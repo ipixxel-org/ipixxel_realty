@@ -520,7 +520,8 @@ export default function TeamDetailPage() {
                 {MODULE_DEFS.map((mod) => (
                   <SwitchRow
                     key={mod.key}
-                    title={mod.label}
+                    title={<><Icon name={mod.icon} size={14} /> {mod.label}</>}
+                    ariaLabel={mod.label}
                     description={mod.description}
                     checked={!!moduleAccess[mod.key]}
                     onToggle={(next) => setModuleAccess((prev) => ({ ...prev, [mod.key]: next }))}

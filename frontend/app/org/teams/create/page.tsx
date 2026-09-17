@@ -16,7 +16,7 @@ import {
   useOrgUsersList,
   useSingleTeamMembership,
 } from "@/components/org/team-fields";
-import { MODULE_DEFS } from "@/lib/teams";
+import { MODULE_DEFS, formatWorkingHours } from "@/lib/teams";
 import { formatMoney, formatMoneyRange } from "@/lib/money";
 import { createTeam, setTeamMembers, setTeamProjects, setTeamUnits, updateTeam } from "@/lib/api";
 
@@ -32,7 +32,10 @@ export default function CreateTeamPage() {
   const [leadId, setLeadId] = useState("");
   const [projectManagerId, setProjectManagerId] = useState("");
   const [region, setRegion] = useState("");
-  const [workingHours, setWorkingHours] = useState("10:00 AM – 7:00 PM");
+  // 24-hour "HH:mm" values, as <input type="time"> needs — formatted into
+  // the single free-text workingHours string on submit (see lib/teams.ts).
+  const [workingHoursStart, setWorkingHoursStart] = useState("10:00");
+  const [workingHoursEnd, setWorkingHoursEnd] = useState("19:00");
   const [description, setDescription] = useState("");
   const [memberIds, setMemberIds] = useState<Set<string>>(new Set());
   // Preview only — TeamModuleAccess has no backend yet, so these toggles
@@ -115,7 +118,7 @@ export default function CreateTeamPage() {
         name: name.trim(),
         projectManagerId: projectManagerId || undefined,
         region: region.trim() || undefined,
-        workingHours: workingHours.trim() || undefined,
+        workingHours: formatWorkingHours(workingHoursStart, workingHoursEnd) || undefined,
         description: description.trim() || undefined,
       });
 
@@ -172,7 +175,7 @@ export default function CreateTeamPage() {
       <div className="cgrid">
         <div className="card" style={{ padding: 26 }}>
           <div className="sec">
-            <div className="lbl">🏷️ Basics</div>
+            <div className="lbl"><Icon name="flag" size={15} /> Basics</div>
             <div className="field">
               <label>Team name <span className="req">*</span></label>
               <input className="inp" placeholder="e.g. Sales Team West" value={name} onChange={(e) => setName(e.target.value)} />
@@ -204,7 +207,21 @@ export default function CreateTeamPage() {
               </div>
               <div className="field">
                 <label>Working hours</label>
-                <input className="inp" value={workingHours} onChange={(e) => setWorkingHours(e.target.value)} />
+                <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                  <input
+                    type="time"
+                    className="inp"
+                    value={workingHoursStart}
+                    onChange={(e) => setWorkingHoursStart(e.target.value)}
+                  />
+                  <span className="muted">–</span>
+                  <input
+                    type="time"
+                    className="inp"
+                    value={workingHoursEnd}
+                    onChange={(e) => setWorkingHoursEnd(e.target.value)}
+                  />
+                </div>
               </div>
             </div>
             <div className="field" style={{ marginBottom: 0 }}>
@@ -214,7 +231,7 @@ export default function CreateTeamPage() {
           </div>
 
           <div className="sec">
-            <div className="lbl">🧑‍💼 Members</div>
+            <div className="lbl"><Icon name="users" size={15} /> Members</div>
             <div className="field">
               <label>Add members</label>
               <MemberPicker
@@ -249,14 +266,15 @@ export default function CreateTeamPage() {
           </div>
 
           <div className="sec">
-            <div className="lbl">🔐 Module access</div>
+            <div className="lbl"><Icon name="lock" size={15} /> Module access</div>
             <div className="hint" style={{ marginBottom: 10 }}>
               Preview only — module access isn&apos;t saved yet, these toggles have no effect.
             </div>
             {MODULE_DEFS.map((mod) => (
               <SwitchRow
                 key={mod.key}
-                title={mod.label}
+                title={<><Icon name={mod.icon} size={14} /> {mod.label}</>}
+                ariaLabel={mod.label}
                 description={mod.description}
                 checked={!!moduleAccess[mod.key]}
                 onToggle={(next) => setModuleAccess((prev) => ({ ...prev, [mod.key]: next }))}
@@ -265,7 +283,7 @@ export default function CreateTeamPage() {
           </div>
 
           <div className="sec">
-            <div className="lbl">🏗️ Project access</div>
+            <div className="lbl"><Icon name="building" size={15} /> Project access</div>
             <div className="hint" style={{ marginBottom: 10 }}>
               Toggle the projects this team should access. Selections are saved when you create the team.
             </div>
@@ -312,7 +330,7 @@ export default function CreateTeamPage() {
           </div>
 
           <div className="sec">
-            <div className="lbl">🏠 Unit access</div>
+            <div className="lbl"><Icon name="home" size={15} /> Unit access</div>
             <div className="hint" style={{ marginBottom: 10 }}>
               Standalone units only — a unit that belongs to a project follows that project&apos;s access instead. Selections are saved when you create the team.
             </div>
@@ -359,7 +377,7 @@ export default function CreateTeamPage() {
           </div>
 
           <div className="sec">
-            <div className="lbl">🔄 Lead routing</div>
+            <div className="lbl"><Icon name="refresh" size={15} /> Lead routing</div>
             <div className="hint" style={{ marginBottom: 10 }}>
               Preview only — there&apos;s no lead-routing or Team Chat backend yet, these toggles have no effect.
             </div>

@@ -197,7 +197,7 @@ export default function OnboardMemberPage() {
       <div className="cgrid">
         <div className="card" style={{ padding: 26 }}>
           <div className="sec">
-            <div className="lbl">👤 Person</div>
+            <div className="lbl"><Icon name="profile" size={15} /> Person</div>
             <div className="row2">
               <div className="field">
                 <label>First name <span className="req">*</span></label>
@@ -247,7 +247,7 @@ export default function OnboardMemberPage() {
           </div>
 
           <div className="sec">
-            <div className="lbl">👥 Placement</div>
+            <div className="lbl"><Icon name="team" size={15} /> Placement</div>
             <div className="row2">
               <div className="field">
                 <label>Team</label>
@@ -287,13 +287,13 @@ export default function OnboardMemberPage() {
           </div>
 
           <div className="sec">
-            <div className="lbl">🔐 Access (inherits team defaults)</div>
+            <div className="lbl"><Icon name="lock" size={15} /> Access (inherits team defaults)</div>
             <div className="hint" style={{ marginBottom: 10 }}>
               Preview only — module access isn&apos;t saved yet, these toggles have no effect.
             </div>
             <div className="field" style={{ marginBottom: 0 }}>
               <ToggleChips
-                options={MODULE_DEFS.map((m) => ({ id: m.key, label: m.label }))}
+                options={MODULE_DEFS.map((m) => ({ id: m.key, label: m.label, icon: m.icon }))}
                 selected={enabledModules}
                 onToggle={toggleModule}
               />
@@ -301,7 +301,7 @@ export default function OnboardMemberPage() {
           </div>
 
           <div className="sec">
-            <div className="lbl">✅ Onboarding checklist</div>
+            <div className="lbl"><Icon name="check" size={15} /> Onboarding checklist</div>
             {ONBOARDING_CHECKLIST.map((item) => {
               const done = !!checklist[item.id];
               return (
@@ -370,13 +370,13 @@ export default function OnboardMemberPage() {
           </div>
 
           <div className="help">
-            💡 A work email and organisation role are enough to invite someone — the checklist above is just a
+            <Icon name="info" size={15} /> A work email and organisation role are enough to invite someone — the checklist above is just a
             local reminder of what to do next, not something we track for you yet.
           </div>
 
           {submitted ? (
             <div className="help" style={{ background: "#ecfdf5", borderColor: "#a7f3d0" }}>
-              ✅ {`${firstName.trim()} ${lastName.trim()}`.trim()} was added and an invite email is on its way.
+              <Icon name="check" size={15} /> {`${firstName.trim()} ${lastName.trim()}`.trim()} was added and an invite email is on its way.
             </div>
           ) : null}
 

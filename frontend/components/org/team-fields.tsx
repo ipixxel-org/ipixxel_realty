@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import Link from "next/link";
 import { Reveal } from "@/components/superadmin/reveal";
+import { Icon, type IconName } from "@/components/icons";
 import { useAuth } from "@/lib/auth-context";
 import { apiFetch, getOrgUnits } from "@/lib/api";
 import type { OrgUnitRow, OrgUser, OrgUsersListResponse, ProjectListRow, ProjectsListResponse, SafeOrganisation, Team } from "@/lib/types";
@@ -346,11 +347,15 @@ export function SwitchRow({
   description,
   checked,
   onToggle,
+  ariaLabel,
 }: {
   title: ReactNode;
   description?: ReactNode;
   checked: boolean;
   onToggle: (next: boolean) => void;
+  /** Required when `title` isn't a plain string (e.g. an icon + label
+   *  fragment) — otherwise the switch loses its accessible name. */
+  ariaLabel?: string;
 }) {
   return (
     <div className="swrow">
@@ -362,7 +367,7 @@ export function SwitchRow({
         className={`switch${checked ? " on" : ""}`}
         role="switch"
         aria-checked={checked}
-        aria-label={typeof title === "string" ? title : undefined}
+        aria-label={ariaLabel ?? (typeof title === "string" ? title : undefined)}
         tabIndex={0}
         onClick={() => onToggle(!checked)}
         onKeyDown={(e) => {
@@ -523,6 +528,10 @@ export function RowActionItem({
 export interface ChipOption {
   id: string;
   label: string;
+  /** Shown before the label — e.g. the module's own icon in the Module
+   *  access list. Optional; chips with no natural icon (org users,
+   *  projects) simply omit it. */
+  icon?: IconName;
   /** Muted secondary text shown right after the label (e.g. an org role name) —
    *  informational only, distinct from `badge` below which flags a conflict. */
   subLabel?: string;
@@ -588,6 +597,7 @@ export function ToggleChips({
             title={blocked ? "Already on another team — remove them from it first." : undefined}
           >
             <span className="b">{on ? (single ? "●" : "✓") : ""}</span>
+            {o.icon ? <Icon name={o.icon} size={13} style={{ marginRight: 4, verticalAlign: -2 }} /> : null}
             {o.label}
             {o.subLabel ? (
               <span className="muted" style={{ marginLeft: 6, fontSize: 11 }}>

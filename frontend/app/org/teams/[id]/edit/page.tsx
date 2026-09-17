@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { Icon } from "@/components/icons";
 import { SwitchRow, TeamsSubNav, displayName, useOrgManagersList, useOrgUsersList } from "@/components/org/team-fields";
-import { TEAM_MEMBER_ROLE_LABEL } from "@/lib/teams";
+import { TEAM_MEMBER_ROLE_LABEL, formatWorkingHours, parseWorkingHours } from "@/lib/teams";
 import { ApiError, getTeam, updateTeam } from "@/lib/api";
 import type { TeamDetail, TeamStatus } from "@/lib/types";
 
@@ -29,7 +29,11 @@ export default function EditTeamPage() {
   const [leadId, setLeadId] = useState("");
   const [projectManagerId, setProjectManagerId] = useState("");
   const [region, setRegion] = useState("");
-  const [workingHours, setWorkingHours] = useState("");
+  // 24-hour "HH:mm" values, as <input type="time"> needs — parsed from /
+  // formatted back into the single free-text workingHours string this team
+  // actually stores (see lib/teams.ts).
+  const [workingHoursStart, setWorkingHoursStart] = useState("");
+  const [workingHoursEnd, setWorkingHoursEnd] = useState("");
   const [description, setDescription] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
@@ -43,7 +47,9 @@ export default function EditTeamPage() {
         setLeadId(t.teamLead?.id ?? "");
         setProjectManagerId(t.projectManager?.id ?? "");
         setRegion(t.region ?? "");
-        setWorkingHours(t.workingHours ?? "");
+        const { start, end } = parseWorkingHours(t.workingHours);
+        setWorkingHoursStart(start);
+        setWorkingHoursEnd(end);
         setDescription(t.description ?? "");
       })
       .catch((err) => {
@@ -91,7 +97,7 @@ export default function EditTeamPage() {
         teamLeadId: leadId || null,
         projectManagerId: projectManagerId || null,
         region: region.trim() || null,
-        workingHours: workingHours.trim() || null,
+        workingHours: formatWorkingHours(workingHoursStart, workingHoursEnd) || null,
         description: description.trim() || null,
       });
       router.push(`/org/teams/${teamId}`);
@@ -154,7 +160,7 @@ export default function EditTeamPage() {
       <div className="cgrid">
         <div className="card" style={{ padding: 26 }}>
           <div className="sec">
-            <div className="lbl">🏷️ Basics</div>
+            <div className="lbl"><Icon name="flag" size={15} /> Basics</div>
             <SwitchRow
               title="Active"
               description={status === "active" ? "Team is active." : "Team is inactive — hidden from active-team views."}
@@ -216,7 +222,21 @@ export default function EditTeamPage() {
               </div>
               <div className="field">
                 <label>Working hours</label>
-                <input className="inp" value={workingHours} onChange={(e) => setWorkingHours(e.target.value)} />
+                <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                  <input
+                    type="time"
+                    className="inp"
+                    value={workingHoursStart}
+                    onChange={(e) => setWorkingHoursStart(e.target.value)}
+                  />
+                  <span className="muted">–</span>
+                  <input
+                    type="time"
+                    className="inp"
+                    value={workingHoursEnd}
+                    onChange={(e) => setWorkingHoursEnd(e.target.value)}
+                  />
+                </div>
               </div>
             </div>
             <div className="field" style={{ marginBottom: 0 }}>
@@ -235,7 +255,7 @@ export default function EditTeamPage() {
             </div>
           </div>
           <div className="help">
-            💡 Members and project access are managed from the team page, not here.
+            <Icon name="info" size={15} /> Members and project access are managed from the team page, not here.
           </div>
           {submitError ? (
             <div className="help" style={{ background: "#fef2f2", borderColor: "#fecaca", color: "var(--rose)" }}>
