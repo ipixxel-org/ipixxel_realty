@@ -10,6 +10,31 @@ export function normalizePhoneNumber(raw: string): string {
   return hasPlus ? `+${digits}` : digits;
 }
 
+// True when an edit form re-submits the number already stored for that user.
+// Older records were saved without a country code ("9876543210") while the
+// forms now send one ("+919876543210"), so a prefixed and an unprefixed value
+// also match when they differ only by a 1–3 digit country code.
+export function isSamePhoneNumber(
+  stored: string | null | undefined,
+  submitted: string,
+): boolean {
+  if (!stored) return false;
+  const a = normalizePhoneNumber(stored);
+  const b = normalizePhoneNumber(submitted);
+  if (a === b) return true;
+  if (a.startsWith('+') === b.startsWith('+')) return false;
+  const [withCode, withoutCode] = a.startsWith('+')
+    ? [a.slice(1), b]
+    : [b.slice(1), a];
+  const extra = withCode.length - withoutCode.length;
+  return (
+    withoutCode.length >= LOOSE_PHONE_MIN_DIGITS &&
+    extra >= 1 &&
+    extra <= 3 &&
+    withCode.endsWith(withoutCode)
+  );
+}
+
 // Accepted shape for a mobile number on our create/edit forms: digits only,
 // an optional single leading '+', and at most 15 digits (E.164's ceiling).
 // No spaces, hyphens or letters. Shared by every DTO that validates a phone

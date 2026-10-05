@@ -5,6 +5,7 @@ import {
   countOrgLandingPages,
   resolveLimit,
 } from './plan-quota.util';
+import { orgBillingRecipientsWhere } from './notification-recipients.util';
 
 // ---------------------------------------------------------------------------
 // Subscription expiry lifecycle + plan-package gates for org-owned resources.
@@ -221,10 +222,10 @@ async function ensureOrgNotified(
   });
   if (existing > 0) return false;
 
-  // Addressed to every active member of the org — the expiry popup is a
-  // platform-wide "you're affected" signal, not just for the person who pays.
+  // Addressed to the org's Admins only — billing is theirs to act on; other
+  // members (Sales, Telecaller, ...) only see notifications meant for them.
   const recipients = await prisma.user.findMany({
-    where: { orgId: sub.orgId, status: 'active' },
+    where: orgBillingRecipientsWhere(sub.orgId),
     select: { id: true },
   });
   if (recipients.length === 0) return false;

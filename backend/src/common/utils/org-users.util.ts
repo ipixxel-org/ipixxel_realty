@@ -6,7 +6,7 @@ import {
   generateTempPassword,
 } from './tokens.util';
 import { toSafeUser } from './mappers.util';
-import { normalizePhoneNumber } from './phone.util';
+import { isSamePhoneNumber, normalizePhoneNumber } from './phone.util';
 import { assertLimit, countBillableOrgUsers } from './plan-quota.util';
 
 import { EmailService } from '../../modules/email/email.service';
@@ -520,8 +520,11 @@ export async function updateOrgUser(
     }
   }
 
+  // The user's own number re-submitted (even in another format) is not a
+  // change: skip the duplicate check and leave the stored value as it is.
   const phoneNumber =
-    dto.phoneNumber === undefined
+    dto.phoneNumber === undefined ||
+    isSamePhoneNumber(existing.phoneNumber, dto.phoneNumber)
       ? undefined
       : normalizePhoneNumber(dto.phoneNumber);
   if (phoneNumber && phoneNumber !== existing.phoneNumber) {

@@ -6985,33 +6985,6 @@
   box-shadow: 0 0 0 4px var(--brand-050);
 }
 
-.org .tb-builder-btn {
-  display: inline-flex;
-  align-items: center;
-  gap: 7px;
-  padding: 8px 13px;
-  border-radius: 11px;
-  border: 1px solid var(--brand-100);
-  background: var(--brand-050);
-  color: var(--brand);
-  font-size: 12.5px;
-  font-weight: 700;
-  cursor: pointer;
-  white-space: nowrap;
-  font-family: inherit;
-  transition: 0.15s;
-}
-
-.org .tb-builder-btn:hover:not(:disabled) {
-  background: #d8dce6;
-  border-color: #b8c0d0;
-}
-
-.org .tb-builder-btn:disabled {
-  cursor: wait;
-  opacity: 0.7;
-}
-
 .org .icon-btn:hover {
   background: var(--brand-050);
   border-color: var(--brand-100);

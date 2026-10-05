@@ -1,18 +1,30 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
+import type { Prisma } from '@prisma/client';
 import { PrismaService } from '../../database/prisma.service';
 
 @Injectable()
 export class NotificationsService {
   constructor(private readonly prisma: PrismaService) {}
 
-  // Super Admin's global inbox: rows addressed to "all super admins"
-  // (recipientId null) plus any addressed to this specific user.
+  // Platform console inbox. A Super Admin sees the shared platform inbox
+  // (rows addressed to "all super admins", recipientId null) plus their own;
+  // any other Platform Team member (e.g. Platform Operator) sees only rows
+  // addressed to them personally (e.g. a support ticket assigned to them).
+  private async platformInboxWhere(
+    recipientId: string,
+  ): Promise<Prisma.NotificationWhereInput> {
+    const superAdmin = await this.prisma.userRole.count({
+      where: { userId: recipientId, role: { key: 'super_admin', orgId: null } },
+    });
+    return superAdmin > 0
+      ? { OR: [{ recipientId: null }, { recipientId }] }
+      : { recipientId };
+  }
+
   async list(recipientId: string, query: { page?: number; limit?: number; unreadOnly?: string }) {
     const page = query.page ?? 1;
     const limit = query.limit ?? 20;
-    const where: any = {
-      OR: [{ recipientId: null }, { recipientId }],
-    };
+    const where: Prisma.NotificationWhereInput = await this.platformInboxWhere(recipientId);
     if (query.unreadOnly === 'true') where.readAt = null;
     const [data, total] = await Promise.all([
       this.prisma.notification.findMany({
@@ -31,17 +43,16 @@ export class NotificationsService {
 
   async unreadCount(recipientId: string) {
     const count = await this.prisma.notification.count({
-      where: { OR: [{ recipientId: null }, { recipientId }], readAt: null },
+      where: { ...(await this.platformInboxWhere(recipientId)), readAt: null },
     });
     return { count };
   }
 
   async markRead(id: string, recipientId: string) {
-    const notif = await this.prisma.notification.findUnique({ where: { id } });
+    const notif = await this.prisma.notification.findFirst({
+      where: { id, ...(await this.platformInboxWhere(recipientId)) },
+    });
     if (!notif) throw new NotFoundException('Notification not found');
-    if (notif.recipientId !== null && notif.recipientId !== recipientId) {
-      throw new NotFoundException('Notification not found');
-    }
     return this.prisma.notification.update({
       where: { id },
       data: { readAt: new Date() },
@@ -50,7 +61,7 @@ export class NotificationsService {
 
   async markAllRead(recipientId: string) {
     await this.prisma.notification.updateMany({
-      where: { OR: [{ recipientId: null }, { recipientId }], readAt: null },
+      where: { ...(await this.platformInboxWhere(recipientId)), readAt: null },
       data: { readAt: new Date() },
     });
     return { success: true };
