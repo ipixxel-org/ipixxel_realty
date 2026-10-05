@@ -11,7 +11,10 @@ import { PrismaService } from '../../database/prisma.service';
 import { EmailService } from '../email/email.service';
 import { frontendBaseUrl } from '../../common/utils/app-url.util';
 import { generateTempPassword } from '../../common/utils/tokens.util';
-import { normalizePhoneNumber } from '../../common/utils/phone.util';
+import {
+  isSamePhoneNumber,
+  normalizePhoneNumber,
+} from '../../common/utils/phone.util';
 import { CreatePlatformMemberDto } from './dto/create-platform-member.dto';
 import { UpdatePlatformMemberDto } from './dto/update-platform-member.dto';
 import { ListPlatformMembersQueryDto } from './dto/list-platform-members-query.dto';
@@ -246,8 +249,13 @@ export class AdminPlatformTeamService {
       }
     }
 
+    // The member's own number re-submitted (even in another format) is not a
+    // change: skip the duplicate check and leave the stored value as it is.
+    const phoneChanged =
+      dto.phoneNumber !== undefined &&
+      !isSamePhoneNumber(member.phoneNumber, dto.phoneNumber);
     let phoneNumber: string | undefined;
-    if (dto.phoneNumber !== undefined) {
+    if (phoneChanged && dto.phoneNumber !== undefined) {
       phoneNumber = dto.phoneNumber
         ? normalizePhoneNumber(dto.phoneNumber)
         : undefined;
@@ -283,7 +291,7 @@ export class AdminPlatformTeamService {
           ...(dto.firstName ? { firstName: dto.firstName.trim() } : {}),
           ...(dto.lastName ? { lastName: dto.lastName.trim() } : {}),
           ...(dto.email ? { email: dto.email.trim().toLowerCase() } : {}),
-          ...(dto.phoneNumber !== undefined ? { phoneNumber: phoneNumber ?? null } : {}),
+          ...(phoneChanged ? { phoneNumber: phoneNumber ?? null } : {}),
           ...(dto.status ? { status: dto.status } : {}),
           // An admin-set password is temporary, exactly like the one sent at
           // creation: the member must choose their own at next login

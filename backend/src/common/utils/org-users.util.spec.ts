@@ -391,3 +391,41 @@ describe('resendCredentials', () => {
     expect(prisma.user.update).not.toHaveBeenCalled();
   });
 });
+
+describe('updateOrgUser mobile number', () => {
+  const member = {
+    id: 'm1',
+    orgId: 'org-1',
+    email: 'm@acme.test',
+    phoneNumber: '9876543210', // older record, saved without country code
+    userRoles: [{ role: { key: 'sales' } }],
+  };
+
+  it("keeps the user's own number when the form re-sends it with a country code", async () => {
+    const { prisma, txn } = makePrisma();
+    prisma.user.findFirst
+      .mockResolvedValueOnce(member)
+      // a different user stores the same number with +91
+      .mockResolvedValue({ id: 'other', phoneNumber: '+919876543210' });
+
+    await updateOrgUser(prisma, 'org-1', 'm1', {
+      phoneNumber: '+919876543210',
+      role: 'telecaller',
+    }).catch(() => undefined); // trailing reload is not under test
+
+    expect(txn.user.update).toHaveBeenCalledTimes(1);
+    expect(txn.user.update.mock.calls[0][0].data.phoneNumber).toBeUndefined();
+  });
+
+  it('still rejects a number that belongs to another user', async () => {
+    const { prisma, txn } = makePrisma();
+    prisma.user.findFirst
+      .mockResolvedValueOnce(member)
+      .mockResolvedValueOnce({ id: 'other' }); // mobile taken
+
+    await expect(
+      updateOrgUser(prisma, 'org-1', 'm1', { phoneNumber: '+919999999999' }),
+    ).rejects.toThrow('This mobile number is already assigned to another user.');
+    expect(txn.user.update).not.toHaveBeenCalled();
+  });
+});
