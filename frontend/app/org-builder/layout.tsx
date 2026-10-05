@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Roboto } from "next/font/google";
 import "@/app/openpage.css";
+import { PresenceTracker } from "@/components/presence-tracker";
 
 // This has to be a top-level sibling route, not nested under app/org/ —
 // app/org/layout.tsx unconditionally wraps every child in <OrgAdminShell>,
@@ -27,6 +28,7 @@ export default function OrgBuilderLayout({ children }: { children: React.ReactNo
         } as React.CSSProperties
       }
     >
+      <PresenceTracker />
       {children}
     </div>
   );

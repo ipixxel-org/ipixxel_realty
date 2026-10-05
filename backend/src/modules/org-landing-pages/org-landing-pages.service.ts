@@ -643,7 +643,7 @@ export class OrgLandingPagesService {
     }
   }
 
-  async publish(orgId: string, id: string) {
+  async publish(orgId: string, id: string, actorId?: string) {
     const page = await this.getOwned(orgId, id);
 
     // Publishing is a package-gated action: a usable subscription (active /
@@ -667,6 +667,7 @@ export class OrgLandingPagesService {
     await this.prisma.auditLog.create({
       data: {
         orgId,
+        actorId: actorId ?? null,
         action: 'landing_page_published',
         entity: 'LandingPage',
         entityId: page.id,

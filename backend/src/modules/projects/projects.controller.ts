@@ -60,7 +60,7 @@ export class ProjectsController {
   @Post()
   @RequirePermission('projects', 'add', ENFORCE)
   create(@CurrentUser() user: JwtPayload, @Body() dto: CreateProjectDto) {
-    return this.service.create(user.orgId as string, dto);
+    return this.service.create(user.orgId as string, dto, user.sub);
   }
 
   @Get()

@@ -2984,3 +2984,22 @@ export interface MarketingSyncLog {
   message: string | null;
   createdAt: string;
 }
+
+/** One live org-user page visit, from GET /admin/presence/live. */
+export interface AdminLiveSession {
+  sessionId: string;
+  orgId: string;
+  orgName: string;
+  userId: string;
+  userName: string;
+  role: string | null;
+  phone: string | null;
+  route: string;
+  pageLabel: string;
+  enteredAt: string;
+  minutesOnPage: number;
+  visible: boolean;
+  errorCount: number;
+  stuck: boolean;
+  stuckReason: "time" | "errors" | null;
+}

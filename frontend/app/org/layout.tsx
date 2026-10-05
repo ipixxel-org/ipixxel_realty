@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import type { ReactNode } from "react";
 import { Roboto } from "next/font/google";
 import { OrgAdminShell } from "@/components/org/shell";
+import { PresenceTracker } from "@/components/presence-tracker";
 import "./org.css";
 import "./landing-pages/landing-pages.css";
 import "./templates/templates.css";
@@ -33,6 +34,7 @@ export default function OrgLayout({ children }: { children: ReactNode }) {
         } as React.CSSProperties
       }
     >
+      <PresenceTracker />
       <OrgAdminShell>{children}</OrgAdminShell>
     </div>
   );

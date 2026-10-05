@@ -85,6 +85,7 @@ import type {
   EmailLogsResponse,
   EmailStatsResponse,
   AdminDashboardResponse,
+  AdminLiveSession,
   PlatformConfig,
   UpdatePlatformConfigInput,
   PlatformTheme,
@@ -158,7 +159,7 @@ function readTokens(): {
 
 let refreshPromise: Promise<boolean> | null = null;
 
-async function tryRefresh(): Promise<boolean> {
+export async function tryRefresh(): Promise<boolean> {
   if (refreshPromise) return refreshPromise;
 
   refreshPromise = (async () => {
@@ -1585,6 +1586,10 @@ export async function getOrgEmailLogs(params?: {
 
 export async function getOrgEmailStats(): Promise<EmailStatsResponse> {
   return apiFetch<EmailStatsResponse>("/org/email/stats");
+}
+
+export async function getAdminLiveSessions(): Promise<AdminLiveSession[]> {
+  return apiFetch<AdminLiveSession[]>("/admin/presence/live");
 }
 
 export async function getAdminDashboard(): Promise<AdminDashboardResponse> {

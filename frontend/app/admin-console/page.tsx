@@ -7,6 +7,7 @@ import { Seg } from "@/components/superadmin/seg";
 import { Icon } from "@/components/icons";
 import { useAuth } from "@/lib/auth-context";
 import { getAdminDashboard } from "@/lib/api";
+import { LiveNowCard } from "@/components/superadmin/live-now-card";
 import { firstAccessibleAdminHref } from "@/components/superadmin/shell";
 import type { AdminDashboardResponse } from "@/lib/types";
 
@@ -720,6 +721,8 @@ export default function SuperAdminDashboardPage() {
           </div>
         </div>
       </div>
+
+      <LiveNowCard />
 
       {/* Recently Onboarded Orgs & Pending Approvals Grid */}
       <div style={{ display: "grid", gridTemplateColumns: "1.2fr 0.8fr", gap: 20 }}>

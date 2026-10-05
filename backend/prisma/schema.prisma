@@ -629,6 +629,28 @@ model AuditLog {
   @@schema("audit")
 }
 
+// One row per page visit by an org user, kept alive by a 30s heartbeat from
+// the frontend. Read by the Super Admin "Live now" card to spot users stuck on
+// a task page. Best-effort telemetry: no foreign keys, so a heartbeat can
+// never fail on (or block) a user/org delete.
+model UserPageSession {
+  id                String    @id @default(uuid())
+  userId            String    @map("user_id")
+  orgId             String    @map("org_id")
+  route             String
+  sessionId         String    @unique @map("session_id")
+  enteredAt         DateTime  @default(now()) @map("entered_at")
+  lastHeartbeatAt   DateTime  @default(now()) @map("last_heartbeat_at")
+  lastInteractionAt DateTime? @map("last_interaction_at")
+  visible           Boolean   @default(true)
+  errorCount        Int       @default(0) @map("error_count")
+  status            String    @default("active") // active | left | completed
+
+  @@index([status, lastHeartbeatAt])
+  @@map("user_page_sessions")
+  @@schema("audit")
+}
+
 // ---------------------------------------------------------------------------
 // Notifications — in-app alerts surfaced to a recipient (typically a Super
 // Admin) when something needs attention, e.g. an organisation registration or

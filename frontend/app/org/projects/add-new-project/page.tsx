@@ -9,6 +9,7 @@ import { formatMoney, formatMoneyRange } from "@/lib/money";
 import { CURRENCY_OPTIONS } from "@/lib/countries";
 import { useProjectTypes } from "@/lib/use-project-types";
 import { uploadFile } from "@/lib/upload";
+import { reportPresenceError } from "@/hooks/usePagePresence";
 import {
   customFieldRequirements,
   defaultableExtraFields,
@@ -821,6 +822,7 @@ export default function AddNewProjectPage() {
     // resumed straight onto Review — or a rail jump the user confirmed past a
     // warning — can still reach here incomplete.
     if (allMissingFields.length > 0) {
+      reportPresenceError();
       for (const f of allMissingFields) markValidated(f.step);
       setError(
         `Fill in the required field${allMissingFields.length > 1 ? "s" : ""} first: ${allMissingFields.map((f) => f.label).join(", ")}.`,
@@ -833,6 +835,7 @@ export default function AddNewProjectPage() {
     const templateProblem =
       validateFieldRows(projectFieldRows, "Project fields") ?? validateFieldRows(unitFieldRows, "Unit fields");
     if (templateProblem) {
+      reportPresenceError();
       setError(templateProblem);
       setStep(1);
       return;
@@ -1077,6 +1080,7 @@ export default function AddNewProjectPage() {
 
       router.push(`/org/projects/${project.id}`);
     } catch (err) {
+      reportPresenceError();
       setError(err instanceof Error ? err.message : "Failed to create the project.");
       setSubmitting(false);
     }

@@ -48,6 +48,7 @@ import { OrgReportsModule } from './modules/org-reports/org-reports.module';
 import { AttributionLabelsModule } from './modules/attribution-labels/attribution-labels.module';
 import { MetaLeadsModule } from './modules/meta-leads/meta-leads.module';
 import { MarketingModule } from './modules/marketing/marketing.module';
+import { PresenceModule } from './modules/presence/presence.module';
 
 @Module({
   imports: [
@@ -98,6 +99,7 @@ import { MarketingModule } from './modules/marketing/marketing.module';
     AttributionLabelsModule,
     MetaLeadsModule,
     MarketingModule,
+    PresenceModule,
   ],
   controllers: [AppController],
   providers: [AppService],

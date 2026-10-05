@@ -156,7 +156,7 @@ export class ProjectsService {
   // Projects
   // -------------------------------------------------------------------------
 
-  async create(orgId: string, dto: CreateProjectDto) {
+  async create(orgId: string, dto: CreateProjectDto, actorId?: string) {
     const managerId = await this.resolveManagerId(orgId, dto.managerId);
 
     // Plan project quota — enforced only when the org has a subscription
@@ -249,6 +249,7 @@ export class ProjectsService {
       await tx.auditLog.create({
         data: {
           orgId,
+          actorId: actorId ?? null,
           action: 'project_created',
           entity: 'Project',
           entityId: created.id,

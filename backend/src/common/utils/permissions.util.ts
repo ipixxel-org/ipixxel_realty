@@ -264,6 +264,7 @@ export const PLATFORM_ROUTE_MODULES: Array<{ prefix: string; module: string }> =
   { prefix: '/admin/email', module: 'admin_email' },
   { prefix: '/admin/notifications', module: 'admin_notifications' },
   { prefix: '/admin/dashboard', module: 'admin_dashboard' },
+  { prefix: '/admin/presence', module: 'admin_dashboard' },
   { prefix: '/admin/roles', module: 'admin_org_roles' },
   { prefix: '/admin/audit-logs', module: 'admin_audit_logs' },
   { prefix: '/admin/support', module: 'admin_support' },

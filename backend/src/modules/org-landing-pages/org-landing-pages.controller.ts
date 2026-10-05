@@ -86,7 +86,7 @@ export class OrgLandingPagesController {
   @Put(':id/publish')
   @HttpCode(200)
   publish(@CurrentUser() user: JwtPayload, @Param('id') id: string) {
-    return this.service.publish(user.orgId as string, id);
+    return this.service.publish(user.orgId as string, id, user.sub);
   }
 
   // Landing Pages > Pause / Unpublish.
