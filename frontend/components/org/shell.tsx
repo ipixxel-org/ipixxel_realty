@@ -8,8 +8,6 @@ import { LeadStagesProvider } from "@/lib/lead-stages";
 import { dashboardPathFor } from "@/lib/mock/sessions";
 import { Icon, type IconName } from "@/components/icons";
 import { BuildingLogoIcon } from "@/components/brand-logo";
-import { loadTemplates } from "@/lib/openpage/store";
-import { orgBuilderPath } from "@/lib/openpage/paths";
 import {
   getOrgBilling,
   getOrgNotifications,
@@ -270,7 +268,6 @@ export function OrgAdminShell({ children }: { children: ReactNode }) {
   const [isSigningOut, setIsSigningOut] = useState(false);
   const [profileMenuOpen, setProfileMenuOpen] = useState(false);
   const [notificationOpen, setNotificationOpen] = useState(false);
-  const [builderLoading, setBuilderLoading] = useState(false);
 
   useEffect(() => {
     if (authLoading) return;
@@ -335,22 +332,6 @@ export function OrgAdminShell({ children }: { children: ReactNode }) {
       router.push("/login");
       router.refresh();
     }
-  }
-
-  async function openBuilder() {
-    setBuilderLoading(true);
-    try {
-      const pages = await loadTemplates({ resource: "landing-page" });
-      if (pages && pages.length > 0) {
-        router.push(orgBuilderPath(pages[0].id));
-        return;
-      }
-    } catch {
-      // No pages (or fetch failed) — fall through to the Landing Pages hub.
-    } finally {
-      setBuilderLoading(false);
-    }
-    router.push("/org/landing-pages");
   }
 
   const toggleSidebar = () => {
@@ -627,18 +608,6 @@ export function OrgAdminShell({ children }: { children: ReactNode }) {
           </div>
 
           <div className="tb-right" style={{ display: "flex", alignItems: "center", gap: 10 }}>
-            {/* Opens a landing page in the builder — needs Landing Pages > Edit. */}
-            {hasPermission("landing_pages", "edit") ? (
-              <button
-                type="button"
-                className="tb-builder-btn"
-                onClick={openBuilder}
-                disabled={builderLoading}
-                title="Open the page builder"
-              >
-                <Icon name="puzzle" size={14} /> {builderLoading ? "Opening…" : "Open Builder"}
-              </button>
-            ) : null}
             <div style={{ position: "relative" }} data-notification-menu>
               <button
                 type="button"
@@ -752,10 +721,6 @@ export function OrgAdminShell({ children }: { children: ReactNode }) {
                 </div>
               ) : null}
             </div>
-
-            <button className="icon-btn" aria-label="Alerts" style={{ position: "relative" }}>
-              <Icon name="alert" size={14} />
-            </button>
 
             <div style={{ position: "relative" }} data-profile-menu>
               <button
