@@ -268,6 +268,7 @@ export async function apiFetch<T>(
 
   const skipRefresh =
     path === "/auth/login" ||
+    path === "/auth/google" ||
     path === "/auth/signup/step1" ||
     path.startsWith("/auth/signup/step1/") ||
     path.startsWith("/auth/forgot-password") ||
@@ -2245,9 +2246,11 @@ export async function getGoogleAuthUrl(
   mode: "login" | "register" = "login",
   portal: "organisation" | "platform" = "organisation",
   redirectUri?: string,
+  nonce?: string,
 ): Promise<{ url: string; state: string }> {
   const params = new URLSearchParams({ mode, portal });
   if (redirectUri) params.set("redirectUri", redirectUri);
+  if (nonce) params.set("nonce", nonce);
   return apiFetch<{ url: string; state: string }>(`/auth/google/url?${params.toString()}`);
 }
 

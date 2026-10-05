@@ -1,93 +1,188 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/lib/auth-context";
-import { apiFetch } from "@/lib/api";
+import { authenticateWithGoogle } from "@/lib/api";
 import { dashboardPathFor } from "@/lib/mock/sessions";
-import type { SafeUser } from "@/lib/types";
+import {
+  GOOGLE_OAUTH_NONCE_KEY,
+  GOOGLE_SIGNUP_KEY,
+  type GoogleSignupPrefill,
+} from "@/components/auth/google-sign-in-button";
+
+type OAuthState = {
+  mode?: "login" | "register";
+  portal?: "organisation" | "platform";
+  nonce?: string;
+};
+
+// A Google authorization code can be exchanged exactly once. React's dev
+// StrictMode runs effects twice, and the second exchange would fail with
+// invalid_grant and bounce a user who actually signed in fine — so remember
+// which codes this page load already started on.
+const startedCodes = new Set<string>();
+
+function decodeState(raw: string): OAuthState | null {
+  try {
+    const b64 = raw.replace(/-/g, "+").replace(/_/g, "/");
+    const padded = b64 + "=".repeat((4 - (b64.length % 4)) % 4);
+    return JSON.parse(atob(padded)) as OAuthState;
+  } catch {
+    return null;
+  }
+}
+
+// The nonce stays until a sign-in succeeds (or the next button click
+// replaces it), so retrying after a failed attempt — e.g. Back to Google's
+// account picker — isn't rejected. An attacker never knows it either way.
+function readStoredNonce(): string | null {
+  try {
+    return window.sessionStorage.getItem(GOOGLE_OAUTH_NONCE_KEY);
+  } catch {
+    return null;
+  }
+}
+
+// Where a finished sign-in sent this tab, keyed by its code. If the callback
+// page is loaded again with the same code (dev-server reload, Back), it just
+// goes there again instead of failing the already-cleared nonce check.
+const GOOGLE_OAUTH_DONE_KEY = "google_oauth_done";
+
+function readFinished(code: string): string | null {
+  try {
+    const raw = window.sessionStorage.getItem(GOOGLE_OAUTH_DONE_KEY);
+    const done = raw ? (JSON.parse(raw) as { code?: string; target?: string }) : null;
+    return done?.code === code && done.target ? done.target : null;
+  } catch {
+    return null;
+  }
+}
+
+function markFinished(code: string, target: string) {
+  try {
+    window.sessionStorage.setItem(GOOGLE_OAUTH_DONE_KEY, JSON.stringify({ code, target }));
+    window.sessionStorage.removeItem(GOOGLE_OAUTH_NONCE_KEY);
+  } catch {}
+}
 
 export default function GoogleCallbackPage() {
   const router = useRouter();
   const { loginWithGoogle } = useAuth();
-  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
-    const googleError = params.get("google_error");
-    const mode = params.get("mode") || "login";
-    const token = params.get("token");
-    const refresh = params.get("refresh");
-    const incomplete = params.get("incomplete") === "1";
-    const googleEmail = params.get("google_email");
-    const googleFn = params.get("google_fn");
-    const googleLn = params.get("google_ln");
-    const googleNotFound = params.get("google_not_found") === "1";
+    const code = params.get("code");
+    const rawState = params.get("state");
+    const state = rawState ? decodeState(rawState) : null;
+    const mode = state?.mode === "register" ? "register" : "login";
+    const portal = state?.portal === "platform" ? "platform" : "organisation";
 
+    const fail = (message: string) => {
+      router.replace(`/${mode}?google_error=${encodeURIComponent(message)}`);
+    };
+
+    const googleError = params.get("error");
     if (googleError) {
-      router.replace(`/${mode}?google_error=${encodeURIComponent(googleError)}`);
+      fail(
+        googleError === "access_denied"
+          ? "Google sign in was cancelled."
+          : `Google sign in failed: ${googleError}`,
+      );
       return;
     }
 
-    if (googleNotFound) {
-      const email = params.get("email") || "";
-      router.replace(`/login?google_not_found=1&email=${encodeURIComponent(email)}`);
+    if (!code || !rawState) {
+      fail("Google sign in did not complete. Please try again.");
       return;
     }
 
-    const googleToken = params.get("google_token");
+    if (startedCodes.has(code)) return;
+    startedCodes.add(code);
 
-    if (googleEmail) {
-      const q = new URLSearchParams({
-        google_email: googleEmail,
-        google_fn: googleFn || "",
-        google_ln: googleLn || "",
-        google_verified: "1",
-      });
-      if (googleToken) q.set("google_token", googleToken);
-      router.replace(`/register?${q.toString()}`);
+    const finishedTarget = readFinished(code);
+    if (finishedTarget) {
+      router.replace(finishedTarget);
       return;
     }
 
-    if (token && refresh) {
-      // Fetch profile with the new token
-      apiFetch<{ user: SafeUser }>("/auth/me", {
-        headers: { Authorization: `Bearer ${token}` },
-      })
-        .then(async (res) => {
-          if (!res?.user) throw new Error("Could not load user profile");
-          const session = await loginWithGoogle({
-            user: res.user,
-            access_token: token,
-            refresh_token: refresh,
-            roles: [],
-            onboarding_incomplete: incomplete,
-          });
+    // Reject any callback this browser didn't start (login CSRF: a crafted
+    // link carrying an attacker's code would otherwise sign the victim into
+    // the attacker's account).
+    const expectedNonce = readStoredNonce();
+    if (!state || !expectedNonce || state.nonce !== expectedNonce) {
+      console.warn(
+        "[google-callback] state check failed:",
+        !state ? "state undecodable" : !expectedNonce ? "no stored nonce in this tab" : "nonce mismatch",
+      );
+      fail("Google sign in could not be verified. Please try again.");
+      return;
+    }
 
-          if (incomplete || session.onboarding_step !== "completed") {
-            try {
-              window.sessionStorage.setItem("register_resume_intent", "1");
-            } catch {}
-            router.replace("/register");
-          } else {
-            router.replace(
-              session.must_change_password
-                ? "/change-password"
-                : dashboardPathFor(session.role),
-            );
-          }
-        })
-        .catch((err: unknown) => {
-          const msg = err instanceof Error ? err.message : "Failed to complete Google login";
-          setError(msg);
-          setTimeout(() => {
-            router.replace(`/${mode}?google_error=${encodeURIComponent(msg)}`);
-          }, 2000);
+    void (async () => {
+      try {
+        const res = await authenticateWithGoogle({
+          code,
+          // Must match the redirect_uri the code was issued for.
+          redirectUri: `${window.location.origin}/auth/google/callback`,
+          mode,
+          portal,
         });
-      return;
-    }
 
-    router.replace(`/${mode}`);
+        switch (res.status) {
+          case "authenticated":
+          case "exists_incomplete":
+          case "created": {
+            if (!("access_token" in res) || !res.user) {
+              throw new Error("An account with this email already exists. Please sign in with your password.");
+            }
+            const onboardingIncomplete = res.status !== "authenticated";
+            const session = await loginWithGoogle({
+              user: res.user,
+              access_token: res.access_token,
+              refresh_token: res.refresh_token,
+              roles: "roles" in res ? res.roles : [],
+              onboarding_incomplete: onboardingIncomplete,
+            });
+            let target: string;
+            if (onboardingIncomplete) {
+              try {
+                window.sessionStorage.setItem("register_resume_intent", "1");
+              } catch {}
+              target = "/register";
+            } else {
+              target = session.must_change_password
+                ? "/change-password"
+                : dashboardPathFor(session.role);
+            }
+            markFinished(code, target);
+            router.replace(target);
+            return;
+          }
+
+          case "needs_profile":
+          case "not_found": {
+            const prefill: GoogleSignupPrefill = {
+              email: res.email,
+              firstName: res.firstName,
+              lastName: res.lastName,
+              googleToken: "googleToken" in res ? res.googleToken : undefined,
+            };
+            try {
+              window.sessionStorage.setItem(GOOGLE_SIGNUP_KEY, JSON.stringify(prefill));
+            } catch {}
+            markFinished(code, "/register");
+            router.replace("/register");
+            return;
+          }
+
+          case "exists_completed":
+            throw new Error(res.message || "An account with this email is already registered.");
+        }
+      } catch (err: unknown) {
+        fail(err instanceof Error ? err.message : "Google authentication failed");
+      }
+    })();
   }, [loginWithGoogle, router]);
 
   return (
@@ -104,6 +199,7 @@ export default function GoogleCallbackPage() {
       }}
     >
       <div
+        role="status"
         style={{
           background: "rgba(255, 255, 255, 0.05)",
           border: "1px solid rgba(255, 255, 255, 0.12)",
@@ -126,10 +222,10 @@ export default function GoogleCallbackPage() {
         />
         <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
         <h2 style={{ fontSize: 18, fontWeight: 700, margin: "0 0 8px" }}>
-          Authenticating with Google
+          Signing you in…
         </h2>
         <p style={{ fontSize: 14, color: "#94a3b8", margin: 0 }}>
-          {error ? error : "Please wait while we complete your sign-in…"}
+          Please wait while we complete your Google sign-in.
         </p>
       </div>
     </div>

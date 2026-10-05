@@ -8,6 +8,7 @@ import {
   UnauthorizedException,
 } from '@nestjs/common';
 import * as crypto from 'crypto';
+import { OAuth2Client, type TokenPayload } from 'google-auth-library';
 import { JwtService } from '@nestjs/jwt';
 import type { OnboardingStep, Role, User, UserRole } from '@prisma/client';
 import * as bcrypt from 'bcrypt';
@@ -60,9 +61,24 @@ import { frontendBaseUrl } from '../../common/utils/app-url.util';
 
 const BCRYPT_COST_FACTOR = 12;
 
+const GOOGLE_ISSUERS = ['accounts.google.com', 'https://accounts.google.com'];
+
+type GoogleProfile = {
+  email: string;
+  emailVerified: boolean;
+  firstName: string;
+  lastName: string;
+  picture?: string;
+  googleId: string;
+};
+
 @Injectable()
 export class AuthService {
   private readonly logger = new Logger(AuthService.name);
+  // No client id here — the audience is passed per call, because the client
+  // id can change at runtime (Super Admin settings). One instance so Google's
+  // signing certs are cached between verifications.
+  private readonly googleOAuthClient = new OAuth2Client();
   private readonly accessExpiresIn =
     process.env.JWT_ACCESS_EXPIRES_IN?.trim() || '15m';
   private readonly refreshExpiresIn =
@@ -1446,12 +1462,6 @@ export class AuthService {
     }
   }
 
-  private apiPublicUrl() {
-    const explicit = (process.env.BACKEND_PUBLIC_URL ?? '').trim();
-    if (explicit) return explicit.replace(/\/$/, '');
-    return `${frontendBaseUrl()}/api`;
-  }
-
   async getGoogleClientCredentials(): Promise<{ clientId: string; clientSecret: string }> {
     let clientId = '';
     let clientSecret = '';
@@ -1491,62 +1501,48 @@ export class AuthService {
     };
   }
 
-  async verifyGoogleCredential(credential: string): Promise<{
-    email: string;
-    emailVerified: boolean;
-    firstName: string;
-    lastName: string;
-    picture?: string;
-    googleId: string;
-  }> {
-    try {
-      const res = await fetch(
-        `https://oauth2.googleapis.com/tokeninfo?id_token=${encodeURIComponent(credential)}`,
-      );
-      if (!res.ok) {
-        throw new UnauthorizedException('Invalid Google ID token');
-      }
-      const data = (await res.json()) as {
-        email?: string;
-        email_verified?: string | boolean;
-        given_name?: string;
-        family_name?: string;
-        name?: string;
-        picture?: string;
-        sub?: string;
-        aud?: string;
-      };
-      if (!data.email) {
-        throw new UnauthorizedException('No email address provided by Google account');
-      }
-      const isVerified = data.email_verified === true || data.email_verified === 'true';
-      if (!isVerified) {
-        throw new UnauthorizedException('Google email is not verified');
-      }
-      return {
-        email: data.email.toLowerCase().trim(),
-        emailVerified: true,
-        firstName: data.given_name || (data.name ? data.name.split(' ')[0] : 'User'),
-        lastName: data.family_name || (data.name ? data.name.split(' ').slice(1).join(' ') : ''),
-        picture: data.picture,
-        googleId: data.sub || '',
-      };
-    } catch (err) {
-      if (err instanceof UnauthorizedException) throw err;
-      const message = err instanceof Error ? err.message : String(err);
-      this.logger.error(`Google token verification failed: ${message}`);
-      throw new UnauthorizedException('Failed to verify Google account');
+  // Verifies a Google ID token's signature, expiry, audience (our client id)
+  // and issuer. Without the audience check, an ID token Google issued to ANY
+  // other app for the same person would be accepted here as a login.
+  async verifyGoogleCredential(credential: string): Promise<GoogleProfile> {
+    const { clientId } = await this.getGoogleClientCredentials();
+    if (!clientId) {
+      throw new ServiceUnavailableException('Google OAuth is not configured');
     }
+
+    let payload: TokenPayload | undefined;
+    try {
+      const ticket = await this.googleOAuthClient.verifyIdToken({
+        idToken: credential,
+        audience: clientId,
+      });
+      payload = ticket.getPayload();
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      this.logger.warn(`Google ID token rejected: ${message}`);
+      throw new UnauthorizedException('Invalid Google ID token');
+    }
+
+    if (!payload || !GOOGLE_ISSUERS.includes(payload.iss)) {
+      throw new UnauthorizedException('Invalid Google ID token');
+    }
+    if (!payload.email) {
+      throw new UnauthorizedException('No email address provided by Google account');
+    }
+    if (payload.email_verified !== true) {
+      throw new UnauthorizedException('Google email is not verified');
+    }
+    return {
+      email: payload.email.toLowerCase().trim(),
+      emailVerified: true,
+      firstName: payload.given_name || (payload.name ? payload.name.split(' ')[0] : 'User'),
+      lastName: payload.family_name || (payload.name ? payload.name.split(' ').slice(1).join(' ') : ''),
+      picture: payload.picture,
+      googleId: payload.sub,
+    };
   }
 
-  async exchangeGoogleCode(code: string, redirectUri: string): Promise<{
-    email: string;
-    emailVerified: boolean;
-    firstName: string;
-    lastName: string;
-    picture?: string;
-    googleId: string;
-  }> {
+  async exchangeGoogleCode(code: string, redirectUri: string): Promise<GoogleProfile> {
     const { clientId, clientSecret } = await this.getGoogleClientCredentials();
     if (!clientId || !clientSecret) {
       throw new ServiceUnavailableException('Google OAuth credentials are not configured on server');
@@ -1564,69 +1560,45 @@ export class AuthService {
       body,
     });
     const tokenData = (await res.json()) as {
-      access_token?: string;
       id_token?: string;
       error?: string;
       error_description?: string;
     };
-    if (!res.ok || !tokenData.access_token) {
+    if (!res.ok) {
       throw new UnauthorizedException(
         tokenData.error_description || tokenData.error || 'Failed to exchange Google OAuth code',
       );
     }
-
-    if (tokenData.id_token) {
-      try {
-        return await this.verifyGoogleCredential(tokenData.id_token);
-      } catch {
-        // Fall back to userinfo
-      }
+    // The 'openid' scope always yields an ID token. It goes through the same
+    // audience/issuer/email_verified checks as a GSI credential — no
+    // unverified userinfo fallback.
+    if (!tokenData.id_token) {
+      throw new UnauthorizedException('Google did not return an ID token');
     }
-
-    const userInfoRes = await fetch('https://www.googleapis.com/oauth2/v3/userinfo', {
-      headers: { Authorization: `Bearer ${tokenData.access_token}` },
-    });
-    if (!userInfoRes.ok) {
-      throw new UnauthorizedException('Failed to fetch Google profile');
-    }
-    const data = (await userInfoRes.json()) as {
-      email?: string;
-      email_verified?: boolean | string;
-      given_name?: string;
-      family_name?: string;
-      name?: string;
-      picture?: string;
-      sub?: string;
-    };
-    if (!data.email) {
-      throw new UnauthorizedException('No email returned by Google');
-    }
-    return {
-      email: data.email.toLowerCase().trim(),
-      emailVerified: data.email_verified === true || data.email_verified === 'true',
-      firstName: data.given_name || (data.name ? data.name.split(' ')[0] : 'User'),
-      lastName: data.family_name || (data.name ? data.name.split(' ').slice(1).join(' ') : ''),
-      picture: data.picture,
-      googleId: data.sub || '',
-    };
+    return this.verifyGoogleCredential(tokenData.id_token);
   }
 
   async getGoogleAuthUrl(
     mode: 'login' | 'register' = 'login',
     portal: 'organisation' | 'platform' = 'organisation',
     customRedirectUri?: string,
+    nonce?: string,
   ) {
     const { clientId } = await this.getGoogleClientCredentials();
     if (!clientId) {
       throw new ServiceUnavailableException('Google OAuth is not configured');
     }
     const redirectUri =
-      customRedirectUri || `${this.apiPublicUrl()}/auth/google/callback`;
+      customRedirectUri || `${frontendBaseUrl()}/auth/google/callback`;
+    // The nonce is generated and kept by the browser (sessionStorage); the
+    // frontend callback rejects any state whose nonce it didn't issue, so a
+    // forged callback link can't sign the victim into someone else's account.
     const state = Buffer.from(
       JSON.stringify({
         mode,
         portal,
         redirectUri,
+        nonce: nonce?.slice(0, 128),
         ts: Date.now(),
       }),
       'utf8',
@@ -1637,7 +1609,6 @@ export class AuthService {
       redirect_uri: redirectUri,
       response_type: 'code',
       scope: 'openid email profile',
-      access_type: 'offline',
       prompt: 'select_account',
       state,
     });
@@ -1649,27 +1620,21 @@ export class AuthService {
   }
 
   async handleGoogleAuth(dto: GoogleAuthDto) {
-    let googleUser: {
-      email: string;
-      emailVerified: boolean;
-      firstName: string;
-      lastName: string;
-      picture?: string;
-      googleId: string;
-    };
+    let googleUser: GoogleProfile;
 
     if (dto.credential) {
       googleUser = await this.verifyGoogleCredential(dto.credential);
     } else if (dto.code) {
+      // Must be the exact redirect_uri the code was issued for — Google
+      // rejects the exchange otherwise, so a caller can't swap it.
       const redirectUri =
-        dto.redirectUri || `${this.apiPublicUrl()}/auth/google/callback`;
+        dto.redirectUri || `${frontendBaseUrl()}/auth/google/callback`;
       googleUser = await this.exchangeGoogleCode(dto.code, redirectUri);
     } else {
       throw new BadRequestException('Google credential or OAuth code is required');
     }
 
     const email = googleUser.email.toLowerCase().trim();
-    const mode = dto.mode || 'login';
 
     const existing = await this.findLoginUser(email);
 
@@ -1685,7 +1650,15 @@ export class AuthService {
         );
       }
 
-      const belongsToPlatform = !existing.orgId;
+      // An org admin who stopped after Step 1 has no org and no roles yet —
+      // that's a signup in progress, not a platform account (platform team
+      // and super admins are always created with onboardingStep 'completed').
+      // Let them through so the callback can resume them at Step 2.
+      const isSignupInProgress =
+        !existing.orgId &&
+        existing.roles.length === 0 &&
+        existing.onboardingStep !== 'completed';
+      const belongsToPlatform = !existing.orgId && !isSignupInProgress;
       if (
         (dto.portal === 'organisation' && belongsToPlatform) ||
         (dto.portal === 'platform' && !belongsToPlatform)
@@ -1751,19 +1724,9 @@ export class AuthService {
       };
     }
 
-    if (mode === 'login') {
-      return {
-        status: 'not_found' as const,
-        email,
-        firstName: googleUser.firstName,
-        lastName: googleUser.lastName,
-        picture: googleUser.picture,
-        message:
-          'No account found with this Google email. Please register your organisation first.',
-      };
-    }
-
-    // mode === 'register'
+    // No account for this Google email: sign-up, whether the user clicked the
+    // button on /login or /register — "Sign in with Google" with a new
+    // address shouldn't dead-end.
     if (dto.phoneNumber && dto.country) {
       const normalizedPhone = normalizePhoneNumber(dto.phoneNumber);
       const existingByPhone = await this.prisma.user.findFirst({
@@ -1832,82 +1795,4 @@ export class AuthService {
       googleToken,
     };
   }
-
-  async handleGoogleCallback(
-    code: string,
-    state: string,
-    error?: string,
-  ): Promise<string> {
-    const fe = frontendBaseUrl();
-    let mode: 'login' | 'register' = 'login';
-    let portal: 'organisation' | 'platform' = 'organisation';
-    let redirectUri = `${this.apiPublicUrl()}/auth/google/callback`;
-
-    if (state) {
-      try {
-        const parsed = JSON.parse(
-          Buffer.from(state, 'base64url').toString('utf8'),
-        );
-        if (parsed.mode === 'register') mode = 'register';
-        if (parsed.portal) portal = parsed.portal;
-        if (parsed.redirectUri) redirectUri = parsed.redirectUri;
-      } catch {}
-    }
-
-    if (error || !code) {
-      const msg = error || 'Google sign in was cancelled';
-      return `${fe}/${mode}?google_error=${encodeURIComponent(msg)}`;
-    }
-
-    try {
-      const result = await this.handleGoogleAuth({
-        code,
-        redirectUri,
-        mode,
-        portal,
-      });
-
-      if (
-        result.status === 'authenticated' ||
-        result.status === 'exists_incomplete' ||
-        result.status === 'created'
-      ) {
-        const tokens = result as {
-          access_token: string;
-          refresh_token: string;
-          onboarding_incomplete?: boolean;
-          user: unknown;
-        };
-        const params = new URLSearchParams({
-          token: tokens.access_token,
-          refresh: tokens.refresh_token,
-          incomplete: tokens.onboarding_incomplete ? '1' : '0',
-          mode,
-        });
-        return `${fe}/auth/google/callback?${params.toString()}`;
-      }
-
-      if (result.status === 'needs_profile') {
-        const params = new URLSearchParams({
-          google_email: result.email,
-          google_fn: result.firstName,
-          google_ln: result.lastName,
-          google_token: result.googleToken || '',
-          google_verified: '1',
-        });
-        return `${fe}/register?${params.toString()}`;
-      }
-
-      if (result.status === 'not_found') {
-        return `${fe}/login?google_not_found=1&email=${encodeURIComponent(result.email)}`;
-      }
-
-      return `${fe}/${mode}`;
-    } catch (err: unknown) {
-      const message =
-        err instanceof Error ? err.message : 'Google authentication failed';
-      return `${fe}/${mode}?google_error=${encodeURIComponent(message)}`;
-    }
-  }
 }
-
