@@ -561,7 +561,7 @@ function PlatformDetailInner() {
                       <label>Page access token</label>
                       <div style={{ display: "flex", gap: 6 }}>
                         <input
-                          className="inp mono"
+                          className="inp inp-mono"
                           type={showManualToken ? "text" : "password"}
                           placeholder="EAA..."
                           value={manual.accessToken}
@@ -971,7 +971,7 @@ function PlatformDetailInner() {
                   <label>Access token</label>
                   <div style={{ display: "flex", gap: 6 }}>
                     <input
-                      className="inp mono"
+                      className="inp inp-mono"
                       type={showCredToken ? "text" : "password"}
                       value={cred.accessToken}
                       onChange={(e) =>
@@ -992,7 +992,7 @@ function PlatformDetailInner() {
                   <label>Refresh token (optional)</label>
                   <div style={{ display: "flex", gap: 6 }}>
                     <input
-                      className="inp mono"
+                      className="inp inp-mono"
                       type={showRefreshToken ? "text" : "password"}
                       value={cred.refreshToken}
                       onChange={(e) =>
@@ -1165,7 +1165,7 @@ function PlatformDetailInner() {
               <div className="field">
                 <label style={{ fontWeight: 600, fontSize: 13 }}>Meta App ID</label>
                 <input
-                  className="inp mono"
+                  className="inp inp-mono"
                   placeholder="e.g. 109283746592019"
                   value={appCreds.metaAppId}
                   onChange={(e) =>
@@ -1179,7 +1179,7 @@ function PlatformDetailInner() {
                 <div style={{ display: "flex", gap: 6 }}>
                   <input
                     type={showSecret1 ? "text" : "password"}
-                    className="inp mono"
+                    className="inp inp-mono"
                     placeholder="e.g. 9f8e7d6c5b4a3..."
                     value={appCreds.metaAppSecret}
                     onChange={(e) =>
@@ -1201,7 +1201,7 @@ function PlatformDetailInner() {
                 <div style={{ display: "flex", gap: 6 }}>
                   <input
                     type={showSecret2 ? "text" : "password"}
-                    className="inp mono"
+                    className="inp inp-mono"
                     placeholder="e.g. tok_sec_random_string"
                     value={appCreds.metaWebhookVerifyToken}
                     onChange={(e) =>
@@ -1250,7 +1250,7 @@ function PlatformDetailInner() {
                   </div>
                   <div style={{ display: "flex", gap: 6 }}>
                     <input
-                      className="inp mono"
+                      className="inp inp-mono"
                       readOnly
                       style={{ fontSize: 12, height: 32, background: "#fff" }}
                       value={detail?.metaConfig?.webhookCallbackUrl || (typeof window !== "undefined" ? `${window.location.origin}/api/webhooks/meta` : "")}
@@ -1275,7 +1275,7 @@ function PlatformDetailInner() {
                   </div>
                   <div style={{ display: "flex", gap: 6 }}>
                     <input
-                      className="inp mono"
+                      className="inp inp-mono"
                       readOnly
                       style={{ fontSize: 12, height: 32, background: "#fff" }}
                       value={detail?.metaConfig?.oauthRedirectUri || (typeof window !== "undefined" ? `${window.location.origin}/api/org/meta/oauth/callback` : "")}
@@ -1301,7 +1301,7 @@ function PlatformDetailInner() {
               <div className="field">
                 <label style={{ fontWeight: 600, fontSize: 13 }}>Google Cloud OAuth Client ID</label>
                 <input
-                  className="inp mono"
+                  className="inp inp-mono"
                   placeholder="e.g. 123456789-xxx.apps.googleusercontent.com"
                   value={appCreds.googleAdsClientId}
                   onChange={(e) =>
@@ -1318,7 +1318,7 @@ function PlatformDetailInner() {
                 <div style={{ display: "flex", gap: 6 }}>
                   <input
                     type={showSecret1 ? "text" : "password"}
-                    className="inp mono"
+                    className="inp inp-mono"
                     placeholder="e.g. GOCSPX-..."
                     value={appCreds.googleAdsClientSecret}
                     onChange={(e) =>
@@ -1344,7 +1344,7 @@ function PlatformDetailInner() {
                     Developer Token <span className="hint">(Optional)</span>
                   </label>
                   <input
-                    className="inp mono"
+                    className="inp inp-mono"
                     placeholder="e.g. AbC123XyZ..."
                     value={appCreds.googleAdsDeveloperToken}
                     onChange={(e) =>
@@ -1373,7 +1373,7 @@ function PlatformDetailInner() {
                 </div>
                 <div style={{ display: "flex", gap: 6 }}>
                   <input
-                    className="inp mono"
+                    className="inp inp-mono"
                     readOnly
                     style={{ fontSize: 12, height: 32, background: "#fff" }}
                     value={typeof window !== "undefined" ? `${window.location.origin}/api/org/marketing/oauth/google/callback` : ""}
@@ -1471,7 +1471,7 @@ function PlatformDetailInner() {
           <div className="field">
             <label style={{ fontWeight: 600, fontSize: 13 }}>Google Sheet URL or ID</label>
             <input
-              className="inp mono"
+              className="inp inp-mono"
               placeholder="https://docs.google.com/spreadsheets/d/1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgvE2upms/edit or ID"
               value={linkSheetInput}
               onChange={(e) => setLinkSheetInput(e.target.value)}

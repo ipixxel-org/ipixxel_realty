@@ -97,7 +97,7 @@ export function GoogleAuthSettings() {
               <span className="hint">From Google Cloud Console</span>
             </label>
             <input
-              className="inp mono"
+              className="inp inp-mono"
               placeholder="e.g. 123456789-xxx.apps.googleusercontent.com"
               value={clientId}
               onChange={(e) => setClientId(e.target.value)}
@@ -113,7 +113,7 @@ export function GoogleAuthSettings() {
             <div style={{ position: "relative", display: "flex" }}>
               <input
                 type={showSecret ? "text" : "password"}
-                className="inp mono"
+                className="inp inp-mono"
                 placeholder="e.g. GOCSPX-..."
                 value={clientSecret}
                 onChange={(e) => setClientSecret(e.target.value)}

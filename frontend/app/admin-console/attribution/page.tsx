@@ -257,7 +257,7 @@ export default function SuperAdminAttributionPage() {
             <label>App ID</label>
             <div className="attr-copy-field">
               <input
-                className="inp mono"
+                className="inp inp-mono"
                 readOnly
                 value={meta?.appId || "—"}
               />
@@ -277,7 +277,7 @@ export default function SuperAdminAttributionPage() {
             <label>Webhook callback</label>
             <div className="attr-copy-field">
               <input
-                className="inp mono"
+                className="inp inp-mono"
                 readOnly
                 value={meta?.webhookCallbackUrl || ""}
               />
@@ -297,7 +297,7 @@ export default function SuperAdminAttributionPage() {
             <label>OAuth redirect</label>
             <div className="attr-copy-field">
               <input
-                className="inp mono"
+                className="inp inp-mono"
                 readOnly
                 value={meta?.oauthRedirectUri || ""}
               />
@@ -360,7 +360,7 @@ export default function SuperAdminAttributionPage() {
             <div className="field">
               <label>Key</label>
               <input
-                className="inp mono"
+                className="inp inp-mono"
                 placeholder="e.g. ad_id"
                 value={draft.key}
                 onChange={(e) =>
