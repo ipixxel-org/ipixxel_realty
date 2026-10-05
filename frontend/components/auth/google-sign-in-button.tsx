@@ -1,8 +1,42 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
-import { authenticateWithGoogle, getGoogleAuthConfig, getGoogleAuthUrl } from "@/lib/api";
-import type { GoogleAuthResponse } from "@/lib/types";
+import { useState } from "react";
+import { getGoogleAuthUrl } from "@/lib/api";
+
+/** sessionStorage key for the OAuth state nonce, checked by /auth/google/callback. */
+export const GOOGLE_OAUTH_NONCE_KEY = "google_oauth_nonce";
+
+/**
+ * sessionStorage key the callback page uses to hand a brand-new Google
+ * user's details (and the short-lived signup token) to /register — kept out
+ * of the URL so the token never lands in history or server logs.
+ */
+export const GOOGLE_SIGNUP_KEY = "google_signup";
+
+export interface GoogleSignupPrefill {
+  email: string;
+  firstName: string;
+  lastName: string;
+  googleToken?: string;
+}
+
+/**
+ * Reads ?google_error= (set by the callback page on failure) and removes it
+ * from the address bar, so a reload doesn't show a stale error again.
+ */
+export function consumeGoogleErrorParam(): string | null {
+  const params = new URLSearchParams(window.location.search);
+  const error = params.get("google_error");
+  if (error === null) return null;
+  params.delete("google_error");
+  const qs = params.toString();
+  window.history.replaceState(
+    window.history.state,
+    "",
+    `${window.location.pathname}${qs ? `?${qs}` : ""}`,
+  );
+  return error;
+}
 
 export function GoogleIcon({ size = 18 }: { size?: number }) {
   return (
@@ -39,158 +73,39 @@ interface GoogleSignInButtonProps {
   portal?: "organisation" | "platform";
   text?: string;
   disabled?: boolean;
-  extraData?: {
-    country?: string;
-    phoneNumber?: string;
-    firstName?: string;
-    lastName?: string;
-  };
-  onSuccess: (res: GoogleAuthResponse) => void;
   onError?: (error: string) => void;
 }
 
-declare global {
-  interface Window {
-    google?: {
-      accounts: {
-        id: {
-          initialize: (config: {
-            client_id: string;
-            callback: (res: { credential?: string }) => void;
-            auto_select?: boolean;
-            cancel_on_tap_outside?: boolean;
-          }) => void;
-          prompt: (notification?: (status: { isNotDisplayed: () => boolean; isSkippedMoment: () => boolean }) => void) => void;
-          renderButton: (
-            parent: HTMLElement,
-            options: Record<string, unknown>,
-          ) => void;
-        };
-      };
-    };
-  }
+function randomNonce(): string {
+  const bytes = new Uint8Array(16);
+  crypto.getRandomValues(bytes);
+  return Array.from(bytes, (b) => b.toString(16).padStart(2, "0")).join("");
 }
 
+/**
+ * Starts Google's OAuth redirect flow. The result is handled by
+ * app/(auth)/(portal)/auth/google/callback, not by the page hosting this button.
+ */
 export function GoogleSignInButton({
   mode = "login",
   portal = "organisation",
   text,
   disabled = false,
-  extraData,
-  onSuccess,
   onError,
 }: GoogleSignInButtonProps) {
   const [loading, setLoading] = useState(false);
-  const [clientId, setClientId] = useState<string | null>(null);
-  const scriptLoadedRef = useRef(false);
-
-  useEffect(() => {
-    let mounted = true;
-    getGoogleAuthConfig()
-      .then((cfg) => {
-        if (!mounted) return;
-        if (cfg.clientId) {
-          setClientId(cfg.clientId);
-          // Load Google Identity Services script
-          if (!scriptLoadedRef.current && !document.getElementById("google-gsi-script")) {
-            const script = document.createElement("script");
-            script.id = "google-gsi-script";
-            script.src = "https://accounts.google.com/gsi/client";
-            script.async = true;
-            script.defer = true;
-            script.onload = () => {
-              scriptLoadedRef.current = true;
-            };
-            document.head.appendChild(script);
-          }
-        }
-      })
-      .catch(() => undefined);
-
-    return () => {
-      mounted = false;
-    };
-  }, []);
 
   async function handleGoogleClick() {
     if (loading || disabled) return;
     setLoading(true);
-
     try {
-      // 1. If Google Identity Services (GIS) library is available and clientId is configured:
-      if (typeof window !== "undefined" && window.google?.accounts?.id && clientId) {
-        let responded = false;
-
-        window.google.accounts.id.initialize({
-          client_id: clientId,
-          callback: async (res) => {
-            responded = true;
-            if (!res.credential) {
-              setLoading(false);
-              onError?.("No Google credential returned");
-              return;
-            }
-            try {
-              const authRes = await authenticateWithGoogle({
-                credential: res.credential,
-                mode,
-                portal,
-                country: extraData?.country,
-                phoneNumber: extraData?.phoneNumber,
-                firstName: extraData?.firstName,
-                lastName: extraData?.lastName,
-                host: window.location.host,
-              });
-              onSuccess(authRes);
-            } catch (err: unknown) {
-              const msg = err instanceof Error ? err.message : "Google authentication failed";
-              onError?.(msg);
-            } finally {
-              setLoading(false);
-            }
-          },
-          cancel_on_tap_outside: true,
-        });
-
-        // Prompt Google Sign-In prompt
-        window.google.accounts.id.prompt((notification) => {
-          if (notification.isNotDisplayed() || notification.isSkippedMoment()) {
-            if (!responded) {
-              // Popup failed or was dismissed, fall back to standard OAuth redirect
-              fallbackToOAuthRedirect();
-            }
-          }
-        });
-
-        // Timeout to fallback if popup does not appear in 4 seconds
-        setTimeout(() => {
-          if (!responded && loading) {
-            fallbackToOAuthRedirect();
-          }
-        }, 4000);
-        return;
-      }
-
-      // 2. Otherwise fall back to standard OAuth authorization URL redirect
-      await fallbackToOAuthRedirect();
-    } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : "Could not initialize Google sign in";
-      onError?.(msg);
-      setLoading(false);
-    }
-  }
-
-  async function fallbackToOAuthRedirect() {
-    try {
-      const redirectUri =
-        typeof window !== "undefined"
-          ? `${window.location.origin}/auth/google/callback`
-          : undefined;
-      const res = await getGoogleAuthUrl(mode, portal, redirectUri);
-      if (res.url) {
-        window.location.href = res.url;
-        return;
-      }
+      const nonce = randomNonce();
+      window.sessionStorage.setItem(GOOGLE_OAUTH_NONCE_KEY, nonce);
+      const redirectUri = `${window.location.origin}/auth/google/callback`;
+      const res = await getGoogleAuthUrl(mode, portal, redirectUri, nonce);
+      if (!res.url) throw new Error("Google sign in is not available right now");
+      window.location.href = res.url;
+      // Leave the spinner up — the page is navigating away.
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : "Google OAuth is not configured on server";
       onError?.(msg);

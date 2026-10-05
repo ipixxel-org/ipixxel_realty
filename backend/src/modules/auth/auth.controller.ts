@@ -1,5 +1,4 @@
-import { Body, Controller, Get, Headers, HttpCode, Post, Query, Res, UseGuards } from '@nestjs/common';
-import type { Response } from 'express';
+import { Body, Controller, Get, Headers, HttpCode, Post, Query, UseGuards } from '@nestjs/common';
 import { AuthService } from './auth.service';
 import { SignupDto } from './dto/signup.dto';
 import { LoginDto } from './dto/login.dto';
@@ -37,11 +36,13 @@ export class AuthController {
     @Query('mode') mode?: 'login' | 'register',
     @Query('portal') portal?: 'organisation' | 'platform',
     @Query('redirectUri') redirectUri?: string,
+    @Query('nonce') nonce?: string,
   ) {
     return this.authService.getGoogleAuthUrl(
       mode || 'login',
       portal || 'organisation',
       redirectUri,
+      nonce,
     );
   }
 
@@ -49,17 +50,6 @@ export class AuthController {
   @HttpCode(200)
   googleAuth(@Body() dto: GoogleAuthDto) {
     return this.authService.handleGoogleAuth(dto);
-  }
-
-  @Get('google/callback')
-  async googleCallback(
-    @Query('code') code: string,
-    @Query('state') state: string,
-    @Query('error') error: string | undefined,
-    @Res() res: Response,
-  ) {
-    const target = await this.authService.handleGoogleCallback(code, state, error);
-    return res.redirect(target);
   }
 
   @Post('signup')

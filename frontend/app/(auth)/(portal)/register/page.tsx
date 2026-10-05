@@ -20,9 +20,14 @@ import {
   verifyEmail,
   resendVerification,
 } from "@/lib/api";
-import { GoogleSignInButton } from "@/components/auth/google-sign-in-button";
+import {
+  GOOGLE_SIGNUP_KEY,
+  GoogleSignInButton,
+  consumeGoogleErrorParam,
+  type GoogleSignupPrefill,
+} from "@/components/auth/google-sign-in-button";
 import { callingCodeForCountry, validatePhoneForCountry } from "@/lib/phone";
-import type { GoogleAuthResponse, OnboardingStep, OrgIndustry, ResumeSignupResponse } from "@/lib/types";
+import type { OnboardingStep, OrgIndustry, ResumeSignupResponse } from "@/lib/types";
 import { COUNTRY_META, COUNTRIES } from "@/lib/countries";
 
 const FIELD_KEYS = [
@@ -316,7 +321,10 @@ export default function RegisterPage() {
       }
       applyTokens(res.user, res);
       resumedAccountIdRef.current = res.user.id;
-      if (!googleVerified && (res.email_verification_required || !res.user.email_verified_at)) {
+      try {
+        window.sessionStorage.removeItem(GOOGLE_SIGNUP_KEY);
+      } catch {}
+      if (res.email_verification_required || !res.user.email_verified_at) {
         setAwaitingVerification(true);
         setVerifyCode("");
         setVerifyError(null);
@@ -397,26 +405,32 @@ export default function RegisterPage() {
 
   const didResumeRef = useRef(false);
   useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
-    const gEmail = params.get("google_email");
-    const gFn = params.get("google_fn");
-    const gLn = params.get("google_ln");
-    const gVerified = params.get("google_verified") === "1";
-    const gToken = params.get("google_token");
-    const gError = params.get("google_error");
+    const gError = consumeGoogleErrorParam();
 
     if (gError) {
       setGeneralError(gError);
     }
-    if (gEmail) {
+    // Handed over by /auth/google/callback for a Google account with no user
+    // yet. Kept until Step 1 succeeds so a refresh doesn't lose it.
+    let gPrefill: GoogleSignupPrefill | null = null;
+    try {
+      const raw = window.sessionStorage.getItem(GOOGLE_SIGNUP_KEY);
+      if (raw) gPrefill = JSON.parse(raw) as GoogleSignupPrefill;
+    } catch {}
+    if (gPrefill?.email) {
+      const { email, firstName, lastName, googleToken: gToken } = gPrefill;
       setForm((prev) => ({
         ...prev,
-        work_email: gEmail,
-        first_name: gFn || prev.first_name,
-        last_name: gLn || prev.last_name,
+        work_email: email,
+        first_name: firstName || prev.first_name,
+        last_name: lastName || prev.last_name,
       }));
-      if (gVerified) setGoogleVerified(true);
-      if (gToken) setGoogleToken(gToken);
+      // Only the signup token proves the email to the backend — without it
+      // Step 1 still needs the normal verification code.
+      if (gToken) {
+        setGoogleVerified(true);
+        setGoogleToken(gToken);
+      }
     }
 
     if (didResumeRef.current) return;
@@ -493,62 +507,6 @@ export default function RegisterPage() {
     // when an incomplete user reaches the wizard from login or /org.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user?.id, user?.onboarding_step]);
-
-  function handleGoogleRegisterSuccess(res: GoogleAuthResponse) {
-    setGeneralError(null);
-
-    if (res.status === "created") {
-      didResumeRef.current = true;
-      applyTokens(res.user, res);
-      resumedAccountIdRef.current = res.user.id;
-      setGoogleVerified(true);
-      setCur(1);
-      window.scrollTo(0, 0);
-      return;
-    }
-
-    if (res.status === "exists_incomplete") {
-      didResumeRef.current = true;
-      applyTokens(res.user, res);
-      resumedAccountIdRef.current = res.existingUserId || res.user.id;
-      setResumingDraft(true);
-      setGoogleVerified(true);
-      setForm((prev) => ({
-        ...prev,
-        work_email: res.user.email || prev.work_email,
-        first_name: res.firstName || res.user.first_name || prev.first_name,
-        last_name: res.lastName || res.user.last_name || prev.last_name,
-      }));
-      setCur(1);
-      window.scrollTo(0, 0);
-      return;
-    }
-
-    if (res.status === "exists_completed") {
-      setAccountExists(true);
-      setForm((prev) => ({ ...prev, work_email: res.email }));
-      setGeneralError("An account with this email is already fully registered. Please sign in.");
-      return;
-    }
-
-    if (res.status === "authenticated") {
-      router.push("/org");
-      return;
-    }
-
-    if (res.status === "needs_profile" || res.status === "not_found") {
-      setForm((prev) => ({
-        ...prev,
-        work_email: res.email,
-        first_name: res.firstName || prev.first_name,
-        last_name: res.lastName || prev.last_name,
-      }));
-      setGoogleVerified(true);
-      if ("googleToken" in res && res.googleToken) {
-        setGoogleToken(res.googleToken);
-      }
-    }
-  }
 
   // 60s resend cooldown, kept in sessionStorage (keyed by email) rather than
   // plain component state — a page refresh mid-cooldown re-reads the same
@@ -734,6 +692,9 @@ export default function RegisterPage() {
       setDraftCollision(null);
       setGoogleVerified(false);
       setGoogleToken(null);
+      try {
+        window.sessionStorage.removeItem(GOOGLE_SIGNUP_KEY);
+      } catch {}
       setCur(0);
       window.scrollTo(0, 0);
     } catch (err) {
@@ -928,13 +889,6 @@ export default function RegisterPage() {
                   <GoogleSignInButton
                     mode="register"
                     text="Sign up with Google"
-                    extraData={{
-                      country: form.country,
-                      phoneNumber: form.phone_number,
-                      firstName: form.first_name,
-                      lastName: form.last_name,
-                    }}
-                    onSuccess={handleGoogleRegisterSuccess}
                     onError={(err) => setGeneralError(err)}
                   />
                   <div className="auth-divider">
