@@ -3,6 +3,7 @@ import type { Prisma } from '@prisma/client';
 import { PrismaService } from '../../database/prisma.service';
 import { assertPlanFitsCurrentUsage } from '../../common/utils/plan-quota.util';
 import { applyOrgSubscriptionLifecycle } from '../../common/utils/subscription-lifecycle.util';
+import { orgBillingRecipientsWhere } from '../../common/utils/notification-recipients.util';
 import { CreatePackageChangeRequestDto } from './dto/create-package-change-request.dto';
 import { RejectPackageChangeRequestDto } from './dto/reject-package-change-request.dto';
 import { ListPackageChangeRequestsDto } from './dto/list-package-change-requests.dto';
@@ -328,8 +329,9 @@ export class PackageChangeRequestsService {
         },
       });
 
+      // Org Admins + the member who raised the request — not every member.
       const orgUsers = await tx.user.findMany({
-        where: { orgId: request.orgId, status: 'active' },
+        where: orgBillingRecipientsWhere(request.orgId, request.requestedById),
         select: { id: true },
       });
 
@@ -399,8 +401,9 @@ export class PackageChangeRequestsService {
         },
       });
 
+      // Org Admins + the member who raised the request — not every member.
       const orgUsers = await tx.user.findMany({
-        where: { orgId: request.orgId, status: 'active' },
+        where: orgBillingRecipientsWhere(request.orgId, request.requestedById),
         select: { id: true },
       });
 
