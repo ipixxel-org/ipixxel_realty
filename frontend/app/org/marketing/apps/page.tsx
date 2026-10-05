@@ -684,7 +684,7 @@ export default function OrgMarketingAppsPage() {
               <div className="field">
                 <label style={{ fontWeight: 600, fontSize: 13 }}>Meta App ID</label>
                 <input
-                  className="inp mono"
+                  className="inp inp-mono"
                   placeholder="e.g. 109283746592019"
                   value={creds.metaAppId}
                   onChange={(e) =>
@@ -698,7 +698,7 @@ export default function OrgMarketingAppsPage() {
                 <div style={{ display: "flex", gap: 6 }}>
                   <input
                     type={showSecretMeta ? "text" : "password"}
-                    className="inp mono"
+                    className="inp inp-mono"
                     placeholder="e.g. 9f8e7d6c5b4a3..."
                     value={creds.metaAppSecret}
                     onChange={(e) =>
@@ -720,7 +720,7 @@ export default function OrgMarketingAppsPage() {
                 <div style={{ display: "flex", gap: 6 }}>
                   <input
                     type={showSecretToken ? "text" : "password"}
-                    className="inp mono"
+                    className="inp inp-mono"
                     placeholder="e.g. tok_sec_random_string"
                     value={creds.metaWebhookVerifyToken}
                     onChange={(e) =>
@@ -768,7 +768,7 @@ export default function OrgMarketingAppsPage() {
                   </div>
                   <div style={{ display: "flex", gap: 6 }}>
                     <input
-                      className="inp mono"
+                      className="inp inp-mono"
                       readOnly
                       style={{ fontSize: 12, height: 32, background: "#fff" }}
                       value={typeof window !== "undefined" ? `${window.location.origin}/api/webhooks/meta` : ""}
@@ -793,7 +793,7 @@ export default function OrgMarketingAppsPage() {
                   </div>
                   <div style={{ display: "flex", gap: 6 }}>
                     <input
-                      className="inp mono"
+                      className="inp inp-mono"
                       readOnly
                       style={{ fontSize: 12, height: 32, background: "#fff" }}
                       value={typeof window !== "undefined" ? `${window.location.origin}/api/org/meta/oauth/callback` : ""}
@@ -819,7 +819,7 @@ export default function OrgMarketingAppsPage() {
               <div className="field">
                 <label style={{ fontWeight: 600, fontSize: 13 }}>Google Ads Client ID</label>
                 <input
-                  className="inp mono"
+                  className="inp inp-mono"
                   placeholder="e.g. 123456789-xxx.apps.googleusercontent.com"
                   value={creds.googleAdsClientId}
                   onChange={(e) =>
@@ -836,7 +836,7 @@ export default function OrgMarketingAppsPage() {
                 <div style={{ display: "flex", gap: 6 }}>
                   <input
                     type={showSecretGoogle ? "text" : "password"}
-                    className="inp mono"
+                    className="inp inp-mono"
                     placeholder="e.g. GOCSPX-..."
                     value={creds.googleAdsClientSecret}
                     onChange={(e) =>
@@ -861,7 +861,7 @@ export default function OrgMarketingAppsPage() {
                   Developer Token <span className="hint">(Optional)</span>
                 </label>
                 <input
-                  className="inp mono"
+                  className="inp inp-mono"
                   placeholder="e.g. AbC123XyZ..."
                   value={creds.googleAdsDeveloperToken}
                   onChange={(e) =>
@@ -889,7 +889,7 @@ export default function OrgMarketingAppsPage() {
                 </div>
                 <div style={{ display: "flex", gap: 6 }}>
                   <input
-                    className="inp mono"
+                    className="inp inp-mono"
                     readOnly
                     style={{ fontSize: 12, height: 32, background: "#fff" }}
                     value={typeof window !== "undefined" ? `${window.location.origin}/api/org/marketing/oauth/google/callback` : ""}

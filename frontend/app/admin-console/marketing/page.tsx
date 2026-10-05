@@ -898,7 +898,7 @@ export default function SuperAdminMarketingPage() {
                     <span className="hint">Required for OAuth dialog</span>
                   </label>
                   <input
-                    className="inp mono"
+                    className="inp inp-mono"
                     placeholder="e.g. 109283746592019"
                     value={creds.metaAppId}
                     onChange={(e) =>
@@ -915,7 +915,7 @@ export default function SuperAdminMarketingPage() {
                   <div className="mkt-admin-input-group">
                     <input
                       type={showSecretMeta ? "text" : "password"}
-                      className="inp mono"
+                      className="inp inp-mono"
                       placeholder="e.g. 9f8e7d6c5b4a3..."
                       value={creds.metaAppSecret}
                       onChange={(e) =>
@@ -941,7 +941,7 @@ export default function SuperAdminMarketingPage() {
                   <div className="mkt-admin-input-group">
                     <input
                       type={showSecretToken ? "text" : "password"}
-                      className="inp mono"
+                      className="inp inp-mono"
                       placeholder="e.g. tok_sec_random_key"
                       value={creds.metaWebhookVerifyToken}
                       onChange={(e) =>
@@ -980,7 +980,7 @@ export default function SuperAdminMarketingPage() {
                 <label>Webhook Callback URL</label>
                 <div className="mkt-admin-copy-field">
                   <input
-                    className="inp mono"
+                    className="inp inp-mono"
                     readOnly
                     value={meta?.webhookCallbackUrl || "—"}
                   />
@@ -1009,7 +1009,7 @@ export default function SuperAdminMarketingPage() {
                 <label>OAuth Redirect URI</label>
                 <div className="mkt-admin-copy-field">
                   <input
-                    className="inp mono"
+                    className="inp inp-mono"
                     readOnly
                     value={meta?.oauthRedirectUri || "—"}
                   />
@@ -1038,7 +1038,7 @@ export default function SuperAdminMarketingPage() {
                 <label>Active Verify Token</label>
                 <div className="mkt-admin-copy-field">
                   <input
-                    className="inp mono"
+                    className="inp inp-mono"
                     readOnly
                     value={creds.metaWebhookVerifyToken || "—"}
                   />
@@ -1254,7 +1254,7 @@ export default function SuperAdminMarketingPage() {
                       <span className="hint">From Meta Developer Console</span>
                     </label>
                     <input
-                      className="inp mono"
+                      className="inp inp-mono"
                       placeholder="e.g. 109283746592019"
                       value={creds.metaAppId}
                       onChange={(e) =>
@@ -1271,7 +1271,7 @@ export default function SuperAdminMarketingPage() {
                     <div className="mkt-admin-input-group">
                       <input
                         type={showSecretMeta ? "text" : "password"}
-                        className="inp mono"
+                        className="inp inp-mono"
                         placeholder="e.g. 9f8e7d6c5b4a3..."
                         value={creds.metaAppSecret}
                         onChange={(e) =>
@@ -1297,7 +1297,7 @@ export default function SuperAdminMarketingPage() {
                     <div className="mkt-admin-input-group">
                       <input
                         type={showSecretToken ? "text" : "password"}
-                        className="inp mono"
+                        className="inp inp-mono"
                         placeholder="e.g. tok_sec_random_string"
                         value={creds.metaWebhookVerifyToken}
                         onChange={(e) =>
@@ -1365,7 +1365,7 @@ export default function SuperAdminMarketingPage() {
                       <span className="hint">From Google Cloud Console</span>
                     </label>
                     <input
-                      className="inp mono"
+                      className="inp inp-mono"
                       placeholder="e.g. 123456789-xxx.apps.googleusercontent.com"
                       value={creds.googleClientId || creds.googleAdsClientId || ""}
                       onChange={(e) =>
@@ -1386,7 +1386,7 @@ export default function SuperAdminMarketingPage() {
                     <div className="mkt-admin-input-group">
                       <input
                         type={showSecretGoogle ? "text" : "password"}
-                        className="inp mono"
+                        className="inp inp-mono"
                         placeholder="e.g. GOCSPX-..."
                         value={creds.googleClientSecret || creds.googleAdsClientSecret || ""}
                         onChange={(e) =>
@@ -1414,7 +1414,7 @@ export default function SuperAdminMarketingPage() {
                       <span className="hint">For Google Ads API spend/metrics</span>
                     </label>
                     <input
-                      className="inp mono"
+                      className="inp inp-mono"
                       placeholder="e.g. AbC123XyZ..."
                       value={creds.googleAdsDeveloperToken}
                       onChange={(e) =>
@@ -1527,7 +1527,7 @@ export default function SuperAdminMarketingPage() {
           <div className="mkt-admin-modal-body">
             <div className="field">
               <label>Platform Key</label>
-              <input className="inp mono" readOnly value={editing.key} />
+              <input className="inp inp-mono" readOnly value={editing.key} />
               <span className="muted" style={{ fontSize: 11.5 }}>
                 Unique system key (immutable)
               </span>
@@ -1590,7 +1590,7 @@ export default function SuperAdminMarketingPage() {
           <div className="field">
             <label>Platform Key</label>
             <input
-              className="inp mono"
+              className="inp inp-mono"
               placeholder="e.g. youtube_ads"
               value={draft.key}
               onChange={(e) =>
