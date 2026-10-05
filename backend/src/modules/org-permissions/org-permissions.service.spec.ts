@@ -107,6 +107,55 @@ describe('OrgPermissionsService.updateRole safety rules', () => {
   });
 });
 
+describe('OrgPermissionsService.updateRole inherits Super Admin defaults', () => {
+  /** Org admin actor; `systemRows` are the Super Admin's saved rows. */
+  function makeSavingService(systemRows: ReturnType<typeof row>[]) {
+    const { service, prisma } = makeService('admin');
+    prisma.roleModulePermission.findMany.mockImplementation(
+      ({ where }: { where: { orgId: unknown } }) =>
+        Promise.resolve(where.orgId === 'system' ? systemRows : []),
+    );
+    prisma.$transaction.mockImplementation((fn: (tx: any) => unknown) => fn(prisma));
+    return { service, prisma };
+  }
+
+  it('stores only modules that differ from the Super Admin default', async () => {
+    const { service, prisma } = makeSavingService([
+      row('crm', { canView: true, canAdd: true }),
+      row('reports', { canView: true }),
+    ]);
+    await service.updateRole(
+      'org1',
+      actor('admin'),
+      'sales',
+      dto(
+        row('crm', { canView: true, canAdd: true }), // same as Super Admin
+        row('reports', { canView: false }), // org turned it off
+      ),
+    );
+    expect(prisma.roleModulePermission.upsert).toHaveBeenCalledTimes(1);
+    expect(prisma.roleModulePermission.upsert.mock.calls[0][0].create.moduleKey).toBe('reports');
+    expect(prisma.roleModulePermission.deleteMany).toHaveBeenCalledWith({
+      where: { orgId: 'org1', roleId: 'r-sales', moduleKey: { notIn: ['reports'] } },
+    });
+  });
+
+  it('falls back to the built-in default when Super Admin saved nothing', async () => {
+    const { service, prisma } = makeSavingService([]);
+    // Built-in sales default for Dashboard is view only.
+    await service.updateRole(
+      'org1',
+      actor('admin'),
+      'sales',
+      dto(row('dashboard', { canView: true })),
+    );
+    expect(prisma.roleModulePermission.upsert).not.toHaveBeenCalled();
+    expect(prisma.roleModulePermission.deleteMany).toHaveBeenCalledWith({
+      where: { orgId: 'org1', roleId: 'r-sales', moduleKey: { notIn: [] } },
+    });
+  });
+});
+
 describe('OrgPermissionsService custom roles in use', () => {
   function makeRoleService(assigned: number) {
     const role = { id: 'r-custom', orgId: 'org1', name: 'salesman', status: 'active' };

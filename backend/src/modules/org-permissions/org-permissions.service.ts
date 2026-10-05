@@ -12,6 +12,7 @@ import {
   actionToColumn,
   clampToModuleActions,
   computeEffectivePermissions,
+  defaultForRole,
   dtoToModulePermission,
   emptyModulePermission,
   loadRolePermissions,
@@ -214,8 +215,22 @@ export class OrgPermissionsService {
 
     await this.assertCanChangeRole(orgId, actor, roleKey, dto);
 
+    // What this role inherits when the org has no row of its own: the Super
+    // Admin's default (Organisation roles), else the built-in default.
+    const systemRows = await this.prisma.roleModulePermission.findMany({
+      where: { orgId: SYSTEM_ORG_ID, roleId: role.id },
+      select: { moduleKey: true, ...PERMISSION_COLUMN_SELECT },
+    });
+    const inherited = new Map(
+      systemRows.map((r) => [r.moduleKey, dtoToModulePermission(r.moduleKey, r)]),
+    );
+
     const input = dto.permissions;
     const seen = new Set<string>();
+    // Modules the org has actually changed from the inherited default. Only
+    // these get an org row; everything else keeps following Super Admin, so a
+    // later change to the platform default still reaches this org.
+    const overridden = new Set<string>();
 
     await this.prisma.$transaction(async (tx) => {
       for (const item of input) {
@@ -224,6 +239,12 @@ export class OrgPermissionsService {
         const data = modulePermissionUpsertData(
           dtoToModulePermission(item.moduleKey, item),
         );
+        const baseline = modulePermissionUpsertData(
+          inherited.get(item.moduleKey) ??
+            dtoToModulePermission(item.moduleKey, defaultForRole(roleKey, item.moduleKey)),
+        );
+        if (samePermissions(data, baseline)) continue;
+        overridden.add(item.moduleKey);
         await tx.roleModulePermission.upsert({
           where: {
             orgId_roleId_moduleKey: {
@@ -236,16 +257,15 @@ export class OrgPermissionsService {
           create: { orgId, roleId: role.id, moduleKey: item.moduleKey, ...data },
         });
       }
-      // Anything not sent is removed so it falls back to the role default.
-      if (seen.size < PERMISSION_MODULES.length) {
-        await tx.roleModulePermission.deleteMany({
-          where: {
-            orgId,
-            roleId: role.id,
-            moduleKey: { notIn: [...seen] },
-          },
-        });
-      }
+      // Anything not sent, or matching the inherited default, is removed so
+      // it falls back to the Super Admin / built-in default.
+      await tx.roleModulePermission.deleteMany({
+        where: {
+          orgId,
+          roleId: role.id,
+          moduleKey: { notIn: [...overridden] },
+        },
+      });
     });
 
     const rows = await loadRolePermissions(this.prisma, orgId);
@@ -472,6 +492,17 @@ export class OrgPermissionsService {
       ).filter((x): x is NonNullable<typeof x> => x !== null),
     };
   }
+}
+
+/** True when two clamped permission rows grant exactly the same actions. */
+function samePermissions(
+  a: Record<PermissionColumn, boolean>,
+  b: Record<PermissionColumn, boolean>,
+) {
+  return PERMISSION_ACTIONS.every((action) => {
+    const column = actionToColumn(action);
+    return a[column] === b[column];
+  });
 }
 
 /** { moduleKey: ModulePermission } -> { moduleKey: { view, add, ... } }. */
