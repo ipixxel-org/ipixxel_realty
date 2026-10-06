@@ -8,11 +8,11 @@
 # GitHub → your repo → Settings → Secrets and variables → Actions →
 # "New repository secret", add these three:
 #
-#   SSH_PRIVATE_KEY   The ENTIRE contents of your ed25519 generated on the server, including the
+#   STAGING_SSH_KEY The ENTIRE contents of your ed25519 generated on the server, including the
 #                     "-----BEGIN ED25519 PRIVATE KEY-----" and
 #                     "-----END ED25519 PRIVATE KEY-----" lines.
-#   SSH_HOST          187.126.119.156
-#   SSH_USER          root
+#   STAGING_HOST          187.126.119.156
+#   STAGING_USER          root
 #
 # Then commit this file to .github/workflows/deploy.yml on main.
 # From then on, every merged PR deploys automatically.
@@ -90,13 +90,13 @@ jobs:
       - name: Set up SSH
         run: |
           mkdir -p ~/.ssh
-          echo "${{ secrets.SSH_PRIVATE_KEY }}" > ~/.ssh/deploy_key
+          echo "${{ secrets.STAGING_SSH_KEY }}" > ~/.ssh/deploy_key
           chmod 600 ~/.ssh/deploy_key
-          ssh-keyscan -H "${{ secrets.SSH_HOST }}" >> ~/.ssh/known_hosts 2>/dev/null
+          ssh-keyscan -H "${{ secrets.STAGING_HOST }}" >> ~/.ssh/known_hosts 2>/dev/null
 
       - name: Deploy
         run: |
-          ssh -i ~/.ssh/deploy_key "${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }}" \
+          ssh -i ~/.ssh/deploy_key "${{ secrets.STAGING_USER }}@${{ secrets.STAGING_HOST }}" \
             'bash -s' << 'ENDSSH'
           set -euo pipefail
 
