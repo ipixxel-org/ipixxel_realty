@@ -704,7 +704,13 @@ export class MetaLeadsService implements OnModuleInit {
       });
 
       if (this.googleSheets) {
-        void this.googleSheets.appendLeadRow(connection.orgId, lead).catch(() => {});
+        void this.googleSheets
+          .appendLeadRow(
+            connection.orgId,
+            lead,
+            lead.projectId ?? connection.projectId ?? undefined,
+          )
+          .catch(() => {});
       }
 
       await this.prisma.activityEvent.create({

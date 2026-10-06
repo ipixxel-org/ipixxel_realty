@@ -11,6 +11,7 @@ import {
   connectMetaWithToken,
   createOrgGoogleSheet,
   disconnectMarketingConnection,
+  disconnectOrgGoogleSheet,
   getMarketingConnectUrl,
   getMarketingCredentials,
   getMarketingPlatform,
@@ -74,6 +75,7 @@ function PlatformDetailInner() {
   const [linkSheetInput, setLinkSheetInput] = useState("");
   const [showNewSheetModal, setShowNewSheetModal] = useState(false);
   const [newSheetTitle, setNewSheetTitle] = useState("");
+  const [activeSheetConnectionId, setActiveSheetConnectionId] = useState("");
   const [syncingAllLeads, setSyncingAllLeads] = useState(false);
   const [sheetBusy, setSheetBusy] = useState(false);
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
@@ -329,7 +331,10 @@ function PlatformDetailInner() {
     setSheetBusy(true);
     setError("");
     try {
-      await createOrgGoogleSheet(newSheetTitle.trim() || undefined);
+      await createOrgGoogleSheet(
+        newSheetTitle.trim() || undefined,
+        activeSheetConnectionId || undefined,
+      );
       setShowNewSheetModal(false);
       setNewSheetTitle("");
       setMessage("New Google Sheet created in your Google Drive! Auto-sync is active.");
@@ -346,7 +351,11 @@ function PlatformDetailInner() {
     setSheetBusy(true);
     setError("");
     try {
-      await linkOrgGoogleSheet(linkSheetInput.trim());
+      await linkOrgGoogleSheet(
+        linkSheetInput.trim(),
+        undefined,
+        activeSheetConnectionId || undefined,
+      );
       setShowLinkSheetModal(false);
       setLinkSheetInput("");
       setMessage("Google Sheet linked successfully! Auto-sync is active.");
@@ -358,12 +367,14 @@ function PlatformDetailInner() {
     }
   };
 
-  const handleSyncAll = async () => {
+  const handleSyncAll = async (connectionId?: string) => {
     setSyncingAllLeads(true);
     setError("");
     setMessage("");
     try {
-      const res = await syncAllOrgGoogleSheetsLeads();
+      const res = await syncAllOrgGoogleSheetsLeads(
+        connectionId ? { connectionId } : undefined,
+      );
       setMessage(res.message || `Successfully synced ${res.synced} lead(s) to Google Sheet!`);
       await load();
     } catch (err) {
@@ -373,14 +384,46 @@ function PlatformDetailInner() {
     }
   };
 
-  const handleToggleAutoSync = async (current: boolean) => {
+  const handleToggleAutoSync = async (current: boolean, connectionId?: string) => {
     setSheetBusy(true);
     try {
-      await updateOrgGoogleSheetSettings({ autoSync: !current });
+      await updateOrgGoogleSheetSettings({
+        autoSync: !current,
+        connectionId: connectionId || undefined,
+      });
       setMessage(!current ? "Auto-sync enabled. New leads will stream to sheet." : "Auto-sync paused.");
       await load();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to update auto-sync setting");
+    } finally {
+      setSheetBusy(false);
+    }
+  };
+
+  const handleToggleSheetPerProject = async (
+    field: "sheetPerProject" | "createSheetPerProject",
+    value: boolean,
+    connectionId?: string,
+  ) => {
+    setSheetBusy(true);
+    setError("");
+    try {
+      await updateOrgGoogleSheetSettings({
+        [field]: value,
+        connectionId: connectionId || undefined,
+      });
+      setMessage(
+        field === "sheetPerProject"
+          ? value
+            ? "Project-wise sheets enabled. Leads are routed per project."
+            : "Project-wise sheets disabled. All leads go to the default tab."
+          : value
+            ? "Project tabs will be created automatically in this spreadsheet."
+            : "Automatic project tab creation disabled.",
+      );
+      await load();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to update project sheet setting");
     } finally {
       setSheetBusy(false);
     }
@@ -807,6 +850,7 @@ function PlatformDetailInner() {
                                   display: "flex",
                                   alignItems: "center",
                                   gap: 8,
+                                  flexWrap: "wrap",
                                 }}
                               >
                                 <Icon name="check" size={16} />
@@ -837,6 +881,30 @@ function PlatformDetailInner() {
                                 >
                                   {autoSync ? "Active" : "Paused"}
                                 </span>
+                                {meta.sheetPerProject ? (
+                                  <>
+                                    {" "}
+                                    &bull; Project-wise Tabs:{" "}
+                                    <span
+                                      style={{
+                                        color: "#0f766e",
+                                        fontWeight: 600,
+                                      }}
+                                    >
+                                      {meta.createSheetPerProject
+                                        ? "Auto-create"
+                                        : "On"}
+                                    </span>
+                                  </>
+                                ) : null}
+                                {c.projectId ? (
+                                  <span
+                                    className="muted"
+                                    style={{ display: "block", marginTop: 2 }}
+                                  >
+                                    Project: <b>{c.project?.name || c.projectId}</b>
+                                  </span>
+                                ) : null}
                               </div>
                             </div>
                             <div
@@ -862,7 +930,7 @@ function PlatformDetailInner() {
                                 type="button"
                                 className="btn btn-secondary btn-sm"
                                 disabled={syncingAllLeads || sheetBusy}
-                                onClick={() => void handleSyncAll()}
+                                onClick={() => void handleSyncAll(c.id)}
                               >
                                 <Icon
                                   name="refresh"
@@ -889,7 +957,7 @@ function PlatformDetailInner() {
                               type="button"
                               className="btn btn-ghost btn-sm"
                               disabled={sheetBusy}
-                              onClick={() => void handleToggleAutoSync(autoSync)}
+                              onClick={() => void handleToggleAutoSync(autoSync, c.id)}
                             >
                               <Icon
                                 name={autoSync ? "alert" : "check"}
@@ -902,7 +970,49 @@ function PlatformDetailInner() {
                             <button
                               type="button"
                               className="btn btn-ghost btn-sm"
-                              onClick={() => setShowNewSheetModal(true)}
+                              disabled={sheetBusy}
+                              onClick={() =>
+                                void handleToggleSheetPerProject(
+                                  "sheetPerProject",
+                                  !meta.sheetPerProject,
+                                  c.id,
+                                )
+                              }
+                            >
+                              <Icon
+                                name={meta.sheetPerProject ? "check" : "alert"}
+                                size={13}
+                              />
+                              {meta.sheetPerProject
+                                ? "Project-wise: On"
+                                : "Project-wise: Off"}
+                            </button>
+                            {meta.sheetPerProject ? (
+                              <button
+                                type="button"
+                                className="btn btn-ghost btn-sm"
+                                disabled={sheetBusy}
+                                onClick={() =>
+                                  void handleToggleSheetPerProject(
+                                    "createSheetPerProject",
+                                    !meta.createSheetPerProject,
+                                    c.id,
+                                  )
+                                }
+                              >
+                                <Icon name="modules" size={13} />
+                                {meta.createSheetPerProject
+                                  ? "Auto-create tabs: On"
+                                  : "Auto-create tabs: Off"}
+                              </button>
+                            ) : null}
+                            <button
+                              type="button"
+                              className="btn btn-ghost btn-sm"
+                              onClick={() => {
+                                setActiveSheetConnectionId(c.id);
+                                setShowNewSheetModal(true);
+                              }}
                             >
                               <Icon name="modules" size={13} /> Create New Sheet
                               in Drive
@@ -910,7 +1020,10 @@ function PlatformDetailInner() {
                             <button
                               type="button"
                               className="btn btn-ghost btn-sm"
-                              onClick={() => setShowLinkSheetModal(true)}
+                              onClick={() => {
+                                setActiveSheetConnectionId(c.id);
+                                setShowLinkSheetModal(true);
+                              }}
                             >
                               <Icon name="link" size={13} /> Link Another Sheet
                             </button>
@@ -919,8 +1032,8 @@ function PlatformDetailInner() {
                               className="btn btn-ghost btn-sm"
                               style={{ color: "#b91c1c" }}
                               onClick={() =>
-                                void disconnectMarketingConnection(c.id).then(
-                                  () => load(),
+                                void disconnectOrgGoogleSheet(c.id).then(() =>
+                                  load(),
                                 )
                               }
                             >
@@ -930,6 +1043,32 @@ function PlatformDetailInner() {
                         </div>
                       );
                     })}
+                  <div
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "space-between",
+                      flexWrap: "wrap",
+                      gap: 10,
+                      marginTop: 14,
+                      paddingTop: 14,
+                      borderTop: "1px dashed #bbf7d0",
+                    }}
+                  >
+                    <span className="muted" style={{ fontSize: 12.5 }}>
+                      You can connect multiple Google accounts. New leads stream to
+                      every connected sheet that is eligible (based on auto-sync and
+                      project filters).
+                    </span>
+                    <button
+                      type="button"
+                      className="btn btn-primary btn-sm"
+                      disabled={busy}
+                      onClick={() => void connectOAuth()}
+                    >
+                      <Icon name="link" size={13} /> Connect another Google account
+                    </button>
+                  </div>
                   </div>
                 )}
               </>

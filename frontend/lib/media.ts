@@ -1,4 +1,4 @@
-const MAX_BYTES = 10 * 1024 * 1024;
+const MAX_BYTES = 2.5 * 1024 * 1024;
 
 export function isMediaSrc(value: unknown): value is string {
   if (typeof value !== "string") return false;
