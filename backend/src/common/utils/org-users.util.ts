@@ -610,6 +610,122 @@ export async function updateOrgUser(
   return result;
 }
 
+// ---------------------------------------------------------------------------
+// My profile (Settings > My profile) — a member viewing / editing their OWN
+// account. Only first name, last name, mobile number and password can change;
+// email, country and role are read-only here. Unlike an admin resetting a
+// member's password (updateOrgUser), changing your own password is not a
+// temporary one: no forced change-password screen, and the session stays.
+// ---------------------------------------------------------------------------
+
+export interface UpdateOwnProfileInput {
+  firstName?: string;
+  lastName?: string;
+  phoneNumber?: string;
+  password?: string;
+}
+
+export async function getOwnProfile(
+  prisma: OrgUsersPrisma,
+  orgId: string,
+  userId: string,
+) {
+  const user = await prisma.user.findFirst({
+    where: { id: userId, orgId },
+    select: {
+      id: true,
+      firstName: true,
+      lastName: true,
+      email: true,
+      phoneNumber: true,
+      country: true,
+      userRoles: { select: { role: { select: { key: true, name: true } } } },
+    },
+  });
+  if (!user) {
+    throw new NotFoundException('User not found');
+  }
+  const role = user.userRoles[0]?.role ?? null;
+  return {
+    id: user.id,
+    firstName: user.firstName,
+    lastName: user.lastName,
+    email: user.email,
+    phoneNumber: user.phoneNumber,
+    country: user.country,
+    role: role ? { key: role.key, name: role.name } : null,
+  };
+}
+
+export async function updateOwnProfile(
+  prisma: OrgUsersPrisma,
+  orgId: string,
+  userId: string,
+  dto: UpdateOwnProfileInput,
+) {
+  const existing = await prisma.user.findFirst({
+    where: { id: userId, orgId },
+    select: { id: true, email: true, firstName: true, lastName: true, phoneNumber: true },
+  });
+  if (!existing) {
+    throw new NotFoundException('User not found');
+  }
+
+  // Same rule as updateOrgUser: the user's own number re-submitted (even in
+  // another format) is not a change; a new number must not belong to anyone.
+  const phoneNumber =
+    dto.phoneNumber === undefined ||
+    isSamePhoneNumber(existing.phoneNumber, dto.phoneNumber)
+      ? undefined
+      : normalizePhoneNumber(dto.phoneNumber);
+  if (phoneNumber && phoneNumber !== existing.phoneNumber) {
+    const phoneTaken = await prisma.user.findFirst({
+      where: { phoneNumber, id: { not: userId } },
+    });
+    if (phoneTaken) {
+      throw new ConflictException(
+        'This mobile number is already assigned to another user.',
+      );
+    }
+  }
+
+  const password = dto.password?.trim() ? dto.password : undefined;
+  await prisma.user.update({
+    where: { id: userId },
+    data: {
+      firstName: dto.firstName?.trim() || undefined,
+      lastName: dto.lastName?.trim() || undefined,
+      phoneNumber,
+      ...(password
+        ? { passwordHash: await bcrypt.hash(password, BCRYPT_COST_FACTOR) }
+        : {}),
+    },
+  });
+
+  const profile = await getOwnProfile(prisma, orgId, userId);
+
+  // Email the new credentials so the member can sign in manually as well as
+  // with Google. Fire-and-forget; a delivery failure never fails the save.
+  if (password) {
+    const recipientName = [profile.firstName, profile.lastName]
+      .filter(Boolean)
+      .join(' ');
+    new EmailService(prisma as unknown as PrismaService)
+      .sendPasswordChangedEmail({
+        to: profile.email,
+        recipientName: recipientName || undefined,
+        newPassword: password,
+        orgId,
+      })
+      .catch((err: unknown) => {
+        const message = err instanceof Error ? err.message : String(err);
+        console.error(`[Password Changed Email] Error delivering to ${profile.email}: ${message}`);
+      });
+  }
+
+  return profile;
+}
+
 // Shared by the Org Admin's own PATCH /org/users/:id/status (which also
 // forbids self-deactivation) and the Super Admin's equivalent endpoint.
 export async function setOrgUserStatus(

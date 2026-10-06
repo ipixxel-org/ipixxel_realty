@@ -45,7 +45,49 @@ export const SETTINGS_ACTIONS = {
   editProfile: "edit",
   editEmail: "approve",
   editPipeline: "activate",
+  // The member's own profile (Settings > My profile), not the organisation's.
+  viewMyProfile: "add",
+  editMyProfile: "deactivate",
 } as const satisfies Record<string, PermissionAction>;
+
+/**
+ * Role-matrix pill rules, shared by Super Admin > Organisation roles and the
+ * org's Roles & Permissions. Every action normally needs the module's View:
+ * granting one grants View, and removing View removes them all. The Settings
+ * "My profile" pills are the exception — they gate the member's own profile
+ * page, not the Settings page, so they neither need nor clear Settings View.
+ * "My profile: Edit" still needs "My profile: View".
+ */
+const VIEW_INDEPENDENT_COLUMNS: Record<string, readonly string[]> = {
+  settings: ["canAdd", "canDeactivate"], // My profile: View / Edit
+};
+const REQUIRED_COLUMN: Record<string, Record<string, string>> = {
+  settings: { canDeactivate: "canAdd" }, // My profile: Edit needs My profile: View
+};
+
+export function applyPermissionToggle<T extends object>(
+  moduleKey: string,
+  row: T,
+  column: string,
+  enabled: boolean,
+  allColumns: readonly string[],
+): T {
+  const independent = VIEW_INDEPENDENT_COLUMNS[moduleKey] ?? [];
+  const required = REQUIRED_COLUMN[moduleKey] ?? {};
+  const next: Record<string, unknown> = { ...row, [column]: enabled };
+  if (enabled) {
+    if (column !== "canView" && !independent.includes(column)) next.canView = true;
+    if (required[column]) next[required[column]] = true;
+  } else {
+    if (column === "canView") {
+      for (const col of allColumns) if (!independent.includes(col)) next[col] = false;
+    }
+    for (const [dependent, needs] of Object.entries(required)) {
+      if (needs === column) next[dependent] = false;
+    }
+  }
+  return next as T;
+}
 
 export const SUPPORT_ACTIONS = {
   raiseTicket: "add",

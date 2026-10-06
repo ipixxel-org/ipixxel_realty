@@ -17,6 +17,7 @@ import {
 } from "@/lib/api";
 import type { OrgBillingSummary, OrgNotification, PermissionAction } from "@/lib/types";
 import { useToast } from "@/components/ui/toast";
+import { SETTINGS_ACTIONS } from "@/lib/permissions";
 import {
   applyThemeVariables,
   resetThemeVariables,
@@ -177,6 +178,7 @@ const CRUMB_MAP: Record<string, string> = {
   "/org/roles-permissions": "Roles & Permissions",
   "/org/publish-approvals": "Publish & Approvals",
   "/org/settings": "Organisation Settings",
+  "/org/profile": "My Profile",
   "/org/support": "Support & Help",
 };
 
@@ -786,8 +788,10 @@ export function OrgAdminShell({ children }: { children: ReactNode }) {
                     </div>
                   </div>
 
+                  {/* My profile page — needs the Settings "My profile: View" pill. */}
+                  {hasPermission("settings", SETTINGS_ACTIONS.viewMyProfile) ? (
                   <Link
-                    href="/org/settings?section=profile"
+                    href="/org/profile"
                     onClick={() => setProfileMenuOpen(false)}
                     style={{
                       display: "flex",
@@ -805,6 +809,7 @@ export function OrgAdminShell({ children }: { children: ReactNode }) {
                     </span>
                     My Profile
                   </Link>
+                  ) : null}
 
                   {/* Same gate as the sidebar's Settings item. */}
                   {hasPermission("settings", "view") ? (

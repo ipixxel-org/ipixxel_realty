@@ -8,6 +8,7 @@ import { Reveal } from "@/components/superadmin/reveal";
 import { Icon } from "@/components/icons";
 import { Seg } from "@/components/superadmin/seg";
 import { useFlash } from "@/lib/flash";
+import { applyPermissionToggle } from "@/lib/permissions";
 import { ORG_ROLES_FLASH_KEY, ORG_ROLES_PATH } from "./roles-shared";
 import { ConfirmModal } from "@/components/ui/confirm-modal";
 import type { OrgUsersListResponse, OrgUser } from "@/lib/types";
@@ -368,13 +369,10 @@ export default function OrgRolesPermissionsPage() {
     const current = roleState.permissions[moduleKey] ?? emptyRow(moduleKey);
     const enabled = !current[column];
     const label = actionLabel(mod, COLUMN_ACTIONS[column]);
-    const next = { ...current, [column]: enabled };
     // Same rule as Super Admin > Organisation roles: every action needs View,
-    // so granting one also grants View, and removing View removes them all.
-    if (enabled && column !== "canView") next.canView = true;
-    if (!enabled && column === "canView") {
-      for (const col of Object.values(ACTION_COLUMNS)) next[col] = false;
-    }
+    // so granting one also grants View, and removing View removes them all —
+    // except the Settings "My profile" pills (see applyPermissionToggle).
+    const next = applyPermissionToggle(moduleKey, current, column, enabled, Object.values(ACTION_COLUMNS));
     void saveModuleRow(
       moduleKey,
       next,

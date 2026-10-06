@@ -20,6 +20,7 @@ import {
   getOrgApprovedEmailHtml,
   getOrgStatusEmailHtml,
   getUserAccountStatusEmailHtml,
+  getPasswordChangedEmailHtml,
 } from './email.templates';
 import { frontendBaseUrl } from '../../common/utils/app-url.util';
 
@@ -34,6 +35,7 @@ export interface SendMailOptions {
   template?:
     | 'invite'
     | 'password_reset'
+    | 'password_changed'
     | 'user_account_activated'
     | 'user_account_deactivated'
     | 'test'
@@ -747,6 +749,30 @@ export class EmailService implements OnApplicationBootstrap {
       subject,
       html,
       template: activated ? 'user_account_activated' : 'user_account_deactivated',
+      orgId: params.orgId,
+    });
+  }
+
+  /** A member changed their own password from My Profile — sends the new
+   *  credentials so they can sign in manually as well as with Google. */
+  async sendPasswordChangedEmail(params: {
+    to: string;
+    recipientName?: string;
+    newPassword: string;
+    orgId?: string | null;
+  }) {
+    const html = getPasswordChangedEmailHtml({
+      recipientName: params.recipientName,
+      loginEmail: params.to,
+      newPassword: params.newPassword,
+      loginUrl: `${frontendBaseUrl()}/login`,
+    });
+
+    return this.sendMail({
+      to: params.to,
+      subject: 'Your iPixxel Realty password was changed',
+      html,
+      template: 'password_changed',
       orgId: params.orgId,
     });
   }

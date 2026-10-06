@@ -7,10 +7,12 @@ jest.mock('bcrypt', () => ({
 
 const sendInviteEmail = jest.fn().mockResolvedValue({ success: true });
 const sendUserAccountStatusEmail = jest.fn().mockResolvedValue({ success: true });
+const sendPasswordChangedEmail = jest.fn().mockResolvedValue({ success: true });
 jest.mock('../../modules/email/email.service', () => ({
   EmailService: jest.fn().mockImplementation(() => ({
     sendInviteEmail,
     sendUserAccountStatusEmail,
+    sendPasswordChangedEmail,
   })),
 }));
 
@@ -21,6 +23,7 @@ import {
   resendCredentials,
   setOrgUserStatus,
   updateOrgUser,
+  updateOwnProfile,
 } from './org-users.util';
 
 type Txn = {
@@ -427,5 +430,62 @@ describe('updateOrgUser mobile number', () => {
       updateOrgUser(prisma, 'org-1', 'm1', { phoneNumber: '+919999999999' }),
     ).rejects.toThrow('This mobile number is already assigned to another user.');
     expect(txn.user.update).not.toHaveBeenCalled();
+  });
+});
+
+describe('updateOwnProfile (Settings > My profile)', () => {
+  const me = {
+    id: 'm1',
+    email: 'me@acme.test',
+    firstName: 'Me',
+    lastName: 'One',
+    phoneNumber: '9876543210',
+  };
+  const profileRow = {
+    ...me,
+    country: 'India',
+    userRoles: [{ role: { key: 'telecaller', name: 'Telecaller' } }],
+  };
+
+  it('changes the password without forcing a change or ending the session, and emails it', async () => {
+    const { prisma } = makePrisma();
+    prisma.user.findFirst.mockResolvedValueOnce(me).mockResolvedValueOnce(profileRow);
+
+    await updateOwnProfile(prisma, 'org-1', 'm1', {
+      firstName: 'New',
+      phoneNumber: '+919876543210', // own number, now with country code
+      password: 'N3wPass!',
+    });
+
+    const data = prisma.user.update.mock.calls[0][0].data;
+    expect(data.firstName).toBe('New');
+    expect(data.phoneNumber).toBeUndefined();
+    expect(data.passwordHash).toBe('hashed:N3wPass!');
+    expect(data.mustChangePassword).toBeUndefined();
+    expect(data.tokenInvalidBefore).toBeUndefined();
+    expect(data.email).toBeUndefined();
+    expect(sendPasswordChangedEmail).toHaveBeenCalledWith(
+      expect.objectContaining({ to: 'me@acme.test', newPassword: 'N3wPass!' }),
+    );
+  });
+
+  it('keeps the current password when none is sent', async () => {
+    const { prisma } = makePrisma();
+    prisma.user.findFirst.mockResolvedValueOnce(me).mockResolvedValueOnce(profileRow);
+
+    await updateOwnProfile(prisma, 'org-1', 'm1', { lastName: 'Two', password: '' });
+
+    expect(prisma.user.update.mock.calls[0][0].data.passwordHash).toBeUndefined();
+    expect(sendPasswordChangedEmail).not.toHaveBeenCalled();
+  });
+
+  it("rejects another user's mobile number", async () => {
+    const { prisma } = makePrisma();
+    prisma.user.findFirst.mockResolvedValueOnce(me).mockResolvedValueOnce({ id: 'other' });
+
+    await expect(
+      updateOwnProfile(prisma, 'org-1', 'm1', { phoneNumber: '+919999999999' }),
+    ).rejects.toThrow('This mobile number is already assigned to another user.');
+    expect(prisma.user.update).not.toHaveBeenCalled();
   });
 });
