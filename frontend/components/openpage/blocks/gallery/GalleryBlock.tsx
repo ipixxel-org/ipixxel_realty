@@ -4,7 +4,11 @@ import { useMemo, useState } from "react";
 import { ImageIcon, X } from "lucide-react";
 import type { BlockConfig } from "../types";
 
+import { El } from "../El";
+import { listElementId, subElementId } from "@/lib/openpage/element-style";
+
 interface GalleryImage {
+  _id?: string;
   src?: string;
   alt?: string;
   caption?: string;
@@ -13,38 +17,83 @@ interface GalleryImage {
 }
 
 const defaultImages: GalleryImage[] = [
-  { alt: "Image 1" },
-  { alt: "Image 2" },
-  { alt: "Image 3" },
-  { alt: "Image 4" },
-  { alt: "Image 5" },
-  { alt: "Image 6" },
+  { _id: "img_0", alt: "Image 1" },
+  { _id: "img_1", alt: "Image 2" },
+  { _id: "img_2", alt: "Image 3" },
+  { _id: "img_3", alt: "Image 4" },
+  { _id: "img_4", alt: "Image 5" },
+  { _id: "img_5", alt: "Image 6" },
 ];
 
-function ImageCard({ image, tall, onOpen }: { image: GalleryImage; tall?: boolean; onOpen: () => void }) {
+/** Clamp a user-entered image height so a bad value can never collapse the grid. */
+function imageHeight(value: unknown, fallback: number): number {
+  const n = typeof value === "number" ? value : Number(value);
+  if (!Number.isFinite(n) || n <= 0) return fallback;
+  return Math.min(Math.max(n, 60), 900);
+}
+
+function ImageCard({
+  image,
+  tall,
+  height,
+  onOpen,
+  block,
+}: {
+  image: GalleryImage;
+  tall?: boolean;
+  height: number;
+  onOpen: () => void;
+  block: BlockConfig;
+}) {
+  const itemIdBase = listElementId({ path: ["images"] }, image._id || "");
   return (
-    <button
+    <El
+      block={block}
+      id={itemIdBase}
+      as="button"
       type="button"
       onClick={onOpen}
       className={`rounded-xl overflow-hidden border border-border-default group text-left w-full ${tall ? "row-span-2" : ""}`}
     >
       {image.src ? (
-        // eslint-disable-next-line @next/next/no-img-element
-        <img src={image.src} alt={image.alt || ""} className="w-full h-full min-h-[140px] object-cover group-hover:scale-[1.04] transition-transform duration-500" />
+        <El block={block} id={subElementId(itemIdBase, "image")} className="block h-full">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src={image.src}
+            alt={image.alt || ""}
+            className="w-full h-full object-cover group-hover:scale-[1.04] transition-transform duration-500"
+            style={{ minHeight: height }}
+          />
+        </El>
       ) : (
-        <div className="w-full h-full min-h-[140px] bg-gradient-to-br from-bg-3 to-bg-4 flex items-center justify-center">
+        <El
+          block={block}
+          id={subElementId(itemIdBase, "image")}
+          className="w-full h-full bg-gradient-to-br from-bg-3 to-bg-4 flex items-center justify-center"
+          style={{ minHeight: height }}
+        >
           <ImageIcon size={24} className="text-text-3" />
-        </div>
+        </El>
       )}
-      {image.caption ? <div className="px-3 py-2 bg-bg-2 text-[11px] text-text-2">{image.caption}</div> : null}
-    </button>
+      {image.caption ? (
+        <El block={block} id={subElementId(itemIdBase, "caption")} as="div" className="px-3 py-2 bg-bg-2 text-[11px] text-text-2">
+          {image.caption}
+        </El>
+      ) : null}
+    </El>
   );
 }
 
 export function GalleryBlock({ block }: { block: BlockConfig }) {
   const { variant, props } = block;
   const title = props.title as string | undefined;
-  const images = ((props.images as GalleryImage[]) || []).length > 0 ? (props.images as GalleryImage[]) : defaultImages;
+  const images = ((): GalleryImage[] => {
+    const src = (props.images as GalleryImage[]) || [];
+    if (src.length > 0) {
+      return src.map((it, i) => ({ _id: (it as GalleryImage)._id || `img_${i}`, ...it }));
+    }
+    return defaultImages;
+  })();
   const categories = useMemo(() => {
     const cats = Array.from(new Set(images.map((i) => i.category).filter(Boolean))) as string[];
     return cats;
@@ -53,6 +102,11 @@ export function GalleryBlock({ block }: { block: BlockConfig }) {
   const [open, setOpen] = useState<number | null>(null);
   const visible = filter === "All" ? images : images.filter((i) => i.category === filter);
   const openImage = open != null ? visible[open] : null;
+
+  // One height control drives every variant, so shrinking an image is a single
+  // field instead of a fixed Tailwind class the user cannot influence.
+  const cardHeight = imageHeight(props.imageHeight, variant === "lifestyle" ? 260 : 160);
+  const rowHeight = variant === "masonry" ? cardHeight : undefined;
 
   return (
     <section id={(typeof props.anchor === "string" && props.anchor) || "gallery"} className="px-6 py-16 @lg:px-16 @lg:py-20">
@@ -86,12 +140,15 @@ export function GalleryBlock({ block }: { block: BlockConfig }) {
         <div className="grid grid-cols-1 @md:grid-cols-2 gap-6 @md:gap-8 max-w-6xl mx-auto">
           {visible.map((img, i) => (
             <button
-              key={`${img.src}-${i}`}
+              key={img._id || `${img.src}-${i}`}
               type="button"
               onClick={() => setOpen(i)}
-              className={`text-left group ${i % 3 === 0 ? "@md:row-span-2" : ""}`}
+              className="text-left group"
             >
-              <div className={`rounded-[24px] overflow-hidden bg-bg-2 ${i % 3 === 0 ? "aspect-[3/4]" : "aspect-[16/11]"}`}>
+              <div
+                className={`rounded-[24px] overflow-hidden bg-bg-2 ${i % 3 === 0 ? "aspect-[3/4]" : "aspect-[16/11]"}`}
+                style={{ minHeight: cardHeight }}
+              >
                 {img.src ? (
                   // eslint-disable-next-line @next/next/no-img-element
                   <img src={img.src} alt={img.alt || ""} className="w-full h-full object-cover group-hover:scale-[1.03] transition-transform duration-700" />
@@ -116,9 +173,10 @@ export function GalleryBlock({ block }: { block: BlockConfig }) {
           variant === "strip"
             ? "flex gap-3 overflow-x-auto pb-2 snap-x snap-mandatory"
             : variant === "masonry"
-              ? "grid grid-cols-2 @lg:grid-cols-3 auto-rows-[160px] gap-3"
+              ? "grid grid-cols-2 @lg:grid-cols-3 gap-3"
               : "grid grid-cols-2 @lg:grid-cols-3 gap-3"
         }
+        style={rowHeight ? { gridAutoRows: `${rowHeight}px` } : undefined}
       >
         {visible.map((img, i) =>
           variant === "strip" ? (
@@ -130,16 +188,31 @@ export function GalleryBlock({ block }: { block: BlockConfig }) {
             >
               {img.src ? (
                 // eslint-disable-next-line @next/next/no-img-element
-                <img src={img.src} alt={img.alt || ""} className="w-full h-52 object-cover group-hover:scale-[1.04] transition-transform duration-500" />
+                <img
+                  src={img.src}
+                  alt={img.alt || ""}
+                  className="w-full object-cover group-hover:scale-[1.04] transition-transform duration-500"
+                  style={{ height: cardHeight }}
+                />
               ) : (
-                <div className="w-full h-52 bg-gradient-to-br from-bg-3 to-bg-4 flex items-center justify-center">
+                <div
+                  className="w-full bg-gradient-to-br from-bg-3 to-bg-4 flex items-center justify-center"
+                  style={{ height: cardHeight }}
+                >
                   <ImageIcon size={24} className="text-text-3" />
                 </div>
               )}
               {img.caption ? <div className="px-3 py-2 bg-bg-2 text-[11px] text-text-2">{img.caption}</div> : null}
             </button>
           ) : (
-            <ImageCard key={`${img.src}-${i}`} image={img} tall={variant === "masonry" && i % 3 === 0} onOpen={() => setOpen(i)} />
+            <ImageCard
+              key={img._id || `${img.src}-${i}`}
+              image={img}
+              tall={variant === "masonry" && i % 3 === 0}
+              height={cardHeight}
+              onOpen={() => setOpen(i)}
+              block={block}
+            />
           )
         )}
       </div>

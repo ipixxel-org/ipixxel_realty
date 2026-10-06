@@ -222,39 +222,76 @@ export class OrgMarketingController {
   @Post('google-sheets/create-sheet')
   createGoogleSheet(
     @CurrentUser() user: JwtPayload,
-    @Body() dto: { title?: string },
+    @Body() dto: { title?: string; connectionId?: string; projectId?: string },
   ) {
-    return this.googleSheets.createNewSheetForOrg(user.orgId as string, dto?.title);
+    return this.googleSheets.createNewSheetForOrg(
+      user.orgId as string,
+      dto?.title,
+      dto?.projectId,
+      dto?.connectionId,
+    );
   }
 
   @Post('google-sheets/link-sheet')
   linkGoogleSheet(
     @CurrentUser() user: JwtPayload,
-    @Body() dto: { sheetInput: string; sheetName?: string },
+    @Body()
+    dto: {
+      sheetInput: string;
+      sheetName?: string;
+      connectionId?: string;
+      projectId?: string;
+    },
   ) {
     return this.googleSheets.linkExistingSheet(
       user.orgId as string,
       dto.sheetInput,
       dto?.sheetName,
+      dto?.projectId,
+      dto?.connectionId,
     );
   }
 
   @Post('google-sheets/sync-all')
-  syncAllGoogleSheets(@CurrentUser() user: JwtPayload) {
-    return this.googleSheets.syncAllLeadsToSheet(user.orgId as string);
+  syncAllGoogleSheets(
+    @CurrentUser() user: JwtPayload,
+    @Body() dto?: { projectId?: string; connectionId?: string },
+  ) {
+    return this.googleSheets.syncAllLeadsToSheet(
+      user.orgId as string,
+      dto?.projectId,
+      dto?.connectionId,
+    );
   }
 
   @Patch('google-sheets/settings')
   updateGoogleSheetsSettings(
     @CurrentUser() user: JwtPayload,
-    @Body() dto: { autoSync?: boolean; sheetName?: string },
+    @Body()
+    dto: {
+      autoSync?: boolean;
+      sheetName?: string;
+      sheetPerProject?: boolean;
+      createSheetPerProject?: boolean;
+      projectSheetNames?: Record<string, string>;
+      projectId?: string | null;
+      connectionId?: string;
+    },
   ) {
-    return this.googleSheets.updateSettings(user.orgId as string, dto);
+    const { connectionId, ...settings } = dto ?? {};
+    return this.googleSheets.updateSettings(
+      user.orgId as string,
+      settings,
+      connectionId,
+    );
   }
 
   @Delete('google-sheets')
-  disconnectGoogleSheets(@CurrentUser() user: JwtPayload) {
-    return this.googleSheets.disconnect(user.orgId as string);
+  disconnectGoogleSheets(
+    @CurrentUser() user: JwtPayload,
+    @Query('connectionId') connectionId?: string,
+  ) {
+    return this.googleSheets.disconnect(user.orgId as string, connectionId);
   }
 }
 

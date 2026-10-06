@@ -15,7 +15,7 @@ import { DynamicDataPicker } from "./DynamicDataPicker";
 interface FieldDef {
   key: string
   label: string
-  type: 'text' | 'textarea' | 'select' | 'array-strings' | 'array-items' | 'image' | 'icon' | 'form-select' | 'toggle' | 'nav-menu'
+  type: 'text' | 'textarea' | 'select' | 'array-strings' | 'array-items' | 'image' | 'icon' | 'form-select' | 'toggle' | 'nav-menu' | 'number'
   options?: string[]
 }
 
@@ -306,7 +306,8 @@ const blockFields: Partial<Record<BlockType, { sections: { title: string; fields
       {
         title: 'Style',
         fields: [
-          { key: 'variant', label: 'Variant', type: 'select', options: ['grid', 'masonry', 'strip'] },
+          { key: 'variant', label: 'Variant', type: 'select', options: ['grid', 'masonry', 'strip', 'lifestyle'] },
+          { key: 'imageHeight', label: 'Image height (px)', type: 'number' },
         ],
       },
     ],
@@ -372,7 +373,9 @@ const blockFields: Partial<Record<BlockType, { sections: { title: string; fields
       { key: 'body', label: 'Body', type: 'textarea' },
       { key: 'image', label: 'Image', type: 'image' },
       { key: 'highlights', label: 'Highlights', type: 'array-items' },
+      { key: 'stats', label: 'Stats', type: 'array-items' },
       { key: 'ctaText', label: 'CTA text', type: 'text' },
+      { key: 'imagePosition', label: 'Image side', type: 'select', options: ['left', 'right'] },
       { key: 'anchor', label: 'Section ID (menu scroll)', type: 'text' },
     ]}],
   },
@@ -392,11 +395,14 @@ const blockFields: Partial<Record<BlockType, { sections: { title: string; fields
   },
   amenities: {
     sections: [{ title: 'Layout', fields: [
-      { key: 'variant', label: 'Template', type: 'select', options: ['grid', 'chips', 'icon-grid', 'featured'] },
+      { key: 'variant', label: 'Template', type: 'select', options: ['grid', 'chips', 'icon-grid', 'featured', 'mosaic'] },
     ]}, { title: 'Content', fields: [
       { key: 'title', label: 'Title', type: 'text' },
       { key: 'subtitle', label: 'Subtitle', type: 'text' },
       { key: 'items', label: 'Amenities', type: 'array-items' },
+      { key: 'ctaText', label: 'CTA text', type: 'text' },
+      { key: 'ctaUrl', label: 'CTA URL', type: 'text' },
+      { key: 'ctaAnchor', label: 'CTA anchor', type: 'text' },
       { key: 'anchor', label: 'Section ID (menu scroll)', type: 'text' },
     ]}],
   },
@@ -444,19 +450,28 @@ const blockFields: Partial<Record<BlockType, { sections: { title: string; fields
     ]}],
   },
   location: {
-    sections: [{ title: 'Layout', fields: [
-      { key: 'variant', label: 'Template', type: 'select', options: ['split-map', 'list', 'map-only', 'cards'] },
-    ]}, { title: 'Content', fields: [
-      { key: 'title', label: 'Title', type: 'text' },
-      { key: 'address', label: 'Address', type: 'text' },
-      { key: 'embedUrl', label: 'Map embed URL', type: 'text' },
-      { key: 'items', label: 'Nearby', type: 'array-items' },
-      { key: 'anchor', label: 'Section ID (menu scroll)', type: 'text' },
-    ]}],
-  },
+      sections: [{ title: 'Layout', fields: [
+        { key: 'variant', label: 'Template', type: 'select', options: ['split-map', 'list', 'map-only', 'cards', 'editorial'] },
+      ]}, { title: 'Content', fields: [
+        { key: 'title', label: 'Title', type: 'text' },
+        { key: 'subtitle', label: 'Subheading', type: 'text' },
+        { key: 'address', label: 'Address', type: 'text' },
+        { key: 'image', label: 'Image', type: 'image' },
+        { key: 'embedUrl', label: 'Google Maps link', type: 'text' },
+        { key: 'items', label: 'Nearby', type: 'array-items' },
+        { key: 'ctaText', label: 'CTA text', type: 'text' },
+        { key: 'ctaUrl', label: 'CTA URL', type: 'text' },
+        { key: 'anchor', label: 'Section ID (menu scroll)', type: 'text' },
+      ]}],
+    },
   'google-maps': {
-    sections: [{ title: 'Map', fields: [
-      { key: 'embedUrl', label: 'Embed URL', type: 'text' },
+    sections: [{ title: 'Layout', fields: [
+      { key: 'showMap', label: 'Show map', type: 'toggle' },
+      { key: 'mapHeight', label: 'Map height (px)', type: 'number' },
+    ]}, { title: 'Map', fields: [
+      { key: 'title', label: 'Title', type: 'text' },
+      { key: 'subtitle', label: 'Subtitle', type: 'text' },
+      { key: 'embedUrl', label: 'Google Maps link', type: 'text' },
       { key: 'anchor', label: 'Section ID (menu scroll)', type: 'text' },
     ]}],
   },
@@ -716,7 +731,7 @@ const KNOWN_VARIANTS: Record<string, string[]> = {
   'project-overview': ['split', 'centered', 'cards', 'timeline'],
   'property-details': ['grid', 'table', 'two-column', 'checklist'],
   'project-highlights': ['grid', 'table', 'two-column', 'checklist'],
-  'amenities': ['grid', 'chips', 'icon-grid', 'featured'],
+  'amenities': ['grid', 'chips', 'icon-grid', 'featured', 'mosaic'],
   'floor-plans': ['cards', 'list', 'showcase'],
   'unit-config': ['cards', 'table'],
   're-pricing': ['cards', 'simple', 'comparison', 'banner'],
@@ -958,6 +973,20 @@ function PropertyField({ field, block }: { field: FieldDef; block: BlockConfig }
         </label>
       )
 
+    case 'number':
+      return (
+        <div className="mb-2.5">
+          <label className="block text-[11.5px] text-text-2 mb-1 font-medium">{field.label}</label>
+          <input
+            type="number"
+            value={value === undefined || value === null || value === '' ? '' : String(value)}
+            placeholder="Auto"
+            onChange={(e) => onChange(e.target.value === '' ? undefined : Number(e.target.value))}
+            className="w-full px-2 py-1.5 rounded border border-border-default bg-bg-2 text-text-0 text-xs outline-none focus:border-green"
+          />
+        </div>
+      )
+
     case 'text':
       return (
         <div className="mb-2.5">
@@ -1074,11 +1103,17 @@ function PropertyField({ field, block }: { field: FieldDef; block: BlockConfig }
           stats: { items: { value: '', label: '' } },
           developer: { stats: { value: '', label: '' } },
           'project-banner': { stats: { value: '', label: '' } },
+          'project-overview': { stats: { value: '', label: '' }, highlights: { title: '', description: '' } },
+          'property-details': { items: { label: '', value: '' } },
+          amenities: { items: { title: '', description: '', image: '', icon: '' } },
+          location: { items: { title: '', meta: '' } },
           faq: { items: { question: '', answer: '' } },
           team: { members: { name: '', role: '', avatar: '' } },
           features: { items: { icon: '', title: '', description: '' } },
+          'unit-config': { items: { type: '', config: '', area: '', price: '', image: '' } },
+          're-pricing': { items: { name: '', price: '', meta: '', cta: '' } },
           image: { images: { src: '', alt: '' } },
-          gallery: { images: { src: '', alt: '', caption: '' } },
+          gallery: { images: { src: '', alt: '', caption: '', meta: '', category: '' } },
           'floor-plans': { items: { name: '', beds: '', area: '', price: '', image: '', downloadUrl: '' } },
         }
         return blockTemplates[block.type]?.[field.key] || { title: '', description: '' }

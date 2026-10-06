@@ -1,6 +1,8 @@
 "use client";
 
-import type { BlockConfig } from "../types";
+import type { BlockConfig, ElementId } from "../types";
+import { El } from "../El";
+import { listElementId, subElementId } from "@/lib/openpage/element-style";
 import { ArrowRight, Check, Download, Lock, MapPin, Play } from "lucide-react";
 import { useOpenPageRuntime } from "@/components/openpage/runtime/OpenPageRuntime";
 import { DynamicLeadForm } from "@/components/openpage/dynamic-lead-form";
@@ -33,12 +35,78 @@ function SectionShell({ children, className = "", id }: { children: React.ReactN
   return <section id={id} className={`px-6 @md:px-10 py-16 @md:py-20 bg-white text-text-0 ${cleanClass}`}>{children}</section>;
 }
 
-function Title({ title, subtitle }: { title?: string; subtitle?: string }) {
+/**
+ * Shared element ids for a section's fixed (non-list) parts. They must stay in
+ * sync with the ids the inspector writes to `elementStyles`, which is what makes
+ * per-element styling, visibility and typography actually take effect.
+ */
+function part(block: BlockConfig, key: string): ElementId {
+  return `${block.type}:${key}`;
+}
+
+/**
+ * Element id for one item of a named list, e.g. `items:it_abc`, or one of its
+ * named children, e.g. `items:it_abc/title`. Mirrors `listElementId` /
+ * `subElementId` in `element-style.ts`, which is what the list editor writes to.
+ */
+function itemPart(listKey: string, item: unknown, subKey?: string): ElementId {
+  const itemId = (item as { _id?: unknown } | null | undefined)?._id;
+  const base = listElementId({ path: [listKey] }, typeof itemId === "string" ? itemId : "");
+  return subKey ? subElementId(base, subKey) : base;
+}
+
+/** True when the inspector flagged this list item as hidden. */
+function isHiddenItem(item: unknown): boolean {
+  return (item as { hidden?: unknown } | null | undefined)?.hidden === true;
+}
+
+/**
+ * Section heading. Wrapped in {@link El} so the heading and its subheading are
+ * individually selectable and styleable rather than inheriting section styles.
+ */
+function Title({
+  block,
+  title,
+  subtitle,
+  align = "center",
+}: {
+  block?: BlockConfig;
+  title?: string;
+  subtitle?: string;
+  align?: "center" | "left";
+}) {
+  const content = (
+    <>
+      {title ? (
+        <El
+          block={block!}
+          id={part(block!, "title")}
+          as="h2"
+          className="font-display text-3xl @md:text-4xl font-semibold tracking-tight mb-2"
+        >
+          {title}
+        </El>
+      ) : null}
+      {subtitle ? (
+        <El block={block!} id={part(block!, "subtitle")} as="p" className="text-text-2 text-sm leading-relaxed">
+          {subtitle}
+        </El>
+      ) : null}
+    </>
+  );
+
+  if (!block) {
+    return <div className="mb-8 text-center max-w-2xl mx-auto">{content}</div>;
+  }
+
   return (
-    <div className="mb-8 text-center max-w-2xl mx-auto">
-      {title ? <h2 className="font-display text-3xl @md:text-4xl font-semibold tracking-tight mb-2">{title}</h2> : null}
-      {subtitle ? <p className="text-text-2 text-sm leading-relaxed">{subtitle}</p> : null}
-    </div>
+    <El
+      block={block}
+      id={part(block, "headingRow")}
+      className={`mb-8 max-w-2xl mx-auto ${align === "center" ? "text-center" : "text-left"}`}
+    >
+      {content}
+    </El>
   );
 }
 
@@ -521,16 +589,81 @@ export function ProjectBannerBlock({ block }: { block: BlockConfig }) {
   );
 }
 
+/** Normalise a stats/highlights list into displayable value+label pairs. */
+function statPairs(list: unknown): Array<{ value: string; label: string }> {
+  return items<Record<string, unknown>>(list)
+    .map((s) => ({
+      value: str(s?.value ?? s?.stat ?? s?.title ?? ""),
+      label: str(s?.label ?? s?.description ?? s?.subtitle ?? ""),
+    }))
+    .filter((s) => s.value || s.label);
+}
+
+/**
+ * Scalar props the user created with "Add Field". They are not part of any
+ * renderer, so without this they are editable but silently invisible on the
+ * page — render them as a labelled definition list instead.
+ */
+function customScalarProps(p: Record<string, unknown>, known: string[]): Array<{ label: string; value: string }> {
+  const skip = new Set([...known, "variant", "anchor", "_id", "hidden"]);
+  const out: Array<{ label: string; value: string }> = [];
+  for (const [key, value] of Object.entries(p)) {
+    if (skip.has(key)) continue;
+    if (typeof value !== "string") continue;
+    const trimmed = value.trim();
+    if (!trimmed) continue;
+    const label = key
+      .replace(/([A-Z])/g, " $1")
+      .replace(/[_-]/g, " ")
+      .replace(/^\w/, (c) => c.toUpperCase());
+    out.push({ label, value: trimmed });
+  }
+  return out;
+}
+
+const OVERVIEW_KNOWN_PROPS = [
+  "title",
+  "subtitle",
+  "body",
+  "image",
+  "highlights",
+  "stats",
+  "ctaText",
+  "ctaAnchor",
+  "imagePosition",
+  "formTitle",
+  "formSubtitle",
+  "formId",
+  "popupId",
+  "pdfUrl",
+];
+
+function CustomPropList({ rows }: { rows: Array<{ label: string; value: string }> }) {
+  if (!rows.length) return null;
+  return (
+    <div className="mt-8 grid gap-3 max-w-3xl mx-auto">
+      {rows.map((r) => (
+        <div key={r.label} className="flex flex-col @sm:flex-row gap-1 @sm:gap-4 rounded-xl border border-border-default bg-bg-2 px-4 py-3">
+          <div className="text-[11px] uppercase tracking-wider text-text-3 @sm:w-44 shrink-0">{r.label}</div>
+          <div className="text-sm text-text-1 whitespace-pre-line">{r.value}</div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 export function ProjectOverviewBlock({ block }: { block: BlockConfig }) {
   const p = block.props;
   const highlights = items<{ title: string; description?: string }>(p.highlights);
   const cta = str(p.ctaText);
+  const overviewStats = statPairs(p.stats);
+  const customRows = customScalarProps(p, OVERVIEW_KNOWN_PROPS);
   const variant = block.variant || (str(p.image) ? "split" : "centered");
 
   if (variant === "cards") {
     return (
       <SectionShell id={str(p.anchor, "overview")}>
-        <Title title={str(p.title, "Why this project")} subtitle={str(p.subtitle)} />
+        <Title block={block} title={str(p.title, "Why this project")} subtitle={str(p.subtitle)} />
         <p className="max-w-3xl mx-auto text-text-1 leading-relaxed text-center mb-10">{str(p.body)}</p>
         <div className="grid @md:grid-cols-3 gap-4 max-w-5xl mx-auto">
           {highlights.map((h, i) => (
@@ -550,7 +683,7 @@ export function ProjectOverviewBlock({ block }: { block: BlockConfig }) {
   if (variant === "timeline") {
     return (
       <SectionShell id={str(p.anchor, "overview")}>
-        <Title title={str(p.title, "The Journey")} subtitle={str(p.subtitle)} />
+        <Title block={block} title={str(p.title, "The Journey")} subtitle={str(p.subtitle)} />
         <p className="max-w-2xl mx-auto text-text-1 leading-relaxed text-center mb-10">{str(p.body)}</p>
         <ol className="max-w-xl mx-auto space-y-0">
           {highlights.map((h, i) => (
@@ -567,13 +700,6 @@ export function ProjectOverviewBlock({ block }: { block: BlockConfig }) {
   }
 
   if (variant === "split") {
-    const rawStats = items<Record<string, unknown>>(p.stats);
-    const overviewStats = rawStats
-      .map((s) => ({
-        value: str(s.value ?? s.stat ?? s.title ?? ""),
-        label: str(s.label ?? s.description ?? s.subtitle ?? ""),
-      }))
-      .filter((s) => s.value || s.label);
     const imageFirst = str(p.imagePosition) !== "right";
     return (
       <SectionShell id={str(p.anchor, "overview")}>
@@ -617,48 +743,116 @@ export function ProjectOverviewBlock({ block }: { block: BlockConfig }) {
             ) : null}
           </div>
         </div>
+        <CustomPropList rows={customRows} />
       </SectionShell>
     );
   }
 
   return (
     <SectionShell id={str(p.anchor, "overview")}>
-      <Title title={str(p.title, "Project Overview")} subtitle={str(p.subtitle)} />
+      <Title block={block} title={str(p.title, "Project Overview")} subtitle={str(p.subtitle)} />
       <p className="max-w-3xl mx-auto text-text-1 leading-relaxed text-center whitespace-pre-line">{str(p.body)}</p>
+      {overviewStats.length ? (
+        <div className="mt-10 grid grid-cols-2 @md:grid-cols-4 gap-px bg-border-default rounded-2xl overflow-hidden max-w-4xl mx-auto">
+          {overviewStats.map((s, i) => (
+            <div key={i} className="bg-white px-5 py-6 text-center">
+              <div className="font-display text-2xl font-semibold mb-1">{s.value || "—"}</div>
+              <div className="text-[10px] uppercase tracking-[0.18em] text-text-3">{s.label}</div>
+            </div>
+          ))}
+        </div>
+      ) : null}
       {str(p.image) ? (
         <div className="mt-10 max-w-5xl mx-auto rounded-[28px] overflow-hidden aspect-[16/9] bg-bg-2">
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img src={str(p.image)} alt={str(p.title)} className="w-full h-full object-cover" />
         </div>
       ) : null}
+      <CustomPropList rows={customRows} />
     </SectionShell>
   );
 }
 
 export function PropertyDetailsBlock({ block }: { block: BlockConfig }) {
-  const rows = items<{ label: string; value: string }>(block.props.items);
-  const fallback = [
-    { label: "Type", value: str(block.props.type, "Residential") },
-    { label: "Status", value: str(block.props.status, "Under Construction") },
-    { label: "Possession", value: str(block.props.possession, "Dec 2027") },
-    { label: "RERA", value: str(block.props.rera, "") },
-  ].filter((r) => r.value);
-  const data = rows.length ? rows : fallback;
   const variant = block.variant || "grid";
+
+  // Dedicated fields win over the generic list so entering Type / Status /
+  // Possession / RERA in the inspector always shows up on the page.
+  const typedRows: Array<{ label: string; value: string }> = [
+    { label: "Type", value: str(block.props.type) },
+    { label: "Status", value: str(block.props.status) },
+    { label: "Possession", value: str(block.props.possession) },
+    { label: "RERA", value: str(block.props.rera) },
+  ].filter((r) => r.value.trim());
+
+  const listRows = items<{ label: string; value: string }>(block.props.items).filter(
+    (r) => str(r?.label).trim() || str(r?.value).trim(),
+  );
+
+  const claimed = new Set(typedRows.map((r) => r.label.toLowerCase()));
+  const merged = [
+    ...typedRows,
+    ...listRows.filter((r) => !claimed.has(str(r.label).trim().toLowerCase())),
+  ];
+
+  const data = merged.length
+    ? merged
+    : [
+        { label: "Type", value: "Residential" },
+        { label: "Status", value: "Under Construction" },
+        { label: "Possession", value: "Dec 2027" },
+      ];
+
+  // Rows coming from the `items` list carry a stable `_id` so "Style this item"
+  // and per-device visibility work; the dedicated fields have no list identity.
+  const rowId = (row: unknown): ElementId | undefined => {
+    const id = (row as { _id?: unknown } | null | undefined)?._id;
+    return typeof id === "string" && id ? itemPart("items", row) : undefined;
+  };
+
+  const cells = data.map((row, i) => {
+    const id = rowId(row);
+    // Dedicated fields have no list identity, so key them off their index to
+    // keep every cell in its own style scope.
+    const labelId = id ? subElementId(id, "label") : `${part(block, `rowLabel-${i}`)}`;
+    const valueId = id ? subElementId(id, "value") : `${part(block, `rowValue-${i}`)}`;
+    const label = (
+      <El block={block} id={labelId} as="span">
+        {row.label}
+      </El>
+    );
+    const value = (
+      <El block={block} id={valueId} as="span">
+        {row.value}
+      </El>
+    );
+    return { row, i, id, label, value };
+  });
 
   if (variant === "table") {
     return (
       <SectionShell id={str(block.props.anchor, "highlights")} className="bg-bg-2">
-        <Title title={str(block.props.title, "Specifications")} subtitle={str(block.props.subtitle)} />
+        <Title block={block} title={str(block.props.title, "Specifications")} subtitle={str(block.props.subtitle)} />
         <div className="max-w-2xl mx-auto overflow-hidden rounded-2xl border border-border-default bg-bg-1">
           <table className="w-full text-sm">
             <tbody>
-              {data.map((row, i) => (
-                <tr key={i} className="border-b border-border-subtle last:border-0">
-                  <td className="px-5 py-3.5 text-text-3 w-[40%]">{row.label}</td>
-                  <td className="px-5 py-3.5 font-medium">{row.value}</td>
-                </tr>
-              ))}
+              {cells.map(({ i, id, label, value }) => {
+                const inner = (
+                  <>
+                    <td className="px-5 py-3.5 text-text-3 w-[40%]">{label}</td>
+                    <td className="px-5 py-3.5 font-medium">{value}</td>
+                  </>
+                );
+                return id ? (
+                  <El key={i} block={block} id={id} as="tr" className="border-b border-border-subtle last:border-0">
+                    {inner}
+                  </El>
+                ) : (
+                  <tr key={i} className="border-b border-border-subtle last:border-0">
+                    {inner}
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </div>
@@ -669,14 +863,30 @@ export function PropertyDetailsBlock({ block }: { block: BlockConfig }) {
   if (variant === "two-column") {
     return (
       <SectionShell id={str(block.props.anchor, "highlights")}>
-        <Title title={str(block.props.title, "Project Highlights")} subtitle={str(block.props.subtitle)} />
+        <Title block={block} title={str(block.props.title, "Project Highlights")} subtitle={str(block.props.subtitle)} />
         <div className="grid @md:grid-cols-2 gap-3 max-w-3xl mx-auto">
-          {data.map((row, i) => (
-            <div key={i} className="flex items-center justify-between rounded-xl border border-border-default bg-bg-2 px-4 py-3">
-              <span className="text-sm text-text-3">{row.label}</span>
-              <span className="text-sm font-semibold">{row.value}</span>
-            </div>
-          ))}
+          {cells.map(({ i, id, label, value }) => {
+            const inner = (
+              <>
+                {label}
+                {value}
+              </>
+            );
+            return id ? (
+              <El
+                key={i}
+                block={block}
+                id={id}
+                className="flex items-center justify-between rounded-xl border border-border-default bg-bg-2 px-4 py-3"
+              >
+                {inner}
+              </El>
+            ) : (
+              <div key={i} className="flex items-center justify-between rounded-xl border border-border-default bg-bg-2 px-4 py-3">
+                {inner}
+              </div>
+            );
+          })}
         </div>
       </SectionShell>
     );
@@ -685,14 +895,29 @@ export function PropertyDetailsBlock({ block }: { block: BlockConfig }) {
   if (variant === "checklist") {
     return (
       <SectionShell id={str(block.props.anchor, "highlights")} className="bg-bg-2">
-        <Title title={str(block.props.title, "Specifications")} subtitle={str(block.props.subtitle)} />
+        <Title block={block} title={str(block.props.title, "Specifications")} subtitle={str(block.props.subtitle)} />
         <ul className="max-w-xl mx-auto space-y-3">
-          {data.map((row, i) => (
-            <li key={i} className="flex gap-3 items-start text-sm">
-              <span className="mt-0.5 w-5 h-5 rounded-full bg-green/15 text-green flex items-center justify-center shrink-0"><Check size={12} /></span>
-              <span><strong className="text-text-0">{row.label}:</strong> <span className="text-text-2">{row.value}</span></span>
-            </li>
-          ))}
+          {cells.map(({ i, id, label, value }) => {
+            const inner = (
+              <>
+                <span className="mt-0.5 w-5 h-5 rounded-full bg-green/15 text-green flex items-center justify-center shrink-0">
+                  <Check size={12} />
+                </span>
+                <span>
+                  <strong className="text-text-0">{label}:</strong> <span className="text-text-2">{value}</span>
+                </span>
+              </>
+            );
+            return id ? (
+              <El key={i} block={block} id={id} as="li" className="flex gap-3 items-start text-sm">
+                {inner}
+              </El>
+            ) : (
+              <li key={i} className="flex gap-3 items-start text-sm">
+                {inner}
+              </li>
+            );
+          })}
         </ul>
       </SectionShell>
     );
@@ -700,17 +925,33 @@ export function PropertyDetailsBlock({ block }: { block: BlockConfig }) {
 
   return (
     <SectionShell id={str(block.props.anchor, "highlights")} className="bg-bg-2">
-      <Title title={str(block.props.title, "Project Highlights")} subtitle={str(block.props.subtitle)} />
+      <Title block={block} title={str(block.props.title, "Project Highlights")} subtitle={str(block.props.subtitle)} />
       <div className="grid grid-cols-2 @md:grid-cols-3 @2xl:grid-cols-5 gap-4 max-w-6xl mx-auto">
-        {data.map((row, i) => (
-          <div key={i} className="rounded-2xl border border-border-default bg-bg-1 p-5 text-center hover:-translate-y-0.5 hover:border-border-hover transition-all">
-            <div className="w-10 h-10 rounded-full bg-green/10 text-green flex items-center justify-center mx-auto mb-3">
-              <Check size={14} />
+        {cells.map(({ i, id, label, value }) => {
+          const inner = (
+            <>
+              <div className="w-10 h-10 rounded-full bg-green/10 text-green flex items-center justify-center mx-auto mb-3">
+                <Check size={14} />
+              </div>
+              <div className="font-display text-2xl font-semibold mb-1">{value}</div>
+              <div className="text-[11px] uppercase tracking-wider text-text-3">{label}</div>
+            </>
+          );
+          return id ? (
+            <El
+              key={i}
+              block={block}
+              id={id}
+              className="rounded-2xl border border-border-default bg-bg-1 p-5 text-center hover:-translate-y-0.5 hover:border-border-hover transition-all"
+            >
+              {inner}
+            </El>
+          ) : (
+            <div key={i} className="rounded-2xl border border-border-default bg-bg-1 p-5 text-center hover:-translate-y-0.5 hover:border-border-hover transition-all">
+              {inner}
             </div>
-            <div className="font-display text-2xl font-semibold mb-1">{row.value}</div>
-            <div className="text-[11px] uppercase tracking-wider text-text-3">{row.label}</div>
-          </div>
-        ))}
+          );
+        })}
       </div>
     </SectionShell>
   );
@@ -817,7 +1058,7 @@ export function ProjectHighlightsBlock({ block }: { block: BlockConfig }) {
     const right = itemsList.slice(mid);
     return (
       <SectionShell id={str(p.anchor, "highlights")} className="bg-bg-2">
-        <Title title={str(p.title, "Project Highlights")} />
+        <Title block={block} title={str(p.title, "Project Highlights")} />
         <div className="max-w-5xl mx-auto grid @lg:grid-cols-[1fr_auto_1fr] gap-8 @lg:gap-10 items-center">
           <ul className="space-y-5 @lg:text-right">
             {left.map((it, i) => (
@@ -848,7 +1089,7 @@ export function ProjectHighlightsBlock({ block }: { block: BlockConfig }) {
 
   return (
     <SectionShell id={str(p.anchor, "highlights")}>
-      <Title title={str(p.title, "Highlights")} subtitle={str(p.subtitle)} />
+      <Title block={block} title={str(p.title, "Highlights")} subtitle={str(p.subtitle)} />
       <div className="grid @md:grid-cols-3 gap-4">
         {itemsList.map((it, i) => (
           <div key={i} className="rounded-xl border border-border-default bg-bg-2 p-5">
@@ -866,47 +1107,100 @@ export function ProjectHighlightsBlock({ block }: { block: BlockConfig }) {
 
 export function AmenitiesBlock({ block }: { block: BlockConfig }) {
   const raw = block.props.items;
+  const p = block.props;
+
+  // Spread each source entry so its stable `_id` survives — rebuilding the
+  // object would collapse every card onto the same element id and break
+  // "Style this item", hide-item and per-device visibility.
   const amen = Array.isArray(raw)
-    ? raw.map((a) => (typeof a === "string" ? { title: a, description: "", image: "", icon: "" } : { title: String((a as { title?: string }).title || ""), description: String((a as { description?: string }).description || ""), image: String((a as { image?: string }).image || ""), icon: String((a as { icon?: string }).icon || "") }))
+    ? raw.map((a, i) =>
+        typeof a === "string"
+          ? { _id: `it_${i}`, title: a, description: "", image: "", icon: "" }
+          : {
+              ...(a as Record<string, unknown>),
+              title: String((a as { title?: string }).title || ""),
+              description: String((a as { description?: string }).description || ""),
+              image: String((a as { image?: string }).image || ""),
+              icon: String((a as { icon?: string }).icon || ""),
+            },
+      )
     : [
-        { title: "Clubhouse", description: "A 30,000 sq.ft clubhouse for gatherings and leisure.", image: "", icon: "" },
-        { title: "Pool", description: "Temperature-controlled infinity pool with deck.", image: "", icon: "" },
-        { title: "Gym", description: "Fully equipped fitness studio overlooking the greens.", image: "", icon: "" },
+        { _id: "it_0", title: "Clubhouse", description: "A 30,000 sq.ft clubhouse for gatherings and leisure.", image: "", icon: "" },
+        { _id: "it_1", title: "Pool", description: "Temperature-controlled infinity pool with deck.", image: "", icon: "" },
+        { _id: "it_2", title: "Gym", description: "Fully equipped fitness studio overlooking the greens.", image: "", icon: "" },
       ];
+
+  const exploreText = str(p.ctaText).trim();
+  const exploreHref = str(p.ctaUrl).trim() || `#${str(p.ctaAnchor, "listings")}`;
+  const exploreButton = exploreText ? (
+    <El block={block} id={part(block, "cta")} className="mt-10 flex justify-center">
+      <a
+        href={exploreHref}
+        className="inline-flex items-center gap-2 px-7 py-3 rounded-lg border border-border-default text-sm font-semibold hover:border-green hover:bg-green/5 transition-colors"
+      >
+        {exploreText}
+        <ArrowRight size={15} />
+      </a>
+    </El>
+  ) : null;
 
   if (block.variant === "chips") {
     return (
-      <SectionShell id={str(block.props.anchor, "amenities")}>
-        <Title title={str(block.props.title, "Amenities")} subtitle={str(block.props.subtitle)} />
+      <SectionShell id={str(p.anchor, "amenities")}>
+        <Title block={block} title={str(p.title, "Amenities")} subtitle={str(p.subtitle)} />
         <div className="flex flex-wrap justify-center gap-2">
-          {amen.map((a) => (
-            <span key={a.title} className="px-3 py-1.5 rounded-full border border-border-default bg-bg-2 text-sm">{a.title}</span>
+          {amen.map((a, i) => (
+            <El
+              key={itemPart("items", a)}
+              block={block}
+              id={itemPart("items", a)}
+              className="px-3 py-1.5 rounded-full border border-border-default bg-bg-2 text-sm"
+            >
+              {a.title}
+            </El>
           ))}
         </div>
+        {exploreButton}
       </SectionShell>
     );
   }
 
   if (block.variant === "icon-grid") {
     return (
-      <SectionShell id={str(block.props.anchor, "amenities")} className="bg-bg-2">
-        <Title title={str(block.props.title, "Amenities")} subtitle={str(block.props.subtitle)} />
+      <SectionShell id={str(p.anchor, "amenities")} className="bg-bg-2">
+        <Title block={block} title={str(p.title, "Amenities")} subtitle={str(p.subtitle)} />
         <div className="grid grid-cols-2 @md:grid-cols-3 @2xl:grid-cols-4 gap-4 max-w-5xl mx-auto">
           {amen.map((a) => (
-            <div key={a.title} className="rounded-2xl border border-border-default bg-bg-1 p-5 text-center hover:border-green/40 transition-all">
-              <div className="w-11 h-11 rounded-xl bg-green/10 text-green flex items-center justify-center mx-auto mb-3 overflow-hidden">
+            <El
+              key={itemPart("items", a)}
+              block={block}
+              id={itemPart("items", a)}
+              className="rounded-2xl border border-border-default bg-bg-1 p-5 text-center hover:border-green/40 transition-all"
+            >
+              <El
+                block={block}
+                id={subElementId(itemPart("items", a), "icon")}
+                className="w-11 h-11 rounded-xl bg-green/10 text-green flex items-center justify-center mx-auto mb-3 overflow-hidden"
+              >
                 {isMediaSrc(a.icon) ? (
                   // eslint-disable-next-line @next/next/no-img-element
                   <img src={a.icon} alt="" className="w-6 h-6 object-contain" />
                 ) : (
                   <Check size={16} />
                 )}
-              </div>
-              <h3 className="font-semibold text-sm mb-1">{a.title}</h3>
-              {a.description ? <p className="text-text-3 text-xs leading-relaxed">{a.description}</p> : null}
-            </div>
+              </El>
+              <El block={block} id={subElementId(itemPart("items", a), "title")} as="h3" className="font-semibold text-sm mb-1">
+                {a.title}
+              </El>
+              {a.description ? (
+                <El block={block} id={subElementId(itemPart("items", a), "description")} as="p" className="text-text-3 text-xs leading-relaxed">
+                  {a.description}
+                </El>
+              ) : null}
+            </El>
           ))}
         </div>
+        {exploreButton}
       </SectionShell>
     );
   }
@@ -914,11 +1208,15 @@ export function AmenitiesBlock({ block }: { block: BlockConfig }) {
   if (block.variant === "featured") {
     const [first, ...rest] = amen;
     return (
-      <SectionShell id={str(block.props.anchor, "amenities")}>
-        <Title title={str(block.props.title, "Amenities")} subtitle={str(block.props.subtitle)} />
+      <SectionShell id={str(p.anchor, "amenities")}>
+        <Title block={block} title={str(p.title, "Amenities")} subtitle={str(p.subtitle)} />
         <div className="grid @lg:grid-cols-2 gap-5 max-w-6xl mx-auto">
           {first ? (
-            <div className="rounded-2xl overflow-hidden border border-border-default bg-bg-2 relative min-h-[280px]">
+            <El
+              block={block}
+              id={itemPart("items", first)}
+              className="rounded-2xl overflow-hidden border border-border-default bg-bg-2 relative min-h-[280px]"
+            >
               {first.image ? (
                 // eslint-disable-next-line @next/next/no-img-element
                 <img src={first.image} alt={first.title} className="absolute inset-0 w-full h-full object-cover" />
@@ -927,20 +1225,33 @@ export function AmenitiesBlock({ block }: { block: BlockConfig }) {
               )}
               <div className="absolute inset-0 bg-gradient-to-t from-black/75 via-black/20 to-transparent" />
               <div className="absolute bottom-0 left-0 right-0 p-6 text-white">
-                <h3 className="font-display text-2xl font-semibold mb-1">{first.title}</h3>
-                {first.description ? <p className="text-white/80 text-sm">{first.description}</p> : null}
+                <El block={block} id={subElementId(itemPart("items", first), "title")} as="h3" className="font-display text-2xl font-semibold mb-1">
+                  {first.title}
+                </El>
+                {first.description ? (
+                  <El block={block} id={subElementId(itemPart("items", first), "description")} as="p" className="text-white/80 text-sm">
+                    {first.description}
+                  </El>
+                ) : null}
               </div>
-            </div>
+            </El>
           ) : null}
           <div className="grid grid-cols-1 @sm:grid-cols-2 gap-4 content-start">
             {rest.map((a) => (
-              <div key={a.title} className="rounded-2xl border border-border-default bg-bg-2 p-5">
-                <h3 className="font-semibold mb-1">{a.title}</h3>
-                {a.description ? <p className="text-text-2 text-sm">{a.description}</p> : null}
-              </div>
+              <El key={itemPart("items", a)} block={block} id={itemPart("items", a)} className="rounded-2xl border border-border-default bg-bg-2 p-5">
+                <El block={block} id={subElementId(itemPart("items", a), "title")} as="h3" className="font-semibold mb-1">
+                  {a.title}
+                </El>
+                {a.description ? (
+                  <El block={block} id={subElementId(itemPart("items", a), "description")} as="p" className="text-text-2 text-sm">
+                    {a.description}
+                  </El>
+                ) : null}
+              </El>
             ))}
           </div>
         </div>
+        {exploreButton}
       </SectionShell>
     );
   }
@@ -948,18 +1259,15 @@ export function AmenitiesBlock({ block }: { block: BlockConfig }) {
   if (block.variant === "mosaic") {
     const [featured, ...rest] = amen;
     return (
-      <SectionShell id={str(block.props.anchor, "amenities")}>
-        <div className="mb-8 text-center max-w-2xl mx-auto">
-          {str(block.props.subtitle) ? (
-            <p className="text-text-2 text-sm mb-1">{str(block.props.subtitle)}</p>
-          ) : null}
-          <h2 className="font-display text-3xl @md:text-4xl font-semibold tracking-tight">
-            {str(block.props.title, "Property Type")}
-          </h2>
-        </div>
+      <SectionShell id={str(p.anchor, "amenities")}>
+        <Title block={block} title={str(p.title, "Amenities")} subtitle={str(p.subtitle)} />
         <div className="max-w-6xl mx-auto grid @lg:grid-cols-2 gap-3 @md:gap-4">
           {featured ? (
-            <div className="relative rounded-[22px] overflow-hidden min-h-[320px] @lg:min-h-[420px] @lg:row-span-2 group">
+            <El
+              block={block}
+              id={itemPart("items", featured)}
+              className="relative rounded-[22px] overflow-hidden min-h-[320px] @lg:min-h-[420px] @lg:row-span-2 group"
+            >
               {featured.image ? (
                 // eslint-disable-next-line @next/next/no-img-element
                 <img src={featured.image} alt={featured.title} className="absolute inset-0 w-full h-full object-cover group-hover:scale-[1.03] transition-transform duration-700" />
@@ -969,18 +1277,24 @@ export function AmenitiesBlock({ block }: { block: BlockConfig }) {
               <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/10 to-transparent" />
               <div className="absolute bottom-0 left-0 right-0 p-5 flex items-end justify-between gap-3">
                 <div>
-                  <h3 className="text-white font-semibold text-xl mb-0.5">{featured.title}</h3>
-                  {featured.description ? <p className="text-white/80 text-sm">{featured.description}</p> : null}
+                  <El block={block} id={subElementId(itemPart("items", featured), "title")} as="h3" className="text-white font-semibold text-xl mb-0.5">
+                    {featured.title}
+                  </El>
+                  {featured.description ? (
+                    <El block={block} id={subElementId(itemPart("items", featured), "description")} as="p" className="text-white/80 text-sm">
+                      {featured.description}
+                    </El>
+                  ) : null}
                 </div>
                 <span className="w-9 h-9 rounded-full bg-white/20 backdrop-blur flex items-center justify-center text-white shrink-0">
                   <ArrowRight size={14} />
                 </span>
               </div>
-            </div>
+            </El>
           ) : null}
           <div className="grid grid-cols-2 gap-3 @md:gap-4">
             {rest.slice(0, 4).map((a) => (
-              <div key={a.title} className="relative rounded-[22px] overflow-hidden aspect-square group">
+              <El key={itemPart("items", a)} block={block} id={itemPart("items", a)} className="relative rounded-[22px] overflow-hidden aspect-square group">
                 {a.image ? (
                   // eslint-disable-next-line @next/next/no-img-element
                   <img src={a.image} alt={a.title} className="absolute inset-0 w-full h-full object-cover group-hover:scale-[1.03] transition-transform duration-700" />
@@ -990,57 +1304,71 @@ export function AmenitiesBlock({ block }: { block: BlockConfig }) {
                 <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/10 to-transparent" />
                 <div className="absolute bottom-0 left-0 right-0 p-4 flex items-end justify-between gap-2">
                   <div>
-                    <h3 className="text-white font-semibold text-sm">{a.title}</h3>
-                    {a.description ? <p className="text-white/75 text-xs">{a.description}</p> : null}
+                    <El block={block} id={subElementId(itemPart("items", a), "title")} as="h3" className="text-white font-semibold text-sm">
+                      {a.title}
+                    </El>
+                    {a.description ? (
+                      <El block={block} id={subElementId(itemPart("items", a), "description")} as="p" className="text-white/75 text-xs">
+                        {a.description}
+                      </El>
+                    ) : null}
                   </div>
                   <span className="w-8 h-8 rounded-full bg-white/20 backdrop-blur flex items-center justify-center text-white shrink-0">
                     <ArrowRight size={12} />
                   </span>
                 </div>
-              </div>
+              </El>
             ))}
           </div>
         </div>
-        {str(block.props.ctaText) ? (
-          <div className="mt-8 flex justify-center">
-            <a
-              href={`#${str(block.props.ctaAnchor, "listings")}`}
-              className="inline-flex items-center gap-2 px-5 py-2.5 rounded-full border border-text-0 text-sm font-semibold hover:bg-bg-2 transition-colors"
-            >
-              {str(block.props.ctaText)}
-              <ArrowRight size={14} className="-rotate-45" />
-            </a>
-          </div>
-        ) : null}
+        {exploreButton}
       </SectionShell>
     );
   }
 
   return (
-    <SectionShell id={str(block.props.anchor, "amenities")}>
-      <Title title={str(block.props.title, "Amenities")} subtitle={str(block.props.subtitle)} />
+    <SectionShell id={str(p.anchor, "amenities")}>
+      <Title block={block} title={str(p.title, "Amenities")} subtitle={str(p.subtitle)} />
       <div className="grid grid-cols-1 @md:grid-cols-2 @2xl:grid-cols-3 gap-4 max-w-6xl mx-auto">
         {amen.map((a) => (
-          <div key={a.title} className="group rounded-2xl border border-border-default bg-bg-2 overflow-hidden hover:-translate-y-0.5 hover:border-border-hover transition-all">
+          <El
+            key={itemPart("items", a)}
+            block={block}
+            id={itemPart("items", a)}
+            className="group rounded-2xl border border-border-default bg-bg-2 overflow-hidden hover:-translate-y-0.5 hover:border-border-hover transition-all"
+          >
             {a.image ? (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img src={a.image} alt={a.title} className="h-40 w-full object-cover" />
+              <El block={block} id={subElementId(itemPart("items", a), "image")} className="block">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src={a.image} alt={a.title} className="h-40 w-full object-cover" />
+              </El>
             ) : null}
             <div className="p-5">
-              <div className="w-9 h-9 rounded-lg bg-green/10 text-green flex items-center justify-center mb-3 overflow-hidden">
+              <El
+                block={block}
+                id={subElementId(itemPart("items", a), "icon")}
+                className="w-9 h-9 rounded-lg bg-green/10 text-green flex items-center justify-center mb-3 overflow-hidden"
+              >
                 {isMediaSrc(a.icon) ? (
                   // eslint-disable-next-line @next/next/no-img-element
                   <img src={a.icon} alt="" className="w-5 h-5 object-contain" />
                 ) : (
                   <Check size={14} />
                 )}
-              </div>
-              <h3 className="font-semibold mb-1">{a.title}</h3>
-              {a.description ? <p className="text-text-2 text-sm leading-relaxed">{a.description}</p> : null}
+              </El>
+              <El block={block} id={subElementId(itemPart("items", a), "title")} as="h3" className="font-semibold mb-1">
+                {a.title}
+              </El>
+              {a.description ? (
+                <El block={block} id={subElementId(itemPart("items", a), "description")} as="p" className="text-text-2 text-sm leading-relaxed">
+                  {a.description}
+                </El>
+              ) : null}
             </div>
-          </div>
+          </El>
         ))}
       </div>
+      {exploreButton}
     </SectionShell>
   );
 }
@@ -1086,7 +1414,7 @@ export function FloorPlansBlock({ block }: { block: BlockConfig }) {
 
   return (
     <SectionShell id={str(block.props.anchor, "plans")} className="bg-bg-2">
-      <Title title={str(block.props.title, "Floor Plans")} subtitle={str(block.props.subtitle)} />
+      <Title block={block} title={str(block.props.title, "Floor Plans")} subtitle={str(block.props.subtitle)} />
       {block.variant === "list" ? (
         <div className="max-w-3xl mx-auto space-y-3">
           {plans.map((plan, i) => {
@@ -1273,7 +1601,7 @@ export function UnitConfigBlock({ block }: { block: BlockConfig }) {
   if (block.variant === "table") {
     return (
       <SectionShell id={str(block.props.anchor, "units")}>
-        <Title title={str(block.props.title, "Property Types")} subtitle={str(block.props.subtitle)} />
+        <Title block={block} title={str(block.props.title, "Property Types")} subtitle={str(block.props.subtitle)} />
         <div className="overflow-x-auto max-w-3xl mx-auto">
           <table className="w-full text-sm">
             <thead>
@@ -1300,7 +1628,7 @@ export function UnitConfigBlock({ block }: { block: BlockConfig }) {
 
   return (
     <SectionShell id={str(block.props.anchor, "units")}>
-      <Title title={str(block.props.title, "Property Types")} subtitle={str(block.props.subtitle)} />
+      <Title block={block} title={str(block.props.title, "Property Types")} subtitle={str(block.props.subtitle)} />
       <div className="grid @md:grid-cols-2 @2xl:grid-cols-3 gap-5 max-w-6xl mx-auto">
         {rows.map((r, i) => (
           <div key={i} className="rounded-2xl border border-border-default bg-bg-1 overflow-hidden hover:-translate-y-0.5 hover:border-border-hover transition-all">
@@ -1333,11 +1661,28 @@ export function UnitConfigBlock({ block }: { block: BlockConfig }) {
 export function RePricingBlock({ block }: { block: BlockConfig }) {
   const cards = items<{ name: string; price: string; meta?: string; cta?: string; features?: string[] }>(block.props.items);
   const variant = block.variant || (cards.length ? "cards" : "simple");
+  const startingPrice = str(block.props.startingPrice).trim();
+  type PriceCard = { name: string; price: string; meta?: string; cta?: string; features?: string[] };
+  const fallbackCard: PriceCard = { name: "Starting", price: startingPrice || "₹ 1.2 Cr*", meta: str(block.props.disclaimer) };
+  const pricedCards: PriceCard[] = cards.length ? cards : [fallbackCard];
+
+  // The starting price is a headline, not a card — surface it above the grid
+  // whenever it is set so entering it always has a visible effect.
+  const StartingHeadline = startingPrice ? (
+    <div className="text-center mb-10">
+      <div className="text-[11px] uppercase tracking-[0.2em] text-green font-semibold mb-2">Starting from</div>
+      <div className="font-display text-4xl @md:text-5xl font-semibold">{startingPrice}</div>
+      {str(block.props.subtitle) ? (
+        <p className="text-text-2 text-sm mt-3 max-w-lg mx-auto">{str(block.props.subtitle)}</p>
+      ) : null}
+    </div>
+  ) : null;
 
   if (variant === "comparison") {
     return (
       <SectionShell id={str(block.props.anchor, "pricing")}>
-        <Title title={str(block.props.title, "Compare Plans")} subtitle={str(block.props.subtitle)} />
+        <Title block={block} title={str(block.props.title, "Compare Plans")} subtitle={str(block.props.subtitle)} />
+        {StartingHeadline}
         <div className="overflow-x-auto max-w-4xl mx-auto">
           <table className="w-full text-sm min-w-[480px]">
             <thead>
@@ -1348,7 +1693,7 @@ export function RePricingBlock({ block }: { block: BlockConfig }) {
               </tr>
             </thead>
             <tbody>
-              {(cards.length ? cards : [{ name: "Starting", price: str(block.props.startingPrice, "₹ 1.2 Cr*"), meta: "" }]).map((c, i) => (
+              {pricedCards.map((c, i) => (
                 <tr key={i} className="border-b border-border-subtle">
                   <td className="py-4 pr-4 font-semibold">{c.name}</td>
                   <td className="py-4 pr-4 text-green font-semibold">{c.price}</td>
@@ -1367,9 +1712,9 @@ export function RePricingBlock({ block }: { block: BlockConfig }) {
     return (
       <SectionShell id={str(block.props.anchor, "pricing")} className="bg-bg-2">
         <div className="max-w-4xl mx-auto rounded-3xl border border-border-default bg-gradient-to-br from-bg-1 to-green/5 px-8 @md:px-12 py-12 text-center">
-          <p className="text-[11px] uppercase tracking-[0.2em] text-green font-semibold mb-3">{str(block.props.subtitle, "Starting from")}</p>
-          <h2 className="font-display text-4xl @md:text-5xl font-semibold mb-3">{str(block.props.startingPrice, cards[0]?.price || "₹ 1.2 Cr*")}</h2>
-          <p className="text-text-2 text-sm mb-8 max-w-lg mx-auto">{str(block.props.title, "Exclusive pricing for limited units")}</p>
+          <p className="text-[11px] uppercase tracking-[0.2em] text-green font-semibold mb-3">Starting from</p>
+          <h2 className="font-display text-4xl @md:text-5xl font-semibold mb-3">{startingPrice || cards[0]?.price || "₹ 1.2 Cr*"}</h2>
+          <p className="text-text-2 text-sm mb-8 max-w-lg mx-auto">{str(block.props.subtitle, str(block.props.title, "Exclusive pricing for limited units"))}</p>
           <a href="#enquire" className="inline-flex px-6 py-3 rounded-lg bg-green text-black text-sm font-semibold">{str(block.props.ctaText, "Enquire Now")}</a>
           {str(block.props.disclaimer) ? <p className="text-text-3 text-xs mt-6">{str(block.props.disclaimer)}</p> : null}
         </div>
@@ -1380,9 +1725,10 @@ export function RePricingBlock({ block }: { block: BlockConfig }) {
   if (variant === "cards" || cards.length) {
     return (
       <SectionShell id={str(block.props.anchor, "pricing")}>
-        <Title title={str(block.props.title, "Pricing")} subtitle={str(block.props.subtitle)} />
+        <Title block={block} title={str(block.props.title, "Pricing")} subtitle={str(block.props.subtitle)} />
+        {StartingHeadline}
         <div className="grid @md:grid-cols-3 gap-5 max-w-5xl mx-auto">
-          {(cards.length ? cards : [{ name: "Starting", price: str(block.props.startingPrice, "₹ 1.2 Cr*"), meta: str(block.props.disclaimer) }]).map((c, i) => (
+          {pricedCards.map((c, i) => (
             <div key={i} className="rounded-2xl border border-border-default bg-bg-2 p-6 text-center hover:border-green/40 transition-all">
               <div className="text-sm text-text-2 mb-2">{c.name}</div>
               <div className="font-display text-3xl font-semibold text-green mb-2">{c.price}</div>
@@ -1397,12 +1743,83 @@ export function RePricingBlock({ block }: { block: BlockConfig }) {
   }
   return (
     <SectionShell id={str(block.props.anchor, "pricing")}>
-      <Title title={str(block.props.title, "Pricing")} subtitle={str(block.props.subtitle)} />
+      <Title block={block} title={str(block.props.title, "Pricing")} subtitle={str(block.props.subtitle)} />
       <div className="text-center">
-        <div className="font-display text-4xl font-bold">{str(block.props.startingPrice, "₹ 1.2 Cr*")}</div>
+        <div className="font-display text-4xl font-bold">{startingPrice || "₹ 1.2 Cr*"}</div>
         <p className="text-text-3 text-xs mt-2">{str(block.props.disclaimer, "*T&C apply. Price on request for selected units.")}</p>
       </div>
     </SectionShell>
+  );
+}
+
+/**
+ * Turn any pasted Google Maps link into something an iframe can actually load.
+ * Users routinely paste the share/place URL from the browser address bar, which
+ * Google refuses to frame — normalise it to the embed form instead.
+ */
+function normalizeMapUrl(raw: string): string {
+  const value = raw.trim();
+  if (!value) return "";
+  if (/^(data:|blob:)/i.test(value)) return value;
+
+  // Bare coordinates, e.g. "12.9716,77.5946" or "?q=12.9716,77.5946".
+  const coords = value.match(/^-?\d{1,3}(?:\.\d+)?\s*,\s*-?\d{1,3}(?:\.\d+)?$/);
+  if (coords) return `https://www.google.com/maps?q=${encodeURIComponent(value)}&z=15&output=embed`;
+
+  if (!/^https?:\/\//i.test(value)) {
+    return `https://www.google.com/maps?q=${encodeURIComponent(value)}&z=15&output=embed`;
+  }
+
+  // Already an embed URL — leave it alone.
+  if (/\/maps\/embed\//i.test(value) || /[?&]output=embed\b/i.test(value)) return value;
+
+  let url: URL;
+  try {
+    url = new URL(value);
+  } catch {
+    return value;
+  }
+
+  const query =
+    url.searchParams.get("q") ||
+    url.searchParams.get("query") ||
+    url.searchParams.get("destination") ||
+    url.searchParams.get("address") ||
+    "";
+  if (!query) return value;
+
+  // A place/directions URL identifies the target through `data=` or the path.
+  const dataParam = url.searchParams.get("data");
+  const target = dataParam || query;
+  const zoom = url.searchParams.get("zoom") || "15";
+
+  if (/google\.[a-z.]+\/maps\/embed/i.test(value)) return value;
+
+  const embed = new URL("https://www.google.com/maps");
+  embed.searchParams.set("q", target);
+  embed.searchParams.set("z", zoom);
+  embed.searchParams.set("output", "embed");
+  return embed.toString();
+}
+
+function MapFrame({ src, title }: { src: string; title: string }) {
+  const embed = normalizeMapUrl(src);
+  if (!embed) {
+    return (
+      <div className="w-full h-full min-h-[260px] flex items-center justify-center text-text-3 text-sm px-4 text-center">
+        Add a Google Maps link — a share link, place URL or coordinates all work.
+      </div>
+    );
+  }
+  return (
+    <iframe
+      title={title}
+      src={embed}
+      className="w-full h-full border-0"
+      loading="lazy"
+      referrerPolicy="no-referrer-when-downgrade"
+      allowFullScreen
+    />
   );
 }
 
@@ -1410,7 +1827,7 @@ export function OffersBlock({ block }: { block: BlockConfig }) {
   const offers = items<{ title: string; description: string }>(block.props.items);
   return (
     <SectionShell className="bg-green/5">
-      <Title title={str(block.props.title, "Limited Offers")} />
+      <Title block={block} title={str(block.props.title, "Limited Offers")} />
       <div className="grid @md:grid-cols-2 gap-4 max-w-3xl mx-auto">
         {offers.map((o, i) => (
           <div key={i} className="rounded-xl border border-green/30 bg-bg-1 p-5">
@@ -1427,36 +1844,38 @@ export function LocationBlock({ block }: { block: BlockConfig }) {
   const nearby = items<{ title: string; meta: string }>(block.props.items);
   const embed = str(block.props.embedUrl);
   const variant = block.variant || "split-map";
+  const p = block.props;
 
   if (variant === "map-only") {
     return (
-      <SectionShell id={str(block.props.anchor, "location")} className="pt-8">
-        <Title title={str(block.props.title, "Location")} subtitle={str(block.props.address)} />
-        <div className="rounded-2xl overflow-hidden border border-border-default aspect-[16/8] bg-bg-2 max-w-6xl mx-auto">
-          {embed ? (
-            <iframe title="Map" src={embed} className="w-full h-full border-0" loading="lazy" />
-          ) : (
-            <div className="w-full h-full min-h-[260px] flex items-center justify-center text-text-3 text-sm">Add a Google Maps embed URL</div>
-          )}
-        </div>
+      <SectionShell id={str(p.anchor, "location")} className="pt-8">
+        <Title block={block} title={str(p.title, "Location")} subtitle={str(p.address)} />
+        <El block={block} id={part(block, "map")} className="rounded-2xl overflow-hidden border border-border-default aspect-[16/8] bg-bg-2 max-w-6xl mx-auto">
+          <MapFrame src={embed} title={str(p.title, "Google Maps")} />
+        </El>
       </SectionShell>
     );
   }
 
   if (variant === "list") {
     return (
-      <SectionShell id={str(block.props.anchor, "location")}>
-        <Title title={str(block.props.title, "Location & Connectivity")} subtitle={str(block.props.address)} />
+      <SectionShell id={str(p.anchor, "location")}>
+        <Title block={block} title={str(p.title, "Location & Connectivity")} subtitle={str(p.address)} />
         <div className="max-w-2xl mx-auto space-y-3">
-          {nearby.map((n, i) => (
-            <div key={i} className="flex items-center justify-between rounded-xl border border-border-default bg-bg-2 px-4 py-3.5">
-              <div className="flex items-center gap-2 text-sm font-medium">
-                <MapPin size={14} className="text-green" />
-                {n.title}
-              </div>
-              <div className="text-text-3 text-sm">{n.meta}</div>
-            </div>
-          ))}
+          {nearby.map((n) => {
+            const id = itemPart("items", n);
+            return (
+              <El key={id} block={block} id={id} className="flex items-center justify-between rounded-xl border border-border-default bg-bg-2 px-4 py-3.5">
+                <El block={block} id={subElementId(id, "title")} as="div" className="flex items-center gap-2 text-sm font-medium">
+                  <MapPin size={14} className="text-green" />
+                  {n.title}
+                </El>
+                <El block={block} id={subElementId(id, "meta")} as="div" className="text-text-3 text-sm">
+                  {n.meta}
+                </El>
+              </El>
+            );
+          })}
         </div>
       </SectionShell>
     );
@@ -1464,56 +1883,72 @@ export function LocationBlock({ block }: { block: BlockConfig }) {
 
   if (variant === "cards") {
     return (
-      <SectionShell id={str(block.props.anchor, "location")} className="bg-bg-2">
-        <Title title={str(block.props.title, "Location Advantages")} subtitle={str(block.props.address)} />
+      <SectionShell id={str(p.anchor, "location")} className="bg-bg-2">
+        <Title block={block} title={str(p.title, "Location Advantages")} subtitle={str(p.address)} />
         <div className="grid @md:grid-cols-2 @2xl:grid-cols-3 gap-4 max-w-5xl mx-auto mb-8">
-          {nearby.map((n, i) => (
-            <div key={i} className="rounded-2xl border border-border-default bg-bg-1 p-5 text-center">
-              <MapPin size={18} className="text-green mx-auto mb-3" />
-              <div className="font-semibold mb-1">{n.title}</div>
-              <div className="text-text-3 text-sm">{n.meta}</div>
-            </div>
-          ))}
+          {nearby.map((n) => {
+            const id = itemPart("items", n);
+            return (
+              <El key={id} block={block} id={id} className="rounded-2xl border border-border-default bg-bg-1 p-5 text-center">
+                <MapPin size={18} className="text-green mx-auto mb-3" />
+                <El block={block} id={subElementId(id, "title")} as="div" className="font-semibold mb-1">
+                  {n.title}
+                </El>
+                <El block={block} id={subElementId(id, "meta")} as="div" className="text-text-3 text-sm">
+                  {n.meta}
+                </El>
+              </El>
+            );
+          })}
         </div>
-        {embed ? (
-          <div className="rounded-2xl overflow-hidden border border-border-default aspect-[16/7] bg-bg-1 max-w-5xl mx-auto">
-            <iframe title="Map" src={embed} className="w-full h-full border-0" loading="lazy" />
-          </div>
+        {embed.trim() ? (
+          <El block={block} id={part(block, "map")} className="rounded-2xl overflow-hidden border border-border-default aspect-[16/7] bg-bg-1 max-w-5xl mx-auto">
+            <MapFrame src={embed} title={str(p.title, "Google Maps")} />
+          </El>
         ) : null}
       </SectionShell>
     );
   }
 
   if (variant === "editorial") {
-    const image = str(block.props.image);
+    const image = str(p.image);
     return (
-      <SectionShell id={str(block.props.anchor, "location")} className="bg-bg-0">
-        <div className="max-w-6xl mx-auto mb-10">
-          {str(block.props.subtitle) ? (
-            <p className="text-[11px] uppercase tracking-[0.28em] text-green font-medium mb-3">{str(block.props.subtitle)}</p>
+      <SectionShell id={str(p.anchor, "location")} className="bg-bg-0">
+        <El block={block} id={part(block, "headingRow")} className="max-w-6xl mx-auto mb-10">
+          {str(p.subtitle) ? (
+            <El block={block} id={part(block, "subtitle")} as="p" className="text-[11px] uppercase tracking-[0.28em] text-green font-medium mb-3">
+              {str(p.subtitle)}
+            </El>
           ) : null}
-          <h2 className="font-display text-3xl @md:text-5xl font-medium tracking-tight max-w-2xl">
-            {str(block.props.title, "Quietly Central.")}
-          </h2>
-        </div>
+          <El block={block} id={part(block, "title")} as="h2" className="font-display text-3xl @md:text-5xl font-medium tracking-tight max-w-2xl">
+            {str(p.title, "Quietly Central.")}
+          </El>
+        </El>
         <div className="max-w-6xl mx-auto grid @lg:grid-cols-[0.95fr_1.05fr] gap-8 @lg:gap-12 items-start">
-          <div className="rounded-[24px] overflow-hidden aspect-[3/4] bg-bg-2">
+          <El block={block} id={part(block, "media")} className="rounded-[24px] overflow-hidden aspect-[3/4] bg-bg-2">
             {image ? (
               // eslint-disable-next-line @next/next/no-img-element
               <img src={image} alt="" className="w-full h-full object-cover" />
-            ) : embed ? (
-              <iframe title="Map" src={embed} className="w-full h-full border-0 min-h-[420px]" loading="lazy" />
+            ) : embed.trim() ? (
+              <MapFrame src={embed} title={str(p.title, "Google Maps")} />
             ) : (
               <div className="w-full h-full min-h-[360px] bg-bg-3" />
             )}
-          </div>
+          </El>
           <div className="grid grid-cols-1 @sm:grid-cols-2 border-t border-l border-border-default">
-            {nearby.map((n, i) => (
-              <div key={i} className="border-r border-b border-border-default px-5 py-6">
-                <div className="font-medium text-text-0 mb-2">{n.title}</div>
-                <div className="font-display text-sm text-text-2 tracking-wide">{n.meta}</div>
-              </div>
-            ))}
+            {nearby.map((n) => {
+              const id = itemPart("items", n);
+              return (
+                <El key={id} block={block} id={id} className="border-r border-b border-border-default px-5 py-6">
+                  <El block={block} id={subElementId(id, "title")} as="div" className="font-medium text-text-0 mb-2">
+                    {n.title}
+                  </El>
+                  <El block={block} id={subElementId(id, "meta")} as="div" className="font-display text-sm text-text-2 tracking-wide">
+                    {n.meta}
+                  </El>
+                </El>
+              );
+            })}
           </div>
         </div>
       </SectionShell>
@@ -1521,33 +1956,34 @@ export function LocationBlock({ block }: { block: BlockConfig }) {
   }
 
   return (
-    <SectionShell id={str(block.props.anchor, "location")}>
-      <Title title={str(block.props.title, "Location & Connectivity")} subtitle={str(block.props.address)} />
+    <SectionShell id={str(p.anchor, "location")}>
+      <Title block={block} title={str(p.title, "Location & Connectivity")} subtitle={str(p.address)} />
       <div className="grid @lg:grid-cols-2 gap-8 max-w-6xl mx-auto items-start">
-        <div className="rounded-2xl overflow-hidden border border-border-default aspect-[4/3] bg-bg-2">
-          {embed ? (
-            <iframe title="Map" src={embed} className="w-full h-full border-0" loading="lazy" />
-          ) : (
-            <div className="w-full h-full min-h-[260px] flex items-center justify-center text-text-3 text-sm">Add a Google Maps embed URL</div>
-          )}
-        </div>
+        <El block={block} id={part(block, "map")} className="rounded-2xl overflow-hidden border border-border-default aspect-[4/3] bg-bg-2">
+          <MapFrame src={embed} title={str(p.title, "Google Maps")} />
+        </El>
         <div>
-          {str(block.props.address) ? (
-            <p className="flex items-start gap-2 text-sm mb-5">
+          {str(p.address) ? (
+            <El block={block} id={part(block, "address")} as="p" className="flex items-start gap-2 text-sm mb-5">
               <MapPin size={16} className="text-green mt-0.5" />
-              <span>{str(block.props.address)}</span>
-            </p>
+              <span>{str(p.address)}</span>
+            </El>
           ) : null}
           <div className="space-y-3">
-            {nearby.map((n, i) => (
-              <div key={i} className="flex items-center justify-between rounded-xl border border-border-default bg-bg-2 px-4 py-3">
-                <div className="flex items-center gap-2 text-sm font-medium">
-                  <MapPin size={14} className="text-green" />
-                  {n.title}
-                </div>
-                <div className="text-text-3 text-sm">{n.meta}</div>
-              </div>
-            ))}
+            {nearby.map((n) => {
+              const id = itemPart("items", n);
+              return (
+                <El key={id} block={block} id={id} className="flex items-center justify-between rounded-xl border border-border-default bg-bg-2 px-4 py-3">
+                  <El block={block} id={subElementId(id, "title")} as="div" className="flex items-center gap-2 text-sm font-medium">
+                    <MapPin size={14} className="text-green" />
+                    {n.title}
+                  </El>
+                  <El block={block} id={subElementId(id, "meta")} as="div" className="text-text-3 text-sm">
+                    {n.meta}
+                  </El>
+                </El>
+              );
+            })}
           </div>
         </div>
       </div>
@@ -1556,15 +1992,24 @@ export function LocationBlock({ block }: { block: BlockConfig }) {
 }
 
 export function GoogleMapsBlock({ block }: { block: BlockConfig }) {
-  const embed = str(block.props.embedUrl);
+  const p = block.props;
+  if (p.showMap === false) return null;
+  const src = str(p.embedUrl);
+  const height = typeof p.mapHeight === "number" && p.mapHeight > 0 ? p.mapHeight : 360;
+
   return (
-    <SectionShell className="pt-0">
-      <div className="rounded-xl overflow-hidden border border-border-default aspect-[16/7] bg-bg-2">
-        {embed ? (
-          <iframe title="Map" src={embed} className="w-full h-full border-0" loading="lazy" />
-        ) : (
-          <div className="w-full h-full flex items-center justify-center text-text-3 text-sm">Add a Google Maps embed URL</div>
-        )}
+    <SectionShell id={str(p.anchor, "map")} className="pt-0">
+      {str(p.title) ? (
+        <div className="max-w-6xl mx-auto mb-5">
+          <h2 className="font-display text-2xl @md:text-3xl font-semibold tracking-tight">{str(p.title)}</h2>
+          {str(p.subtitle) ? <p className="text-text-2 text-sm mt-2">{str(p.subtitle)}</p> : null}
+        </div>
+      ) : null}
+      <div
+        className="rounded-xl overflow-hidden border border-border-default bg-bg-2 max-w-6xl mx-auto"
+        style={{ height }}
+      >
+        <MapFrame src={src} title={str(p.title, "Google Maps")} />
       </div>
     </SectionShell>
   );
@@ -1606,7 +2051,7 @@ export function ConstructionStatusBlock({ block }: { block: BlockConfig }) {
 
   return (
     <SectionShell id={str(p.anchor, "progress")}>
-      <Title title={str(p.title, "Construction Status")} />
+      <Title block={block} title={str(p.title, "Construction Status")} />
       <div className="max-w-xl mx-auto space-y-4">
         {stages.map((s, i) => (
           <div key={i}>
@@ -1634,6 +2079,8 @@ export function DeveloperBlock({ block }: { block: BlockConfig }) {
     }))
     .filter((s) => s.value || s.label);
   const variant = block.variant || "default";
+  const logo = str(p.logo).trim();
+  const image = str(p.image).trim();
 
   if (variant === "split") {
     return (
@@ -1678,7 +2125,7 @@ export function DeveloperBlock({ block }: { block: BlockConfig }) {
         ];
     return (
       <SectionShell id={str(p.anchor, "builder")}>
-        <Title title={str(p.title, "About the Developer")} subtitle={str(p.name)} />
+        <Title block={block} title={str(p.title, "About the Developer")} subtitle={str(p.name)} />
         <p className="max-w-2xl mx-auto text-text-1 text-center leading-relaxed mb-10">{str(p.body)}</p>
         <div className="grid grid-cols-2 @md:grid-cols-4 gap-4 max-w-4xl mx-auto">
           {displayStats.map((s, i) => (
@@ -1698,7 +2145,7 @@ export function DeveloperBlock({ block }: { block: BlockConfig }) {
         <div className="max-w-5xl mx-auto flex flex-col @md:flex-row @md:items-center gap-6 @md:gap-10">
           {str(p.logo) || str(p.image) ? (
             // eslint-disable-next-line @next/next/no-img-element
-            <img src={str(p.logo) || str(p.image)} alt={str(p.name)} className="h-14 w-auto object-contain shrink-0" />
+            <img src={logo || image} alt={str(p.name)} className="h-14 w-auto object-contain shrink-0" />
           ) : null}
           <div className="flex-1">
             <h3 className="font-semibold text-lg">{str(p.name) || str(p.title, "Developer")}</h3>
@@ -1721,20 +2168,40 @@ export function DeveloperBlock({ block }: { block: BlockConfig }) {
 
   return (
     <SectionShell id={str(p.anchor, "builder")} className="bg-bg-2">
-      <Title title={str(p.title, "About the Developer")} />
-      <div className="max-w-3xl mx-auto text-center">
-        <h3 className="text-xl font-semibold mb-2">{str(p.name)}</h3>
-        <p className="text-text-1 leading-relaxed">{str(p.body)}</p>
-        {stats.length > 0 && (
-          <div className="grid grid-cols-2 @md:grid-cols-4 gap-4 mt-8 pt-6 border-t border-border-default/60">
-            {stats.map((s, i) => (
-              <div key={i} className="rounded-xl border border-border-default bg-bg-1 p-4 text-center shadow-sm">
-                <div className="font-display text-xl @md:text-2xl font-bold text-green mb-1">{s.value}</div>
-                <div className="text-[11px] uppercase tracking-wider text-text-3">{s.label}</div>
-              </div>
-            ))}
-          </div>
-        )}
+      <div className="grid @lg:grid-cols-2 gap-10 max-w-6xl mx-auto items-center">
+        <div>
+          {logo || image ? (
+            <div className="rounded-2xl border border-border-default bg-white aspect-[4/3] overflow-hidden flex items-center justify-center p-6">
+              {image ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={image} alt={str(p.name, "Developer")} className="w-full h-full object-cover" />
+              ) : (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={logo} alt={`${str(p.name, "Developer")} logo`} className="max-h-full max-w-full object-contain" />
+              )}
+            </div>
+          ) : null}
+          {logo && image ? (
+            <div className="mt-4 flex items-center justify-center rounded-xl border border-border-default bg-white px-6 py-4">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src={logo} alt={`${str(p.name, "Developer")} logo`} className="h-12 w-auto object-contain" />
+            </div>
+          ) : null}
+        </div>
+        <div>
+          <Title block={block} title={str(p.title, "About the Developer")} subtitle={str(p.name)} />
+          <p className="text-text-1 leading-relaxed whitespace-pre-line">{str(p.body)}</p>
+          {stats.length > 0 && (
+            <div className="grid grid-cols-2 @md:grid-cols-4 gap-4 mt-8 pt-6 border-t border-border-default/60">
+              {stats.map((s, i) => (
+                <div key={i} className="rounded-xl border border-border-default bg-bg-1 p-4 text-center shadow-sm">
+                  <div className="font-display text-xl @md:text-2xl font-bold text-green mb-1">{s.value}</div>
+                  <div className="text-[11px] uppercase tracking-wider text-text-3">{s.label}</div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
       </div>
     </SectionShell>
   );
@@ -1811,7 +2278,7 @@ export function LeadFormBlock({ block }: { block: BlockConfig }) {
   if (variant === "default") {
     return (
       <SectionShell id={str(block.props.anchor, "enquire")} className="bg-bg-2">
-        <Title title={str(block.props.title, "Get in touch")} subtitle={str(block.props.subtitle)} />
+        <Title block={block} title={str(block.props.title, "Get in touch")} subtitle={str(block.props.subtitle)} />
         <div className="max-w-lg mx-auto">{formEl}</div>
       </SectionShell>
     );
@@ -1819,7 +2286,7 @@ export function LeadFormBlock({ block }: { block: BlockConfig }) {
 
   return (
     <SectionShell id={str(block.props.anchor, "enquire")}>
-      <Title title={str(block.props.title, "Enquire now")} subtitle={str(block.props.subtitle)} />
+      <Title block={block} title={str(block.props.title, "Enquire now")} subtitle={str(block.props.subtitle)} />
       <div className="max-w-lg mx-auto rounded-2xl border border-border-default bg-bg-2 p-6 @md:p-8">
         {formEl}
       </div>
@@ -1952,7 +2419,7 @@ export function SiteVisitBlock({ block }: { block: BlockConfig }) {
   const form = formId ? findFormById(formId, forms) : forms[0];
   return (
     <SectionShell className="bg-bg-2">
-      <Title title={str(block.props.title, "Book a site visit")} subtitle={str(block.props.subtitle)} />
+      <Title block={block} title={str(block.props.title, "Book a site visit")} subtitle={str(block.props.subtitle)} />
       <div className="max-w-md mx-auto">
         {form ? (
           <DynamicLeadForm
@@ -1975,7 +2442,7 @@ export function SiteVisitBlock({ block }: { block: BlockConfig }) {
 export function CustomSectionBlock({ block }: { block: BlockConfig }) {
   return (
     <SectionShell>
-      <Title title={str(block.props.title, "Custom section")} subtitle={str(block.props.subtitle)} />
+      <Title block={block} title={str(block.props.title, "Custom section")} subtitle={str(block.props.subtitle)} />
       <div className="max-w-3xl mx-auto text-text-1 leading-relaxed whitespace-pre-wrap">{str(block.props.body)}</div>
     </SectionShell>
   );
@@ -1985,7 +2452,7 @@ export function VideoEmbedBlock({ block }: { block: BlockConfig }) {
   const url = str(block.props.url);
   return (
     <SectionShell>
-      <Title title={str(block.props.title, "Walkthrough")} />
+      <Title block={block} title={str(block.props.title, "Walkthrough")} />
       <div className="aspect-video rounded-xl overflow-hidden border border-border-default bg-bg-2 flex items-center justify-center">
         {url ? (
           <iframe title="Video" src={url} className="w-full h-full border-0" allow="autoplay; encrypted-media" allowFullScreen />

@@ -368,7 +368,9 @@ export class LeadsService implements OnModuleInit {
     });
 
     if (this.googleSheets) {
-      void this.googleSheets.appendLeadRow(orgId, lead).catch(() => {});
+      void this.googleSheets
+        .appendLeadRow(orgId, lead, projectId ?? undefined)
+        .catch(() => {});
     }
 
     if (resolvedLandingPageId) {
@@ -593,7 +595,9 @@ export class LeadsService implements OnModuleInit {
     });
 
     if (this.googleSheets) {
-      void this.googleSheets.appendLeadRow(orgId, created).catch(() => {});
+      void this.googleSheets
+        .appendLeadRow(orgId, created, created.projectId ?? undefined)
+        .catch(() => {});
     }
 
     return created;

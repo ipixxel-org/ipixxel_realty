@@ -46,7 +46,11 @@ export class GoogleSheetsAdapter implements PlatformAdapter {
   }
 
   async syncConnection(connection: MarketingConnectionRow): Promise<AdapterSyncResult> {
-    const res = await this.googleSheets.syncAllLeadsToSheet(connection.orgId);
+    const res = await this.googleSheets.syncAllLeadsToSheet(
+      connection.orgId,
+      connection.projectId ?? undefined,
+      connection.id,
+    );
     return {
       ok: res.ok,
       message: res.message,
@@ -55,6 +59,6 @@ export class GoogleSheetsAdapter implements PlatformAdapter {
   }
 
   async disconnect(connection: MarketingConnectionRow): Promise<void> {
-    await this.googleSheets.disconnect(connection.orgId);
+    await this.googleSheets.disconnect(connection.orgId, connection.id);
   }
 }
