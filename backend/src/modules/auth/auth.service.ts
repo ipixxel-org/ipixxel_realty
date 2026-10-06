@@ -888,20 +888,15 @@ export class AuthService {
     }
 
     // Account-state messaging only AFTER the password is verified, so a wrong
-    // password never reveals whether an account is pending/disabled.
-    //   disabled                      -> disapproved / deactivated
-    //   pending + approvedAt == null   -> awaiting Org Admin approval
-    //   pending + approvedAt != null   -> approved; allowed in, but forced
-    //                                     straight to change-password
-    //   active                         -> normal
+    // password never reveals whether an account is disabled.
+    //   disabled -> deactivated
+    //   pending  -> created by the Org Admin and not yet signed in; allowed
+    //               in, but forced straight to change-password (there is no
+    //               separate Org Admin approval step any more)
+    //   active   -> normal
     if (user.status === 'disabled') {
       throw new UnauthorizedException(
         'Your account access has been revoked. Please contact your administrator.',
-      );
-    }
-    if (user.status === 'pending' && !user.approvedAt) {
-      throw new UnauthorizedException(
-        'Your account is pending approval by your organisation administrator.',
       );
     }
 
@@ -1644,11 +1639,9 @@ export class AuthService {
           'Your account access has been revoked. Please contact your administrator.',
         );
       }
-      if (existing.status === 'pending' && !existing.approvedAt) {
-        throw new UnauthorizedException(
-          'Your account is pending approval by your organisation administrator.',
-        );
-      }
+      // A `pending` member (created by the Org Admin, not yet signed in) is
+      // let in like password login — the frontend then sends them to
+      // change-password (must_change_password).
 
       // An org admin who stopped after Step 1 has no org and no roles yet —
       // that's a signup in progress, not a platform account (platform team

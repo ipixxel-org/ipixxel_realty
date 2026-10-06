@@ -200,11 +200,11 @@ export async function provisionInvitedUser(
         email,
         phoneNumber,
         passwordHash,
-        // Starts life awaiting Org Admin approval — cannot authenticate until
-        // approvedAt is set (see AuthService.authenticate), then must complete
-        // the forced change-password flow before flipping to `active`.
+        // No separate approval step: approved on creation and can sign in
+        // straight away, but must complete the forced change-password flow
+        // before flipping to `active` (see AuthService.changePassword).
         status: 'pending',
-        approvedAt: null,
+        approvedAt: new Date(),
         mustChangePassword,
         onboardingStep: 'completed',
       },

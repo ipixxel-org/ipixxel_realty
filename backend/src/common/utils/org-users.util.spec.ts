@@ -95,7 +95,7 @@ beforeEach(() => {
 });
 
 describe('provisionInvitedUser', () => {
-  it('creates the member as pending, unapproved and forced to change password', async () => {
+  it('creates the member as pending, already approved and forced to change password', async () => {
     const { prisma, txn } = makePrisma();
 
     await provisionInvitedUser(prisma, 'org-1', {
@@ -109,7 +109,7 @@ describe('provisionInvitedUser', () => {
     expect(txn.user.create).toHaveBeenCalledTimes(1);
     const data = txn.user.create.mock.calls[0][0].data;
     expect(data.status).toBe('pending');
-    expect(data.approvedAt).toBeNull();
+    expect(data.approvedAt).toBeInstanceOf(Date); // no separate approval step
     expect(data.mustChangePassword).toBe(true);
     expect(data.passwordHash).not.toContain(' '); // hashed, never plaintext
     expect(sendInviteEmail).toHaveBeenCalledTimes(1);
