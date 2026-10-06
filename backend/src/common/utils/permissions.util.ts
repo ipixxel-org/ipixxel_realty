@@ -114,15 +114,19 @@ export const PERMISSION_MODULES: ModuleDefinition[] = [
   { key: 'billing', label: 'Billing', description: 'Plan, subscription and invoices' },
   // Domain, Billing, CRM option lists and Project Catalogs sections follow
   // their own modules; these pills cover the rest (see SETTINGS_ACTIONS).
+  // "My profile" pills gate the member's own profile page, independently of
+  // View (Settings page), so a role can be given only its own profile.
   {
     key: 'settings',
     label: 'Settings',
     description: 'Organisation profile, branding, email and pipeline',
-    actions: ['view', 'edit', 'approve', 'activate'],
+    actions: ['view', 'edit', 'approve', 'activate', 'add', 'deactivate'],
     actionLabels: {
-      edit: 'Edit profile & branding',
+      edit: 'Edit settings & branding',
       approve: 'Edit email & SMTP',
       activate: 'Edit pipeline',
+      add: 'My profile: View',
+      deactivate: 'My profile: Edit',
     },
   },
   // Orgs can't edit, close or delete tickets — the platform team resolves them.
@@ -167,6 +171,9 @@ export const SETTINGS_ACTIONS = {
   editProfile: 'edit',
   editEmail: 'approve',
   editPipeline: 'activate',
+  // The member's own profile (Settings > My profile), not the organisation's.
+  viewMyProfile: 'add',
+  editMyProfile: 'deactivate',
 } as const satisfies Record<string, PermissionAction>;
 
 export const SUPPORT_ACTIONS = {

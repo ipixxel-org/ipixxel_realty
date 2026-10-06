@@ -81,6 +81,8 @@ interface AuthContextValue {
   isOrgAdmin: () => boolean;
   refreshPermissions: () => Promise<Permissions | null>;
   updateOrganisation: (org: Partial<SafeOrganisation>) => void;
+  // Settings > My profile saved — keep the header/sidebar name in sync.
+  updateProfile: (profile: Partial<Pick<SessionUser, "first_name" | "last_name" | "phone_number">>) => void;
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null);
@@ -577,6 +579,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     [],
   );
 
+  const updateProfile = useCallback(
+    (profile: Partial<Pick<SessionUser, "first_name" | "last_name" | "phone_number">>) => {
+      setUser((prev) => {
+        if (!prev) return null;
+        const updatedUser: SessionUser = { ...prev, ...profile };
+        try {
+          localStorage.setItem(STORAGE_KEYS.user, JSON.stringify(updatedUser));
+        } catch {
+          /* ignore */
+        }
+        return updatedUser;
+      });
+    },
+    [],
+  );
+
   const value = useMemo<AuthContextValue>(
     () => ({
       user,
@@ -593,6 +611,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       isOrgAdmin,
       refreshPermissions,
       updateOrganisation,
+      updateProfile,
     }),
     [
       user,
@@ -608,6 +627,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       isOrgAdmin,
       refreshPermissions,
       updateOrganisation,
+      updateProfile,
     ],
   );
 

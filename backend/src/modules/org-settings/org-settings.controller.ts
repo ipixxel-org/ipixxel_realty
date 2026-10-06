@@ -10,7 +10,7 @@ import { OrgSettingsService } from './org-settings.service';
 import { UpdateOrganisationDto } from '../admin-organisations/dto/update-organisation.dto';
 import { AssetUploadUrlDto } from './dto/asset-upload-url.dto';
 
-// General, Branding and Localization — Settings > Edit profile & branding.
+// General, Branding and Localization — Settings > Edit settings & branding.
 const ENFORCE = { enforceForOrgAdmin: true } as const;
 
 @UseGuards(JwtAuthGuard, OrgApprovedGuard, PermissionGuard)

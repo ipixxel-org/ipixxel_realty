@@ -9,6 +9,7 @@ import { Icon } from "@/components/icons";
 import { ConfirmModal } from "@/components/ui/confirm-modal";
 import type { DynamicRole } from "@/lib/types";
 import { useFlash } from "@/lib/flash";
+import { applyPermissionToggle } from "@/lib/permissions";
 import { ListPager, usePagedRows } from "@/components/ui/list-pager";
 import { ROLES_FLASH_KEY, ROLES_PATH, roleInUseMessage } from "./role-shared";
 
@@ -345,14 +346,9 @@ export default function SuperAdminRolesPage() {
   const togglePerm = (moduleKey: string, action: PermissionColumn) => {
     const nextRows = permissionsData.map((item) => {
       if (item.moduleKey !== moduleKey) return item;
-      const nextVal = !item[action];
-      const updated = { ...item, [action]: nextVal };
-      if (nextVal && action !== "canView") updated.canView = true;
-      if (!nextVal && action === "canView") {
-        // Without View nothing else in the module is reachable.
-        Object.assign(updated, setColumns(item, () => false));
-      }
-      return updated;
+      // Granting an action grants View; removing View removes the rest —
+      // except the Settings "My profile" pills (see applyPermissionToggle).
+      return applyPermissionToggle(moduleKey, item, action, !item[action], PERMISSION_COLUMNS);
     });
     const moduleRow = permissionsData.find((item) => item.moduleKey === moduleKey);
     const moduleLabel = moduleRow?.label ?? "module";

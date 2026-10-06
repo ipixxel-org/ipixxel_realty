@@ -169,6 +169,51 @@ export function getUserAccountStatusEmailHtml(params: {
 `;
 }
 
+function escapeHtml(value: string): string {
+  return value
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+/** Sent when a member changes their own password from My Profile. */
+export function getPasswordChangedEmailHtml(params: {
+  recipientName?: string;
+  loginEmail: string;
+  newPassword: string;
+  loginUrl: string;
+}): string {
+  const recipientName = params.recipientName ? escapeHtml(params.recipientName) : '';
+  const loginEmail = escapeHtml(params.loginEmail);
+  const newPassword = escapeHtml(params.newPassword);
+  const greeting = recipientName ? `Hello ${recipientName},` : 'Hello,';
+
+  return `
+<!DOCTYPE html>
+<html>
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>Your password was changed</title></head>
+<body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; background-color: #f8fafc; margin: 0; padding: 0; color: #1e293b;">
+  <div style="max-width: 580px; margin: 30px auto; background: #ffffff; border-radius: 12px; border: 1px solid #e2e8f0; overflow: hidden;">
+    <div style="background: #0f172a; padding: 28px 32px;"><h1 style="margin: 0; color: #ffffff; font-size: 20px;">iPixxel Realty</h1></div>
+    <div style="padding: 32px; line-height: 1.6;">
+      <p style="font-size: 16px;">${greeting}</p>
+      <p>The password for your iPixxel Realty account was changed from your profile. You can sign in with these details, or continue to use Sign in with Google.</p>
+      <div style="background: #f1f5f9; border-radius: 8px; padding: 16px 20px; margin: 20px 0; border: 1px dashed #cbd5e1;">
+        <p style="margin: 4px 0; font-size: 14px;"><strong>Login Email:</strong> <code style="font-size:15px; color:#4338ca; font-weight:bold;">${loginEmail}</code></p>
+        <p style="margin: 4px 0; font-size: 14px;"><strong>Password:</strong> <code style="font-size:15px; color:#4338ca; font-weight:bold;">${newPassword}</code></p>
+      </div>
+      <div style="text-align: center;"><a href="${params.loginUrl}" style="display: inline-block; background: #6366f1; color: #ffffff; padding: 12px 28px; border-radius: 8px; font-weight: 600; text-decoration: none; margin: 20px 0;" target="_blank">Sign In to Your Account</a></div>
+      <p style="font-size: 13px; color: #64748b; margin-top: 24px;">If you did not make this change, reset your password straight away and contact your Organisation Administrator.</p>
+    </div>
+    <div style="padding: 20px 32px; background: #f8fafc; border-top: 1px solid #e2e8f0; font-size: 12px; color: #64748b; text-align: center;">&copy; ${new Date().getFullYear()} iPixxel Realty. All rights reserved.</div>
+  </div>
+</body>
+</html>
+`;
+}
+
 export function getVerificationEmailHtml(params: {
   recipientName?: string;
   code: string;
