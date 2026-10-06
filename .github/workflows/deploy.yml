@@ -8,12 +8,11 @@
 # GitHub → your repo → Settings → Secrets and variables → Actions →
 # "New repository secret", add these three:
 #
-#   SSH_PRIVATE_KEY   The ENTIRE contents of your .pem file, including the
-#                     "-----BEGIN RSA PRIVATE KEY-----" and
-#                     "-----END RSA PRIVATE KEY-----" lines.
-#                     (Open the .pem in a text editor and copy everything.)
-#   SSH_HOST          65.0.61.249
-#   SSH_USER          ubuntu
+#   SSH_PRIVATE_KEY   The ENTIRE contents of your ed25519 generated on the server, including the
+#                     "-----BEGIN ED25519 PRIVATE KEY-----" and
+#                     "-----END ED25519 PRIVATE KEY-----" lines.
+#   SSH_HOST          187.126.119.156
+#   SSH_USER          root
 #
 # Then commit this file to .github/workflows/deploy.yml on main.
 # From then on, every merged PR deploys automatically.
@@ -29,7 +28,7 @@
 #     can connect — their IPs aren't fixed
 # ---------------------------------------------------------------------------
 
-name: Deploy to production
+name: Deploy to staging
 
 on:
   # Merging a PR into main creates a push to main, which triggers this.
@@ -42,7 +41,7 @@ on:
 # Never let two deploys overlap — a second one starting mid-build would leave
 # the server in an unpredictable state.
 concurrency:
-  group: production-deploy
+  group: staging-deploy
   cancel-in-progress: false
 
 jobs:
