@@ -4,3 +4,6 @@
 .env
 
 /generated/prisma
+
+# Local-dev private files (Team Chat attachments) — never commit
+/private-uploads

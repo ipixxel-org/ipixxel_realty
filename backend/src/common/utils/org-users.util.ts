@@ -8,6 +8,11 @@ import {
 import { toSafeUser } from './mappers.util';
 import { isSamePhoneNumber, normalizePhoneNumber } from './phone.util';
 import { assertLimit, countBillableOrgUsers } from './plan-quota.util';
+import {
+  runTeamChatHook,
+  teamChatUserActivated,
+  teamChatUserDeactivated,
+} from './team-chat-membership.util';
 
 import { EmailService } from '../../modules/email/email.service';
 
@@ -50,6 +55,10 @@ type OrgUsersPrisma = Pick<
   | 'refreshToken'
   | 'passwordResetToken'
   | '$transaction'
+  // Team Chat lifecycle hooks (General channel membership).
+  | 'teamChannel'
+  | 'teamChannelMember'
+  | 'teamMessage'
 > & {
   organisation?: { findUnique: (...args: any[]) => Promise<any> };
   emailConfig?: { findFirst: (...args: any[]) => Promise<any> };
@@ -217,6 +226,12 @@ export async function provisionInvitedUser(
     return created;
   });
 
+  // Invited members are org members straight away (status `pending` until
+  // they set their own password) — there is no separate "accept" step.
+  await runTeamChatHook('user provisioned', () =>
+    teamChatUserActivated(prisma, orgId, user.id),
+  );
+
   sendInviteEmailNotification(
     prisma,
     orgId,
@@ -336,6 +351,10 @@ export async function approveOrgUser(
   if (user.status !== nextStatus || !user.approvedAt) {
     sendUserAccountStatusNotification(prisma, orgId, updated, 'activated');
   }
+  // Re-approving a disabled member brings them back into General.
+  await runTeamChatHook('user approved', () =>
+    teamChatUserActivated(prisma, orgId, id),
+  );
 
   return toSafeUser(updated);
 }
@@ -375,6 +394,10 @@ export async function deleteOrgUser(
     throw new ForbiddenException('Organisation admins cannot be deleted.');
   }
 
+  // Before the delete, while the name still exists for "<Name> left".
+  await runTeamChatHook('user deleted', () =>
+    teamChatUserDeactivated(prisma, orgId, id),
+  );
   await prisma.user.delete({ where: { id } });
   return { success: true };
 }
@@ -769,6 +792,16 @@ export async function setOrgUserStatus(
     }
     return result;
   });
+
+  if (status === 'disabled') {
+    await runTeamChatHook('user disabled', () =>
+      teamChatUserDeactivated(prisma, orgId, id),
+    );
+  } else {
+    await runTeamChatHook('user enabled', () =>
+      teamChatUserActivated(prisma, orgId, id),
+    );
+  }
 
   if (notifyUser && user.status !== status && (status === 'disabled' || status === 'active')) {
     sendUserAccountStatusNotification(

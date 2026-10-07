@@ -26,6 +26,10 @@ import { PreviewDraftDto } from './dto/preview-draft.dto';
 import { JwtPayload } from '../../common/types/jwt-payload.interface';
 import { nextOnboardingStep } from '../../common/utils/onboarding.util';
 import {
+  runTeamChatHook,
+  teamChatUserActivated,
+} from '../../common/utils/team-chat-membership.util';
+import {
   assignBasicPlanIfMissing,
   finalizeLegacyOnboardingDraft,
   isLegacyOnboardingStep,
@@ -341,6 +345,11 @@ export class AuthService {
 
         return { user, organisation };
       },
+    );
+
+    // Founder joins the new org's General channel (created here).
+    await runTeamChatHook('org registered (legacy signup)', () =>
+      teamChatUserActivated(this.prisma, organisation.id, user.id),
     );
 
     // Do NOT issue tokens — organisation is pending approval, user cannot log in yet
@@ -787,6 +796,11 @@ export class AuthService {
       return { organisation, updatedUser };
     });
 
+    // Founder joins the new org's General channel (created here).
+    await runTeamChatHook('org created (onboarding)', () =>
+      teamChatUserActivated(this.prisma, organisation.id, user.id),
+    );
+
     const tokens = await this.issueTokens(user.id, organisation.id, ['admin']);
 
     return {
@@ -842,6 +856,11 @@ export class AuthService {
         termsAcceptedAt: new Date(),
       },
     });
+
+    // Re-submit / resume of Step 2: self-heal General membership.
+    await runTeamChatHook('org onboarding resubmitted', () =>
+      teamChatUserActivated(this.prisma, orgId, userId),
+    );
 
     const tokens = await this.issueTokens(userId, organisation.id, roles);
 

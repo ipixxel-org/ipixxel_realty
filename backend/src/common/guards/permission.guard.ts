@@ -135,6 +135,27 @@ export async function assertOrgPermission(
 }
 
 /**
+ * Boolean form of assertOrgPermission, for handlers that allow an action
+ * either by permission or by some other right (e.g. Team Chat: channel admin
+ * OR team_chat:edit).
+ */
+export async function hasOrgPermission(
+  prisma: Parameters<typeof assertOrgPermission>[0],
+  actor: JwtPayload | undefined,
+  module: string,
+  action: PermissionAction,
+  enforceForOrgAdmin = false,
+): Promise<boolean> {
+  try {
+    await assertOrgPermission(prisma, actor, module, action, enforceForOrgAdmin);
+    return true;
+  } catch (err) {
+    if (err instanceof ForbiddenException) return false;
+    throw err;
+  }
+}
+
+/**
  * Passes when the member holds ANY of the given actions on the module (e.g. a
  * support attachment is uploaded for either a new ticket or a reply).
  */

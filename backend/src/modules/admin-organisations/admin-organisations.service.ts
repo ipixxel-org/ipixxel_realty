@@ -21,6 +21,10 @@ import {
   setOrgUserStatus,
 } from '../../common/utils/org-users.util';
 import { assertTemplateQuota } from '../../common/utils/plan-quota.util';
+import {
+  runTeamChatHook,
+  teamChatUserActivated,
+} from '../../common/utils/team-chat-membership.util';
 import { assertEligibleTemplateIds } from '../../common/utils/template-eligibility.util';
 import { OnboardCompanyDto } from './dto/onboard-company.dto';
 import { OnboardAdminDto } from './dto/onboard-admin.dto';
@@ -130,6 +134,11 @@ export class AdminOrganisationsService {
       return { organisation, user };
     });
 
+    // Founder joins the new org's General channel (created here).
+    await runTeamChatHook('org created by super admin', () =>
+      teamChatUserActivated(this.prisma, organisation.id, user.id),
+    );
+
     if (!dto.adminPassword) {
       void this.emailService.sendInviteEmail({
         to: user.email,
@@ -194,6 +203,10 @@ export class AdminOrganisationsService {
 
       return created;
     });
+
+    await runTeamChatHook('org admin onboarded by super admin', () =>
+      teamChatUserActivated(this.prisma, organisation.id, user.id),
+    );
 
     this.pendingTempPasswords.set(organisation.id, tempPassword);
     void this.emailService.sendInviteEmail({

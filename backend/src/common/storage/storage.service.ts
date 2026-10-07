@@ -7,14 +7,26 @@ import {
 import { randomUUID } from 'node:crypto';
 import * as fs from 'fs';
 import * as path from 'path';
-import { DeleteObjectCommand, PutObjectCommand, S3Client } from '@aws-sdk/client-s3';
+import {
+  DeleteObjectCommand,
+  GetObjectCommand,
+  PutObjectCommand,
+  S3Client,
+} from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import {
+  CreatePrivateDownloadUrlInput,
+  CreatePrivateUploadUrlInput,
+  CreatePrivateUploadUrlResult,
   CreateUploadUrlInput,
   CreateUploadUrlResult,
   FIELD_RULES,
   UploadField,
 } from './storage.types';
+import {
+  LOCAL_PRIVATE_ROOT,
+  signLocalPrivate,
+} from './private-local.util';
 
 // Presigned PUT URLs are valid for 10 minutes — long enough for a slow
 // mobile upload, short enough that a leaked URL is near-useless.
@@ -178,6 +190,134 @@ export class StorageService {
     }
   }
 
+  // -------------------------------------------------------------------------
+  // Private objects (Team Chat attachments)
+  //
+  // The main bucket is public — everything in it is reachable through
+  // R2_PUBLIC_URL — so private files go to a SEPARATE bucket that has no
+  // public access (R2_PRIVATE_BUCKET_NAME) and are only ever handed out as
+  // short-lived signed GET URLs. If R2 is configured but the private bucket
+  // isn't, these methods refuse (503) rather than fall back to the public
+  // bucket. Without R2 (local dev) files go to `private-uploads/`, which is
+  // NOT under the static `/uploads` route, and are served by
+  // PrivateFilesController behind an HMAC-signed, expiring URL.
+  // -------------------------------------------------------------------------
+
+  private privateBucket(): string {
+    const bucket = process.env.R2_PRIVATE_BUCKET_NAME?.trim();
+    if (!bucket) {
+      throw new ServiceUnavailableException(
+        'Private file storage is not configured (R2_PRIVATE_BUCKET_NAME).',
+      );
+    }
+    if (bucket === process.env.R2_BUCKET_NAME?.trim()) {
+      throw new ServiceUnavailableException(
+        'R2_PRIVATE_BUCKET_NAME must differ from the public R2_BUCKET_NAME.',
+      );
+    }
+    return bucket;
+  }
+
+  async createPrivateUploadUrl(
+    input: CreatePrivateUploadUrlInput,
+  ): Promise<CreatePrivateUploadUrlResult> {
+    if (!Number.isFinite(input.size) || input.size <= 0) {
+      throw new BadRequestException('A valid file size is required.');
+    }
+    if (input.size > input.maxBytes) {
+      throw new BadRequestException(
+        `That file is too large — the limit is ${formatMb(input.maxBytes)}.`,
+      );
+    }
+    const contentType = normalizeContentType(input.contentType);
+    const now = new Date();
+    const key = [
+      seg(input.scope),
+      seg(input.orgId),
+      now.getFullYear().toString(),
+      String(now.getMonth() + 1).padStart(2, '0'),
+      `${randomUUID()}-${sanitizeFilename(input.filename)}`,
+    ].join('/');
+
+    if (!this.isConfigured()) {
+      const exp = Math.floor(Date.now() / 1000) + PRESIGN_TTL_SECONDS;
+      const sig = signLocalPrivate(['put', key, exp, contentType, input.size]);
+      const qs = new URLSearchParams({
+        key,
+        exp: String(exp),
+        ct: contentType,
+        size: String(input.size),
+        sig,
+      });
+      return {
+        uploadUrl: `${this.localBaseUrl()}/files/private/put?${qs.toString()}`,
+        key,
+        contentType,
+        expiresIn: PRESIGN_TTL_SECONDS,
+      };
+    }
+
+    const uploadUrl = await getSignedUrl(
+      this.s3(),
+      new PutObjectCommand({
+        Bucket: this.privateBucket(),
+        Key: key,
+        ContentType: contentType,
+        ContentLength: input.size,
+      }),
+      { expiresIn: PRESIGN_TTL_SECONDS },
+    );
+    return { uploadUrl, key, contentType, expiresIn: PRESIGN_TTL_SECONDS };
+  }
+
+  async createPrivateDownloadUrl(
+    input: CreatePrivateDownloadUrlInput,
+  ): Promise<{ url: string; expiresIn: number }> {
+    const ttl = input.ttlSeconds ?? 5 * 60;
+    const contentType = normalizeContentType(input.contentType);
+    const disposition = contentDisposition(input.disposition, input.fileName);
+
+    if (!this.isConfigured()) {
+      const exp = Math.floor(Date.now() / 1000) + ttl;
+      const sig = signLocalPrivate(['get', input.key, exp, contentType, disposition]);
+      const qs = new URLSearchParams({
+        key: input.key,
+        exp: String(exp),
+        ct: contentType,
+        cd: disposition,
+        sig,
+      });
+      return {
+        url: `${this.localBaseUrl()}/files/private/get?${qs.toString()}`,
+        expiresIn: ttl,
+      };
+    }
+
+    const url = await getSignedUrl(
+      this.s3(),
+      new GetObjectCommand({
+        Bucket: this.privateBucket(),
+        Key: input.key,
+        ResponseContentType: contentType,
+        ResponseContentDisposition: disposition,
+      }),
+      { expiresIn: ttl },
+    );
+    return { url, expiresIn: ttl };
+  }
+
+  /** Where a local-dev private file lives on disk (never statically served). */
+  localPrivatePath(key: string): string {
+    return path.join(LOCAL_PRIVATE_ROOT(), ...key.split('/'));
+  }
+
+  private localBaseUrl(): string {
+    const port = process.env.PORT || '4000';
+    return (
+      process.env.PUBLIC_BACKEND_URL || `http://localhost:${port}`
+    ).replace(/\/+$/, '');
+  }
+
   // Key layout is decided here, server-side. Org-scoped content lives under
   // a single top-level `org/{orgId}/` prefix; platform-level content (no
   // orgId — e.g. the Super Admin template builder) under `platform/`. The
@@ -241,6 +381,23 @@ function seg(value: string): string {
 function formatMb(bytes: number): string {
   const mb = bytes / (1024 * 1024);
   return mb >= 1 ? `${Math.round(mb)} MB` : `${Math.round(bytes / 1024)} KB`;
+}
+
+/** Browsers send '' for unknown types; anything not type/subtype-shaped is
+ *  stored as an opaque binary. */
+function normalizeContentType(value: string | undefined): string {
+  const ct = (value || '').trim().toLowerCase();
+  return /^[\w.+-]+\/[\w.+-]+$/.test(ct) ? ct : 'application/octet-stream';
+}
+
+/** RFC 6266 header with an ASCII fallback plus the UTF-8 original. */
+function contentDisposition(
+  kind: 'inline' | 'attachment',
+  fileName: string,
+): string {
+  const ascii = (fileName || 'file').replace(/[^\x20-\x7e]|["\\]/g, '_');
+  const utf8 = encodeURIComponent(fileName || 'file');
+  return `${kind}; filename="${ascii}"; filename*=UTF-8''${utf8}`;
 }
 
 function sanitizeFilename(name: string): string {

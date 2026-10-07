@@ -1,5 +1,10 @@
 import type { OnboardingStep } from '@prisma/client';
 import { onboardingStepIndex } from './onboarding.util';
+import {
+  runTeamChatHook,
+  teamChatUserActivated,
+  type ChatDb,
+} from './team-chat-membership.util';
 
 const BASIC_PLAN_SLUG = 'basic';
 
@@ -73,7 +78,7 @@ export async function assignBasicPlanIfMissing(
  * safe to call on every login/resume for a user past 'account'.
  */
 export async function finalizeLegacyOnboardingDraft(
-  prisma: FinalizePrisma,
+  prisma: FinalizePrisma & ChatDb,
   orgId: string,
   userId: string,
 ): Promise<void> {
@@ -87,4 +92,10 @@ export async function finalizeLegacyOnboardingDraft(
   await assignBasicPlanIfMissing(prisma, orgId);
 
   await prisma.user.update({ where: { id: userId }, data: { onboardingStep: 'completed' } });
+
+  // The org is live now — make sure its General channel exists with this
+  // user in it (idempotent; a no-op on every later call).
+  await runTeamChatHook('legacy onboarding finalized', () =>
+    teamChatUserActivated(prisma, orgId, userId),
+  );
 }
