@@ -11,8 +11,12 @@ import {
 } from '@nestjs/common';
 import type { Request, Response } from 'express';
 import * as fs from 'fs';
-import * as path from 'path';
-import { isSafePrivateKey, verifyLocalPrivate } from './private-local.util';
+import {
+  isSafeStorageKey,
+  requestContentType,
+  streamUploadToFile,
+  verifyLocalUrl,
+} from './private-local.util';
 import { StorageService } from './storage.service';
 
 /**
@@ -41,26 +45,10 @@ export class PrivateFilesController {
       Number(exp),
       sig,
     );
-    const limit = Number(size);
-    fs.mkdirSync(path.dirname(target), { recursive: true });
-    const out = fs.createWriteStream(target);
-    let received = 0;
-    req.on('data', (chunk: Buffer) => {
-      received += chunk.length;
-      if (received > limit) {
-        req.destroy();
-        out.destroy();
-        fs.rm(target, { force: true }, () => undefined);
-        if (!res.headersSent) res.status(413).json({ error: 'File too large' });
-      }
-    });
-    req.pipe(out);
-    out.on('finish', () => {
-      if (!res.headersSent) res.status(200).send('OK');
-    });
-    out.on('error', (err) => {
-      if (!res.headersSent) res.status(500).json({ error: err.message });
-    });
+    if (requestContentType(req) !== ct) {
+      throw new BadRequestException(`Content-Type must be ${ct}`);
+    }
+    streamUploadToFile(req, res, target, Number(size));
   }
 
   @Get('get')
@@ -92,11 +80,19 @@ export class PrivateFilesController {
     exp: number,
     sig: string,
   ): string {
-    if (this.storage.isConfigured()) {
+    // Only the no-R2 local-dev fallback is served here; with the private
+    // bucket configured (or misconfigured) these routes don't exist.
+    let mode: 'r2' | 'local' | 'unavailable';
+    try {
+      mode = this.storage.privateStorageMode();
+    } catch {
+      mode = 'unavailable';
+    }
+    if (mode !== 'local') {
       throw new NotFoundException();
     }
-    if (!isSafePrivateKey(key)) throw new BadRequestException('Invalid key');
-    if (!verifyLocalPrivate(parts, exp, sig)) {
+    if (!isSafeStorageKey(key)) throw new BadRequestException('Invalid key');
+    if (!verifyLocalUrl(parts, exp, sig)) {
       throw new ForbiddenException('Link expired or invalid');
     }
     return this.storage.localPrivatePath(key);

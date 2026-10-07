@@ -24,8 +24,9 @@ import {
   UploadField,
 } from './storage.types';
 import {
+  isSafeStorageKey,
   LOCAL_PRIVATE_ROOT,
-  signLocalPrivate,
+  signLocalUrl,
 } from './private-local.util';
 
 // Presigned PUT URLs are valid for 10 minutes — long enough for a slow
@@ -132,7 +133,18 @@ export class StorageService {
     if (!this.isConfigured()) {
       const port = process.env.PORT || '4000';
       const baseUrl = process.env.PUBLIC_BACKEND_URL || `http://localhost:${port}`;
-      const uploadUrl = `${baseUrl}/uploads/local-put?key=${encodeURIComponent(key)}`;
+      // Signed like an R2 presign: bound to this key, type, size and expiry
+      // (see LocalUploadController).
+      const exp = Math.floor(Date.now() / 1000) + PRESIGN_TTL_SECONDS;
+      const sig = signLocalUrl(['public-put', key, exp, contentType, input.size]);
+      const qs = new URLSearchParams({
+        key,
+        exp: String(exp),
+        ct: contentType,
+        size: String(input.size),
+        sig,
+      });
+      const uploadUrl = `${baseUrl}/uploads/local-put?${qs.toString()}`;
       const publicUrl = `${baseUrl}/uploads/${key}`;
 
       return {
@@ -196,26 +208,109 @@ export class StorageService {
   // The main bucket is public — everything in it is reachable through
   // R2_PUBLIC_URL — so private files go to a SEPARATE bucket that has no
   // public access (R2_PRIVATE_BUCKET_NAME) and are only ever handed out as
-  // short-lived signed GET URLs. If R2 is configured but the private bucket
-  // isn't, these methods refuse (503) rather than fall back to the public
-  // bucket. Without R2 (local dev) files go to `private-uploads/`, which is
-  // NOT under the static `/uploads` route, and are served by
-  // PrivateFilesController behind an HMAC-signed, expiring URL.
+  // short-lived signed GET URLs.
+  //
+  // The private bucket has its OWN API token (R2_PRIVATE_*), used through a
+  // separate S3 client for every private operation — the public bucket's
+  // credentials are never used for chat files, and these never for anything
+  // else. Missing or half-set private config refuses with 503; there is no
+  // fallback to the public bucket. Only when no R2 is configured at all
+  // (local dev) do files go to `private-uploads/` — NOT under the static
+  // `/uploads` route — served by PrivateFilesController behind an
+  // HMAC-signed, expiring URL.
   // -------------------------------------------------------------------------
 
-  private privateBucket(): string {
-    const bucket = process.env.R2_PRIVATE_BUCKET_NAME?.trim();
-    if (!bucket) {
-      throw new ServiceUnavailableException(
-        'Private file storage is not configured (R2_PRIVATE_BUCKET_NAME).',
-      );
+  private privateClient: S3Client | null = null;
+
+  /**
+   * 'r2' when the private bucket is fully configured, 'local' only when no
+   * R2 storage is configured at all; anything in between throws 503.
+   * Error messages name variables, never their values.
+   */
+  privateStorageMode(): 'r2' | 'local' {
+    const cfg = this.privateEnv();
+    if (cfg.complete) return 'r2';
+    if (!cfg.anySet && !this.isConfigured()) return 'local';
+    throw new ServiceUnavailableException(
+      `Private file storage is not configured (${cfg.problem}).`,
+    );
+  }
+
+  private privateEnv() {
+    const env = process.env;
+    const bucket = env.R2_PRIVATE_BUCKET_NAME?.trim() ?? '';
+    const accessKeyId = env.R2_PRIVATE_ACCESS_KEY_ID?.trim() ?? '';
+    const secretAccessKey = env.R2_PRIVATE_SECRET_ACCESS_KEY?.trim() ?? '';
+    const accountId = env.R2_PRIVATE_ACCOUNT_ID?.trim() ?? '';
+    // Same account as the public bucket unless told otherwise.
+    const endpoint = (
+      env.R2_PRIVATE_ENDPOINT?.trim() ||
+      (accountId ? `https://${accountId}.r2.cloudflarestorage.com` : '') ||
+      env.R2_ENDPOINT?.trim() ||
+      ''
+    ).replace(/\/+$/, '');
+
+    const anySet = Boolean(
+      bucket || accessKeyId || secretAccessKey || accountId || env.R2_PRIVATE_ENDPOINT,
+    );
+    let problem = '';
+    if (!bucket) problem = 'R2_PRIVATE_BUCKET_NAME is missing';
+    else if (!accessKeyId || !secretAccessKey)
+      problem = 'R2_PRIVATE_ACCESS_KEY_ID / R2_PRIVATE_SECRET_ACCESS_KEY are missing';
+    else if (!endpoint || endpoint.includes('your-account-id'))
+      problem = 'no endpoint: set R2_PRIVATE_ENDPOINT, R2_PRIVATE_ACCOUNT_ID or R2_ENDPOINT';
+    else if (bucket === env.R2_BUCKET_NAME?.trim())
+      problem = 'R2_PRIVATE_BUCKET_NAME must differ from R2_BUCKET_NAME';
+    else if (accessKeyId === env.R2_ACCESS_KEY_ID?.trim())
+      problem = 'R2_PRIVATE_ACCESS_KEY_ID must be the private bucket\'s own token, not R2_ACCESS_KEY_ID';
+
+    return {
+      complete: !problem,
+      anySet,
+      problem,
+      bucket,
+      endpoint,
+      accessKeyId,
+      secretAccessKey,
+    };
+  }
+
+  /** The private bucket's own client and name. Throws 503 if unconfigured. */
+  private privateS3(): { client: S3Client; bucket: string } {
+    if (this.privateStorageMode() !== 'r2') {
+      throw new ServiceUnavailableException('Private R2 storage is not configured.');
     }
-    if (bucket === process.env.R2_BUCKET_NAME?.trim()) {
-      throw new ServiceUnavailableException(
-        'R2_PRIVATE_BUCKET_NAME must differ from the public R2_BUCKET_NAME.',
-      );
+    const cfg = this.privateEnv();
+    if (!this.privateClient) {
+      this.privateClient = new S3Client({
+        region: 'auto',
+        endpoint: cfg.endpoint,
+        credentials: {
+          accessKeyId: cfg.accessKeyId,
+          secretAccessKey: cfg.secretAccessKey,
+        },
+        requestChecksumCalculation: 'WHEN_REQUIRED',
+        responseChecksumValidation: 'WHEN_REQUIRED',
+      });
     }
-    return bucket;
+    return { client: this.privateClient, bucket: cfg.bucket };
+  }
+
+  async deletePrivateObject(key: string): Promise<void> {
+    if (!key) return;
+    if (this.privateStorageMode() === 'local') {
+      if (isSafeStorageKey(key)) {
+        fs.rmSync(this.localPrivatePath(key), { force: true });
+      }
+      return;
+    }
+    const { client, bucket } = this.privateS3();
+    try {
+      await client.send(new DeleteObjectCommand({ Bucket: bucket, Key: key }));
+    } catch (err) {
+      const name = err instanceof Error ? err.name : 'Error';
+      this.logger.error(`Failed to delete private object "${key}": ${name}`);
+    }
   }
 
   async createPrivateUploadUrl(
@@ -239,9 +334,9 @@ export class StorageService {
       `${randomUUID()}-${sanitizeFilename(input.filename)}`,
     ].join('/');
 
-    if (!this.isConfigured()) {
+    if (this.privateStorageMode() === 'local') {
       const exp = Math.floor(Date.now() / 1000) + PRESIGN_TTL_SECONDS;
-      const sig = signLocalPrivate(['put', key, exp, contentType, input.size]);
+      const sig = signLocalUrl(['put', key, exp, contentType, input.size]);
       const qs = new URLSearchParams({
         key,
         exp: String(exp),
@@ -257,10 +352,11 @@ export class StorageService {
       };
     }
 
+    const { client, bucket } = this.privateS3();
     const uploadUrl = await getSignedUrl(
-      this.s3(),
+      client,
       new PutObjectCommand({
-        Bucket: this.privateBucket(),
+        Bucket: bucket,
         Key: key,
         ContentType: contentType,
         ContentLength: input.size,
@@ -277,9 +373,9 @@ export class StorageService {
     const contentType = normalizeContentType(input.contentType);
     const disposition = contentDisposition(input.disposition, input.fileName);
 
-    if (!this.isConfigured()) {
+    if (this.privateStorageMode() === 'local') {
       const exp = Math.floor(Date.now() / 1000) + ttl;
-      const sig = signLocalPrivate(['get', input.key, exp, contentType, disposition]);
+      const sig = signLocalUrl(['get', input.key, exp, contentType, disposition]);
       const qs = new URLSearchParams({
         key: input.key,
         exp: String(exp),
@@ -293,10 +389,11 @@ export class StorageService {
       };
     }
 
+    const { client, bucket } = this.privateS3();
     const url = await getSignedUrl(
-      this.s3(),
+      client,
       new GetObjectCommand({
-        Bucket: this.privateBucket(),
+        Bucket: bucket,
         Key: input.key,
         ResponseContentType: contentType,
         ResponseContentDisposition: disposition,
