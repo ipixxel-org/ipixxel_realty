@@ -234,6 +234,15 @@ export class TeamChatController {
     return this.attachments.presign(user, dto);
   }
 
+  /** Cancel an upload that hasn't been sent (own uploads only). */
+  @Delete('attachments/:id')
+  cancelAttachment(
+    @CurrentUser() user: JwtPayload,
+    @Param('id', uuid) id: string,
+  ) {
+    return this.attachments.cancel(user, id);
+  }
+
   @Get('attachments/:id/url')
   attachmentUrl(
     @CurrentUser() user: JwtPayload,

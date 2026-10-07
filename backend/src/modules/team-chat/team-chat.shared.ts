@@ -49,7 +49,7 @@ export const MESSAGE_INCLUDE = {
       deletedAt: true,
       sender: { select: USER_SELECT },
       attachments: {
-        select: { fileName: true },
+        select: { fileName: true, mimeType: true },
         orderBy: { createdAt: 'asc' },
         take: 1,
       },
@@ -81,13 +81,16 @@ export function messagePreview(m: {
   kind: string;
   body: string;
   deletedAt: Date | null;
-  attachments?: { fileName: string }[];
+  attachments?: { fileName: string; mimeType?: string }[];
 }): string {
   if (m.deletedAt) return 'This message was deleted';
   const body = m.body.trim();
   if (body) return body.length > 120 ? `${body.slice(0, 120)}…` : body;
-  const file = m.attachments?.[0]?.fileName;
-  return file ? `📎 ${file}` : '📎 Attachment';
+  const file = m.attachments?.[0];
+  if (!file) return '📎 Attachment';
+  if (file.mimeType?.startsWith('image/')) return '📷 Photo';
+  if (file.mimeType?.startsWith('video/')) return '🎥 Video';
+  return `📎 ${file.fileName}`;
 }
 
 export function aggregateReactions(

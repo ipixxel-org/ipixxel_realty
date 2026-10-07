@@ -1736,3 +1736,277 @@
     max-width: 85%;
   }
 }
+
+/* ---------- Files & emoji (phase 3) ---------- */
+
+/* Composer: pending-files tray above the input bar */
+.org .tch-composer-wrap {
+  border-top: 1px solid #e5e7eb;
+  background: #ffffff;
+}
+.org .tch-composer-wrap .tch-composer {
+  border-top: none;
+}
+.org .tch-tray {
+  display: flex;
+  gap: 10px;
+  padding: 12px 18px 0;
+  overflow-x: auto;
+}
+.org .tch-tray-item {
+  position: relative;
+  flex: 0 0 auto;
+  width: 84px;
+  height: 84px;
+  border-radius: 10px;
+  border: 1px solid #e5e7eb;
+  background: #f9fafb;
+  overflow: hidden;
+}
+.org .tch-tray-item img,
+.org .tch-tray-item video {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+.org .tch-tray-item.is-error {
+  border-color: #fecaca;
+}
+.org .tch-tray-file {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  padding: 6px;
+  color: #059669;
+  text-align: center;
+}
+.org .tch-tray-file span {
+  width: 100%;
+  font-size: 10.5px;
+  font-weight: 600;
+  color: #111827;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.org .tch-tray-file small {
+  font-size: 10px;
+  color: #6b7280;
+}
+.org .tch-tray-play {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: rgba(17, 24, 39, 0.55);
+  color: #ffffff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.org .tch-tray-progress {
+  position: absolute;
+  left: 6px;
+  right: 6px;
+  bottom: 6px;
+  height: 4px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.85);
+  overflow: hidden;
+}
+.org .tch-tray-progress span {
+  display: block;
+  height: 100%;
+  background: #059669;
+  transition: width 0.15s;
+}
+.org .tch-tray-remove {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  border: none;
+  background: rgba(17, 24, 39, 0.65);
+  color: #ffffff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+.org .tch-tray-error {
+  position: absolute;
+  inset: 0;
+  border: none;
+  background: rgba(254, 242, 242, 0.88);
+  color: #dc2626;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  cursor: pointer;
+}
+.org .tch-tray-msg {
+  padding: 6px 18px 0;
+  font-size: 12px;
+  color: #dc2626;
+}
+
+/* Emoji picker popover */
+.org .tch-emoji-wrap {
+  position: relative;
+  display: flex;
+}
+.org .tch-emoji-pop {
+  position: absolute;
+  right: -40px;
+  bottom: 44px;
+  z-index: 30;
+  border-radius: 12px;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.14);
+}
+.org .tch-emoji-pop.is-loading {
+  width: 320px;
+  height: 120px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #ffffff;
+  border: 1px solid #e5e7eb;
+  font-size: 12.5px;
+  color: #6b7280;
+}
+.org .tch-emoji-pop .EmojiPickerReact {
+  --epr-highlight-color: #059669;
+  --epr-hover-bg-color: #f0fdf4;
+  --epr-focus-bg-color: #ecfdf5;
+  --epr-search-input-bg-color: #f9fafb;
+  --epr-category-label-bg-color: rgba(255, 255, 255, 0.95);
+  font-family: inherit;
+}
+
+/* Drag & drop */
+.org .tch-drop-overlay {
+  position: absolute;
+  inset: 8px;
+  z-index: 25;
+  border: 2px dashed #059669;
+  border-radius: 14px;
+  background: rgba(240, 253, 244, 0.92);
+  color: #047857;
+  font-size: 14px;
+  font-weight: 700;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  pointer-events: none;
+}
+
+/* Photos & videos inside a bubble */
+.org .tch-media-grid {
+  display: grid;
+  gap: 3px;
+  width: min(320px, 100%);
+  border-radius: 10px;
+  overflow: hidden;
+}
+.org .tch-media-grid.is-1 {
+  grid-template-columns: 1fr;
+}
+.org .tch-media-grid.is-2,
+.org .tch-media-grid.is-3,
+.org .tch-media-grid.is-4 {
+  grid-template-columns: 1fr 1fr;
+}
+.org .tch-media-grid.is-3 .tch-media-tile:first-child {
+  grid-column: span 2;
+}
+.org .tch-media-tile {
+  position: relative;
+  display: block;
+  width: 100%;
+  aspect-ratio: 1 / 1;
+  padding: 0;
+  border: none;
+  background: #e5e7eb;
+  cursor: zoom-in;
+  overflow: hidden;
+}
+.org .tch-media-tile.is-single {
+  aspect-ratio: 4 / 3;
+  max-height: 360px;
+}
+.org .tch-media-tile img,
+.org .tch-media-tile video {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+.org .tch-media-loading {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(90deg, #e5e7eb 25%, #f3f4f6 50%, #e5e7eb 75%);
+  background-size: 200% 100%;
+  animation: tch-shimmer 1.2s infinite linear;
+}
+@keyframes tch-shimmer {
+  to {
+    background-position: -200% 0;
+  }
+}
+.org .tch-media-play {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 12px;
+  border-radius: 999px;
+  background: rgba(17, 24, 39, 0.6);
+  color: #ffffff;
+}
+.org .tch-media-play em {
+  font-style: normal;
+  font-size: 11.5px;
+  font-weight: 600;
+}
+.org .tch-media-more {
+  position: absolute;
+  inset: 0;
+  background: rgba(17, 24, 39, 0.5);
+  color: #ffffff;
+  font-size: 22px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.org .tch-bubble .tch-file-card {
+  margin-top: 0;
+  width: min(300px, 100%);
+}
+.org .tch-bubble .tch-file-card:disabled {
+  opacity: 0.7;
+}
+
+@media (max-width: 768px) {
+  .org .tch-emoji-pop {
+    right: -60px;
+  }
+  .org .tch-tray {
+    padding: 10px 12px 0;
+  }
+}

@@ -137,7 +137,7 @@ export class TeamChatConversationsService {
           createdAt: true,
           sender: { select: USER_SELECT },
           attachments: {
-            select: { fileName: true },
+            select: { fileName: true, mimeType: true },
             orderBy: { createdAt: 'asc' },
             take: 1,
           },

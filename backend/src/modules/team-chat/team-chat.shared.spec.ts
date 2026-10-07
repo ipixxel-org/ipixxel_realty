@@ -84,6 +84,16 @@ describe('team chat helpers', () => {
     expect(
       messagePreview({ ...base, attachments: [{ fileName: 'a.pdf' }] }),
     ).toBe('📎 a.pdf');
+    const file = (mimeType: string) => ({
+      ...base,
+      attachments: [{ fileName: 'x', mimeType }],
+    });
+    expect(messagePreview(file('image/png'))).toBe('📷 Photo');
+    expect(messagePreview(file('video/mp4'))).toBe('🎥 Video');
+    expect(messagePreview(file('application/pdf'))).toBe('📎 x');
+    expect(messagePreview({ ...file('image/png'), body: 'look at this' })).toBe(
+      'look at this',
+    );
   });
 });
 

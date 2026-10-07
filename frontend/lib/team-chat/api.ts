@@ -100,7 +100,7 @@ export function searchMessages(
 
 export function sendMessage(
   id: string,
-  input: { body: string; clientMsgId: string; parentId?: string },
+  input: { body: string; clientMsgId: string; parentId?: string; attachmentIds?: string[] },
 ): Promise<ChatMessage> {
   return post(`/conversations/${id}/messages`, input);
 }

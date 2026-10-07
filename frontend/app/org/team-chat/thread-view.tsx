@@ -15,7 +15,6 @@ import { Icon } from "@/components/icons";
 import { useAuth } from "@/lib/auth-context";
 import { useToast } from "@/components/ui/toast";
 import * as chatApi from "@/lib/team-chat/api";
-import { apiFetch } from "@/lib/api";
 import { useTeamChat } from "@/lib/team-chat/context";
 import {
   avatarColor,
@@ -33,33 +32,13 @@ import type {
   ReactionEvent,
 } from "@/lib/team-chat/types";
 import { Avatar, ConfirmDialog, PromptDialog, errorText } from "./chat-ui";
+import { AttachmentsView } from "./attachments-view";
+import { Composer, type ComposerHandle, type SentAttachment } from "./composer";
 import { MembersDrawer } from "./members-drawer";
 
 const QUICK_REACTIONS = ["👍", "❤️", "😂", "😮", "😢", "🙏"];
 const GROUP_WINDOW_MS = 5 * 60 * 1000;
 const NEAR_BOTTOM_PX = 120;
-const TYPING_REFRESH_MS = 3000;
-
-// --- drafts (per conversation, per browser) -------------------------------
-const drafts = new Map<string, string>();
-const draftKey = (id: string) => `tc.draft.${id}`;
-function readDraft(id: string): string {
-  if (drafts.has(id)) return drafts.get(id) ?? "";
-  try {
-    return window.localStorage.getItem(draftKey(id)) ?? "";
-  } catch {
-    return "";
-  }
-}
-function writeDraft(id: string, text: string) {
-  drafts.set(id, text);
-  try {
-    if (text) window.localStorage.setItem(draftKey(id), text);
-    else window.localStorage.removeItem(draftKey(id));
-  } catch {
-    // Storage unavailable (private mode): the in-memory copy still works.
-  }
-}
 
 // --- message list helpers --------------------------------------------------
 const byTime = (a: ChatMessage, b: ChatMessage) =>
@@ -139,6 +118,8 @@ export function ThreadView({
   const [menuOpen, setMenuOpen] = useState(false);
   const [dialog, setDialog] = useState<"none" | "rename" | "leave" | "delete">("none");
   const [focusTick, setFocusTick] = useState(0);
+  const [dragging, setDragging] = useState(false);
+  const composerRef = useRef<ComposerHandle>(null);
 
   const scrollRef = useRef<HTMLDivElement>(null);
   const pendingScroll = useRef<PendingScroll | null>(null);
@@ -394,6 +375,7 @@ export function ThreadView({
         const real = await chatApi.sendMessage(conversationId, {
           body: optimistic.body,
           clientMsgId: optimistic.clientMsgId as string,
+          attachmentIds: optimistic.attachments.map((a) => a.id),
         });
         setMessages((prev) => merge(prev, [forMe(real)]));
         chat?.applyMessage(real);
@@ -406,12 +388,12 @@ export function ThreadView({
   );
 
   const send = useCallback(
-    (body: string) => {
+    (body: string, files: SentAttachment[] = []) => {
       const clientMsgId = newClientMsgId();
       const optimistic: ChatMessage = {
         id: `pending-${clientMsgId}`,
         conversationId,
-        kind: "text",
+        kind: files.length ? "file" : "text",
         body,
         sender: { id: myId, name: myName },
         createdAt: new Date().toISOString(),
@@ -422,7 +404,8 @@ export function ThreadView({
         pinnedBy: null,
         clientMsgId,
         parent: null,
-        attachments: [],
+        // Shown from their local previews until the page is reloaded.
+        attachments: files.map(({ previewUrl: _preview, ...a }) => (void _preview, a)),
         mentions: [],
         reactions: [],
         cursor: "",
@@ -594,7 +577,33 @@ export function ThreadView({
       </header>
 
       <div className="tch-thread-body">
-        <div className="tch-thread-main">
+        <div
+          className="tch-thread-main"
+          onDragEnter={(e) => {
+            if (!conv.readOnly && e.dataTransfer.types.includes("Files")) {
+              e.preventDefault();
+              setDragging(true);
+            }
+          }}
+          onDragOver={(e) => {
+            if (!conv.readOnly && e.dataTransfer.types.includes("Files")) e.preventDefault();
+          }}
+          onDragLeave={(e) => {
+            if (!e.currentTarget.contains(e.relatedTarget as Node | null)) setDragging(false);
+          }}
+          onDrop={(e) => {
+            if (conv.readOnly || !e.dataTransfer.files.length) return;
+            e.preventDefault();
+            setDragging(false);
+            composerRef.current?.addFiles(Array.from(e.dataTransfer.files));
+          }}
+        >
+          {dragging ? (
+            <div className="tch-drop-overlay">
+              <Icon name="link" size={22} />
+              <span>Drop files to send</span>
+            </div>
+          ) : null}
           {panel === "search" ? (
             <ConversationSearch
               conversationId={conversationId}
@@ -667,6 +676,7 @@ export function ThreadView({
           ) : (
             <Composer
               key={conversationId}
+              ref={composerRef}
               conversationId={conversationId}
               onSend={send}
               onTyping={(t) => chat.sendTyping(conversationId, t)}
@@ -841,9 +851,7 @@ function MessageRow({
           ) : m.body ? (
             <div className="tch-msg-text">{linkify(m.body)}</div>
           ) : null}
-          {!deleted && m.attachments.length
-            ? m.attachments.map((a) => <AttachmentLink key={a.id} id={a.id} name={a.fileName} size={a.sizeBytes} />)
-            : null}
+          {!deleted && m.attachments.length ? <AttachmentsView attachments={m.attachments} /> : null}
           <span className="tch-bubble-time">
             {m.editedAt && !deleted ? "edited · " : ""}
             {m.status === "sending" ? "Sending…" : timeOfDay(m.createdAt)}
@@ -895,145 +903,6 @@ function MessageRow({
           )}
         </div>
       ) : null}
-    </div>
-  );
-}
-
-function formatSize(bytes: number): string {
-  if (bytes < 1024) return `${bytes} B`;
-  if (bytes < 1024 * 1024) return `${Math.round(bytes / 1024)} KB`;
-  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
-}
-
-function AttachmentLink({ id, name, size }: { id: string; name: string; size: number }) {
-  const open = async () => {
-    try {
-      const { url } = await apiFetch<{ url: string }>(`/org/team-chat/attachments/${id}/url`);
-      window.open(url, "_blank", "noopener,noreferrer");
-    } catch {
-      // Not available any more (e.g. deleted); nothing to open.
-    }
-  };
-  return (
-    <button type="button" className="tch-file-card" onClick={() => void open()}>
-      <div className="tch-file-icon">
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-          <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
-          <polyline points="14 2 14 8 20 8" />
-          <line x1="8" y1="13" x2="16" y2="13" />
-          <line x1="8" y1="17" x2="16" y2="17" />
-        </svg>
-      </div>
-      <div className="tch-file-details">
-        <span className="tch-file-name">{name}</span>
-        <span className="tch-file-size">{formatSize(size)}</span>
-      </div>
-      <span className="tch-file-dl">
-        <Icon name="download" size={16} />
-      </span>
-    </button>
-  );
-}
-
-// ---------------------------------------------------------------------------
-
-function Composer({
-  conversationId,
-  onSend,
-  onTyping,
-}: {
-  conversationId: string;
-  onSend: (body: string) => void;
-  onTyping: (typing: boolean) => void;
-}) {
-  const [text, setText] = useState(() => readDraft(conversationId));
-  const ref = useRef<HTMLTextAreaElement>(null);
-  const typingSentAt = useRef(0);
-  const onTypingRef = useRef(onTyping);
-  useLayoutEffect(() => {
-    onTypingRef.current = onTyping;
-  });
-
-  const resize = () => {
-    const el = ref.current;
-    if (!el) return;
-    el.style.height = "auto";
-    el.style.height = `${Math.min(el.scrollHeight, 160)}px`;
-  };
-  useLayoutEffect(resize, []);
-  useEffect(() => {
-    ref.current?.focus();
-  }, []);
-
-  const stopTyping = useCallback(() => {
-    if (typingSentAt.current) {
-      typingSentAt.current = 0;
-      onTypingRef.current(false);
-    }
-  }, []);
-  // Leaving the conversation ends "typing".
-  useEffect(() => stopTyping, [stopTyping]);
-
-  const change = (value: string) => {
-    setText(value);
-    writeDraft(conversationId, value);
-    if (!value.trim()) return stopTyping();
-    const now = Date.now();
-    if (now - typingSentAt.current > TYPING_REFRESH_MS) {
-      typingSentAt.current = now;
-      onTypingRef.current(true);
-    }
-  };
-
-  const submit = () => {
-    const body = text.trim();
-    if (!body) return;
-    onSend(body);
-    setText("");
-    writeDraft(conversationId, "");
-    stopTyping();
-    requestAnimationFrame(resize);
-  };
-
-  return (
-    <div className="tch-composer">
-      <button type="button" className="tch-composer-attach" title="File sharing is coming soon" disabled>
-        <Icon name="link" size={18} />
-      </button>
-      <textarea
-        ref={ref}
-        rows={1}
-        className="tch-composer-input"
-        value={text}
-        placeholder="Type a message..."
-        maxLength={5000}
-        onChange={(e) => {
-          change(e.target.value);
-          resize();
-        }}
-        onBlur={stopTyping}
-        onKeyDown={(e) => {
-          if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) {
-            e.preventDefault();
-            submit();
-          }
-        }}
-        aria-label="Message"
-      />
-      <button type="button" className="tch-composer-emoji" title="Emoji picker is coming soon" disabled>
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-          <circle cx="12" cy="12" r="10" />
-          <path d="M8 14s1.5 2 4 2 4-2 4-2" />
-          <line x1="9" y1="9" x2="9.01" y2="9" />
-          <line x1="15" y1="9" x2="15.01" y2="9" />
-        </svg>
-      </button>
-      <button type="button" className="tch-composer-send" title="Send message" onClick={submit} disabled={!text.trim()}>
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-          <line x1="22" y1="2" x2="11" y2="13" />
-          <polygon points="22 2 15 22 11 13 2 9 22 2" />
-        </svg>
-      </button>
     </div>
   );
 }
