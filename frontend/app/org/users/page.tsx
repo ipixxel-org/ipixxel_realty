@@ -7,7 +7,7 @@ import { apiFetch, ApiError, deleteOrgUser } from "@/lib/api";
 import { Reveal } from "@/components/superadmin/reveal";
 import { Icon } from "@/components/icons";
 import Link from "next/link";
-import { useTeamsList } from "@/components/org/team-fields";
+// import { useTeamsList } from "@/components/org/team-fields"; // [DISABLED-TEAMS]
 import type {
   OrgBillingSummary,
   OrgUser,
@@ -78,7 +78,8 @@ export default function OrgUsersPage() {
   const [search, setSearch] = useState("");
   const [roleFilter, setRoleFilter] = useState<string>("");
   const [statusFilter, setStatusFilter] = useState<"active" | "disabled" | "pending" | "">("");
-  const [teamFilter, setTeamFilter] = useState<string>("");
+  // [DISABLED-TEAMS] The team filter never reached the users query anyway.
+  // const [teamFilter, setTeamFilter] = useState<string>("");
   const [page, setPage] = useState(1);
   // Fixed server-side page size.
   const pageSize = PAGE_SIZE;
@@ -88,7 +89,7 @@ export default function OrgUsersPage() {
   const [selectedUserIds, setSelectedUserIds] = useState<Set<string>>(new Set());
 
   // Teams & Dynamic Roles
-  const { teams } = useTeamsList();
+  // const { teams } = useTeamsList(); // [DISABLED-TEAMS]
   const [dynamicRoles, setDynamicRoles] = useState<{ value: string; label: string; assignable: boolean }[]>([]);
 
   // Users data
@@ -218,7 +219,7 @@ export default function OrgUsersPage() {
     setSearch("");
     setRoleFilter("");
     setStatusFilter("");
-    setTeamFilter("");
+    // setTeamFilter(""); // [DISABLED-TEAMS]
     setPage(1);
   }
 
@@ -459,7 +460,7 @@ export default function OrgUsersPage() {
               <option value="pending">Pending</option>
             </select>
 
-            {/* Team Filter */}
+            {/* [DISABLED-TEAMS] Team Filter
             <select
               className="usr-select"
               value={teamFilter}
@@ -472,6 +473,7 @@ export default function OrgUsersPage() {
                 </option>
               ))}
             </select>
+            */}
 
             {/* Reset Button */}
             <button

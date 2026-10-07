@@ -106,9 +106,11 @@ export const PERMISSION_MODULES: ModuleDefinition[] = [
   // have their own modules above. Only the Media Library remains under it.
   { key: 'websites', label: 'Media Library', description: 'Central media & assets library', actions: ['view'] },
   { key: 'domains', label: 'Domains', description: 'Subdomain & custom-domain management' },
-  { key: 'calling', label: 'Calling', description: 'Calls, queues, numbers and automation' },
-  { key: 'whatsapp', label: 'WhatsApp', description: 'WhatsApp inbox and broadcasts' },
-  { key: 'teams', label: 'Teams', description: 'Organising members into teams' },
+  // Hidden from Roles & Permissions while these pages are switched off.
+  // Stored grant rows stay in the DB; uncomment to restore.
+  // { key: 'calling', label: 'Calling', description: 'Calls, queues, numbers and automation' }, // [DISABLED-CALLING]
+  // { key: 'whatsapp', label: 'WhatsApp', description: 'WhatsApp inbox and broadcasts' }, // [DISABLED-WHATSAPP]
+  // { key: 'teams', label: 'Teams', description: 'Organising members into teams' }, // [DISABLED-TEAMS]
   { key: 'reports', label: 'Reports', description: 'Reports and analytics' },
   { key: 'integrations', label: 'Integrations', description: 'Connected apps and channels' },
   { key: 'billing', label: 'Billing', description: 'Plan, subscription and invoices' },
@@ -346,21 +348,21 @@ const DEFAULT_BY_KEY: Record<
     websites: { view: true },
     landing_pages: { view: true },
     templates: { view: true },
-    calling: { view: true, add: true, edit: true },
-    whatsapp: { view: true, add: true, edit: true },
+    // calling: { view: true, add: true, edit: true }, // [DISABLED-CALLING]
+    // whatsapp: { view: true, add: true, edit: true }, // [DISABLED-WHATSAPP]
     reports: { view: true },
   },
   sales: {
     dashboard: { view: true },
     crm: { view: true, add: true, edit: true },
-    calling: { view: true, add: true, edit: true },
-    whatsapp: { view: true, add: true, edit: true },
+    // calling: { view: true, add: true, edit: true }, // [DISABLED-CALLING]
+    // whatsapp: { view: true, add: true, edit: true }, // [DISABLED-WHATSAPP]
   },
   telecaller: {
     dashboard: { view: true },
     crm: { view: true, add: true, edit: true },
-    calling: { view: true, add: true, edit: true },
-    whatsapp: { view: true, add: true, edit: true },
+    // calling: { view: true, add: true, edit: true }, // [DISABLED-CALLING]
+    // whatsapp: { view: true, add: true, edit: true }, // [DISABLED-WHATSAPP]
   },
 };
 

@@ -122,10 +122,10 @@
   box-shadow: 0 4px 12px rgba(5, 150, 105, 0.35);
 }
 
-/* 3-Column Chat Shell */
+/* 2-Column Chat Shell (conversation list + thread) */
 .org .tch-shell {
   display: grid;
-  grid-template-columns: 260px 1fr 310px;
+  grid-template-columns: 260px 1fr;
   gap: 16px;
   height: calc(100vh - 215px);
   min-height: 600px;
@@ -134,9 +134,6 @@
 @media (max-width: 1200px) {
   .org .tch-shell {
     grid-template-columns: 240px 1fr;
-  }
-  .org .tch-right {
-    display: none;
   }
 }
 
@@ -686,198 +683,4 @@
 
 .org .tch-composer-send:hover {
   background: #047857;
-}
-
-/* Right Column */
-.org .tch-right {
-  background: #ffffff;
-  border: 1px solid #e5e7eb;
-  border-radius: 16px;
-  padding: 18px 16px;
-  display: flex;
-  flex-direction: column;
-  gap: 20px;
-  overflow-y: auto;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.02);
-}
-
-.org .tch-panel-card {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-}
-
-.org .tch-panel-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  font-size: 13.5px;
-  font-weight: 700;
-  color: #111827;
-}
-
-.org .tch-panel-head-left {
-  display: flex;
-  align-items: center;
-  gap: 7px;
-}
-
-.org .tch-panel-link {
-  font-size: 12px;
-  font-weight: 600;
-  color: #2563eb;
-  cursor: pointer;
-  text-decoration: none;
-}
-
-.org .tch-pinned-box {
-  background: #ffffff;
-  border: 1px solid #f3f4f6;
-  border-radius: 10px;
-  padding: 12px;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.02);
-}
-
-.org .tch-pinned-top {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-}
-
-.org .tch-pinned-user {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.org .tch-pinned-name {
-  font-size: 12.5px;
-  font-weight: 700;
-  color: #111827;
-}
-
-.org .tch-pinned-time {
-  font-size: 11px;
-  color: #9ca3af;
-}
-
-.org .tch-pinned-text {
-  font-size: 12.5px;
-  color: #4b5563;
-  line-height: 1.45;
-  margin: 0;
-}
-
-/* Members Avatars Row */
-.org .tch-members-row {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  flex-wrap: wrap;
-}
-
-.org .tch-member-circle {
-  width: 32px;
-  height: 32px;
-  border-radius: 50%;
-  color: #ffffff;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 11.5px;
-  font-weight: 700;
-}
-
-.org .tch-member-overflow {
-  width: 32px;
-  height: 32px;
-  border-radius: 50%;
-  background: #f3f4f6;
-  color: #6b7280;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 11.5px;
-  font-weight: 700;
-}
-
-/* Shared Leads List */
-.org .tch-shared-leads-list {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-}
-
-.org .tch-lead-item {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  background: #ffffff;
-  border: 1px solid #e5e7eb;
-  border-radius: 10px;
-  padding: 10px 12px;
-  cursor: pointer;
-  transition: all 0.15s;
-}
-
-.org .tch-lead-item:hover {
-  border-color: #059669;
-  background: #f0fdf4;
-}
-
-.org .tch-lead-item-left {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-}
-
-.org .tch-lead-user-ic {
-  color: #6b7280;
-}
-
-.org .tch-lead-name-group {
-  display: flex;
-  flex-direction: column;
-}
-
-.org .tch-lead-name {
-  font-size: 13px;
-  font-weight: 700;
-  color: #111827;
-}
-
-.org .tch-lead-type {
-  font-size: 11.5px;
-  color: #6b7280;
-}
-
-.org .tch-lead-item-right {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-}
-
-.org .tch-status-badge {
-  font-size: 11px;
-  font-weight: 600;
-  padding: 2px 8px;
-  border-radius: 999px;
-}
-
-.org .tch-status-badge.new {
-  background: #ecfdf5;
-  color: #059669;
-}
-
-.org .tch-status-badge.in-progress {
-  background: #eff6ff;
-  color: #2563eb;
-}
-
-.org .tch-status-badge.follow-up {
-  background: #f5f3ff;
-  color: #7c3aed;
 }

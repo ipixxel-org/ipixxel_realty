@@ -5,7 +5,7 @@ import { Reveal } from "@/components/superadmin/reveal";
 import { Icon } from "@/components/icons";
 import { Field, FormActions, FormPage, TextInput, formPageStyles } from "@/components/forms/form-page";
 import { useAuth } from "@/lib/auth-context";
-import { displayName, initialsFor, useOrgUsersList, useTeamsList } from "@/components/org/team-fields";
+import { displayName, initialsFor, useOrgUsersList } from "@/components/org/team-fields";
 import {
   getTeamChatOverview,
   getTeamChannel,
@@ -111,16 +111,9 @@ const INITIAL_MESSAGES: Record<string, ChatMessage[]> = {
   ],
 };
 
-const SHARED_LEADS = [
-  { id: "lead-1", name: "Arjun Mehta", type: "3 BHK Apartment", status: "New", statusClass: "new" },
-  { id: "lead-2", name: "Kavita Sharma", type: "Villa Project", status: "In Progress", statusClass: "in-progress" },
-  { id: "lead-3", name: "Rakesh Patel", type: "Commercial Property", status: "Follow-up", statusClass: "follow-up" },
-];
-
 export default function OrgTeamChatPage() {
   const { user: currentUser } = useAuth();
   const { users } = useOrgUsersList();
-  const { teams } = useTeamsList();
 
   // Active channel/DM state
   const [activeChannelId, setActiveChannelId] = useState<string>("general");
@@ -132,7 +125,6 @@ export default function OrgTeamChatPage() {
   // New channel / new message views (full-width, shown in place of the chat)
   const [showChannelModal, setShowChannelModal] = useState(false);
   const [newChannelName, setNewChannelName] = useState("");
-  const [newChannelTeam, setNewChannelTeam] = useState("");
   const [showDmModal, setShowDmModal] = useState(false);
 
   // Messages dictionary
@@ -315,7 +307,7 @@ export default function OrgTeamChatPage() {
               <div className="tch-eyebrow">TEAM CHAT</div>
               <h1 className="tch-title">Team Chat</h1>
               <p className="tch-sub">
-                Internal chat for your teams – discuss deals, and tag any lead to a teammate to hand it over.
+                Internal chat for your organisation – channels and direct messages.
               </p>
             </div>
           </div>
@@ -582,107 +574,6 @@ export default function OrgTeamChatPage() {
               </button>
             </div>
           </section>
-
-          {/* Right Column (Info / Members / Pinned / Shared Leads) */}
-          <aside className="tch-right">
-            {/* Section 1: Pinned Messages */}
-            <div className="tch-panel-card">
-              <div className="tch-panel-head">
-                <div className="tch-panel-head-left">
-                  <Icon name="pin" size={15} />
-                  <span>Pinned Messages</span>
-                </div>
-              </div>
-
-              <div className="tch-pinned-box">
-                <div className="tch-pinned-top">
-                  <div className="tch-pinned-user">
-                    <div
-                      className="tch-avatar-circle"
-                      style={{ width: 24, height: 24, fontSize: 10, background: "#f97316" }}
-                    >
-                      SK
-                    </div>
-                    <div>
-                      <span className="tch-pinned-name">Shubham Kumar</span>{" "}
-                      <span className="tch-pinned-time">22 Sep, 10:30 AM</span>
-                    </div>
-                  </div>
-                  <Icon name="dots" size={14} />
-                </div>
-                <p className="tch-pinned-text">
-                  Please update all project leads status by EOD.
-                </p>
-              </div>
-            </div>
-
-            {/* Section 2: Members */}
-            <div className="tch-panel-card">
-              <div className="tch-panel-head">
-                <div className="tch-panel-head-left">
-                  <Icon name="users" size={15} />
-                  <span>Members (12)</span>
-                </div>
-                <span className="tch-panel-link">View all</span>
-              </div>
-
-              <div className="tch-members-row">
-                <div className="tch-member-circle" style={{ background: "#f97316" }} title="Shubham Kumar">
-                  SK
-                </div>
-                <div className="tch-member-circle" style={{ background: "#3b82f6" }} title="Aakash Verma">
-                  AK
-                </div>
-                <div className="tch-member-circle" style={{ background: "#ec4899" }} title="Priya Patel">
-                  PP
-                </div>
-                <div className="tch-member-circle" style={{ background: "#8b5cf6" }} title="Rohit Jain">
-                  RJ
-                </div>
-                <div className="tch-member-circle" style={{ background: "#14b8a6" }} title="Neha Sharma">
-                  NS
-                </div>
-                <div className="tch-member-circle" style={{ background: "#6366f1" }} title="Mohit Tiwari">
-                  MT
-                </div>
-                <div className="tch-member-overflow" title="6 more members">
-                  +6
-                </div>
-              </div>
-            </div>
-
-            {/* Section 3: Shared Leads in this Chat */}
-            <div className="tch-panel-card">
-              <div className="tch-panel-head">
-                <div className="tch-panel-head-left">
-                  <Icon name="target" size={15} />
-                  <span>Shared Leads in this Chat</span>
-                </div>
-              </div>
-
-              <div className="tch-shared-leads-list">
-                {SHARED_LEADS.map((lead) => (
-                  <div key={lead.id} className="tch-lead-item">
-                    <div className="tch-lead-item-left">
-                      <div className="tch-lead-user-ic">
-                        <Icon name="profile" size={16} />
-                      </div>
-                      <div className="tch-lead-name-group">
-                        <span className="tch-lead-name">{lead.name}</span>
-                        <span className="tch-lead-type">{lead.type}</span>
-                      </div>
-                    </div>
-                    <div className="tch-lead-item-right">
-                      <span className={`tch-status-badge ${lead.statusClass}`}>
-                        {lead.status}
-                      </span>
-                      <Icon name="chevron-right" size={14} />
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          </aside>
         </div>
       </Reveal>
 

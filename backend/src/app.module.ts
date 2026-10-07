@@ -30,7 +30,9 @@ import { ProjectsModule } from './modules/projects/projects.module';
 import { OrgProjectCatalogModule } from './modules/org-project-catalog/org-project-catalog.module';
 import { OrgProjectTypesModule } from './modules/org-project-types/org-project-types.module';
 import { OrgLeadStageDisplayModule } from './modules/org-lead-stage-display/org-lead-stage-display.module';
-import { OrgTeamsModule } from './modules/org-teams/org-teams.module';
+// [DISABLED-TEAMS] Teams module switched off — /org/teams/* is not served.
+// Tables/models are untouched. Uncomment here and below to restore.
+// import { OrgTeamsModule } from './modules/org-teams/org-teams.module';
 import { OrgPermissionsModule } from './modules/org-permissions/org-permissions.module';
 import { AdminRolesModule } from './modules/admin-roles/admin-roles.module';
 import { OrgDashboardModule } from './modules/org-dashboard/org-dashboard.module';
@@ -76,7 +78,7 @@ import { MarketingModule } from './modules/marketing/marketing.module';
     OrgProjectCatalogModule,
     OrgProjectTypesModule,
     OrgLeadStageDisplayModule,
-    OrgTeamsModule,
+    // OrgTeamsModule, // [DISABLED-TEAMS]
     OrgPermissionsModule,
     AdminRolesModule,
     OrgDashboardModule,

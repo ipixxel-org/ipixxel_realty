@@ -117,7 +117,9 @@ export function useOrgRoleOptions() {
   return roles;
 }
 
-/** The org's real teams — used by the onboarding page's Team picker. */
+/** The org's real teams — used by the onboarding page's Team picker.
+ *  [DISABLED-TEAMS] /org/teams is not served while Teams is switched off;
+ *  only the (disabled) Teams pages still import this. Don't add new callers. */
 export function useTeamsList() {
   const { accessToken } = useAuth();
   const [teams, setTeams] = useState<Team[]>([]);
@@ -195,7 +197,8 @@ export function AvatarStack({
   );
 }
 
-/** Cross-page nav shown on every Teams / Team Chat / Onboarding screen. */
+/** Cross-page nav shown on every Teams / Team Chat / Onboarding screen.
+ *  [DISABLED-TEAMS] Only the (disabled) Teams pages render this now. */
 export function TeamsSubNav({
   active,
 }: {

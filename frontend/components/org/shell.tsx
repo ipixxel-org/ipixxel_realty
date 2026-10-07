@@ -61,13 +61,14 @@ const NAV_GROUPS: NavGroup[] = [
       { href: "/org/marketing/utm", icon: "link", label: "UTM Tracking", tip: "UTM Tracking" },
     ],
   },
-  {
-    grp: "Communication",
-    items: [
-      { href: "/org/calling", icon: "phone", label: "Calling", tip: "Calling" },
-      { href: "/org/whatsapp", icon: "mail", label: "WhatsApp", tip: "WhatsApp" },
-    ],
-  },
+  // Calling and WhatsApp are switched off (their routes render <ComingSoon/>).
+  // {
+  //   grp: "Communication",
+  //   items: [
+  //     { href: "/org/calling", icon: "phone", label: "Calling", tip: "Calling" }, // [DISABLED-CALLING]
+  //     { href: "/org/whatsapp", icon: "mail", label: "WhatsApp", tip: "WhatsApp" }, // [DISABLED-WHATSAPP]
+  //   ],
+  // },
   {
     grp: "Website",
     items: [
@@ -80,7 +81,7 @@ const NAV_GROUPS: NavGroup[] = [
   {
     grp: "Team",
     items: [
-      { href: "/org/teams", icon: "team", label: "Teams", tip: "Teams" },
+      // { href: "/org/teams", icon: "team", label: "Teams", tip: "Teams" }, // [DISABLED-TEAMS]
       { href: "/org/team-chat", icon: "mail", label: "Team Chat", tip: "Team Chat" },
       { href: "/org/users", icon: "profile", label: "Users", tip: "Users" },
       { href: "/org/roles-permissions", icon: "lock", label: "Roles & Permissions", tip: "Roles & Permissions" },
@@ -105,8 +106,8 @@ export function isOrgNavItemAllowed(
   if (href === "/org") return hasPermission("dashboard", "view");
   if (href.startsWith("/org/leads")) return hasPermission("crm", "view");
   if (href.startsWith("/org/projects")) return hasPermission("projects", "view");
-  if (href.startsWith("/org/calling")) return hasPermission("calling", "view");
-  if (href.startsWith("/org/whatsapp")) return hasPermission("whatsapp", "view");
+  // if (href.startsWith("/org/calling")) return hasPermission("calling", "view"); // [DISABLED-CALLING]
+  // if (href.startsWith("/org/whatsapp")) return hasPermission("whatsapp", "view"); // [DISABLED-WHATSAPP]
   if (href.startsWith("/org/landing-pages")) return hasPermission("landing_pages", "view");
   if (href.startsWith("/org/templates")) return hasPermission("templates", "view");
   if (href.startsWith("/org/media")) return hasPermission("websites", "view");
@@ -118,7 +119,11 @@ export function isOrgNavItemAllowed(
   if (href.startsWith("/org/marketing") || href.startsWith("/org/integrations")) {
     return hasPermission("crm", "view") || hasPermission("integrations", "view");
   }
-  if (href.startsWith("/org/teams") || href.startsWith("/org/team-chat")) return hasPermission("teams", "view");
+  // if (href.startsWith("/org/teams")) return hasPermission("teams", "view"); // [DISABLED-TEAMS]
+  // Team Chat has its own `team_chat` module (added to the catalog in the
+  // chat rebuild). Until then the key is unknown, which org admins pass
+  // (unrestricted) and every other role fails.
+  if (href.startsWith("/org/team-chat")) return hasPermission("team_chat", "view");
   if (href.startsWith("/org/users")) return hasPermission("users", "view");
   if (href.startsWith("/org/roles-permissions")) return hasPermission("roles_permissions", "view");
   if (href.startsWith("/org/settings")) return hasPermission("settings", "view");
