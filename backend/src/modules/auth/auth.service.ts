@@ -1147,9 +1147,46 @@ export class AuthService {
     return { success: true };
   }
 
-  async forgotPassword(email: string): Promise<{ success: boolean }> {
+  async forgotPassword(
+    email: string,
+    portal?: 'organisation' | 'platform',
+  ): Promise<{ success: boolean }> {
     const user = await this.prisma.user.findUnique({ where: { email } });
-    if (!user) {
+    const isPlatformRequest = portal === 'platform';
+
+    // Keep the two login surfaces isolated, mirroring authenticate(): the
+    // platform portal only serves accounts with no organisation, and the
+    // organisation portal only serves org members.
+    const portalMismatch =
+      !!user &&
+      ((portal === 'platform' && !!user.orgId) ||
+        (portal === 'organisation' && !user.orgId));
+
+    if (isPlatformRequest) {
+      // Platform (Super Admin / Platform Team) accounts are the most
+      // privileged on the system, so this path never reveals whether an
+      // address exists, belongs to an org, or is disabled — the response is
+      // always the same generic success.
+      if (!user || portalMismatch || user.status === 'disabled') {
+        this.logger.warn(
+          '[Forgot Password] Platform reset requested for a non-eligible address',
+        );
+        return { success: true };
+      }
+      // Throttle: one email per minute per account, so the endpoint can't be
+      // used to flood an admin inbox. An outstanding link stays valid.
+      const recent = await this.prisma.passwordResetToken.findFirst({
+        where: {
+          userId: user.id,
+          usedAt: null,
+          createdAt: { gt: new Date(Date.now() - 60 * 1000) },
+        },
+        select: { id: true },
+      });
+      if (recent) {
+        return { success: true };
+      }
+    } else if (!user || portalMismatch) {
       throw new NotFoundException('No account exists for this email address');
     }
 
@@ -1176,6 +1213,11 @@ export class AuthService {
         to: user.email,
         recipientName: recipientName || undefined,
         resetToken: token,
+        // Platform accounts land on the platform-branded reset page, which
+        // returns them to /admin-login afterwards.
+        resetUrl: isPlatformRequest
+          ? `${frontendBaseUrl()}/admin-login/reset-password?token=${encodeURIComponent(token)}`
+          : undefined,
         orgId: user.orgId,
       });
       if (!result.success) {
