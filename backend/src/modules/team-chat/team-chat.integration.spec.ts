@@ -483,4 +483,55 @@ suite('Team Chat access rules (integration)', () => {
       msgs.send(users.sales, dm.id, { body: 'hello?', clientMsgId: cid() }),
     ).rejects.toThrow(ForbiddenException);
   });
+
+  it('only offers DMs with active users who have team_chat:view', async () => {
+    // A custom role gets no chat access until granted.
+    const noChat = await user('zednochat', orgA, `custom_${run}`);
+    const disabled = await user('zeddisabled', orgA, 'sales');
+    await prisma.user.update({
+      where: { id: disabled.sub },
+      data: { status: 'disabled' },
+    });
+    const ids = async (q: string) =>
+      (await conv.search(users.sales, q)).users.map((u) => u.id);
+
+    let found = await ids('zed');
+    expect(found).not.toContain(noChat.sub);
+    expect(found).not.toContain(disabled.sub);
+    expect(await ids('sales')).not.toContain(users.sales.sub); // never yourself
+    expect(await ids('sales')).toContain(users.sales2.sub);
+
+    await expect(
+      conv.openDm(users.sales, { userId: noChat.sub }),
+    ).rejects.toThrow(ForbiddenException);
+    await expect(
+      conv.openDm(users.sales, { userId: noChat.sub }),
+    ).rejects.toThrow("doesn't have access to Team Chat");
+
+    // A per-user grant (the override tier) makes them reachable.
+    await prisma.userModulePermission.create({
+      data: {
+        orgId: orgA,
+        userId: noChat.sub,
+        moduleKey: 'team_chat',
+        canView: true,
+      },
+    });
+    found = await ids('zed');
+    expect(found).toContain(noChat.sub);
+    await expect(
+      conv.openDm(users.sales, { userId: noChat.sub }),
+    ).resolves.toMatchObject({ kind: 'dm', name: 'zednochat' });
+
+    // ...and a per-user revoke hides an otherwise-allowed sales user.
+    await prisma.userModulePermission.create({
+      data: {
+        orgId: orgA,
+        userId: users.sales2.sub,
+        moduleKey: 'team_chat',
+        canView: false,
+      },
+    });
+    expect(await ids('sales')).not.toContain(users.sales2.sub);
+  });
 });

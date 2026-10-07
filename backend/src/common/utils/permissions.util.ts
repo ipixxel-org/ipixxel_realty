@@ -117,7 +117,8 @@ export const PERMISSION_MODULES: ModuleDefinition[] = [
   {
     key: 'team_chat',
     label: 'Team Chat',
-    description: 'Internal chat: channels, direct messages and files',
+    description:
+      'Internal chat: channels, direct messages and files. Custom roles have no chat access until granted.',
     actions: ['view', 'add', 'edit', 'delete'],
     actionLabels: {
       view: 'Use chat',

@@ -11,6 +11,7 @@ import {
 } from '@prisma/client';
 import { PrismaService } from '../../database/prisma.service';
 import type { JwtPayload } from '../../common/types/jwt-payload.interface';
+import { usersWithOrgPermission } from '../../common/guards/permission.guard';
 import {
   chatDisplayName,
   isUniqueViolation,
@@ -485,7 +486,21 @@ export class TeamChatConversationsService {
     if (dto.userId === actor.sub) {
       throw new BadRequestException('You cannot message yourself');
     }
-    await this.access.assertActiveOrgUsers(orgId, [dto.userId]);
+    const [target] = await this.access.assertActiveOrgUsers(orgId, [
+      dto.userId,
+    ]);
+    const canChat = await usersWithOrgPermission(
+      this.prisma,
+      orgId,
+      [dto.userId],
+      'team_chat',
+      'view',
+    );
+    if (!canChat.has(dto.userId)) {
+      throw new ForbiddenException(
+        `${chatDisplayName(target)} doesn't have access to Team Chat`,
+      );
+    }
     const dmKey = dmKeyFor(actor.sub, dto.userId);
 
     let channel = await this.prisma.teamChannel.findUnique({
@@ -542,12 +557,14 @@ export class TeamChatConversationsService {
       ),
     );
 
+    // People you can start a DM with: active members of your org (not you)
+    // whose permissions include team_chat:view.
     const tokens = needle.split(/\s+/).filter(Boolean).slice(0, 5);
-    const users = await this.prisma.user.findMany({
+    const candidates = await this.prisma.user.findMany({
       where: {
         orgId,
         id: { not: actor.sub },
-        status: { not: 'disabled' },
+        status: 'active',
         AND: tokens.map((t) => ({
           OR: [
             { firstName: { contains: t, mode: 'insensitive' as const } },
@@ -558,8 +575,16 @@ export class TeamChatConversationsService {
       },
       select: USER_SELECT,
       orderBy: [{ firstName: 'asc' }, { email: 'asc' }],
-      take: 20,
+      take: 100,
     });
+    const canChat = await usersWithOrgPermission(
+      this.prisma,
+      orgId,
+      candidates.map((u) => u.id),
+      'team_chat',
+      'view',
+    );
+    const users = candidates.filter((u) => canChat.has(u.id)).slice(0, 20);
     const dmByPeer = new Map(
       conversations.filter((c) => c.peer).map((c) => [c.peer!.id, c.id]),
     );
