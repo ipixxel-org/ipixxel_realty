@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { getPlatformConfig, updatePlatformConfig } from "@/lib/api";
 import type { PlatformConfig } from "@/lib/types";
+import { formPageStyles } from "@/components/forms/form-page";
 
 const DEFAULT_POLICY = {
   billingExpiryNotifyDays: "3",
@@ -57,7 +58,7 @@ export function BillingExpirySettings() {
           {loading ? "Loading…" : "API-wired"}
         </span>
       </div>
-      <div className="card-b" style={{ display: "grid", gap: 16 }}>
+      <div className={`card-b ${formPageStyles.page}`} style={{ display: "grid", gap: 16 }}>
         <div style={{ fontSize: 12.5, color: "var(--muted)", lineHeight: 1.6 }}>
           Controls what happens when an organisation&apos;s subscription term ends: when members are warned, how
           long the grace window lasts, and what happens once it closes. Enforced across every org by the lifecycle
@@ -122,11 +123,11 @@ export function BillingExpirySettings() {
             {status.text}
           </div>
         ) : null}
-        <div style={{ display: "flex", gap: 10, justifyContent: "flex-end" }}>
-          <button className="btn btn-ghost" type="button" disabled={loading} onClick={() => setPolicy(DEFAULT_POLICY)}>
+        <div className={formPageStyles.actions}>
+          <button className={formPageStyles.btn} type="button" disabled={loading} onClick={() => setPolicy(DEFAULT_POLICY)}>
             Discard
           </button>
-          <button className="btn btn-primary" type="button" onClick={() => void save()} disabled={saving || loading}>
+          <button className={formPageStyles.btnPrimary} type="button" onClick={() => void save()} disabled={saving || loading}>
             {saving ? "Saving…" : "Save expiry policy"}
           </button>
         </div>
