@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Reveal } from "@/components/superadmin/reveal";
 import { Icon } from "@/components/icons";
@@ -13,6 +12,16 @@ import {
   useOrgUsersList,
 } from "@/components/org/team-fields";
 import { createTeam, setTeamMembers, setTeamProjects } from "@/lib/api";
+import {
+  Field,
+  FormActions,
+  FormAlert,
+  FormGrid,
+  FormPage,
+  SelectInput,
+  TextArea,
+  TextInput,
+} from "@/components/forms/form-page";
 import "../teams.css";
 
 interface ModuleConfig {
@@ -206,60 +215,14 @@ export default function CreateTeamPage() {
   }
 
   return (
+    <FormPage
+      eyebrow="Teams"
+      title="Create a team"
+      subtitle="Name the team, set its lead, choose members, and grant project access."
+      backHref="/org/teams"
+      backLabel="Back to Teams"
+    >
     <div className="tm-create-wrap">
-      {/* Header */}
-      <Reveal delay={1}>
-        <div className="tm-create-head">
-          <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
-            <div className="tm-header-icon" aria-hidden="true">
-              <svg
-                width="24"
-                height="24"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2.2"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              >
-                <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" />
-                <circle cx="9" cy="7" r="4" />
-                <path d="M22 21v-2a4 4 0 0 0-3-3.87" />
-                <path d="M16 3.13a4 4 0 0 1 0 7.75" />
-              </svg>
-            </div>
-            <div className="tm-header-content">
-              <div className="tm-eyebrow">TEAMS</div>
-              <h1 className="tm-title">Create a team</h1>
-              <p className="tm-sub">
-                Name the team, set its lead, choose members, and grant project access.
-              </p>
-            </div>
-          </div>
-
-          <div className="tm-create-head-actions">
-            <Link className="tm-btn-cancel" href="/org/teams">
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
-                <line x1="18" y1="6" x2="6" y2="18" />
-                <line x1="6" y1="6" x2="18" y2="18" />
-              </svg>
-              Cancel
-            </Link>
-            <button
-              type="button"
-              className="tm-btn-submit"
-              disabled={submitting}
-              onClick={handleSubmit}
-            >
-              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                <polyline points="20 6 9 17 4 12" />
-              </svg>
-              <span>{submitting ? "Creating…" : "Create team"}</span>
-            </button>
-          </div>
-        </div>
-      </Reveal>
-
       {/* Stepper Tabs Bar */}
       <Reveal delay={2}>
         <div className="tm-stepper-tabs">
@@ -332,20 +295,7 @@ export default function CreateTeamPage() {
         </div>
       </Reveal>
 
-      {submitError && (
-        <div
-          className="help"
-          style={{
-            background: "#fef2f2",
-            color: "#b91c1c",
-            border: "1px solid #fecaca",
-            borderRadius: "10px",
-            padding: "12px 16px",
-          }}
-        >
-          {submitError}
-        </div>
-      )}
+      {submitError ? <FormAlert message={submitError} /> : null}
 
       {/* Section 1: Basic Information */}
       <Reveal delay={2}>
@@ -375,130 +325,77 @@ export default function CreateTeamPage() {
             </div>
           </div>
 
-          <div className="tm-form-grid">
-            {/* Team Name */}
-            <div className="tm-field">
-              <label className="tm-label">
-                Team name <span className="tm-req">*</span>
-              </label>
-              <div className="tm-input-group">
-                <span className="tm-input-ic">
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                    <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" />
-                    <circle cx="9" cy="7" r="4" />
-                    <path d="M22 21v-2a4 4 0 0 0-3-3.87" />
-                    <path d="M16 3.13a4 4 0 0 1 0 7.75" />
-                  </svg>
-                </span>
-                <input
-                  type="text"
-                  placeholder="e.g. Sales Team West"
-                  value={name}
-                  onChange={(e) => setName(e.target.value)}
-                />
-              </div>
-            </div>
-
-            {/* Team Lead */}
-            <div className="tm-field">
-              <label className="tm-label">Team lead</label>
-              <div className="tm-input-group">
-                <span className="tm-input-ic">
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                    <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
-                    <circle cx="12" cy="7" r="4" />
-                  </svg>
-                </span>
-                <select
-                  value={leadId}
-                  onChange={(e) => setLeadId(e.target.value)}
-                  disabled={usersLoading || !!usersError}
-                >
-                  <option value="">
-                    {usersLoading ? "Loading users…" : "No lead assigned"}
+          <FormGrid>
+            <Field htmlFor="tc-name" label="Team name *" icon="team">
+              <TextInput
+                id="tc-name"
+                icon="team"
+                placeholder="e.g. Sales Team West"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+              />
+            </Field>
+            <Field htmlFor="tc-lead" label="Team lead" icon="profile">
+              <SelectInput
+                id="tc-lead"
+                icon="profile"
+                value={leadId}
+                onChange={(e) => setLeadId(e.target.value)}
+                disabled={usersLoading || !!usersError}
+              >
+                <option value="">
+                  {usersLoading ? "Loading users…" : "No lead assigned"}
+                </option>
+                {users.map((u) => (
+                  <option key={u.id} value={u.id}>
+                    {displayName(u)}
                   </option>
-                  {users.map((u) => (
-                    <option key={u.id} value={u.id}>
-                      {displayName(u)}
-                    </option>
-                  ))}
-                </select>
-                <span className="tm-chevron-right">
-                  <Icon name="chevron-down" size={14} />
-                </span>
-              </div>
-            </div>
+                ))}
+              </SelectInput>
+            </Field>
+          </FormGrid>
 
-            {/* Region / Branch */}
-            <div className="tm-field">
-              <label className="tm-label">Region / Branch</label>
-              <div className="tm-input-group">
-                <span className="tm-input-ic">
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                    <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z" />
-                    <circle cx="12" cy="10" r="3" />
-                  </svg>
-                </span>
-                <input
-                  type="text"
-                  placeholder="Ahmedabad West"
-                  value={region}
-                  onChange={(e) => setRegion(e.target.value)}
-                />
-              </div>
-            </div>
+          <FormGrid>
+            <Field htmlFor="tc-region" label="Region / Branch" icon="pin">
+              <TextInput
+                id="tc-region"
+                icon="pin"
+                placeholder="Ahmedabad West"
+                value={region}
+                onChange={(e) => setRegion(e.target.value)}
+              />
+            </Field>
+            <Field htmlFor="tc-hours" label="Working hours" icon="clock">
+              <SelectInput
+                id="tc-hours"
+                icon="clock"
+                value={workingHours}
+                onChange={(e) => setWorkingHours(e.target.value)}
+              >
+                <option value="10:00 AM – 7:00 PM">10:00 AM – 7:00 PM</option>
+                <option value="9:00 AM – 6:00 PM">9:00 AM – 6:00 PM</option>
+                <option value="8:00 AM – 5:00 PM">8:00 AM – 5:00 PM</option>
+                <option value="11:00 AM – 8:00 PM">11:00 AM – 8:00 PM</option>
+                <option value="24/7 Support">24/7 Support</option>
+              </SelectInput>
+            </Field>
+          </FormGrid>
 
-            {/* Working Hours */}
-            <div className="tm-field">
-              <label className="tm-label">Working hours</label>
-              <div className="tm-input-group">
-                <span className="tm-input-ic">
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                    <circle cx="12" cy="12" r="10" />
-                    <polyline points="12 6 12 12 16 14" />
-                  </svg>
-                </span>
-                <select
-                  value={workingHours}
-                  onChange={(e) => setWorkingHours(e.target.value)}
-                >
-                  <option value="10:00 AM – 7:00 PM">10:00 AM – 7:00 PM</option>
-                  <option value="9:00 AM – 6:00 PM">9:00 AM – 6:00 PM</option>
-                  <option value="8:00 AM – 5:00 PM">8:00 AM – 5:00 PM</option>
-                  <option value="11:00 AM – 8:00 PM">11:00 AM – 8:00 PM</option>
-                  <option value="24/7 Support">24/7 Support</option>
-                </select>
-                <span className="tm-chevron-right">
-                  <Icon name="chevron-down" size={14} />
-                </span>
-              </div>
-            </div>
-          </div>
-
-          {/* Description */}
-          <div className="tm-field">
-            <label className="tm-label">Description</label>
-            <div className="tm-textarea-group">
-              <div className="tm-textarea-inner">
-                <span className="tm-input-ic">
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
-                    <polyline points="14 2 14 8 20 8" />
-                    <line x1="16" y1="13" x2="8" y2="13" />
-                    <line x1="16" y1="17" x2="8" y2="17" />
-                  </svg>
-                </span>
-                <textarea
-                  placeholder="What this team handles..."
-                  maxLength={300}
-                  rows={2}
-                  value={description}
-                  onChange={(e) => setDescription(e.target.value)}
-                />
-              </div>
-              <div className="tm-char-count">{description.length}/300</div>
-            </div>
-          </div>
+          <Field
+            htmlFor="tc-desc"
+            label="Description"
+            icon="document"
+            hint={`${description.length}/300 characters`}
+          >
+            <TextArea
+              id="tc-desc"
+              placeholder="What this team handles..."
+              maxLength={300}
+              rows={3}
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
+            />
+          </Field>
         </div>
       </Reveal>
 
@@ -813,6 +710,16 @@ export default function CreateTeamPage() {
           )}
         </div>
       </Reveal>
+
+      <FormActions
+        cancelHref="/org/teams"
+        busy={submitting}
+        busyLabel="Creating…"
+        submitLabel="Create team"
+        submitIcon="check"
+        onSubmit={() => void handleSubmit()}
+      />
     </div>
+    </FormPage>
   );
 }

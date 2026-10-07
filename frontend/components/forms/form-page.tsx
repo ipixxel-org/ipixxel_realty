@@ -378,6 +378,7 @@ export function FormActions({
   busyLabel,
   submitIcon = "check",
   onSubmit,
+  extra,
 }: {
   /** Route Cancel goes to. Use `onCancel` instead for an in-page form view. */
   cancelHref?: string;
@@ -389,9 +390,12 @@ export function FormActions({
   submitIcon?: IconName;
   /** Click handler for forms that don't submit through a <form>. */
   onSubmit?: () => void;
+  /** Extra buttons placed before Cancel (e.g. a destructive Delete). */
+  extra?: React.ReactNode;
 }) {
   return (
     <div className={styles.actions}>
+      {extra}
       {onCancel ? (
         <button type="button" className={styles.btn} onClick={onCancel} disabled={busy}>
           Cancel

@@ -49,6 +49,7 @@ import {
 import { GalleryUpload, MediaUpload } from "@/components/org/media-upload";
 import "@/app/org/org.css";
 import { ConfirmModal } from "@/components/ui/confirm-modal";
+import { FormActions, FormAlert, FormPage, formPageStyles } from "@/components/forms/form-page";
 import { Icon } from "@/components/icons";
 import type {
   Amenity,
@@ -869,26 +870,14 @@ export default function OrgProjectEditPage() {
     );
   }
 
-  const saveBtn = (
-    <button className="btn btn-primary" type="button" disabled={saving} onClick={() => void save()}>
-      {saving ? "Saving…" : "Save changes"}
-    </button>
-  );
-
   return (
-    <>
-      <div className="page-head reveal in">
-        <div>
-          <div className="eyebrow">Projects</div>
-          <h1>Edit {projectName}</h1>
-          <div className="sub">Update every part of the project — pricing, location, specs, marketing, team, media.</div>
-        </div>
-        <div className="actions">
-          <Link href={`/org/projects/${id}`} className="btn btn-ghost">Cancel</Link>
-          {saveBtn}
-        </div>
-      </div>
-
+    <FormPage
+      eyebrow="Projects"
+      title={`Edit ${projectName}`}
+      subtitle="Update every part of the project — pricing, location, specs, marketing, team, media."
+      backHref={`/org/projects/${id}`}
+      backLabel="Back to project"
+    >
       {/* Section nav — sticky underline tab bar (edit page only). Replaces the
           project workspace tabs here: this page only edits the Overview
           sections, so the section jump-nav takes the tab-bar slot and pins
@@ -965,7 +954,7 @@ export default function OrgProjectEditPage() {
         </div>
       ) : null}
 
-      {error ? <div className="form-alert">{error}</div> : null}
+      <FormAlert message={error} />
       {notice ? <div className="form-alert ok">{notice}</div> : null}
 
       <div className="col gap-18">
@@ -1475,24 +1464,27 @@ export default function OrgProjectEditPage() {
             </div>
           </div>
 
-          <div className="row gap-10 mt-8 between">
-            {canDelete ? (
-              <button
-                className="btn btn-ghost btn-sm text-rose"
-                type="button"
-                onClick={() => setDeleteOpen(true)}
-                disabled={saving || deleting}
-              >
-                Delete project
-              </button>
-            ) : (
-              <span />
-            )}
-            <div className="row gap-10">
-              <Link href={`/org/projects/${id}`} className="btn btn-ghost">Cancel</Link>
-              {saveBtn}
-            </div>
-          </div>
+          <FormActions
+            cancelHref={`/org/projects/${id}`}
+            busy={saving}
+            submitDisabled={deleting}
+            busyLabel="Saving…"
+            submitLabel="Save changes"
+            submitIcon="check"
+            onSubmit={() => void save()}
+            extra={
+              canDelete ? (
+                <button
+                  className={`${formPageStyles.btn} ${formPageStyles.btnDanger} ${formPageStyles.actionsStart}`}
+                  type="button"
+                  onClick={() => setDeleteOpen(true)}
+                  disabled={saving || deleting}
+                >
+                  <Icon name="trash" size={15} /> Delete project
+                </button>
+              ) : null
+            }
+          />
         </div>
 
       <ConfirmModal
@@ -1531,6 +1523,6 @@ export default function OrgProjectEditPage() {
           if (!deleting) setDeleteOpen(false);
         }}
       />
-    </>
+    </FormPage>
   );
 }

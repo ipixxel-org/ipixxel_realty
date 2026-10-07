@@ -1814,7 +1814,7 @@ export default function OrgSettingsPage() {
         <button
           type="button"
           className="btn btn-ghost"
-          style={{ height: 38, padding: "0 14px", borderRadius: 9, fontSize: 13 }}
+          style={{ minHeight: 46, padding: "0 22px", borderRadius: 12, fontSize: 14.5 }}
           onClick={handleDiscard}
           disabled={saving}
         >

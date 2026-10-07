@@ -1,6 +1,8 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { Icon } from "@/components/icons";
+import { formPageStyles } from "@/components/forms/form-page";
 import {
   getOrgEmailLogs,
   getOrgEmailStats,
@@ -161,6 +163,7 @@ export function OrgSmtpSettings() {
         </div>
       ) : null}
 
+      <div className={formPageStyles.page}>
       <form onSubmit={handleSave}>
         <div className="row2">
           <div className="field">
@@ -234,8 +237,9 @@ export function OrgSmtpSettings() {
             onClick={() => patch({ isActive: form.isActive === false })}
           />
         </div>
-        <div style={{ display: "flex", gap: 8, marginTop: 12 }}>
-          <button type="submit" className="btn btn-primary" disabled={saving}>
+        <div className={formPageStyles.actions}>
+          <button type="submit" className={formPageStyles.btnPrimary} disabled={saving}>
+            <Icon name="check" size={16} />
             {saving ? "Saving…" : "Save SMTP"}
           </button>
         </div>
@@ -253,12 +257,14 @@ export function OrgSmtpSettings() {
               placeholder="you@company.com"
               required
             />
-            <button type="submit" className="btn btn-ghost" disabled={testing || !form.host}>
+            <button type="submit" className={formPageStyles.btn} disabled={testing || !form.host}>
+              <Icon name="mail" size={16} />
               {testing ? "Sending…" : "Send test"}
             </button>
           </div>
         </div>
       </form>
+      </div>
 
       <div className="row2" style={{ marginTop: 8 }}>
         <div className="field">
