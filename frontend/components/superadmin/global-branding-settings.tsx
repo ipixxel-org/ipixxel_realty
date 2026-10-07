@@ -4,6 +4,7 @@ import { useEffect, useState, useTransition } from "react";
 import { getPlatformConfig, updatePlatformConfig } from "@/lib/api";
 import { useGlobalTheme, applyThemeVariables } from "@/components/global-theme-provider";
 import { Icon } from "@/components/icons";
+import { formPageStyles } from "@/components/forms/form-page";
 import type { PlatformConfig } from "@/lib/types";
 
 const COLOR_PRESETS = [
@@ -178,7 +179,7 @@ export function GlobalBrandingSettings() {
         </span>
       </div>
 
-      <div className="card-b" style={{ display: "grid", gap: 24 }}>
+      <div className={`card-b ${formPageStyles.page}`} style={{ display: "grid", gap: 24 }}>
         <div style={{ fontSize: 13, color: "var(--muted)", lineHeight: 1.6 }}>
           Set the global <strong>Primary</strong> and <strong>Secondary</strong> brand colors for the entire platform.
           These variables automatically power buttons, headers, navigation highlights, badges, and gradients across the
@@ -501,7 +502,7 @@ export function GlobalBrandingSettings() {
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", paddingTop: 8, borderTop: "1px solid var(--line)" }}>
           <button
             type="button"
-            className="btn btn-ghost"
+            className={formPageStyles.btn}
             onClick={handleReset}
             disabled={saving || !isDirty}
           >
@@ -515,17 +516,10 @@ export function GlobalBrandingSettings() {
             )}
             <button
               type="button"
-              className="btn btn-primary"
+              className={formPageStyles.btnPrimary}
               onClick={handleSave}
               disabled={saving}
-              style={{
-                background: primary,
-                minWidth: 140,
-                display: "inline-flex",
-                alignItems: "center",
-                justifyContent: "center",
-                gap: 8,
-              }}
+              style={{ background: primary }}
             >
               {saving ? (
                 <>

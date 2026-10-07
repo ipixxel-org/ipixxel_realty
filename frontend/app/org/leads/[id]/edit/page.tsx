@@ -26,6 +26,12 @@ import type {
   UpdateLeadInput,
 } from "@/lib/types";
 import "@/app/org/org.css";
+import {
+  FormActions,
+  FormAlert,
+  FormPage,
+  formPageStyles,
+} from "@/components/forms/form-page";
 import "./lead-edit.css";
 
 const SOURCES = ["Meta Lead Ad", "Google Ads", "Website form", "Portal (99acres)", "Walk-in", "Referral"];
@@ -407,18 +413,6 @@ export default function OrgLeadEditPage() {
 
   const catalogLoaded = catalog !== null;
 
-  const avatarInitials = useMemo(() => {
-    const name = form?.fullName || lead?.altName || "";
-    return (
-      name
-        .trim()
-        .split(/\s+/)
-        .filter(Boolean)
-        .slice(0, 2)
-        .map((p) => p[0].toUpperCase())
-        .join("") || "?"
-    );
-  }, [form?.fullName, lead?.altName]);
 
   function formatInr(val: string): string {
     const digits = val.replace(/[^\d]/g, "");
@@ -485,12 +479,12 @@ export default function OrgLeadEditPage() {
     const settingsHref = catName.startsWith("lead_") ? LEAD_CATALOG_HREF : PROJECT_CATALOG_HREF;
 
     return (
-      <div className="led-field">
-        <label className="led-label">
-          {label} {required ? <span className="led-req">*</span> : null}
+      <div className="field">
+        <label>
+          {label} {required ? <span className="req">*</span> : null}
         </label>
         <select
-          className="led-select"
+          className="inp"
           value={currentVal}
           disabled={!catalogLoaded}
           onChange={(e) => set(key, e.target.value)}
@@ -516,59 +510,15 @@ export default function OrgLeadEditPage() {
   };
 
   return (
+    <FormPage
+      eyebrow="Lead Center"
+      title="Edit lead"
+      subtitle="Update contact, requirement, source and assignment details."
+      backHref={`/org/leads/${lead.id}`}
+      backLabel="Back to lead"
+    >
     <div className="led-container">
-      {/* 1. Breadcrumb Bar */}
-      <div className="led-top-bar">
-        <div className="led-breadcrumb">
-          <Link href="/org/leads" title="Home">
-            <Icon name="home" size={15} style={{ color: "#2563eb" }} />
-          </Link>
-          <span className="led-sep">›</span>
-          <Link href="/org/leads">Lead Center</Link>
-          <span className="led-sep">›</span>
-          <span className="led-current">Edit Lead</span>
-        </div>
-      </div>
-
-      {/* 2. Page Header matching screenshot */}
-      <div className="led-header">
-        <div className="led-header-left">
-          <div className="led-avatar">{avatarInitials}</div>
-          <div>
-            <h1 className="led-header-title">Edit Lead</h1>
-            <p className="led-header-sub">Update contact, requirement, source and assignment details.</p>
-          </div>
-        </div>
-        <div className="led-header-actions">
-          <Link className="led-btn-cancel" href={`/org/leads/${lead.id}`}>
-            ✕ Cancel
-          </Link>
-          <button
-            className="led-btn-save"
-            type="button"
-            disabled={saving || hasPhoneError}
-            onClick={() => void save()}
-          >
-            {saving ? "Saving…" : "💾 Save Changes"}
-          </button>
-        </div>
-      </div>
-
-      {saveError ? (
-        <div
-          style={{
-            background: "#fef2f2",
-            border: "1px solid #fecaca",
-            color: "#dc2626",
-            padding: "12px 16px",
-            borderRadius: 10,
-            marginBottom: 20,
-            fontSize: 13.5,
-          }}
-        >
-          {saveError}
-        </div>
-      ) : null}
+      <FormAlert message={saveError} />
 
       {/* 3. Main 2-Column Grid */}
       <div className="led-layout">
@@ -588,21 +538,21 @@ export default function OrgLeadEditPage() {
 
             {/* Row 1: Full name & Alternate name */}
             <div className="led-grid-2">
-              <div className="led-field">
-                <label className="led-label">
-                  Full name <span className="led-req">*</span>
+              <div className="field">
+                <label>
+                  Full name <span className="req">*</span>
                 </label>
                 <input
-                  className="led-input"
+                  className="inp"
                   value={form.fullName}
                   placeholder="e.g. Vikram Rao"
                   onChange={(e) => set("fullName", e.target.value)}
                 />
               </div>
-              <div className="led-field">
-                <label className="led-label">Alternate name / Co-applicant</label>
+              <div className="field">
+                <label>Alternate name / Co-applicant</label>
                 <input
-                  className="led-input"
+                  className="inp"
                   value={form.altName}
                   placeholder="e.g. Spouse name"
                   onChange={(e) => set("altName", e.target.value)}
@@ -612,14 +562,14 @@ export default function OrgLeadEditPage() {
 
             {/* Row 2: Phone, Alternate phone, WhatsApp */}
             <div className="led-grid-3">
-              <div className="led-field">
-                <label className="led-label">
-                  Phone <span className="led-req">*</span>
+              <div className="field">
+                <label>
+                  Phone <span className="req">*</span>
                 </label>
-                <div className={`led-phone-group ${phoneErrors.phone ? "led-invalid" : ""}`}>
-                  <span className="led-phone-prefix">🇮🇳 +91</span>
+                <div className={formPageStyles.control} data-invalid={phoneErrors.phone ? true : undefined}>
+                  <span className={formPageStyles.prefix}>🇮🇳 +91</span>
                   <input
-                    className="led-phone-input"
+                    className={formPageStyles.input}
                     value={form.phone}
                     inputMode="tel"
                     placeholder="98765 43102"
@@ -627,16 +577,16 @@ export default function OrgLeadEditPage() {
                   />
                 </div>
                 {phoneErrors.phone ? (
-                  <span style={{ fontSize: 11.5, color: "#ef4444" }}>{phoneErrors.phone}</span>
+                  <div className="error" role="alert">{phoneErrors.phone}</div>
                 ) : null}
               </div>
 
-              <div className="led-field">
-                <label className="led-label">Alternate phone</label>
-                <div className={`led-phone-group ${phoneErrors.altPhone ? "led-invalid" : ""}`}>
-                  <span className="led-phone-prefix">🇮🇳 +91</span>
+              <div className="field">
+                <label>Alternate phone</label>
+                <div className={formPageStyles.control} data-invalid={phoneErrors.altPhone ? true : undefined}>
+                  <span className={formPageStyles.prefix}>🇮🇳 +91</span>
                   <input
-                    className="led-phone-input"
+                    className={formPageStyles.input}
                     value={form.altPhone}
                     inputMode="tel"
                     placeholder="Enter alternate phone"
@@ -644,16 +594,16 @@ export default function OrgLeadEditPage() {
                   />
                 </div>
                 {phoneErrors.altPhone ? (
-                  <span style={{ fontSize: 11.5, color: "#ef4444" }}>{phoneErrors.altPhone}</span>
+                  <div className="error" role="alert">{phoneErrors.altPhone}</div>
                 ) : null}
               </div>
 
-              <div className="led-field">
-                <label className="led-label">WhatsApp</label>
-                <div className={`led-phone-group ${phoneErrors.whatsapp ? "led-invalid" : ""}`}>
-                  <span className="led-phone-prefix">🇮🇳 +91</span>
+              <div className="field">
+                <label>WhatsApp</label>
+                <div className={formPageStyles.control} data-invalid={phoneErrors.whatsapp ? true : undefined}>
+                  <span className={formPageStyles.prefix}>🇮🇳 +91</span>
                   <input
-                    className="led-phone-input"
+                    className={formPageStyles.input}
                     value={form.whatsapp}
                     inputMode="tel"
                     placeholder="98284 55127"
@@ -661,17 +611,17 @@ export default function OrgLeadEditPage() {
                   />
                 </div>
                 {phoneErrors.whatsapp ? (
-                  <span style={{ fontSize: 11.5, color: "#ef4444" }}>{phoneErrors.whatsapp}</span>
+                  <div className="error" role="alert">{phoneErrors.whatsapp}</div>
                 ) : null}
               </div>
             </div>
 
             {/* Row 3: Email, City/Location, Tags */}
             <div className="led-grid-3">
-              <div className="led-field">
-                <label className="led-label">Email</label>
+              <div className="field">
+                <label>Email</label>
                 <input
-                  className="led-input"
+                  className="inp"
                   type="email"
                   value={form.email}
                   placeholder="vikram.rao@example.com"
@@ -679,18 +629,18 @@ export default function OrgLeadEditPage() {
                 />
               </div>
 
-              <div className="led-field">
-                <label className="led-label">City / Location</label>
+              <div className="field">
+                <label>City / Location</label>
                 <input
-                  className="led-input"
+                  className="inp"
                   value={form.city}
                   placeholder="Bangalore, Karnataka"
                   onChange={(e) => set("city", e.target.value)}
                 />
               </div>
 
-              <div className="led-field">
-                <label className="led-label">Tags</label>
+              <div className="field">
+                <label>Tags</label>
                 <CatalogMultiSelect
                   values={form.tags}
                   options={tagOptions}
@@ -722,8 +672,8 @@ export default function OrgLeadEditPage() {
             </div>
 
             {/* Configuration (org unit_type catalog, multi-select) */}
-            <div className="led-field" style={{ marginBottom: 16 }}>
-              <label className="led-label">Configuration</label>
+            <div className="field" style={{ marginBottom: 16 }}>
+              <label>Configuration</label>
               <CatalogMultiSelect
                 values={form.configurations}
                 options={configLabels}
@@ -742,14 +692,14 @@ export default function OrgLeadEditPage() {
 
             {/* Row 1: Budget Min, Budget Max, Purpose */}
             <div className="led-grid-3">
-              <div className="led-field">
-                <label className="led-label">
-                  Budget (Min) <span className="led-req">*</span>
+              <div className="field">
+                <label>
+                  Budget (Min) <span className="req">*</span>
                 </label>
-                <div className="led-currency-group">
-                  <span className="led-currency-prefix">₹</span>
+                <div className={formPageStyles.control}>
+                  <span className={formPageStyles.prefix}>₹</span>
                   <input
-                    className="led-currency-input"
+                    className={formPageStyles.input}
                     inputMode="numeric"
                     value={formatInr(form.budgetMin)}
                     placeholder="14,00,000"
@@ -758,14 +708,14 @@ export default function OrgLeadEditPage() {
                 </div>
               </div>
 
-              <div className="led-field">
-                <label className="led-label">
-                  Budget (Max) <span className="led-req">*</span>
+              <div className="field">
+                <label>
+                  Budget (Max) <span className="req">*</span>
                 </label>
-                <div className="led-currency-group">
-                  <span className="led-currency-prefix">₹</span>
+                <div className={formPageStyles.control}>
+                  <span className={formPageStyles.prefix}>₹</span>
                   <input
-                    className="led-currency-input"
+                    className={formPageStyles.input}
                     inputMode="numeric"
                     value={formatInr(form.budgetMax)}
                     placeholder="18,00,000"
@@ -792,10 +742,10 @@ export default function OrgLeadEditPage() {
             </div>
 
             {/* Row 4: Requirement notes */}
-            <div className="led-field">
-              <label className="led-label">Requirement notes</label>
+            <div className="field">
+              <label>Requirement notes</label>
               <input
-                className="led-input"
+                className="inp"
                 value={form.requirementNotes}
                 placeholder="Enter any specific requirements, preferences, or additional notes..."
                 onChange={(e) => set("requirementNotes", e.target.value)}
@@ -817,10 +767,10 @@ export default function OrgLeadEditPage() {
 
             {/* Row 1: Project of interest, Lead source, Campaign / Medium */}
             <div className="led-grid-3">
-              <div className="led-field">
-                <label className="led-label">Project of interest</label>
+              <div className="field">
+                <label>Project of interest</label>
                 <select
-                  className="led-select"
+                  className="inp"
                   value={form.projectId}
                   onChange={(e) => set("projectId", e.target.value)}
                 >
@@ -836,10 +786,10 @@ export default function OrgLeadEditPage() {
                 </select>
               </div>
 
-              <div className="led-field">
-                <label className="led-label">Lead source</label>
+              <div className="field">
+                <label>Lead source</label>
                 <select
-                  className="led-select"
+                  className="inp"
                   value={form.source}
                   onChange={(e) => set("source", e.target.value)}
                 >
@@ -855,10 +805,10 @@ export default function OrgLeadEditPage() {
                 </select>
               </div>
 
-              <div className="led-field">
-                <label className="led-label">Campaign / Medium</label>
+              <div className="field">
+                <label>Campaign / Medium</label>
                 <input
-                  className="led-input"
+                  className="inp"
                   value={form.campaign}
                   placeholder="e.g. Google Ads, Facebook"
                   onChange={(e) => set("campaign", e.target.value)}
@@ -868,40 +818,40 @@ export default function OrgLeadEditPage() {
 
             {/* Row 2: Landing page URL, UTM Source, UTM Campaign, UTM Medium */}
             <div className="led-grid-4">
-              <div className="led-field">
-                <label className="led-label">Landing page URL</label>
+              <div className="field">
+                <label>Landing page URL</label>
                 <input
-                  className="led-input"
+                  className="inp"
                   value={form.landingPageUrl}
                   placeholder="https://example.com/landing-page"
                   onChange={(e) => set("landingPageUrl", e.target.value)}
                 />
               </div>
 
-              <div className="led-field">
-                <label className="led-label">UTM Source</label>
+              <div className="field">
+                <label>UTM Source</label>
                 <input
-                  className="led-input"
+                  className="inp"
                   value={form.utmSource}
                   placeholder="e.g. google"
                   onChange={(e) => set("utmSource", e.target.value)}
                 />
               </div>
 
-              <div className="led-field">
-                <label className="led-label">UTM Campaign</label>
+              <div className="field">
+                <label>UTM Campaign</label>
                 <input
-                  className="led-input"
+                  className="inp"
                   value={form.utmCampaign}
                   placeholder="e.g. summer_sale"
                   onChange={(e) => set("utmCampaign", e.target.value)}
                 />
               </div>
 
-              <div className="led-field">
-                <label className="led-label">UTM Medium</label>
+              <div className="field">
+                <label>UTM Medium</label>
                 <input
-                  className="led-input"
+                  className="inp"
                   value={form.utmMedium}
                   placeholder="e.g. cpc"
                   onChange={(e) => set("utmMedium", e.target.value)}
@@ -927,10 +877,10 @@ export default function OrgLeadEditPage() {
 
             <div style={{ display: "flex", flexDirection: "column", gap: 18 }}>
               {/* Pipeline status */}
-              <div className="led-field">
-                <label className="led-label">Pipeline status</label>
+              <div className="field">
+                <label>Pipeline status</label>
                 <select
-                  className="led-select"
+                  className="inp"
                   value={lead.status}
                   onChange={(e) => {
                     const st = e.target.value as CrmLeadStatus;
@@ -958,8 +908,8 @@ export default function OrgLeadEditPage() {
               */}
 
               {/* Temperature */}
-              <div className="led-field">
-                <label className="led-label">Temperature</label>
+              <div className="field">
+                <label>Temperature</label>
                 <div className="led-temp-group">
                   {[
                     { val: "hot", label: "🔥 Hot" },
@@ -983,10 +933,10 @@ export default function OrgLeadEditPage() {
               </div>
 
               {/* Lead source */}
-              <div className="led-field">
-                <label className="led-label">Lead source</label>
+              <div className="field">
+                <label>Lead source</label>
                 <select
-                  className="led-select"
+                  className="inp"
                   value={form.source}
                   onChange={(e) => set("source", e.target.value)}
                 >
@@ -1017,8 +967,8 @@ export default function OrgLeadEditPage() {
             </div>
 
             <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-              <div className="led-field">
-                <label className="led-label">Owner / Agent</label>
+              <div className="field">
+                <label>Owner / Agent</label>
                 <div className="led-agent-pill">
                   <div className="led-agent-avatar">
                     {assignedUser.name
@@ -1034,9 +984,9 @@ export default function OrgLeadEditPage() {
                 </div>
               </div>
 
-              <div className="led-field">
-                <label className="led-label">Team</label>
-                <select className="led-select" value="Sales Team" disabled>
+              <div className="field">
+                <label>Team</label>
+                <select className="inp" value="Sales Team" disabled>
                   <option value="Sales Team">Sales Team</option>
                 </select>
                 <div style={{ fontSize: 11.5, color: "#94a3b8", marginTop: 2 }}>
@@ -1084,6 +1034,16 @@ export default function OrgLeadEditPage() {
         </div>
       </div>
 
+      <FormActions
+        cancelHref={`/org/leads/${lead.id}`}
+        busy={saving}
+        submitDisabled={hasPhoneError}
+        busyLabel="Saving…"
+        submitLabel="Save changes"
+        submitIcon="check"
+        onSubmit={() => void save()}
+      />
+
       {/* Status Note Modal — a note is required for every pipeline status change */}
       <StatusNoteModal
         open={pendingStatus !== null}
@@ -1093,5 +1053,6 @@ export default function OrgLeadEditPage() {
         onConfirm={confirmStatus}
       />
     </div>
+    </FormPage>
   );
 }

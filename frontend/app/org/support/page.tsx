@@ -13,6 +13,15 @@ import {
 import { Reveal } from "@/components/superadmin/reveal";
 import { ReasonInfoPopover } from "@/components/superadmin/reason-info-popover";
 import { Icon } from "@/components/icons";
+import {
+  Field,
+  FormAlert,
+  FormGrid,
+  SelectInput,
+  TextArea,
+  TextInput,
+  formPageStyles,
+} from "@/components/forms/form-page";
 import { LIST_PAGE_SIZE, ListPager } from "@/components/ui/list-pager";
 import type {
   SupportTicketCategory,
@@ -223,49 +232,52 @@ export default function OrgSupportPage() {
                   <span className="x">Typical reply within 4 hrs</span>
                 </div>
                 <div className="card-b">
-                  {formError ? <div className="form-alert mb-14">{formError}</div> : null}
-                  <div className="field">
-                    <label>Subject</label>
-                    <input
-                      className="inp"
+                  <div className={formPageStyles.page}>
+                  <FormAlert message={formError} />
+                  <Field htmlFor="st-subject" label="Subject" icon="document">
+                    <TextInput
+                      id="st-subject"
+                      icon="document"
                       placeholder="Briefly, what do you need help with?"
                       value={subject}
                       onChange={(e) => setSubject(e.target.value)}
                     />
-                  </div>
-                  <div className="row2">
-                    <div className="field">
-                      <label>Category</label>
-                      <select
+                  </Field>
+                  <FormGrid>
+                    <Field htmlFor="st-category" label="Category" icon="tag">
+                      <SelectInput
+                        id="st-category"
+                        icon="tag"
                         value={category}
                         onChange={(e) => setCategory(e.target.value as SupportTicketCategory)}
                       >
                         {CATEGORIES.map((c) => (
                           <option key={c} value={c}>{c}</option>
                         ))}
-                      </select>
-                    </div>
-                    <div className="field">
-                      <label>Priority</label>
-                      <select
+                      </SelectInput>
+                    </Field>
+                    <Field htmlFor="st-priority" label="Priority" icon="flag">
+                      <SelectInput
+                        id="st-priority"
+                        icon="flag"
                         value={priority}
                         onChange={(e) => setPriority(e.target.value as SupportTicketPriority)}
                       >
                         {PRIORITIES.map((p) => (
                           <option key={p.value} value={p.value}>{p.label}</option>
                         ))}
-                      </select>
-                    </div>
-                  </div>
-                  <div className="field">
-                    <label>Message</label>
-                    <textarea
+                      </SelectInput>
+                    </Field>
+                  </FormGrid>
+                  <Field htmlFor="st-message" label="Message" icon="mail">
+                    <TextArea
+                      id="st-message"
                       rows={5}
                       placeholder="Describe the issue, include project or lead IDs if relevant…"
                       value={message}
                       onChange={(e) => setMessage(e.target.value)}
                     />
-                  </div>
+                  </Field>
                   <div className="field">
                     <label>Attachments</label>
                     <input
@@ -317,14 +329,18 @@ export default function OrgSupportPage() {
                       </div>
                     ) : null}
                   </div>
-                  <button
-                    className="btn btn-primary"
-                    type="button"
-                    disabled={submitting || uploading}
-                    onClick={() => void submitTicket()}
-                  >
-                    {submitting ? "Submitting…" : "Submit ticket"}
-                  </button>
+                  <div className={formPageStyles.actions}>
+                    <button
+                      className={formPageStyles.btnPrimary}
+                      type="button"
+                      disabled={submitting || uploading}
+                      onClick={() => void submitTicket()}
+                    >
+                      <Icon name="check" size={16} />
+                      {submitting ? "Submitting…" : "Submit ticket"}
+                    </button>
+                  </div>
+                  </div>
                 </div>
               </div>
             </Reveal>

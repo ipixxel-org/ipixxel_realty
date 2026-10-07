@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useParams, useSearchParams } from "next/navigation";
 import { Reveal } from "@/components/superadmin/reveal";
 import { Icon } from "@/components/icons";
+import { formPageStyles } from "@/components/forms/form-page";
 import {
   apiFetch,
   connectMarketingCredentials,
@@ -579,7 +580,7 @@ function PlatformDetailInner() {
                   </button>
                 </div>
                 {showManual ? (
-                  <div style={{ marginTop: 14 }}>
+                  <div className={formPageStyles.page} style={{ marginTop: 14 }}>
                     <div className="field">
                       <label>Page ID</label>
                       <input
@@ -1079,7 +1080,7 @@ function PlatformDetailInner() {
             )}
 
             {showCred && isGoogleAds ? (
-              <div style={{ marginTop: 14 }}>
+              <div className={formPageStyles.page} style={{ marginTop: 14 }}>
                 <div className="field">
                   <label>Account / Customer ID</label>
                   <input

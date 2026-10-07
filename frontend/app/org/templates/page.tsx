@@ -31,7 +31,7 @@ import {
   X,
 } from "lucide-react";
 import { Modal } from "@/components/ui/modal";
-import { Field, FormActions, FormAlert, FormPage, TextInput, formPageStyles } from "@/components/forms/form-page";
+import { Field, FormActions, FormAlert, FormModal, FormPage, TextInput, formPageStyles } from "@/components/forms/form-page";
 import { ConfirmModal } from "@/components/ui/confirm-modal";
 import { useAuth } from "@/lib/auth-context";
 import { apiFetch } from "@/lib/api";
@@ -412,49 +412,9 @@ export default function OrgTemplatesPage() {
     }
   }
 
-  // Create / add flows as full-width in-page views (were modals). The gallery
-  // stays mounted but hidden; preview / upgrade / in-use modals portal to
-  // <body>, so they still open on top of these views exactly as before.
-  const formView = useTemplate ? (
-    <FormPage
-      eyebrow="Website · Templates"
-      title="Create landing page"
-      subtitle={`Start a new landing page based on "${useTemplate.name}".`}
-      onBack={() => setUseTemplate(null)}
-      backLabel="Back to Templates"
-    >
-      <div className={formPageStyles.panel}>
-        <FormAlert message={useError} />
-        <Field htmlFor="tpl-use-name" label="Landing page name" icon="landing">
-          <TextInput
-            id="tpl-use-name"
-            icon="landing"
-            placeholder="e.g. Skyline Residence Launch"
-            value={useName}
-            onChange={(e) => setUseName(e.target.value)}
-            autoFocus
-          />
-        </Field>
-        <Field htmlFor="tpl-use-bind" label="Project or standalone unit" icon="building">
-          <InventoryBindFields
-            accessToken={accessToken}
-            value={useBind}
-            onChange={setUseBind}
-            onAvailabilityChange={setUseHasInventory}
-            hideLabel
-          />
-        </Field>
-        <FormActions
-          onCancel={() => setUseTemplate(null)}
-          busy={useSubmitting}
-          busyLabel="Creating…"
-          submitLabel="Create & Launch Builder"
-          submitIcon="plus"
-          onSubmit={() => void confirmUseTemplate()}
-        />
-      </div>
-    </FormPage>
-  ) : addModalOpen ? (
+  // "Add templates to workspace" is a full-width in-page view (a picker); the
+  // short "Create landing page" form is a popup rendered below.
+  const formView = addModalOpen ? (
     <FormPage
       eyebrow="Website · Templates"
       title="Add templates to workspace"
@@ -747,6 +707,46 @@ export default function OrgTemplatesPage() {
   return (
     <>
       {formView}
+      <FormModal
+        open={useTemplate !== null}
+        onClose={() => {
+          if (!useSubmitting) setUseTemplate(null);
+        }}
+        title="Create landing page"
+        description={`Start a new landing page based on "${useTemplate?.name ?? ""}".`}
+        busy={useSubmitting}
+        onSubmit={() => void confirmUseTemplate()}
+      >
+        <FormAlert message={useError} />
+        <Field htmlFor="tpl-use-name" label="Landing page name" icon="landing">
+          <TextInput
+            id="tpl-use-name"
+            icon="landing"
+            placeholder="e.g. Skyline Residence Launch"
+            value={useName}
+            onChange={(e) => setUseName(e.target.value)}
+            autoFocus
+          />
+        </Field>
+        <Field htmlFor="tpl-use-bind" label="Project or standalone unit" icon="building">
+          <InventoryBindFields
+            accessToken={accessToken}
+            value={useBind}
+            onChange={setUseBind}
+            onAvailabilityChange={setUseHasInventory}
+            hideLabel
+          />
+        </Field>
+        <FormActions
+          onCancel={() => {
+            if (!useSubmitting) setUseTemplate(null);
+          }}
+          busy={useSubmitting}
+          busyLabel="Creating…"
+          submitLabel="Create & Launch Builder"
+          submitIcon="plus"
+        />
+      </FormModal>
     <div className="tpl-wrap" style={formView ? { display: "none" } : undefined}>
       {/* 1. Hero Banner */}
       <div className="tpl-hero reveal in">

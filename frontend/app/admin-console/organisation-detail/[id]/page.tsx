@@ -7,6 +7,7 @@ import { apiFetch } from "@/lib/api";
 import { Reveal } from "@/components/superadmin/reveal";
 import { CountUp } from "@/components/superadmin/count-up";
 import { Icon } from "@/components/icons";
+import { FormActions, FormAlert, formPageStyles } from "@/components/forms/form-page";
 import { ConfirmModal } from "@/components/ui/confirm-modal";
 import { Modal } from "@/components/ui/modal";
 import { ReasonInfoPopover } from "@/components/superadmin/reason-info-popover";
@@ -993,7 +994,7 @@ export default function SuperAdminOrganisationDetailPage() {
                 </div>
                 <div>
                   {editing ? (
-                    <form onSubmit={handleEditSubmit}>
+                    <form onSubmit={handleEditSubmit} className={formPageStyles.page}>
                       <div className="row2">
                         <div className="field">
                           <label>Organisation name</label>
@@ -1134,20 +1135,14 @@ export default function SuperAdminOrganisationDetailPage() {
                           />
                         </div>
                       </div>
-                      {editError ? <div className="form-alert">{editError}</div> : null}
-                      <div style={{ display: "flex", gap: 10, justifyContent: "flex-end" }}>
-                        <button
-                          type="button"
-                          className="btn btn-ghost btn-sm"
-                          onClick={() => setEditing(false)}
-                          disabled={editSubmitting}
-                        >
-                          Cancel
-                        </button>
-                        <button type="submit" className="btn btn-primary btn-sm" disabled={editSubmitting}>
-                          {editSubmitting ? "Saving…" : "Save"}
-                        </button>
-                      </div>
+                      <FormAlert message={editError} />
+                      <FormActions
+                        onCancel={() => setEditing(false)}
+                        busy={editSubmitting}
+                        busyLabel="Saving…"
+                        submitLabel="Save changes"
+                        submitIcon="check"
+                      />
                     </form>
                   ) : (
                     <div

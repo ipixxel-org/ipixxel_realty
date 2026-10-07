@@ -135,6 +135,15 @@ export default function SuperAdminLoginPage() {
           ) : null}
         </div>
 
+        <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 20 }}>
+          <Link
+            href="/admin-login/forgot-password"
+            style={{ color: "var(--brand)", fontWeight: 600, fontSize: 13.5 }}
+          >
+            Forgot password?
+          </Link>
+        </div>
+
         {generalError ? (
           <p
             role="alert"

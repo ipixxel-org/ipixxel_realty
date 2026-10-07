@@ -13,7 +13,7 @@ import { MetaLeadAdsCard } from "@/components/org/meta-lead-ads-card";
 import { SETTINGS_ACTIONS } from "@/lib/permissions";
 import { FieldRolesPanel, TypedFieldEditor } from "@/components/org/typed-field-editor";
 import { FIELD_ROLES, fieldsToRows, groupNoun, roleBaselineOf, rowsToFields, templateTraits, validateFieldRows, type FieldRole, type FieldRow } from "@/lib/field-template";
-import { FormActions, FormAlert, FormPage, FormSection, formPageStyles } from "@/components/forms/form-page";
+import { FormActions, FormAlert, FormModal, FormSection } from "@/components/forms/form-page";
 import { ConfirmModal } from "@/components/ui/confirm-modal";
 
 import { COUNTRY_META, COUNTRIES, CURRENCY_OPTIONS, TIMEZONE_OPTIONS } from "@/lib/countries";
@@ -1814,7 +1814,7 @@ export default function OrgSettingsPage() {
         <button
           type="button"
           className="btn btn-ghost"
-          style={{ height: 38, padding: "0 14px", borderRadius: 9, fontSize: 13 }}
+          style={{ minHeight: 46, padding: "0 22px", borderRadius: 12, fontSize: 14.5 }}
           onClick={handleDiscard}
           disabled={saving}
         >
@@ -1836,15 +1836,18 @@ export default function OrgSettingsPage() {
   return (
     <>
       {requestModalPlan ? (
-        <FormPage
-          eyebrow="Settings · Billing"
+        <FormModal
+          open
+          onClose={() => {
+            if (!submittingRequest) setRequestModalPlan(null);
+          }}
           title="Request package change"
-          subtitle="Review package change details before submitting for Super Admin approval."
-          onBack={() => setRequestModalPlan(null)}
-          backDisabled={submittingRequest}
-          backLabel="Back to Billing"
+          description="Review package change details before submitting for Super Admin approval."
+          busy={submittingRequest}
+          size="lg"
+          onSubmit={() => void handleSubmitPackageChangeRequest()}
         >
-          <div className={formPageStyles.panel}>
+          <div>
             <FormAlert message={changeError} />
 
             <FormSection title="Summary" />
@@ -1899,16 +1902,17 @@ export default function OrgSettingsPage() {
             </div>
 
             <FormActions
-              onCancel={() => setRequestModalPlan(null)}
+              onCancel={() => {
+                if (!submittingRequest) setRequestModalPlan(null);
+              }}
               busy={submittingRequest}
               busyLabel="Submitting Request…"
               submitLabel="Confirm Change Request"
-              onSubmit={() => void handleSubmitPackageChangeRequest()}
             />
           </div>
-        </FormPage>
+        </FormModal>
       ) : null}
-    <div className="os-page" style={requestModalPlan ? { display: "none" } : undefined}>
+    <div className="os-page">
       <div className="set-header reveal in">
         <div className="set-header-left">
           <div className="set-header-badge">

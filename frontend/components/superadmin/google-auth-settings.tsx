@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { getAdminMarketingCredentials, updateAdminMarketingCredentials } from "@/lib/api";
 import { GoogleIcon } from "@/components/auth/google-sign-in-button";
 import { Icon } from "@/components/icons";
+import { formPageStyles } from "@/components/forms/form-page";
 import type { MarketingCredentials } from "@/lib/types";
 
 export function GoogleAuthSettings() {
@@ -80,7 +81,7 @@ export function GoogleAuthSettings() {
         </span>
       </div>
 
-      <div className="card-b" style={{ display: "grid", gap: 18 }}>
+      <div className={`card-b ${formPageStyles.page}`} style={{ display: "grid", gap: 18 }}>
         <p className="muted" style={{ fontSize: 13.5, margin: 0, lineHeight: 1.55 }}>
           Allow users and organisation admins to sign in and register with their verified Google account.
           When signing up with Google, users skip email OTP verification automatically.
@@ -248,14 +249,14 @@ export function GoogleAuthSettings() {
           </div>
         )}
 
-        <div style={{ display: "flex", justifyContent: "flex-end", gap: 10, marginTop: 4 }}>
+        <div className={formPageStyles.actions}>
           <button
             type="button"
-            className="btn btn-primary"
+            className={formPageStyles.btnPrimary}
             onClick={save}
             disabled={loading || saving}
-            style={{ minWidth: 140 }}
           >
+            <Icon name="check" size={16} />
             {saving ? "Saving to Database…" : "Save Google OAuth"}
           </button>
         </div>

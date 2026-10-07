@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { useAuth } from "@/lib/auth-context";
 import { Icon } from "@/components/icons";
+import { formPageStyles } from "@/components/forms/form-page";
 import { Modal } from "@/components/ui/modal";
 import {
   getSmtpConfig,
@@ -311,7 +312,7 @@ export default function SuperAdminEmailPage() {
       </div>
 
       {activeTab === "settings" ? (
-        <form onSubmit={handleSave}>
+        <form onSubmit={handleSave} className={formPageStyles.page}>
           <div className="card reveal in" style={{ marginBottom: 22 }}>
             <div className="card-h">
               <span className="t">SMTP Server Credentials</span>
@@ -446,7 +447,7 @@ export default function SuperAdminEmailPage() {
           </div>
         </form>
       ) : activeTab === "templates" ? (
-        <form onSubmit={handleSave}>
+        <form onSubmit={handleSave} className={formPageStyles.page}>
           <div className="card reveal in" style={{ marginBottom: 22 }}>
             <div className="card-h" style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
               <div>
@@ -559,12 +560,13 @@ export default function SuperAdminEmailPage() {
             </div>
           </div>
 
-          <div style={{ display: "flex", justifyContent: "flex-end" }}>
+          <div className={formPageStyles.actions}>
             <button
               type="submit"
-              className="btn btn-primary"
+              className={formPageStyles.btnPrimary}
               disabled={saving || loading}
             >
+              <Icon name="check" size={16} />
               {saving ? "Saving templates..." : "Save Template Changes"}
             </button>
           </div>

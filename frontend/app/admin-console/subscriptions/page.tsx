@@ -21,7 +21,8 @@ import { useAuth } from "@/lib/auth-context";
 import { useRouter } from "next/navigation";
 import { useFlash } from "@/lib/flash";
 import { LIST_PAGE_SIZE, ListPager } from "@/components/ui/list-pager";
-import { SUBS_FLASH_KEY, SUBS_PATH } from "./subscriptions-shared";
+import { ORG_SUBS_TAB, SUBS_FLASH_KEY, SUBS_PATH } from "./subscriptions-shared";
+import { ChangeSubscriptionModal } from "./change-subscription-modal";
 import type {
   Plan,
   PlanCapability,
@@ -141,6 +142,7 @@ export default function SuperAdminSubscriptionsPage() {
     billingExpiryMessage: "",
   });
   const [savingPolicy, setSavingPolicy] = useState(false);
+  const [changeSub, setChangeSub] = useState<Subscription | null>(null);
 
   const notify = (msg: string) => {
     setToast(msg);
@@ -257,6 +259,27 @@ export default function SuperAdminSubscriptionsPage() {
     fetchPackageChangeRequests("pending", 1);
     loadExpiryPolicy();
   }, [canViewSubscriptions]);
+
+  useEffect(() => {
+    if (!canChangeSubscription) return;
+    const changeId = new URLSearchParams(window.location.search).get("change");
+    if (!changeId) return;
+    let cancelled = false;
+    router.replace(SUBS_PATH);
+    apiFetch<Subscription>(`/admin/subscriptions/${encodeURIComponent(changeId)}`)
+      .then((s) => {
+        if (cancelled) return;
+        setTab(Number(ORG_SUBS_TAB));
+        setChangeSub(s);
+      })
+      .catch((e: unknown) => {
+        if (!cancelled) notify(e instanceof Error ? e.message : "Failed to load subscription");
+      });
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- run once when the permission resolves
+  }, [canChangeSubscription]);
 
   const searchMounted = useRef(false);
   useEffect(() => {
@@ -1112,7 +1135,7 @@ export default function SuperAdminSubscriptionsPage() {
                             <div style={{ display: "flex", gap: 6, justifyContent: "flex-end" }}>
                               {canChangeSubscription ? <button
                                 type="button"
-                                onClick={() => router.push(`${SUBS_PATH}/${encodeURIComponent(s.id)}/change`)}
+                                onClick={() => setChangeSub(s)}
                                 style={{
                                   padding: "5px 10px",
                                   borderRadius: 6,
@@ -1469,6 +1492,21 @@ export default function SuperAdminSubscriptionsPage() {
           />
         </div>
       </Modal>
+
+      {changeSub && !plansLoading ? (
+        <ChangeSubscriptionModal
+          key={changeSub.id}
+          sub={changeSub}
+          plans={plans}
+          onClose={() => setChangeSub(null)}
+          onChanged={(updated, cycle) => {
+            setSubs((prev) => prev.map((row) => (row.id === updated.id ? updated : row)));
+            notify(`${changeSub.organisation?.name || "Org"} → ${updated.plan?.name} ${cycle}`);
+            setChangeSub(null);
+            void fetchOverview();
+          }}
+        />
+      ) : null}
 
       {toast ? (
         <div style={{ position: "fixed", right: 20, bottom: 20, zIndex: 500 }}>

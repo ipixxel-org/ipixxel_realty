@@ -152,7 +152,7 @@ export class AuthController {
   @Post('forgot-password')
   @HttpCode(200)
   forgotPassword(@Body() dto: ForgotPasswordDto) {
-    return this.authService.forgotPassword(dto.email);
+    return this.authService.forgotPassword(dto.email, dto.portal);
   }
 
   @Get('reset-password/validate')

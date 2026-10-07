@@ -1,7 +1,6 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Reveal } from "@/components/superadmin/reveal";
 import { Icon } from "@/components/icons";
@@ -12,6 +11,16 @@ import {
   useTeamsList,
 } from "@/components/org/team-fields";
 import { createOrgUser, getTeam, setTeamMembers } from "@/lib/api";
+import {
+  Field,
+  FormActions,
+  FormAlert,
+  FormGrid,
+  FormPage,
+  PhoneInput,
+  SelectInput,
+  TextInput,
+} from "@/components/forms/form-page";
 import type { TeamMemberRoleValue } from "@/lib/types";
 import "./onboard.css";
 
@@ -156,52 +165,14 @@ export default function OnboardMemberPage() {
   }
 
   return (
+    <FormPage
+      eyebrow="Teams"
+      title="Create / Invite Team Member"
+      subtitle="Add a new member to your organisation and give them the right access to tools and projects."
+      backHref="/org/teams"
+      backLabel="Back to Teams"
+    >
     <div className="ob-wrap">
-      {/* Header */}
-      <Reveal delay={1}>
-        <div className="ob-header">
-          <div className="ob-header-left">
-            <div className="ob-header-icon" aria-hidden="true">
-              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" />
-                <circle cx="9" cy="7" r="4" />
-                <line x1="19" y1="8" x2="19" y2="14" />
-                <line x1="22" y1="11" x2="16" y2="11" />
-              </svg>
-            </div>
-            <div className="ob-header-content">
-              <div className="ob-eyebrow">TEAMS</div>
-              <h1 className="ob-title">Create / Invite Team Member</h1>
-              <p className="ob-sub">
-                Add a new member to your organisation and give them the right access to tools and projects.
-              </p>
-            </div>
-          </div>
-
-          <div className="ob-header-actions">
-            <Link className="ob-btn-cancel" href="/org/teams">
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
-                <line x1="18" y1="6" x2="6" y2="18" />
-                <line x1="6" y1="6" x2="18" y2="18" />
-              </svg>
-              <span>Cancel</span>
-            </Link>
-            <button
-              type="button"
-              className="ob-btn-submit"
-              disabled={submitting}
-              onClick={handleSubmit}
-            >
-              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-                <line x1="22" y1="2" x2="11" y2="13" />
-                <polygon points="22 2 15 22 11 13 2 9 22 2" />
-              </svg>
-              <span>{submitting ? "Adding…" : "Add & send invite"}</span>
-            </button>
-          </div>
-        </div>
-      </Reveal>
-
       {/* Stepper Progress Bar */}
       <Reveal delay={2}>
         <div className="ob-stepper">
@@ -251,20 +222,7 @@ export default function OnboardMemberPage() {
         </div>
       </Reveal>
 
-      {submitError && (
-        <div
-          className="help"
-          style={{
-            background: "#fef2f2",
-            color: "#b91c1c",
-            border: "1px solid #fecaca",
-            borderRadius: "10px",
-            padding: "12px 16px",
-          }}
-        >
-          {submitError}
-        </div>
-      )}
+      {submitError ? <FormAlert message={submitError} /> : null}
 
       {submitted && (
         <div
@@ -303,80 +261,55 @@ export default function OnboardMemberPage() {
                 </div>
               </div>
 
-              <div className="ob-fields-row">
-                <div className="ob-field">
-                  <label className="ob-label">
-                    First name <span className="ob-req">*</span>
-                  </label>
-                  <div className="ob-input-box">
-                    <span className="ob-ic">
-                      <Icon name="profile" size={16} />
-                    </span>
-                    <input
-                      type="text"
-                      placeholder="e.g. Karan"
-                      value={firstName}
-                      onChange={(e) => setFirstName(e.target.value)}
-                    />
-                  </div>
-                </div>
+              <FormGrid>
+                <Field htmlFor="ob-first" label="First name *" icon="profile">
+                  <TextInput
+                    id="ob-first"
+                    icon="profile"
+                    placeholder="e.g. Karan"
+                    autoComplete="given-name"
+                    value={firstName}
+                    onChange={(e) => setFirstName(e.target.value)}
+                  />
+                </Field>
+                <Field htmlFor="ob-last" label="Last name *" icon="profile">
+                  <TextInput
+                    id="ob-last"
+                    icon="profile"
+                    placeholder="e.g. Pillai"
+                    autoComplete="family-name"
+                    value={lastName}
+                    onChange={(e) => setLastName(e.target.value)}
+                  />
+                </Field>
+              </FormGrid>
 
-                <div className="ob-field">
-                  <label className="ob-label">
-                    Last name <span className="ob-req">*</span>
-                  </label>
-                  <div className="ob-input-box">
-                    <span className="ob-ic">
-                      <Icon name="profile" size={16} />
-                    </span>
-                    <input
-                      type="text"
-                      placeholder="e.g. Pillai"
-                      value={lastName}
-                      onChange={(e) => setLastName(e.target.value)}
-                    />
-                  </div>
-                </div>
-              </div>
-
-              <div className="ob-fields-row">
-                <div className="ob-field">
-                  <label className="ob-label">
-                    Work email <span className="ob-req">*</span>
-                  </label>
-                  <div className="ob-input-box">
-                    <span className="ob-ic">
-                      <Icon name="mail" size={16} />
-                    </span>
-                    <input
-                      type="email"
-                      placeholder="name@yourcompany.com"
-                      value={email}
-                      onChange={(e) => setEmail(e.target.value)}
-                    />
-                  </div>
-                </div>
-
-                <div className="ob-field">
-                  <label className="ob-label">
-                    Mobile number <span className="ob-req">*</span>
-                  </label>
-                  <div className="ob-input-box">
-                    <div className="ob-flag-badge">
-                      <span style={{ fontSize: 16 }}>🇮🇳</span>
-                      <Icon name="chevron-down" size={12} />
-                      <span>+91</span>
-                    </div>
-                    <input
-                      type="tel"
-                      placeholder="98765 43210"
-                      maxLength={10}
-                      value={mobile}
-                      onChange={(e) => setMobile(sanitizePhone(e.target.value))}
-                    />
-                  </div>
-                </div>
-              </div>
+              <FormGrid>
+                <Field htmlFor="ob-email" label="Work email *" icon="mail">
+                  <TextInput
+                    id="ob-email"
+                    icon="mail"
+                    type="email"
+                    inputMode="email"
+                    autoComplete="email"
+                    placeholder="name@yourcompany.com"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                  />
+                </Field>
+                <Field htmlFor="ob-mobile" label="Mobile number *" icon="phone">
+                  <PhoneInput
+                    id="ob-mobile"
+                    prefix="🇮🇳 +91"
+                    type="tel"
+                    inputMode="numeric"
+                    placeholder="98765 43210"
+                    maxLength={10}
+                    value={mobile}
+                    onChange={(e) => setMobile(sanitizePhone(e.target.value))}
+                  />
+                </Field>
+              </FormGrid>
             </div>
           </Reveal>
 
@@ -400,93 +333,65 @@ export default function OnboardMemberPage() {
                 </div>
               </div>
 
-              <div className="ob-fields-row">
-                <div className="ob-field">
-                  <label className="ob-label">
-                    Organisation role <span className="ob-req">*</span>
-                  </label>
-                  <div className="ob-input-box">
-                    <span className="ob-ic">
-                      <Icon name="shield" size={16} />
-                    </span>
-                    <select
-                      value={orgRole}
-                      onChange={(e) => setOrgRole(e.target.value)}
-                    >
-                      <option value="">Select a role...</option>
-                      {orgRoleOptions.map((r) => (
-                        <option key={r.value} value={r.value}>
-                          {r.label}
-                        </option>
-                      ))}
-                    </select>
-                    <span className="ob-chevron">
-                      <Icon name="chevron-down" size={14} />
-                    </span>
-                  </div>
-                  <span className="ob-hint">
-                    Controls what they can access — same roles as the Users page.
-                  </span>
-                </div>
-
-                <div className="ob-field">
-                  <label className="ob-label">
-                    Team <span className="ob-req">*</span>
-                  </label>
-                  <div className="ob-input-box">
-                    <span className="ob-ic">
-                      <Icon name="team" size={16} />
-                    </span>
-                    <select
-                      value={teamId}
-                      onChange={(e) => setTeamId(e.target.value)}
-                      disabled={teamsLoading || !!teamsError}
-                    >
-                      <option value="">Select team...</option>
-                      {teams.map((t) => (
-                        <option key={t.id} value={t.id}>
-                          {t.name}
-                        </option>
-                      ))}
-                    </select>
-                    <span className="ob-chevron">
-                      <Icon name="chevron-down" size={14} />
-                    </span>
-                  </div>
-                </div>
-              </div>
+              <FormGrid>
+                <Field
+                  htmlFor="ob-role"
+                  label="Organisation role *"
+                  icon="shield"
+                  hint="Controls what they can access — same roles as the Users page."
+                >
+                  <SelectInput id="ob-role" icon="shield" value={orgRole} onChange={(e) => setOrgRole(e.target.value)}>
+                    <option value="">Select a role...</option>
+                    {orgRoleOptions.map((r) => (
+                      <option key={r.value} value={r.value}>
+                        {r.label}
+                      </option>
+                    ))}
+                  </SelectInput>
+                </Field>
+                <Field htmlFor="ob-team" label="Team *" icon="team">
+                  <SelectInput
+                    id="ob-team"
+                    icon="team"
+                    value={teamId}
+                    onChange={(e) => setTeamId(e.target.value)}
+                    disabled={teamsLoading || !!teamsError}
+                  >
+                    <option value="">Select team...</option>
+                    {teams.map((t) => (
+                      <option key={t.id} value={t.id}>
+                        {t.name}
+                      </option>
+                    ))}
+                  </SelectInput>
+                </Field>
+              </FormGrid>
 
               <div className="ob-fields-row">
-                <div className="ob-field">
-                  <label className="ob-label">Reports to</label>
-                  <div className="ob-input-box">
-                    <span className="ob-ic">
-                      <Icon name="profile" size={16} />
-                    </span>
-                    <select
-                      value={reportsToId}
-                      onChange={(e) => setReportsToId(e.target.value)}
-                      disabled={usersLoading || !!usersError}
-                    >
-                      <option value="">No one in particular</option>
-                      {users.map((u) => (
-                        <option key={u.id} value={u.id}>
-                          {displayName(u)}
-                        </option>
-                      ))}
-                    </select>
-                    <span className="ob-chevron">
-                      <Icon name="chevron-down" size={14} />
-                    </span>
-                  </div>
-                  <span className="ob-hint">
-                    Preview only — there&apos;s no &apos;reports to&apos; field on the backend yet.
-                  </span>
-                </div>
+                <Field
+                  htmlFor="ob-reports"
+                  label="Reports to"
+                  icon="profile"
+                  hint="Preview only — there's no 'reports to' field on the backend yet."
+                >
+                  <SelectInput
+                    id="ob-reports"
+                    icon="profile"
+                    value={reportsToId}
+                    onChange={(e) => setReportsToId(e.target.value)}
+                    disabled={usersLoading || !!usersError}
+                  >
+                    <option value="">No one in particular</option>
+                    {users.map((u) => (
+                      <option key={u.id} value={u.id}>
+                        {displayName(u)}
+                      </option>
+                    ))}
+                  </SelectInput>
+                </Field>
 
-                <div className="ob-field">
-                  <label className="ob-label">Team role (Optional)</label>
-                  <div className="ob-role-chips">
+                <Field htmlFor="ob-team-role" label="Team role" note="(optional)" icon="tag">
+                  <div className="ob-role-chips" id="ob-team-role" role="radiogroup">
                     {teamRoleList.map((role) => {
                       const isSelected = teamRole === role;
                       return (
@@ -502,7 +407,7 @@ export default function OnboardMemberPage() {
                       );
                     })}
                   </div>
-                </div>
+                </Field>
               </div>
             </div>
           </Reveal>
@@ -702,6 +607,15 @@ export default function OnboardMemberPage() {
               )}
             </div>
           </Reveal>
+
+          <FormActions
+            cancelHref="/org/teams"
+            busy={submitting}
+            busyLabel="Adding…"
+            submitLabel="Add & send invite"
+            submitIcon="user-plus"
+            onSubmit={() => void handleSubmit()}
+          />
         </div>
 
         {/* Right Sidebar Widgets */}
@@ -818,5 +732,6 @@ export default function OnboardMemberPage() {
         </aside>
       </div>
     </div>
+    </FormPage>
   );
 }

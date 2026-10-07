@@ -302,23 +302,24 @@
 .org .set-save-btn {
   display: inline-flex;
   align-items: center;
-  gap: 7px;
-  height: 38px;
-  padding: 0 18px;
-  background: #059669;
+  justify-content: center;
+  gap: 8px;
+  min-height: 46px;
+  min-width: 120px;
+  padding: 0 22px;
+  background: #2563eb;
   color: #ffffff;
-  border-radius: 9px;
+  border-radius: 12px;
   border: none;
-  font-size: 13.5px;
+  font-size: 14.5px;
   font-weight: 600;
   cursor: pointer;
-  box-shadow: 0 1px 2px rgba(5, 150, 105, 0.2);
+  box-shadow: 0 6px 16px -6px rgba(37, 99, 235, 0.55);
   transition: background 0.15s, transform 0.1s, box-shadow 0.15s;
 }
 
 .org .set-save-btn:hover:not(:disabled) {
-  background: #047857;
-  box-shadow: 0 2px 6px rgba(5, 150, 105, 0.3);
+  background: #1d4ed8;
 }
 
 .org .set-save-btn:active:not(:disabled) {
@@ -326,7 +327,7 @@
 }
 
 .org .set-save-btn:disabled {
-  opacity: 0.65;
+  opacity: 0.55;
   cursor: not-allowed;
 }
 
@@ -357,16 +358,16 @@
 }
 
 .org .set-field label {
-  font-size: 13px;
+  font-size: 14px;
   font-weight: 600;
-  color: #1e293b;
-  margin-bottom: 7px;
+  color: #0f172a;
+  margin-bottom: 8px;
   display: flex;
   align-items: center;
 }
 
 .org .set-req {
-  color: #ef4444;
+  color: #dc2626;
   margin-left: 3px;
   font-weight: 700;
 }
@@ -381,7 +382,7 @@
 
 .org .set-input-box .set-field-ic {
   position: absolute;
-  left: 13px;
+  left: 14px;
   top: 50%;
   transform: translateY(-50%);
   color: #94a3b8;
@@ -400,12 +401,12 @@
 .org .set-input-box select.inp,
 .org .set-input-box textarea.inp {
   width: 100%;
-  height: 42px;
-  padding: 0 14px 0 40px;
+  height: 48px;
+  padding: 0 14px 0 42px;
   border: 1px solid #e2e8f0;
-  border-radius: 10px;
+  border-radius: 12px;
   background: #ffffff;
-  font-size: 13.5px;
+  font-size: 14.5px;
   color: #0f172a;
   outline: none;
   transition: border-color 0.15s, box-shadow 0.15s;
@@ -413,8 +414,8 @@
 
 .org .set-input-box textarea.inp {
   height: auto;
-  min-height: 80px;
-  padding: 10px 14px 10px 40px;
+  min-height: 104px;
+  padding: 12px 14px 12px 42px;
   line-height: 1.5;
   resize: vertical;
 }
@@ -422,8 +423,8 @@
 .org .set-input-box input.inp:focus,
 .org .set-input-box select.inp:focus,
 .org .set-input-box textarea.inp:focus {
-  border-color: #059669;
-  box-shadow: 0 0 0 3px rgba(5, 150, 105, 0.12);
+  border-color: #2563eb;
+  box-shadow: 0 0 0 4px rgba(37, 99, 235, 0.14);
 }
 
 .org .set-input-box input.inp:disabled,
@@ -439,18 +440,18 @@
   display: flex;
   align-items: center;
   width: 100%;
-  height: 42px;
+  height: 48px;
   border: 1px solid #e2e8f0;
-  border-radius: 10px;
+  border-radius: 12px;
   background: #ffffff;
-  padding: 0 12px;
+  padding: 0 14px;
   gap: 10px;
   transition: border-color 0.15s, box-shadow 0.15s;
 }
 
 .org .set-phone-group:focus-within {
-  border-color: #059669;
-  box-shadow: 0 0 0 3px rgba(5, 150, 105, 0.12);
+  border-color: #2563eb;
+  box-shadow: 0 0 0 4px rgba(37, 99, 235, 0.14);
 }
 
 .org .set-phone-ic {
@@ -489,7 +490,7 @@
   background: transparent;
   width: 100%;
   height: 100%;
-  font-size: 13.5px;
+  font-size: 14.5px;
   color: #0f172a;
   font-family: inherit;
 }

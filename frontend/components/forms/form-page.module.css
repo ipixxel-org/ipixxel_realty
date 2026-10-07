@@ -622,6 +622,20 @@
   background: var(--fp-brand-dark);
 }
 
+.page .btnDanger {
+  color: var(--fp-danger);
+  border-color: #fecaca;
+}
+
+.page .btnDanger:hover:not(:disabled) {
+  background: #fef2f2;
+}
+
+/* Pushes a destructive action to the left edge of the action bar. */
+.page .actionsStart {
+  margin-right: auto;
+}
+
 .page .btnPrimary:disabled,
 .page .btn[aria-disabled="true"],
 .page .btn:disabled,
@@ -635,4 +649,116 @@
   .page .btnPrimary {
     flex: 1 1 140px;
   }
+}
+
+/* ---------- Legacy markup bridge ----------
+   Older create / edit pages render `.field > label` + `.inp` / select /
+   textarea markup from the console stylesheets. Inside a FormPage those get
+   the same look as the components above (Field / TextInput / SelectInput /
+   TextArea) so every form shares one standard without rewriting each page's
+   inputs. `.page.page` lifts specificity above `.org .inp` / `.org select`
+   (2 classes), and `:global` only reaches markup inside this page. Only
+   presentation changes here — no layout of the page's own grids. */
+.page.page :global(.field) {
+  margin-bottom: 20px;
+  min-width: 0;
+}
+
+.page.page :global(.field) > label {
+  display: block;
+  margin-bottom: 8px;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--fp-ink);
+}
+
+.page.page :global(.inp),
+.page.page :global(.field) select,
+.page.page :global(.field) textarea {
+  box-sizing: border-box;
+  width: 100%;
+  min-height: 48px;
+  padding: 12px 14px;
+  border: 1px solid var(--fp-line);
+  border-radius: 12px;
+  background: #ffffff;
+  font: inherit;
+  font-size: 14.5px;
+  color: var(--fp-ink);
+  box-shadow: none;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.page.page :global(.field) textarea,
+.page.page textarea:global(.inp) {
+  min-height: 104px;
+  resize: vertical;
+}
+
+.page.page :global(.inp)::placeholder,
+.page.page :global(.field) textarea::placeholder {
+  color: var(--fp-faint);
+}
+
+.page.page :global(.inp):focus,
+.page.page :global(.field) select:focus,
+.page.page :global(.field) textarea:focus {
+  outline: none;
+  border-color: var(--fp-brand);
+  box-shadow: 0 0 0 4px var(--fp-brand-ring);
+}
+
+.page.page :global(.inp):disabled,
+.page.page :global(.inp):read-only:not(select),
+.page.page :global(.field) select:disabled,
+.page.page :global(.field) textarea:disabled {
+  background: var(--fp-soft);
+  color: var(--fp-muted);
+}
+
+.page.page :global(.inp)[aria-invalid="true"],
+.page.page :global(.inp):global(.inp-invalid),
+.page.page :global(.field-invalid) :global(.inp),
+.page.page :global(.field) select[aria-invalid="true"],
+.page.page :global(.field) textarea[aria-invalid="true"] {
+  border-color: var(--fp-danger-line);
+}
+
+.page.page :global(.inp-mono) {
+  font-family: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+}
+
+/* Compact filter-style controls keep their own sizing. */
+.page.page :global(.inp.w-auto) {
+  width: auto;
+}
+
+.page.page :global(.field) :global(.hint) {
+  margin-top: 8px;
+  font-size: 12.5px;
+  line-height: 1.4;
+  color: var(--fp-muted);
+}
+
+.page.page :global(.field) :global(.error),
+.page.page :global(.field-err) {
+  margin-top: 8px;
+  font-size: 12.5px;
+  line-height: 1.4;
+  color: var(--fp-danger);
+}
+
+.page.page :global(.req) {
+  color: var(--fp-danger);
+}
+
+.page.page :global(.form-alert):not(:global(.ok)) {
+  padding: 12px 14px;
+  margin-bottom: 20px;
+  border-radius: 12px;
+  background: #fef2f2;
+  border: 1px solid #fecaca;
+  color: #b91c1c;
+  font-size: 13.5px;
+  font-weight: 500;
 }

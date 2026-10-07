@@ -47,7 +47,7 @@ import { SiteRenderer } from "@/components/openpage/renderer/SiteRenderer";
 import { siteFromLandingPage } from "@/lib/openpage/content";
 import { buildRealEstateTemplate } from "@/lib/openpage/re-templates";
 import { Modal } from "@/components/ui/modal";
-import { Field, FormActions, FormAlert, FormPage, TextInput, formPageStyles } from "@/components/forms/form-page";
+import { Field, FormActions, FormAlert, FormModal, FormPage, TextInput, formPageStyles } from "@/components/forms/form-page";
 import { ConfirmModal } from "@/components/ui/confirm-modal";
 import type {
   LandingPageRow,
@@ -679,106 +679,9 @@ export default function OrgLandingPagesPage() {
   const draftPct = totalKpi > 0 ? Math.round((draftKpi / totalKpi) * 100) : 0;
   const unpublishedPct = totalKpi > 0 ? Math.round((unpublishedKpi / totalKpi) * 100) : 0;
 
-  // Create flows as full-width in-page views (were modals). The list stays
-  // mounted but hidden; the preview / plan-limit / domain modals portal to
-  // <body>, so they still open on top of these views exactly as before.
-  const formView = scratchOpen ? (
-    <FormPage
-      eyebrow="Website · Landing Pages"
-      title="Create a blank landing page"
-      subtitle="Starts with an empty canvas. Bind a project or standalone unit to auto-fill property tokens."
-      onBack={() => {
-        if (!scratchSubmitting) setScratchOpen(false);
-      }}
-      backDisabled={scratchSubmitting}
-      backLabel="Back to Landing Pages"
-    >
-      <div className={formPageStyles.panel}>
-        <FormAlert message={scratchError} />
-        <Field htmlFor="lp-scratch-name" label="Landing page name" icon="landing">
-          <TextInput
-            id="lp-scratch-name"
-            icon="landing"
-            placeholder="e.g. Waterfront Residences"
-            value={scratchName}
-            onChange={(e) => setScratchName(e.target.value)}
-            autoFocus
-          />
-        </Field>
-        <Field htmlFor="lp-scratch-bind" label="Project or standalone unit" icon="building">
-          <InventoryBindFields
-            accessToken={accessToken}
-            value={scratchBind}
-            onChange={setScratchBind}
-            onSelectOption={(opt) => {
-              setScratchSelectedLabel(opt.label);
-              if (opt.label && !scratchName.trim()) {
-                setScratchName(opt.label);
-              }
-            }}
-            onAvailabilityChange={setScratchHasInventory}
-            hideLabel
-          />
-        </Field>
-        <FormActions
-          onCancel={() => setScratchOpen(false)}
-          busy={scratchSubmitting}
-          busyLabel="Creating…"
-          submitLabel="Create & Launch Builder"
-          submitIcon="plus"
-          onSubmit={() => void confirmCreateFromScratch()}
-        />
-      </div>
-    </FormPage>
-  ) : useTemplate ? (
-    <FormPage
-      eyebrow="Website · Landing Pages"
-      title="Create landing page"
-      subtitle={`Start a new landing page based on "${useTemplate.name}".`}
-      onBack={() => {
-        if (!useSubmitting) setUseTemplate(null);
-      }}
-      backDisabled={useSubmitting}
-      backLabel="Back to Landing Pages"
-    >
-      <div className={formPageStyles.panel}>
-        <FormAlert message={useError} />
-        <Field htmlFor="lp-use-name" label="Landing page name" icon="landing">
-          <TextInput
-            id="lp-use-name"
-            icon="landing"
-            placeholder="e.g. Skyline Residence Launch"
-            value={useName}
-            onChange={(e) => setUseName(e.target.value)}
-            autoFocus
-          />
-        </Field>
-        <Field htmlFor="lp-use-bind" label="Project or standalone unit" icon="building">
-          <InventoryBindFields
-            accessToken={accessToken}
-            value={useBind}
-            onChange={setUseBind}
-            onSelectOption={(opt) => {
-              setUseSelectedLabel(opt.label);
-              if (opt.label && !useName.trim()) {
-                setUseName(`${opt.label}${useTemplate?.name ? ` — ${useTemplate.name}` : ""}`);
-              }
-            }}
-            onAvailabilityChange={setUseHasInventory}
-            hideLabel
-          />
-        </Field>
-        <FormActions
-          onCancel={() => setUseTemplate(null)}
-          busy={useSubmitting}
-          busyLabel="Creating…"
-          submitLabel="Create & Launch Builder"
-          submitIcon="plus"
-          onSubmit={() => void confirmUseTemplate()}
-        />
-      </div>
-    </FormPage>
-  ) : templatePickerOpen ? (
+  // The template picker is a full-width in-page view; the two short create
+  // forms are popups (rendered below) so they open over the list.
+  const formView = templatePickerOpen ? (
     <FormPage
       eyebrow="Website · Landing Pages"
       title="Choose a landing page template"
@@ -934,6 +837,98 @@ export default function OrgLandingPagesPage() {
   return (
     <>
       {formView}
+      <FormModal
+        open={scratchOpen}
+        onClose={() => {
+          if (!scratchSubmitting) setScratchOpen(false);
+        }}
+        title="Create a blank landing page"
+        description="Starts with an empty canvas. Bind a project or standalone unit to auto-fill property tokens."
+        busy={scratchSubmitting}
+        onSubmit={() => void confirmCreateFromScratch()}
+      >
+        <FormAlert message={scratchError} />
+        <Field htmlFor="lp-scratch-name" label="Landing page name" icon="landing">
+          <TextInput
+            id="lp-scratch-name"
+            icon="landing"
+            placeholder="e.g. Waterfront Residences"
+            value={scratchName}
+            onChange={(e) => setScratchName(e.target.value)}
+            autoFocus
+          />
+        </Field>
+        <Field htmlFor="lp-scratch-bind" label="Project or standalone unit" icon="building">
+          <InventoryBindFields
+            accessToken={accessToken}
+            value={scratchBind}
+            onChange={setScratchBind}
+            onSelectOption={(opt) => {
+              setScratchSelectedLabel(opt.label);
+              if (opt.label && !scratchName.trim()) {
+                setScratchName(opt.label);
+              }
+            }}
+            onAvailabilityChange={setScratchHasInventory}
+            hideLabel
+          />
+        </Field>
+        <FormActions
+          onCancel={() => {
+            if (!scratchSubmitting) setScratchOpen(false);
+          }}
+          busy={scratchSubmitting}
+          busyLabel="Creating…"
+          submitLabel="Create & Launch Builder"
+          submitIcon="plus"
+        />
+      </FormModal>
+      <FormModal
+        open={useTemplate !== null}
+        onClose={() => {
+          if (!useSubmitting) setUseTemplate(null);
+        }}
+        title="Create landing page"
+        description={`Start a new landing page based on "${useTemplate?.name ?? ""}".`}
+        busy={useSubmitting}
+        onSubmit={() => void confirmUseTemplate()}
+      >
+        <FormAlert message={useError} />
+        <Field htmlFor="lp-use-name" label="Landing page name" icon="landing">
+          <TextInput
+            id="lp-use-name"
+            icon="landing"
+            placeholder="e.g. Skyline Residence Launch"
+            value={useName}
+            onChange={(e) => setUseName(e.target.value)}
+            autoFocus
+          />
+        </Field>
+        <Field htmlFor="lp-use-bind" label="Project or standalone unit" icon="building">
+          <InventoryBindFields
+            accessToken={accessToken}
+            value={useBind}
+            onChange={setUseBind}
+            onSelectOption={(opt) => {
+              setUseSelectedLabel(opt.label);
+              if (opt.label && !useName.trim()) {
+                setUseName(`${opt.label}${useTemplate?.name ? ` — ${useTemplate.name}` : ""}`);
+              }
+            }}
+            onAvailabilityChange={setUseHasInventory}
+            hideLabel
+          />
+        </Field>
+        <FormActions
+          onCancel={() => {
+            if (!useSubmitting) setUseTemplate(null);
+          }}
+          busy={useSubmitting}
+          busyLabel="Creating…"
+          submitLabel="Create & Launch Builder"
+          submitIcon="plus"
+        />
+      </FormModal>
     <div className="lp-wrap" style={formView ? { display: "none" } : undefined}>
       {/* Studio Header */}
       <div className="lp-header reveal in">
