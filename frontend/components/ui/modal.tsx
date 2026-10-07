@@ -78,10 +78,12 @@ export function Modal({
   return createPortal(
     <div
       className={cn(
-        "fixed inset-0 z-50 flex items-center justify-center p-4",
+        "fixed inset-0 flex items-center justify-center p-4",
         containerClassName,
       )}
-      style={{ background: "transparent" }}
+      // Above the sticky console topbars (z-index 100) so a popup is never
+      // cut off under the header; below dropdown menus (400) and toasts.
+      style={{ background: "transparent", zIndex: 200 }}
     >
       <div
         className="absolute inset-0 modal-backdrop"
