@@ -9,7 +9,7 @@ import {
   markNotificationRead,
 } from "@/lib/api";
 import type { AppNotification } from "@/lib/types";
-import { Icon } from "@/components/icons";
+import { Icon, type IconName } from "@/components/icons";
 import { useToast } from "@/components/ui/toast";
 
 const PAGE_SIZE = 25;
@@ -25,7 +25,7 @@ const TYPE_LABEL: Record<string, string> = {
   support_ticket_assigned: "Ticket assigned",
 };
 
-const TYPE_ICON: Record<string, string> = {
+const TYPE_ICON: Record<string, IconName> = {
   organisation_registration: "building",
   custom_domain_request: "link",
   organisation_approved: "check",

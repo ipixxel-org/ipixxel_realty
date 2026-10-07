@@ -45,8 +45,8 @@ describe("widget library integrity", () => {
     const byId = Object.fromEntries(WIDGETS.map((w) => [w.id, w]));
     // Carousel keeps autoplay toggle (absorbed slider)
     expect(byId.carousel.make().settings.autoplay).toBe(true);
-    // Form (absorbed enquiry/multistep/whatsapp forms) starts simple
-    expect(byId["lead-form"].make().settings.fields).toEqual(["name", "phone"]);
+    // Form (absorbed enquiry/multistep/whatsapp forms) targets a Forms-module form
+    expect(byId["lead-form"].make().settings.formId).toBe("form-site-visit");
     // Contact CTA exposes mode
     expect(byId["call-cta"].make().settings.mode).toBe("call");
     // CTA Banner exposes layout
@@ -98,16 +98,19 @@ describe("thank-you template", () => {
     for (const s of sections) expect(removed).not.toContain(s.type);
   });
 
-  it("contains a gated-off brochure download pointing at the sample kit", () => {
-    const brochure = sections.find((s: SectionInstance) => s.type === "brochure");
-    expect(brochure).toBeDefined();
-    expect(brochure!.settings.gateEnabled).toBe(false);
-    expect(brochure!.settings.file).toBe("/brochure/project.pdf");
+  it("sends the visitor back home with a clear call to action", () => {
+    const button = sections.find((s: SectionInstance) => s.type === "button");
+    expect(button).toBeDefined();
+    expect(button!.settings.action).toBe("link");
+    expect(button!.settings.link).toBe("/");
   });
 
-  it("has no empty image slots — art slugs are used until media is uploaded", () => {
-    const images = sections.filter((s) => s.type === "image");
-    expect(images.length).toBeGreaterThan(0);
-    for (const img of images) expect(String(img.settings.src ?? "")).not.toBe("");
+  it("has no empty copy — heading and body text are filled in", () => {
+    const heading = sections.find((s: SectionInstance) => s.type === "heading");
+    const body = sections.find((s: SectionInstance) => s.type === "text");
+    expect(heading).toBeDefined();
+    expect(String(heading!.settings.text ?? "")).not.toBe("");
+    expect(body).toBeDefined();
+    expect(String(body!.settings.text ?? "")).not.toBe("");
   });
 });

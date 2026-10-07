@@ -648,7 +648,6 @@ export default function OrgUsersPage() {
                 ) : (
                   rows.map((user) => {
                     const createdFmt = formatDate(user.createdAt);
-                    const lastLoginFmt = formatDate(user.updatedAt || user.createdAt);
                     const isSelected = selectedUserIds.has(user.id);
                     return (
                       <tr key={user.id}>
@@ -693,10 +692,7 @@ export default function OrgUsersPage() {
                           </span>
                         </td>
                         <td>
-                          <div className="usr-date-cell">
-                            <span className="usr-date-primary">{lastLoginFmt.date}</span>
-                            <span className="usr-date-sub">{lastLoginFmt.time}</span>
-                          </div>
+                          <span style={{ color: "#6b7280" }}>—</span>
                         </td>
                         <td>
                           <div className="usr-date-cell">

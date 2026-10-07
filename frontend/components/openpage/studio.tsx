@@ -9,7 +9,9 @@ import {
   Bell,
   CheckCircle2,
   Clock,
+  Keyboard,
   PencilRuler,
+  Route,
   Settings,
   Sparkles,
   X,
@@ -26,7 +28,8 @@ import { OpenPageBridge } from "@/components/openpage/editor/OpenPageBridge";
 import { SiteRenderer } from "@/components/openpage/renderer/SiteRenderer";
 import { PageSettingsModule } from "@/components/openpage/modules/page-settings";
 import { useConfigStore } from "@/components/openpage/store/configStore";
-import { landingPageFromSite } from "@/lib/openpage/content";
+import { useEditorStore } from "@/components/openpage/store/editorStore";
+import { landingPageFromSite, siteFromLandingPage } from "@/lib/openpage/content";
 
 interface Toast {
   id: number;
@@ -457,6 +460,39 @@ export function OpenPageStudio({ resource = "template" }: { resource?: Resource 
     return () => window.removeEventListener("op:save", onOpSave);
   }, []);
 
+  // Version History -> Restore (op:restore-revision) writes the snapshot's
+  // content into the config store so the canvas re-renders it immediately;
+  // the normal bridge persist then autosaves it back to the backend (which
+  // captures it as a fresh revision itself) — restore is just an edit.
+  useEffect(() => {
+    const onRestoreRevision = (e: Event) => {
+      const content = (e as CustomEvent<{ content?: Record<string, unknown> }>).detail?.content;
+      if (!activePage || !content) return;
+      const next: LandingPageData = {
+        ...activePage,
+        sections: (content.sections as LandingPageData["sections"]) ?? [],
+        config: content.config as LandingPageData["config"],
+        openPageSite: content.site as LandingPageData["openPageSite"],
+      };
+      useConfigStore.getState().setConfig(siteFromLandingPage(next));
+      setActivePage(next);
+      toast("Version restored");
+    };
+    window.addEventListener("op:restore-revision", onRestoreRevision);
+    return () => window.removeEventListener("op:restore-revision", onRestoreRevision);
+  }, [activePage, toast]);
+
+  // The command palette (Ctrl+K) lives inside the builder module, so switching
+  // to Page Settings from there is done through this event bridge.
+  useEffect(() => {
+    const onSetModule = (e: Event) => {
+      const next = (e as CustomEvent<{ module?: ModuleKey }>).detail?.module;
+      if (next === "builder" || next === "settings") setModule(next);
+    };
+    window.addEventListener("op:set-module", onSetModule);
+    return () => window.removeEventListener("op:set-module", onSetModule);
+  }, []);
+
   const patchPage = useCallback(
     (pageId: string, patch: Partial<LandingPageData>) => {
       setActivePage((prev) => {
@@ -504,7 +540,7 @@ export function OpenPageStudio({ resource = "template" }: { resource?: Resource 
                 Auto-saving…
               </div>
             )}
-            <EditorLayout pageId={activePage.id} captureLeads />
+            <EditorLayout pageId={activePage.id} captureLeads resource={resource} />
           </div>
         ) : (
           <div className="ps-studio-boot">{pageReady ? "This page could not be opened." : "Opening page…"}</div>
@@ -633,6 +669,28 @@ export function OpenPageStudio({ resource = "template" }: { resource?: Resource 
 
       <SlidePanel open={helpOpen} onClose={() => setHelpOpen(false)} title="Help center" icon={<Sparkles size={16} />}>
         <div style={{ fontSize: 13, color: "var(--ps-slate)", lineHeight: 1.7, display: "flex", flexDirection: "column", gap: 12 }}>
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+            <button
+              type="button"
+              className="ps-topnav-btn"
+              onClick={() => {
+                setHelpOpen(false);
+                window.dispatchEvent(new CustomEvent("op:tour"));
+              }}
+            >
+              <Route size={14} /> Take the guided tour
+            </button>
+            <button
+              type="button"
+              className="ps-topnav-btn"
+              onClick={() => {
+                setHelpOpen(false);
+                useEditorStore.getState().toggleShortcutsModal();
+              }}
+            >
+              <Keyboard size={14} /> Keyboard shortcuts
+            </button>
+          </div>
           {resource === "landing-page" ? (
             <>
               <div><strong style={{ color: "var(--ps-ink)" }}>Builder</strong> — drag widgets, then Save, Preview, Publish or Unpublish from the top bar.</div>

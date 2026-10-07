@@ -49,7 +49,7 @@ export function RightSidebar() {
   }, [selectedBlock?.id, selectedElementId]) // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
-    <div className="hidden md:flex w-[300px] h-full min-h-0 bg-bg-1 border-l border-border-default flex-col shrink-0 overflow-hidden">
+    <div data-tour="inspector" className="hidden md:flex w-[300px] h-full min-h-0 bg-bg-1 border-l border-border-default flex-col shrink-0 overflow-hidden">
       {/* Inspector header */}
       <div className="h-11 px-3.5 border-b border-border-default flex items-center justify-between shrink-0">
         <div className="flex items-center gap-2 min-w-0">

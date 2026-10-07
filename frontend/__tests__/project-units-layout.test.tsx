@@ -26,7 +26,7 @@ vi.mock("next/navigation", () => ({
   usePathname: () => "/org/projects/p1/units",
 }));
 vi.mock("@/lib/auth-context", () => ({
-  useAuth: () => ({ accessToken: "t", user: { org_id: "org-1" } }),
+  useAuth: () => ({ accessToken: "t", user: { org_id: "org-1" }, hasPermission: () => true }),
 }));
 
 const APARTMENT_TEMPLATE = [

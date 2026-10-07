@@ -857,6 +857,7 @@ model Template {
   templateCategory      TemplateCategory?      @relation(fields: [categoryId], references: [id], onDelete: SetNull)
   organisationTemplates OrganisationTemplate[]
   landingPages          LandingPage[]
+  pageRevisions         PageRevision[]
 
   @@map("templates")
   @@schema("templates")
@@ -1050,11 +1051,37 @@ model LandingPage {
   customDomainOrgs Organisation[] @relation("OrgCustomDomainLandingPage")
   orgDomainRequests OrgDomainRequest[]
   trackingEvents  TrackingEvent[]
+  pageRevisions   PageRevision[]
 
   @@unique([orgId, slug])
   @@index([orgId])
   @@index([status])
   @@map("landing_pages")
+  @@schema("templates")
+}
+
+// Builder version history — one row per content-changing save, capped at 30
+// per page (pruned oldest-first on capture). Stores the full content JSON so
+// the Version History panel can restore it; deliberately separate from
+// AuditLog, whose metadata rows carry no payload. Exactly one of
+// landingPageId/templateId is set. `orgId` is denormalised for cheap
+// org-scoped queries and for platform templates (null).
+model PageRevision {
+  id            String   @id @default(uuid())
+  landingPageId String?  @map("landing_page_id")
+  templateId    String?  @map("template_id")
+  orgId         String?  @map("org_id")
+  content       Json // { sections, config, engine, site } — snapshot as saved
+  label         String   @default("")
+  createdById   String?  @map("created_by_id")
+  createdAt     DateTime @default(now()) @map("created_at")
+
+  landingPage LandingPage? @relation(fields: [landingPageId], references: [id], onDelete: Cascade)
+  template    Template?    @relation(fields: [templateId], references: [id], onDelete: Cascade)
+
+  @@index([landingPageId, createdAt])
+  @@index([templateId, createdAt])
+  @@map("page_revisions")
   @@schema("templates")
 }
 

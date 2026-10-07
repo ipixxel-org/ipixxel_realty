@@ -355,7 +355,7 @@ export function PlatformRolesPanel({
                             type="button"
                             disabled={locked || savingPermission !== null}
                             onClick={() => void togglePerm(pillModuleKey ?? item.moduleKey, permission as "canView" | "canAdd" | "canEdit" | "canDelete" | "canApprove")}
-                            aria-pressed={enabled}
+                            aria-pressed={Boolean(enabled)}
                             aria-label={`${label} permission for ${item.label}`}
                           >
                             <span className="platform-permission-dot" aria-hidden="true" />
