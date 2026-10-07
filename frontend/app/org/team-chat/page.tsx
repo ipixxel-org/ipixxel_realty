@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Reveal } from "@/components/superadmin/reveal";
 import { Icon } from "@/components/icons";
-import { Field, FormActions, FormPage, TextInput, formPageStyles } from "@/components/forms/form-page";
+import { Field, FormActions, FormModal, TextInput } from "@/components/forms/form-page";
 import { useAuth } from "@/lib/auth-context";
 import { displayName, initialsFor, useOrgUsersList, useTeamsList } from "@/components/org/team-fields";
 import {
@@ -220,85 +220,6 @@ export default function OrgTeamChatPage() {
       return part;
     });
   };
-
-  // --- New channel — full-width in-page view (was a modal). Same field and
-  // the same submit behaviour: channels aren't persisted yet, so submitting
-  // closes the form and clears the name, exactly as the modal did.
-  if (showChannelModal) {
-    return (
-      <FormPage
-        eyebrow="Team · Team Chat"
-        title="Create a new channel"
-        subtitle="Channels keep conversations about a deal, project or team in one place."
-        onBack={() => setShowChannelModal(false)}
-        backLabel="Back to Team Chat"
-      >
-        <form
-          className={formPageStyles.panel}
-          onSubmit={(e) => {
-            e.preventDefault();
-            if (!newChannelName.trim()) return;
-            setShowChannelModal(false);
-            setNewChannelName("");
-          }}
-        >
-          <Field htmlFor="tc-channel" label="Channel name" icon="team">
-            <TextInput
-              id="tc-channel"
-              icon="team"
-              placeholder="e.g. deals-ahmedabad"
-              value={newChannelName}
-              onChange={(e) => setNewChannelName(e.target.value)}
-              autoFocus
-            />
-          </Field>
-          <FormActions
-            onCancel={() => setShowChannelModal(false)}
-            busy={false}
-            submitDisabled={!newChannelName.trim()}
-            busyLabel="Creating…"
-            submitLabel="Create channel"
-            submitIcon="plus"
-          />
-        </form>
-      </FormPage>
-    );
-  }
-
-  // --- New direct message — full-width in-page view (was a modal). Same list
-  // (first 10 members); picking one closes the view, exactly as before.
-  if (showDmModal) {
-    return (
-      <FormPage
-        eyebrow="Team · Team Chat"
-        title="Start a direct message"
-        subtitle="Pick a teammate to message."
-        onBack={() => setShowDmModal(false)}
-        backLabel="Back to Team Chat"
-      >
-        <div className={formPageStyles.panel}>
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(260px, 1fr))", gap: 10 }}>
-            {users.slice(0, 10).map((u) => (
-              <button
-                key={u.id}
-                type="button"
-                className="tch-dm-btn"
-                style={{ padding: 12, border: "1px solid #e5e7eb", borderRadius: 12 }}
-                onClick={() => {
-                  setShowDmModal(false);
-                }}
-              >
-                <div className="tch-avatar-circle" style={{ background: "#2563eb" }}>
-                  {initialsFor(displayName(u))}
-                </div>
-                <b>{displayName(u)}</b>
-              </button>
-            ))}
-          </div>
-        </div>
-      </FormPage>
-    );
-  }
 
   return (
     <div className="tch-wrap">
@@ -686,6 +607,67 @@ export default function OrgTeamChatPage() {
         </div>
       </Reveal>
 
+      {/* New channel — popup. Channels aren't persisted yet, so submitting
+          closes the popup and clears the name, as before. */}
+      <FormModal
+        open={showChannelModal}
+        onClose={() => setShowChannelModal(false)}
+        title="Create a new channel"
+        description="Channels keep conversations about a deal, project or team in one place."
+        size="sm"
+        onSubmit={() => {
+          if (!newChannelName.trim()) return;
+          setShowChannelModal(false);
+          setNewChannelName("");
+        }}
+      >
+        <Field htmlFor="tc-channel" label="Channel name" icon="team">
+          <TextInput
+            id="tc-channel"
+            icon="team"
+            placeholder="e.g. deals-ahmedabad"
+            value={newChannelName}
+            onChange={(e) => setNewChannelName(e.target.value)}
+            autoFocus
+          />
+        </Field>
+        <FormActions
+          onCancel={() => setShowChannelModal(false)}
+          busy={false}
+          submitDisabled={!newChannelName.trim()}
+          busyLabel="Creating…"
+          submitLabel="Create channel"
+          submitIcon="plus"
+        />
+      </FormModal>
+
+      {/* New direct message — popup. Same list (first 10 members); picking one
+          closes it, as before. */}
+      <FormModal
+        open={showDmModal}
+        onClose={() => setShowDmModal(false)}
+        title="Start a direct message"
+        description="Pick a teammate to message."
+      >
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(200px, 1fr))", gap: 10 }}>
+          {users.slice(0, 10).map((u) => (
+            <button
+              key={u.id}
+              type="button"
+              className="tch-dm-btn"
+              style={{ padding: 12, border: "1px solid #e5e7eb", borderRadius: 12 }}
+              onClick={() => {
+                setShowDmModal(false);
+              }}
+            >
+              <div className="tch-avatar-circle" style={{ background: "#2563eb" }}>
+                {initialsFor(displayName(u))}
+              </div>
+              <b>{displayName(u)}</b>
+            </button>
+          ))}
+        </div>
+      </FormModal>
     </div>
   );
 }
