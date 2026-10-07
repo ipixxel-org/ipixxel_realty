@@ -603,13 +603,7 @@ export function OrgAdminShell({ children }: { children: ReactNode }) {
             </div>
           </div>
 
-          <div className="tb-search" style={{ maxWidth: 460 }}>
-            <span className="si"><Icon name="search" size={14} /></span>
-            <input placeholder="Search leads, pages, agents…" />
-            <span className="kbd">⌘K</span>
-          </div>
-
-          <div className="tb-right" style={{ display: "flex", alignItems: "center", gap: 10 }}>
+          <div className="tb-right" style={{ display: "flex", alignItems: "center", gap: 10, marginLeft: "auto" }}>
             <div style={{ position: "relative" }} data-notification-menu>
               <button
                 type="button"

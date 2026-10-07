@@ -389,12 +389,7 @@ export function SuperAdminShell({ children }: { children: ReactNode }) {
               <b>{crumb}</b>
             </div>
           </div>
-          <div className="tb-search">
-            <span className="si"><Icon name="search" size={14} /></span>
-            <input placeholder="Search organisations, templates, domains, email logs…" />
-            <span className="kbd">⌘K</span>
-          </div>
-          <div className="tb-right" style={{ position: "relative" }}>
+          <div className="tb-right" style={{ position: "relative", marginLeft: "auto" }}>
             <NotificationsBell accessToken={accessToken} />
             <Link href="/admin-console/email" className="icon-btn" title="Email & SMTP Settings">
               <Icon name="mail" size={15} />
