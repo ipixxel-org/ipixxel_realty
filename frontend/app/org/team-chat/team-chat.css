@@ -1626,3 +1626,113 @@
     display: none;
   }
 }
+
+/* ---------- Two-sided conversation (yours right, others left) ---------- */
+.org .tch-msg-row {
+  align-items: flex-start;
+}
+.org .tch-msg-row:hover {
+  background: transparent;
+}
+.org .tch-msg-row .tch-msg-content {
+  flex: 0 1 auto;
+  max-width: min(70%, 640px);
+  align-items: flex-start;
+}
+.org .tch-msg-row.is-mine {
+  flex-direction: row-reverse;
+}
+.org .tch-msg-row.is-mine .tch-msg-content {
+  align-items: flex-end;
+}
+.org .tch-msg-row.is-grouped {
+  margin-top: -14px;
+}
+.org .tch-bubble {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 8px 12px 6px;
+  background: #f3f4f6;
+  border: 1px solid #e5e7eb;
+  border-radius: 4px 14px 14px 14px;
+  min-width: 70px;
+}
+.org .tch-msg-row.is-grouped .tch-bubble {
+  border-radius: 14px;
+}
+.org .tch-msg-row.is-mine .tch-bubble {
+  background: #ecfdf5;
+  border-color: #bbf7d0;
+  border-radius: 14px 4px 14px 14px;
+}
+.org .tch-msg-row.is-mine.is-grouped .tch-bubble {
+  border-radius: 14px;
+}
+.org .tch-bubble.is-deleted {
+  background: #ffffff;
+}
+.org .tch-bubble-time {
+  align-self: flex-end;
+  font-size: 10.5px;
+  color: #9ca3af;
+  line-height: 1;
+  white-space: nowrap;
+}
+.org .tch-msg-row.is-highlight {
+  animation: none;
+}
+.org .tch-msg-row.is-highlight .tch-bubble {
+  animation: tch-flash 2.4s ease;
+}
+/* The react button sits beside the bubble (left of yours, right of theirs). */
+.org .tch-msg-tools {
+  position: static;
+  align-self: center;
+  margin: 0 6px;
+}
+.org .tch-msg-row.is-mine .tch-retry {
+  align-self: flex-end;
+}
+
+/* People search field (popups and members panel) */
+.org .tch-picker-input {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 40px;
+  padding: 0 12px;
+  background: #f9fafb;
+  border: 1px solid #e5e7eb;
+  border-radius: 10px;
+  color: #9ca3af;
+  transition: border-color 0.15s;
+}
+.org .tch-picker-input:focus-within {
+  border-color: #059669;
+  background: #ffffff;
+}
+.org .tch-picker-input input {
+  flex: 1;
+  min-width: 0;
+  height: 100%;
+  border: none;
+  outline: none;
+  background: transparent;
+  font-size: 13.5px;
+  color: #111827;
+}
+.org .tch-optional {
+  font-style: normal;
+  font-weight: 400;
+  color: #9ca3af;
+}
+.org .tch-modal.is-wide {
+  max-width: 520px;
+}
+
+@media (max-width: 768px) {
+  .org .tch-msg-row .tch-msg-content {
+    max-width: 85%;
+  }
+}

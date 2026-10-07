@@ -525,7 +525,7 @@ export function ThreadView({
         : `${conv.memberCount} member${conv.memberCount === 1 ? "" : "s"}`;
 
   return (
-    <section className="tch-loading">
+    <section className="tch-center">
       <header className="tch-center-head">
         <button type="button" className="tch-icon-action tch-back" onClick={onBack} aria-label="Back to chats">
           <Icon name="chevron-left" size={18} />
@@ -787,6 +787,8 @@ function MessageList({
   );
 }
 
+/** Your messages on the right, everyone else's on the left (avatar + name
+ *  shown on the first of a run). Time sits inside the bubble. */
 function MessageRow({
   m,
   mine,
@@ -810,10 +812,10 @@ function MessageRow({
   return (
     <div
       data-mid={m.id}
-      className={`tch-msg-row${grouped ? " is-grouped" : ""}${highlighted ? " is-highlight" : ""}${m.status === "failed" ? " is-failed" : ""}`}
+      className={`tch-msg-row${mine ? " is-mine" : ""}${grouped ? " is-grouped" : ""}${highlighted ? " is-highlight" : ""}${m.status === "failed" ? " is-failed" : ""}`}
       onMouseLeave={() => setPicker(false)}
     >
-      {grouped ? (
+      {mine ? null : grouped ? (
         <div className="tch-msg-avatar-space" />
       ) : (
         <div className="tch-msg-avatar" style={{ background: avatarColor(m.sender?.id ?? m.id) }}>
@@ -821,35 +823,32 @@ function MessageRow({
         </div>
       )}
       <div className="tch-msg-content">
-        {grouped ? null : (
+        {!mine && !grouped ? (
           <div className="tch-msg-meta">
-            <span className="tch-msg-sender">
-              {name}
-              {mine ? <span className="tch-msg-you"> (you)</span> : null}
-            </span>
-            <span className="tch-msg-time">{timeOfDay(m.createdAt)}</span>
-          </div>
-        )}
-        {m.forwarded && !deleted ? <div className="tch-msg-forwarded">Forwarded</div> : null}
-        {m.parent && !deleted ? (
-          <div className="tch-quote">
-            <strong>{m.parent.sender?.name ?? "Message"}</strong>
-            <span>{m.parent.preview}</span>
+            <span className="tch-msg-sender">{name}</span>
           </div>
         ) : null}
-        {deleted ? (
-          <div className="tch-msg-text is-deleted">This message was deleted</div>
-        ) : m.body ? (
-          <div className="tch-msg-text">
-            {linkify(m.body)}
-            {m.editedAt ? <span className="tch-msg-edited"> (edited)</span> : null}
-            {grouped ? <span className="tch-msg-time tch-msg-time-inline">{timeOfDay(m.createdAt)}</span> : null}
-          </div>
-        ) : null}
-        {!deleted && m.attachments.length
-          ? m.attachments.map((a) => <AttachmentLink key={a.id} id={a.id} name={a.fileName} size={a.sizeBytes} />)
-          : null}
-        {m.status === "sending" ? <span className="tch-msg-status">Sending…</span> : null}
+        <div className={`tch-bubble${deleted ? " is-deleted" : ""}`}>
+          {m.forwarded && !deleted ? <div className="tch-msg-forwarded">Forwarded</div> : null}
+          {m.parent && !deleted ? (
+            <div className="tch-quote">
+              <strong>{m.parent.sender?.name ?? "Message"}</strong>
+              <span>{m.parent.preview}</span>
+            </div>
+          ) : null}
+          {deleted ? (
+            <div className="tch-msg-text is-deleted">This message was deleted</div>
+          ) : m.body ? (
+            <div className="tch-msg-text">{linkify(m.body)}</div>
+          ) : null}
+          {!deleted && m.attachments.length
+            ? m.attachments.map((a) => <AttachmentLink key={a.id} id={a.id} name={a.fileName} size={a.sizeBytes} />)
+            : null}
+          <span className="tch-bubble-time">
+            {m.editedAt && !deleted ? "edited · " : ""}
+            {m.status === "sending" ? "Sending…" : timeOfDay(m.createdAt)}
+          </span>
+        </div>
         {m.status === "failed" ? (
           <button type="button" className="tch-retry" onClick={() => onRetry(m)}>
             Not sent · Retry

@@ -3,14 +3,13 @@
 import { useCallback, useMemo, useState, useSyncExternalStore } from "react";
 import { Lock } from "lucide-react";
 import { Reveal } from "@/components/superadmin/reveal";
-import { Field, FormActions, FormPage, TextInput, formPageStyles } from "@/components/forms/form-page";
 import { useToast } from "@/components/ui/toast";
 import { useAuth } from "@/lib/auth-context";
 import * as chatApi from "@/lib/team-chat/api";
 import { useTeamChat } from "@/lib/team-chat/context";
 import { isChatHost } from "@/lib/team-chat/socket";
 import type { ChatUserResult } from "@/lib/team-chat/types";
-import { UserPicker, errorText } from "./chat-ui";
+import { Modal, UserPicker, errorText } from "./chat-ui";
 import { ConversationRail } from "./conversation-rail";
 import { ThreadView } from "./thread-view";
 import "./team-chat.css";
@@ -41,7 +40,7 @@ export default function OrgTeamChatPage() {
   const { toast } = useToast();
   // undefined = nothing chosen yet; null = explicitly back at the list.
   const [chosen, setChosen] = useState<string | null | undefined>(() => readSelected() ?? undefined);
-  const [view, setView] = useState<"chat" | "new-channel" | "new-message">("chat");
+  const [popup, setPopup] = useState<"none" | "new-channel" | "new-message">("none");
   const isDesktop = useSyncExternalStore(
     subscribeDesktop,
     () => window.matchMedia(DESKTOP).matches,
@@ -78,40 +77,6 @@ export default function OrgTeamChatPage() {
 
   const canCreateChannel = hasPermission("team_chat", "add");
 
-  if (view === "new-channel") {
-    return (
-      <NewChannelForm
-        onBack={() => setView("chat")}
-        onCreated={(id) => {
-          setView("chat");
-          select(id);
-        }}
-      />
-    );
-  }
-
-  if (view === "new-message") {
-    return (
-      <NewMessageForm
-        onBack={() => setView("chat")}
-        onPick={async (u) => {
-          try {
-            let id = u.dmConversationId;
-            if (!id) {
-              const conv = await chatApi.openDm(u.id);
-              chat?.upsertConversation(conv);
-              id = conv.id;
-            }
-            setView("chat");
-            select(id);
-          } catch (err) {
-            toast({ title: "Couldn't open chat", description: errorText(err, "Please try again"), variant: "error" });
-          }
-        }}
-      />
-    );
-  }
-
   return (
     <div className="tch-wrap">
       <Reveal delay={1}>
@@ -128,25 +93,6 @@ export default function OrgTeamChatPage() {
               <p className="tch-sub">Internal chat for your organisation – channels and direct messages.</p>
             </div>
           </div>
-
-          <div className="tch-header-actions">
-            <button type="button" className="tch-btn-msg" onClick={() => setView("new-message")}>
-              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-                <rect x="2" y="4" width="20" height="16" rx="2" />
-                <path d="m2 7 10 6 10-6" />
-              </svg>
-              <span>New message</span>
-            </button>
-            {canCreateChannel ? (
-              <button type="button" className="tch-btn-channel" onClick={() => setView("new-channel")}>
-                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                  <line x1="12" y1="5" x2="12" y2="19" />
-                  <line x1="5" y1="12" x2="19" y2="12" />
-                </svg>
-                <span>New channel</span>
-              </button>
-            ) : null}
-          </div>
         </div>
       </Reveal>
 
@@ -156,8 +102,8 @@ export default function OrgTeamChatPage() {
             activeId={activeId}
             onSelect={select}
             canCreateChannel={canCreateChannel}
-            onNewChannel={() => setView("new-channel")}
-            onNewMessage={() => setView("new-message")}
+            onNewChannel={() => setPopup("new-channel")}
+            onNewMessage={() => setPopup("new-message")}
           />
           {activeId ? (
             <ThreadView
@@ -176,6 +122,35 @@ export default function OrgTeamChatPage() {
           )}
         </div>
       </Reveal>
+
+      {popup === "new-channel" ? (
+        <NewChannelPopup
+          onClose={() => setPopup("none")}
+          onCreated={(id) => {
+            setPopup("none");
+            select(id);
+          }}
+        />
+      ) : null}
+      {popup === "new-message" ? (
+        <NewMessagePopup
+          onClose={() => setPopup("none")}
+          onPick={async (u) => {
+            try {
+              let id = u.dmConversationId;
+              if (!id) {
+                const conv = await chatApi.openDm(u.id);
+                chat?.upsertConversation(conv);
+                id = conv.id;
+              }
+              setPopup("none");
+              select(id);
+            } catch (err) {
+              toast({ title: "Couldn't open chat", description: errorText(err, "Please try again"), variant: "error" });
+            }
+          }}
+        />
+      ) : null}
     </div>
   );
 }
@@ -192,8 +167,8 @@ function NoAccess({ title, text }: { title: string; text: string }) {
   );
 }
 
-// --- New channel: full-width in-page form (same look as before) -----------
-function NewChannelForm({ onBack, onCreated }: { onBack: () => void; onCreated: (id: string) => void }) {
+// --- New channel popup ------------------------------------------------------
+function NewChannelPopup({ onClose, onCreated }: { onClose: () => void; onCreated: (id: string) => void }) {
   const chat = useTeamChat();
   const [name, setName] = useState("");
   const [picked, setPicked] = useState<ChatUserResult[]>([]);
@@ -201,87 +176,78 @@ function NewChannelForm({ onBack, onCreated }: { onBack: () => void; onCreated: 
   const [error, setError] = useState<string | null>(null);
   const pickedIds = useMemo(() => new Set(picked.map((u) => u.id)), [picked]);
 
+  const create = async () => {
+    if (!name.trim() || busy) return;
+    setBusy(true);
+    setError(null);
+    try {
+      const conv = await chatApi.createChannel({ name: name.trim(), memberIds: picked.map((u) => u.id) });
+      chat?.upsertConversation(conv);
+      onCreated(conv.id);
+    } catch (err) {
+      setError(errorText(err, "Couldn't create the channel"));
+      setBusy(false);
+    }
+  };
+
   return (
-    <FormPage
-      eyebrow="Team · Team Chat"
-      title="Create a new channel"
-      subtitle="Channels keep conversations about a deal, project or team in one place."
-      onBack={onBack}
-      backLabel="Back to Team Chat"
+    <Modal
+      title="New channel"
+      onClose={onClose}
+      wide
+      footer={
+        <>
+          <button type="button" className="tch-btn" onClick={onClose} disabled={busy}>
+            Cancel
+          </button>
+          <button type="button" className="tch-btn is-primary" onClick={() => void create()} disabled={busy || !name.trim()}>
+            {busy ? "Creating…" : "Create channel"}
+          </button>
+        </>
+      }
     >
-      <form
-        className={formPageStyles.panel}
-        onSubmit={async (e) => {
-          e.preventDefault();
-          if (!name.trim()) return;
-          setBusy(true);
-          setError(null);
-          try {
-            const conv = await chatApi.createChannel({ name: name.trim(), memberIds: picked.map((u) => u.id) });
-            chat?.upsertConversation(conv);
-            onCreated(conv.id);
-          } catch (err) {
-            setError(errorText(err, "Couldn't create the channel"));
-            setBusy(false);
-          }
-        }}
-      >
-        <Field htmlFor="tc-channel" label="Channel name" icon="team">
-          <TextInput
-            id="tc-channel"
-            icon="team"
-            placeholder="e.g. deals-ahmedabad"
-            value={name}
-            maxLength={80}
-            onChange={(e) => setName(e.target.value)}
-            autoFocus
-          />
-        </Field>
-        <Field htmlFor="tc-members" label="Members" icon="users" note="(optional — you can add people later)">
-          <div id="tc-members" className="tch-member-pick">
-            {picked.length ? (
-              <div className="tch-chips">
-                {picked.map((u) => (
-                  <span key={u.id} className="tch-pick-chip">
-                    {u.name}
-                    <button type="button" onClick={() => setPicked((p) => p.filter((x) => x.id !== u.id))} aria-label={`Remove ${u.name}`}>
-                      ×
-                    </button>
-                  </span>
-                ))}
-              </div>
-            ) : null}
-            <UserPicker excludeIds={pickedIds} onPick={(u) => setPicked((p) => [...p, u])} />
-          </div>
-        </Field>
-        {error ? <p className="tch-form-error">{error}</p> : null}
-        <FormActions
-          onCancel={onBack}
-          busy={busy}
-          submitDisabled={!name.trim()}
-          busyLabel="Creating…"
-          submitLabel="Create channel"
-          submitIcon="plus"
+      <label className="tch-field">
+        <span>Channel name</span>
+        <input
+          autoFocus
+          value={name}
+          maxLength={80}
+          placeholder="e.g. deals-ahmedabad"
+          onChange={(e) => setName(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") void create();
+          }}
         />
-      </form>
-    </FormPage>
+      </label>
+      <div className="tch-field">
+        <span>
+          Members <em className="tch-optional">(optional — you can add people later)</em>
+        </span>
+        {picked.length ? (
+          <div className="tch-chips">
+            {picked.map((u) => (
+              <span key={u.id} className="tch-pick-chip">
+                {u.name}
+                <button type="button" onClick={() => setPicked((p) => p.filter((x) => x.id !== u.id))} aria-label={`Remove ${u.name}`}>
+                  ×
+                </button>
+              </span>
+            ))}
+          </div>
+        ) : null}
+        <UserPicker excludeIds={pickedIds} onPick={(u) => setPicked((p) => [...p, u])} />
+      </div>
+      {error ? <p className="tch-form-error">{error}</p> : null}
+    </Modal>
   );
 }
 
-// --- New direct message: full-width in-page view (same look as before) ----
+// --- New message popup ------------------------------------------------------
 const NO_ONE = new Set<string>();
-function NewMessageForm({ onBack, onPick }: { onBack: () => void; onPick: (u: ChatUserResult) => void }) {
+function NewMessagePopup({ onClose, onPick }: { onClose: () => void; onPick: (u: ChatUserResult) => void }) {
   return (
-    <FormPage
-      eyebrow="Team · Team Chat"
-      title="Start a direct message"
-      subtitle="Pick a teammate to message."
-      onBack={onBack}
-      backLabel="Back to Team Chat"
-    >
-      <div className={formPageStyles.panel}>
-        <UserPicker excludeIds={NO_ONE} onPick={onPick} placeholder="Search teammates by name or email" />
-      </div>
-    </FormPage>
+    <Modal title="New message" onClose={onClose}>
+      <UserPicker excludeIds={NO_ONE} onPick={onPick} placeholder="Search teammates by name or email" autoFocus />
+    </Modal>
   );
 }

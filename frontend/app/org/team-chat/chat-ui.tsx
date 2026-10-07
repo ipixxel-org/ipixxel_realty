@@ -197,10 +197,12 @@ export function UserPicker({
   excludeIds,
   onPick,
   placeholder = "Search people by name or email",
+  autoFocus,
 }: {
   excludeIds: Set<string>;
   onPick: (u: ChatUserResult) => void;
   placeholder?: string;
+  autoFocus?: boolean;
 }) {
   const [q, setQ] = useState("");
   const term = q.trim();
@@ -227,9 +229,9 @@ export function UserPicker({
   const visible = (results ?? []).filter((u) => !excludeIds.has(u.id));
   return (
     <div className="tch-picker">
-      <div className="tch-search-input-box">
+      <div className="tch-picker-input">
         <Icon name="search" size={15} />
-        <input value={q} onChange={(e) => setQ(e.target.value)} placeholder={placeholder} />
+        <input autoFocus={autoFocus} value={q} onChange={(e) => setQ(e.target.value)} placeholder={placeholder} />
         {loading ? <Loader2 size={14} className="tch-spin" /> : null}
       </div>
       {results !== null ? (

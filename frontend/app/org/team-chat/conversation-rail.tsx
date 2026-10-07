@@ -91,11 +91,6 @@ export function ConversationRail({
             </button>
           ) : null}
         </div>
-        {canCreateChannel ? (
-          <button type="button" className="tch-btn-add-square" title="Create Channel" onClick={onNewChannel}>
-            <Icon name="plus" size={16} />
-          </button>
-        ) : null}
       </div>
 
       {chat.status === "reconnecting" ? <div className="tch-conn-banner">Reconnecting…</div> : null}
