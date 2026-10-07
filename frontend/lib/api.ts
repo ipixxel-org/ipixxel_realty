@@ -105,12 +105,6 @@ import type {
   TeamProjectRow,
   CreateOrgUserInput,
   OrgUser,
-  TeamChatOverview,
-  TeamChatDetail,
-  TeamChatChannelSummary,
-  TeamChatMessage,
-  CreateTeamChannelInput,
-  CreateTeamMessageInput,
   LeadFormRecord,
   CreateFormInput,
   UpdateFormInput,
@@ -157,6 +151,16 @@ function readTokens(): {
     accessToken: localStorage.getItem(ACCESS_TOKEN_KEY),
     refreshToken: localStorage.getItem(REFRESH_TOKEN_KEY),
   };
+}
+
+/** The stored access token (the Team Chat socket sends it in its handshake). */
+export function getStoredAccessToken(): string | null {
+  return readTokens().accessToken;
+}
+
+/** Refreshes the access token; shares the in-flight refresh with apiFetch. */
+export function refreshAccessToken(): Promise<boolean> {
+  return tryRefresh();
 }
 
 let refreshPromise: Promise<boolean> | null = null;
@@ -1917,44 +1921,7 @@ export function createOrgUser(input: CreateOrgUserInput): Promise<OrgUser> {
   });
 }
 
-// --- Team Chat (org/team-chat) -------------------------------------------
-
-export function getTeamChatOverview(): Promise<TeamChatOverview> {
-  return apiFetch<TeamChatOverview>("/org/team-chat");
-}
-
-export function getTeamChannel(id: string): Promise<TeamChatDetail> {
-  return apiFetch<TeamChatDetail>(`/org/team-chat/channels/${id}`);
-}
-
-export function createTeamChannel(
-  input: CreateTeamChannelInput,
-): Promise<TeamChatChannelSummary> {
-  return apiFetch<TeamChatChannelSummary>("/org/team-chat/channels", {
-    method: "POST",
-    body: JSON.stringify(input),
-  });
-}
-
-export function createTeamDm(userId: string): Promise<TeamChatDetail> {
-  return apiFetch<TeamChatDetail>("/org/team-chat/dms", {
-    method: "POST",
-    body: JSON.stringify({ userId }),
-  });
-}
-
-export function sendTeamMessage(
-  channelId: string,
-  input: CreateTeamMessageInput,
-): Promise<TeamChatMessage> {
-  return apiFetch<TeamChatMessage>(
-    `/org/team-chat/channels/${channelId}/messages`,
-    {
-      method: "POST",
-      body: JSON.stringify(input),
-    },
-  );
-}
+// Team Chat lives in lib/team-chat/api.ts.
 
 // --- Media Library (Org & Super Admin) -------------------------------------
 

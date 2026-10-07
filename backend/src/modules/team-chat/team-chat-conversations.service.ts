@@ -4,11 +4,7 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import {
-  Prisma,
-  type TeamChannel,
-  type TeamChannelMember,
-} from '@prisma/client';
+import type { TeamChannel, TeamChannelMember } from '@prisma/client';
 import { PrismaService } from '../../database/prisma.service';
 import type { JwtPayload } from '../../common/types/jwt-payload.interface';
 import { usersWithOrgPermission } from '../../common/guards/permission.guard';
@@ -20,6 +16,9 @@ import {
   teamChatUserActivated,
 } from '../../common/utils/team-chat-membership.util';
 import { TeamChatAccessService } from './team-chat-access.service';
+import { TeamChatPresenceService } from './team-chat-presence.service';
+import { TeamChatRealtimeService } from './team-chat-realtime.service';
+import { TeamChatUnreadService } from './team-chat-unread.service';
 import {
   AddMembersDto,
   CreateChannelDto,
@@ -46,6 +45,9 @@ export class TeamChatConversationsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly access: TeamChatAccessService,
+    private readonly unread: TeamChatUnreadService,
+    private readonly realtime: TeamChatRealtimeService,
+    private readonly presence: TeamChatPresenceService,
   ) {}
 
   // -------------------------------------------------------------------------
@@ -105,7 +107,7 @@ export class TeamChatConversationsService {
     const channelIds = memberships.map((m) => m.channelId);
 
     const [unreadRows, lastIdRows, memberCounts] = await Promise.all([
-      this.unreadRows(orgId, viewerId, channelIds),
+      this.unread.forUser(orgId, viewerId, channelIds),
       this.prisma.$queryRaw<{ id: string }[]>`
         SELECT DISTINCT ON ("channel_id") "id"
         FROM "access"."team_messages"
@@ -183,6 +185,7 @@ export class TeamChatConversationsService {
                   name: chatDisplayName(peer),
                   email: peer.email,
                   active: peerActive,
+                  online: peerActive && this.presence.isOnline(peer.id),
                   lastSeenAt: seenBy.get(peer.id) ?? null,
                 }
               : null
@@ -212,33 +215,8 @@ export class TeamChatConversationsService {
     );
   }
 
-  /**
-   * Unread per conversation: messages after the read pointer, not system
-   * messages, not deleted, not the viewer's own (B5). Before the first read
-   * the pointer is the join time, so history from before joining never
-   * counts.
-   */
-  unreadRows(orgId: string, viewerId: string, channelIds?: string[]) {
-    const scope = channelIds
-      ? Prisma.sql`AND m."channel_id" = ANY(${channelIds}::text[])`
-      : Prisma.empty;
-    return this.prisma.$queryRaw<{ channelId: string; unread: number }[]>`
-      SELECT m."channel_id" AS "channelId", COUNT(msg."id")::int AS "unread"
-      FROM "access"."team_channel_members" m
-      JOIN "access"."team_messages" msg ON msg."channel_id" = m."channel_id"
-      WHERE m."user_id" = ${viewerId}
-        AND m."org_id" = ${orgId}
-        ${scope}
-        AND msg."kind" <> 'system'
-        AND msg."deleted_at" IS NULL
-        AND msg."sender_id" IS DISTINCT FROM ${viewerId}
-        AND (msg."created_at", msg."id") >
-            (COALESCE(m."last_read_at", m."joined_at"), COALESCE(m."last_read_message_id", ''))
-      GROUP BY m."channel_id"`;
-  }
-
   async totalUnread(orgId: string, viewerId: string): Promise<number> {
-    const rows = await this.unreadRows(orgId, viewerId);
+    const rows = await this.unread.forUser(orgId, viewerId);
     return rows.reduce((sum, r) => sum + r.unread, 0);
   }
 
@@ -287,6 +265,7 @@ export class TeamChatConversationsService {
       });
       return created;
     });
+    this.realtime.conversationCreated(channel.id, [actor.sub, ...others]);
     return this.railEntry(actor, channel.id);
   }
 
@@ -315,14 +294,16 @@ export class TeamChatConversationsService {
     if (name === m.channel.name) return this.railEntry(actor, channelId);
 
     const creator = await this.creator(actor);
-    await this.prisma.$transaction(async (tx) => {
+    const system = await this.prisma.$transaction(async (tx) => {
       await tx.teamChannel.update({ where: { id: channelId }, data: { name } });
-      await postSystemMessage(
+      return postSystemMessage(
         tx,
         m.channel,
         `${chatDisplayName(creator)} renamed the channel to "${name}"`,
       );
     });
+    this.realtime.conversationUpdated(channelId);
+    this.realtime.messagesNewById(orgId, [system.id]);
     return this.railEntry(actor, channelId);
   }
 
@@ -358,6 +339,7 @@ export class TeamChatConversationsService {
         },
       });
     });
+    this.realtime.conversationRemoved(channelId, memberIds, 'deleted');
     return { id: channelId, deleted: true, memberIds };
   }
 
@@ -378,7 +360,7 @@ export class TeamChatConversationsService {
     const added = users.filter((u) => !existing.has(u.id));
     if (added.length > 0) {
       const creator = await this.creator(actor);
-      await this.prisma.$transaction(async (tx) => {
+      const system = await this.prisma.$transaction(async (tx) => {
         await tx.teamChannelMember.createMany({
           data: added.map((u) => ({
             channelId,
@@ -388,12 +370,19 @@ export class TeamChatConversationsService {
           })),
           skipDuplicates: true,
         });
-        await postSystemMessage(
+        return postSystemMessage(
           tx,
           m.channel,
           `${chatDisplayName(creator)} added ${joinNames(added)}`,
         );
       });
+      this.realtime.conversationCreated(
+        channelId,
+        added.map((u) => u.id),
+      );
+      this.realtime.membersUpdated(channelId);
+      this.realtime.conversationUpdated(channelId);
+      this.realtime.messagesNewById(orgId, [system.id]);
     }
     return {
       added: added.map((u) => u.id),
@@ -417,17 +406,21 @@ export class TeamChatConversationsService {
       throw new NotFoundException('That user is not in this channel');
 
     const creator = await this.creator(actor);
-    await this.prisma.$transaction(async (tx) => {
+    const system = await this.prisma.$transaction(async (tx) => {
       await tx.teamChannelMember.delete({
         where: { channelId_userId: { channelId, userId } },
       });
       await promoteAdminIfOrphaned(tx, channelId);
-      await postSystemMessage(
+      return postSystemMessage(
         tx,
         m.channel,
         `${chatDisplayName(creator)} removed ${chatDisplayName(target.user)}`,
       );
     });
+    this.realtime.conversationRemoved(channelId, [userId], 'removed');
+    this.realtime.membersUpdated(channelId);
+    this.realtime.conversationUpdated(channelId);
+    this.realtime.messagesNewById(orgId, [system.id]);
     return { removed: userId, members: await this.members(actor, channelId) };
   }
 
@@ -442,13 +435,17 @@ export class TeamChatConversationsService {
       );
     }
     const me = await this.creator(actor);
-    await this.prisma.$transaction(async (tx) => {
+    const system = await this.prisma.$transaction(async (tx) => {
       await tx.teamChannelMember.delete({
         where: { channelId_userId: { channelId, userId: actor.sub } },
       });
       await promoteAdminIfOrphaned(tx, channelId);
-      await postSystemMessage(tx, m.channel, `${chatDisplayName(me)} left`);
+      return postSystemMessage(tx, m.channel, `${chatDisplayName(me)} left`);
     });
+    this.realtime.conversationRemoved(channelId, [actor.sub], 'left');
+    this.realtime.membersUpdated(channelId);
+    this.realtime.conversationUpdated(channelId);
+    this.realtime.messagesNewById(orgId, [system.id]);
     return { id: channelId, left: true };
   }
 
@@ -470,6 +467,7 @@ export class TeamChatConversationsService {
       email: r.user.email,
       role: r.role,
       active: r.user.status !== 'disabled',
+      online: r.user.status !== 'disabled' && this.presence.isOnline(r.user.id),
       joinedAt: r.joinedAt,
       lastSeenAt: r.user.teamChatPresence?.lastSeenAt ?? null,
     }));
@@ -506,8 +504,10 @@ export class TeamChatConversationsService {
     let channel = await this.prisma.teamChannel.findUnique({
       where: { orgId_dmKey: { orgId, dmKey } },
     });
+    let created = false;
     if (!channel) {
       try {
+        created = true;
         channel = await this.prisma.teamChannel.create({
           data: {
             orgId,
@@ -525,19 +525,23 @@ export class TeamChatConversationsService {
         });
       } catch (err) {
         if (!isUniqueViolation(err)) throw err;
+        created = false;
         channel = await this.prisma.teamChannel.findUniqueOrThrow({
           where: { orgId_dmKey: { orgId, dmKey } },
         });
       }
     }
     // Pre-rebuild DMs may lack a participant's row; both always belong.
-    await this.prisma.teamChannelMember.createMany({
+    const repaired = await this.prisma.teamChannelMember.createMany({
       data: [
         { channelId: channel.id, userId: actor.sub, orgId },
         { channelId: channel.id, userId: dto.userId, orgId },
       ],
       skipDuplicates: true,
     });
+    if (created || repaired.count > 0) {
+      this.realtime.conversationCreated(channel.id, [actor.sub, dto.userId]);
+    }
     return this.railEntry(actor, channel.id);
   }
 

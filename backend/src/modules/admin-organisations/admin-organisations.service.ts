@@ -25,6 +25,7 @@ import {
   runTeamChatHook,
   teamChatUserActivated,
 } from '../../common/utils/team-chat-membership.util';
+import { publishChatAccessChanged } from '../../common/utils/team-chat-bus';
 import { assertEligibleTemplateIds } from '../../common/utils/template-eligibility.util';
 import { OnboardCompanyDto } from './dto/onboard-company.dto';
 import { OnboardAdminDto } from './dto/onboard-admin.dto';
@@ -705,6 +706,7 @@ export class AdminOrganisationsService {
         ...(existing.status === 'rejected' ? { rejectionReason: null } : {}),
       },
     });
+    if (existing.status !== dto.status) publishChatAccessChanged({ orgId: id });
 
     // Notify every organisation member when the workspace is suspended so
     // users who are not currently signed in also understand why access stops.

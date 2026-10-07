@@ -132,8 +132,10 @@ export function serializeMessage(m: MessageRow, viewerId: string) {
     forwarded: m.forwarded,
     pinnedAt: m.pinnedAt,
     pinnedBy: m.pinnedBy ? userRef(m.pinnedBy) : null,
-    // Only echoed to its sender, who uses it to match an optimistic bubble.
-    clientMsgId: m.senderId === viewerId ? m.clientMsgId : null,
+    // The sender matches it to their optimistic bubble. Socket broadcasts
+    // carry the sender's view, so other members may see it too: it is a
+    // random client-generated id, not a secret.
+    clientMsgId: m.clientMsgId,
     parent: m.parent
       ? {
           id: m.parent.id,

@@ -21,6 +21,7 @@
     "next": "16.3.1",
     "react": "19.2.8",
     "react-dom": "19.2.8",
+    "socket.io-client": "^4.8.4",
     "sonner": "^2.0.8",
     "yet-another-react-lightbox": "^3.32.2",
     "zustand": "^5.0.15"

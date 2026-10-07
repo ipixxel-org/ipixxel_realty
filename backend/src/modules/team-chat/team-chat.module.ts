@@ -7,6 +7,10 @@ import { TeamChatAccessService } from './team-chat-access.service';
 import { TeamChatConversationsService } from './team-chat-conversations.service';
 import { TeamChatMessagesService } from './team-chat-messages.service';
 import { TeamChatAttachmentsService } from './team-chat-attachments.service';
+import { TeamChatUnreadService } from './team-chat-unread.service';
+import { TeamChatPresenceService } from './team-chat-presence.service';
+import { TeamChatRealtimeService } from './team-chat-realtime.service';
+import { TeamChatGateway } from './team-chat.gateway';
 
 @Module({
   imports: [AuthModule],
@@ -16,6 +20,10 @@ import { TeamChatAttachmentsService } from './team-chat-attachments.service';
     TeamChatConversationsService,
     TeamChatMessagesService,
     TeamChatAttachmentsService,
+    TeamChatUnreadService,
+    TeamChatPresenceService,
+    TeamChatRealtimeService,
+    TeamChatGateway,
     OrgApprovedGuard,
     PermissionGuard,
   ],

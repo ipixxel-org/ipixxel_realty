@@ -18,6 +18,8 @@ import {
 import type { OrgBillingSummary, OrgNotification, PermissionAction } from "@/lib/types";
 import { useToast } from "@/components/ui/toast";
 import { SETTINGS_ACTIONS } from "@/lib/permissions";
+import { TeamChatProvider, useTeamChat } from "@/lib/team-chat/context";
+import { isChatHost } from "@/lib/team-chat/socket";
 import {
   applyThemeVariables,
   resetThemeVariables,
@@ -266,6 +268,17 @@ function expiryBannerFromBilling(billing: OrgBillingSummary | null): ExpiryBanne
   return null;
 }
 
+/** Live Team Chat unread total on the sidebar item (every org page). */
+function TeamChatNavBadge() {
+  const total = useTeamChat()?.totalUnread ?? 0;
+  if (total <= 0) return null;
+  return (
+    <span className="tc-nav-badge" aria-label={`${total} unread chat messages`}>
+      {total > 99 ? "99+" : total}
+    </span>
+  );
+}
+
 export function OrgAdminShell({ children }: { children: ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
@@ -508,6 +521,7 @@ export function OrgAdminShell({ children }: { children: ReactNode }) {
   const avatarInitials = initials(user.first_name, user.last_name);
 
   return (
+    <TeamChatProvider enabled={hasPermission("team_chat", "view") && isChatHost()}>
     <div className={appClass}>
       <aside className="sidebar">
         <div className="s-top">
@@ -564,6 +578,7 @@ export function OrgAdminShell({ children }: { children: ReactNode }) {
                         >
                           <span className="ic"><Icon name={item.icon} size={16} /></span>
                           <span className="lbl">{item.label}</span>
+                          {item.href === "/org/team-chat" ? <TeamChatNavBadge /> : null}
                         </Link>
                       </li>
                     );
@@ -972,5 +987,6 @@ export function OrgAdminShell({ children }: { children: ReactNode }) {
         ) : null}
       </main>
     </div>
+    </TeamChatProvider>
   );
 }

@@ -15,7 +15,8 @@ import {
   postSystemMessage,
 } from '../../common/utils/team-chat-membership.util';
 import { TeamChatAccessService } from './team-chat-access.service';
-import { TeamChatConversationsService } from './team-chat-conversations.service';
+import { TeamChatRealtimeService } from './team-chat-realtime.service';
+import { TeamChatUnreadService } from './team-chat-unread.service';
 import {
   EditMessageDto,
   ListMessagesQueryDto,
@@ -44,7 +45,8 @@ export class TeamChatMessagesService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly access: TeamChatAccessService,
-    private readonly conversations: TeamChatConversationsService,
+    private readonly unread: TeamChatUnreadService,
+    private readonly realtime: TeamChatRealtimeService,
   ) {}
 
   // -------------------------------------------------------------------------
@@ -295,7 +297,9 @@ export class TeamChatMessagesService {
           include: MESSAGE_INCLUDE,
         });
       });
-      return serializeMessage(message, actor.sub);
+      const serialized = serializeMessage(message, actor.sub);
+      this.realtime.messageNew(orgId, serialized);
+      return serialized;
     } catch (err) {
       // Two concurrent sends with the same clientMsgId: the loser returns
       // the winner's row.
@@ -398,7 +402,9 @@ export class TeamChatMessagesService {
         include: MESSAGE_INCLUDE,
       });
     });
-    return serializeMessage(updated, actor.sub);
+    const serialized = serializeMessage(updated, actor.sub);
+    this.realtime.messageUpdated(serialized);
+    return serialized;
   }
 
   /**
@@ -435,7 +441,9 @@ export class TeamChatMessagesService {
         },
       });
     });
-    return this.reload(messageId, actor.sub);
+    const deleted = await this.reload(messageId, actor.sub);
+    this.realtime.messageDeleted(channel.orgId, deleted, !!message.pinnedAt);
+    return deleted;
   }
 
   // -------------------------------------------------------------------------
@@ -462,18 +470,22 @@ export class TeamChatMessagesService {
       );
     }
     const me = await this.me(actor);
-    await this.prisma.$transaction(async (tx) => {
+    const system = await this.prisma.$transaction(async (tx) => {
       await tx.teamMessage.update({
         where: { id: messageId },
         data: { pinnedAt: new Date(), pinnedById: actor.sub },
       });
-      await postSystemMessage(
+      return postSystemMessage(
         tx,
         channel,
         `${chatDisplayName(me)} pinned a message`,
       );
     });
-    return this.reload(messageId, actor.sub);
+    const result = await this.reload(messageId, actor.sub);
+    this.realtime.messageUpdated(result);
+    this.realtime.pinsUpdated(channel.id);
+    this.realtime.messagesNewById(channel.orgId, [system.id]);
+    return result;
   }
 
   async unpin(actor: JwtPayload, messageId: string) {
@@ -483,7 +495,10 @@ export class TeamChatMessagesService {
       where: { id: messageId },
       data: { pinnedAt: null, pinnedById: null },
     });
-    return this.reload(messageId, actor.sub);
+    const unpinned = await this.reload(messageId, actor.sub);
+    this.realtime.messageUpdated(unpinned);
+    this.realtime.pinsUpdated(message.channelId);
+    return unpinned;
   }
 
   // -------------------------------------------------------------------------
@@ -565,7 +580,9 @@ export class TeamChatMessagesService {
       where: { id: { in: createdIds } },
       include: MESSAGE_INCLUDE,
     });
-    return { messages: rows.map((m) => serializeMessage(m, actor.sub)) };
+    const messages = rows.map((m) => serializeMessage(m, actor.sub));
+    for (const m of messages) this.realtime.messageNew(orgId, m);
+    return { messages };
   }
 
   // -------------------------------------------------------------------------
@@ -609,12 +626,9 @@ export class TeamChatMessagesService {
         });
       }
     }
-    const rows = await this.conversations.unreadRows(orgId, actor.sub);
-    return {
-      conversationId,
-      unread: rows.find((r) => r.channelId === conversationId)?.unread ?? 0,
-      totalUnread: rows.reduce((sum, r) => sum + r.unread, 0),
-    };
+    // The user's other tabs/devices clear their badges too.
+    this.realtime.unreadChanged(orgId, [actor.sub], conversationId);
+    return this.unread.summary(orgId, actor.sub, conversationId);
   }
 
   // -------------------------------------------------------------------------
@@ -641,7 +655,7 @@ export class TeamChatMessagesService {
         update: { emoji, createdAt: new Date() },
       });
     }
-    return this.reactions(messageId, actor.sub);
+    return this.reactionsChanged(message.channelId, messageId, actor.sub);
   }
 
   async unreact(actor: JwtPayload, messageId: string) {
@@ -650,7 +664,7 @@ export class TeamChatMessagesService {
     await this.prisma.teamMessageReaction.deleteMany({
       where: { messageId, userId: actor.sub },
     });
-    return this.reactions(messageId, actor.sub);
+    return this.reactionsChanged(message.channelId, messageId, actor.sub);
   }
 
   private assertReactable(message: { kind: string; deletedAt: Date | null }) {
@@ -659,13 +673,19 @@ export class TeamChatMessagesService {
     }
   }
 
-  private async reactions(messageId: string, viewerId: string) {
+  private async reactionsChanged(
+    conversationId: string,
+    messageId: string,
+    viewerId: string,
+  ) {
     const rows = await this.prisma.teamMessageReaction.findMany({
       where: { messageId },
       select: { emoji: true, user: { select: USER_SELECT } },
       orderBy: { createdAt: 'asc' },
     });
-    return { messageId, reactions: aggregateReactions(rows, viewerId) };
+    const reactions = aggregateReactions(rows, viewerId);
+    this.realtime.reactionUpdated(conversationId, messageId, reactions);
+    return { messageId, reactions };
   }
 
   // -------------------------------------------------------------------------

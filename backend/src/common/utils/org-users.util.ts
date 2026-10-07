@@ -13,6 +13,7 @@ import {
   teamChatUserActivated,
   teamChatUserDeactivated,
 } from './team-chat-membership.util';
+import { publishChatAccessChanged } from './team-chat-bus';
 
 import { EmailService } from '../../modules/email/email.service';
 
@@ -278,6 +279,7 @@ export async function reissueInvite(
     });
     return result;
   });
+  publishChatAccessChanged({ orgId, userId });
 
   sendInviteEmailNotification(
     prisma,
@@ -399,6 +401,7 @@ export async function deleteOrgUser(
     teamChatUserDeactivated(prisma, orgId, id),
   );
   await prisma.user.delete({ where: { id } });
+  publishChatAccessChanged({ orgId, userId: id });
   return { success: true };
 }
 
@@ -609,6 +612,8 @@ export async function updateOrgUser(
       await tx.userRole.create({ data: { userId: id, roleId: role.id } });
     }
   });
+  // Role or password change: re-check any live Team Chat connection.
+  publishChatAccessChanged({ orgId, userId: id });
 
   const result = await getOrgUserById(prisma, orgId, id);
 
@@ -802,6 +807,7 @@ export async function setOrgUserStatus(
       teamChatUserActivated(prisma, orgId, id),
     );
   }
+  publishChatAccessChanged({ orgId, userId: id });
 
   if (notifyUser && user.status !== status && (status === 'disabled' || status === 'active')) {
     sendUserAccountStatusNotification(

@@ -1,5 +1,6 @@
 import { Logger } from '@nestjs/common';
 import { Prisma, PrismaClient } from '@prisma/client';
+import { publishChatMembership } from './team-chat-bus';
 
 // ---------------------------------------------------------------------------
 // Team Chat membership lifecycle — the one place that keeps the org-wide
@@ -13,6 +14,10 @@ import { Prisma, PrismaClient } from '@prisma/client';
 // member (see the call sites of teamChatUserActivated/Deactivated). Every
 // call is idempotent, and the `runTeamChatHook` wrapper means a chat failure
 // can never fail the user operation that triggered it.
+//
+// The activated/deactivated hooks also tell the realtime gateway (live rail,
+// member lists, system messages). Call them with the plain client, after the
+// triggering change has committed — never inside a transaction.
 // ---------------------------------------------------------------------------
 
 /** PrismaService, a transaction client, or any Pick that includes these. */
@@ -122,6 +127,15 @@ export async function teamChatUserActivated(
     general,
     `${chatDisplayName(user)} joined`,
   );
+  publishChatMembership([
+    {
+      orgId,
+      channelId: general.id,
+      userId,
+      change: 'joined',
+      systemMessageId: message.id,
+    },
+  ]);
   return { channelId: general.id, userId, systemMessageId: message.id };
 }
 
@@ -166,6 +180,9 @@ export async function teamChatUserDeactivated(
       systemMessageId: message.id,
     });
   }
+  publishChatMembership(
+    changes.map((c) => ({ ...c, orgId, change: 'left' as const })),
+  );
   return changes;
 }
 

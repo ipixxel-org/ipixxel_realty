@@ -25,6 +25,9 @@ import {
 import { TeamChatAccessService } from './team-chat-access.service';
 import { TeamChatConversationsService } from './team-chat-conversations.service';
 import { TeamChatMessagesService } from './team-chat-messages.service';
+import { TeamChatPresenceService } from './team-chat-presence.service';
+import { TeamChatRealtimeService } from './team-chat-realtime.service';
+import { TeamChatUnreadService } from './team-chat-unread.service';
 
 const DB_URL = process.env.TEAM_CHAT_TEST_DATABASE_URL;
 const suite = DB_URL ? describe : describe.skip;
@@ -77,8 +80,22 @@ suite('Team Chat access rules (integration)', () => {
   beforeAll(async () => {
     prisma = new PrismaClient({ datasources: { db: { url: DB_URL } } });
     const access = new TeamChatAccessService(prisma as never);
-    conv = new TeamChatConversationsService(prisma as never, access);
-    msgs = new TeamChatMessagesService(prisma as never, access, conv);
+    const unread = new TeamChatUnreadService(prisma as never);
+    // Never attached to a socket server here, so every push is a no-op.
+    const realtime = new TeamChatRealtimeService(prisma as never, unread);
+    conv = new TeamChatConversationsService(
+      prisma as never,
+      access,
+      unread,
+      realtime,
+      new TeamChatPresenceService(),
+    );
+    msgs = new TeamChatMessagesService(
+      prisma as never,
+      access,
+      unread,
+      realtime,
+    );
 
     await prisma.organisation.createMany({
       data: [

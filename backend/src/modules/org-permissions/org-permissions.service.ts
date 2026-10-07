@@ -5,6 +5,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { PrismaService } from '../../database/prisma.service';
+import { publishChatAccessChanged } from '../../common/utils/team-chat-bus';
 import {
   PERMISSION_ACTIONS,
   PERMISSION_COLUMN_SELECT,
@@ -268,6 +269,7 @@ export class OrgPermissionsService {
       });
     });
 
+    publishChatAccessChanged({ orgId });
     const rows = await loadRolePermissions(this.prisma, orgId);
     return rows.find((r) => r.roleKey === roleKey) ?? null;
   }
@@ -392,6 +394,7 @@ export class OrgPermissionsService {
       }
     });
 
+    publishChatAccessChanged({ orgId, userId });
     return this.loadUserPermissions(orgId, userId);
   }
 
