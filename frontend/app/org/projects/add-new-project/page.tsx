@@ -1386,7 +1386,7 @@ export default function AddNewProjectPage() {
                   <div style={{ flex: 1 }}>
                     <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
                       <h2 style={{ fontSize: 16, fontWeight: 700, margin: 0, color: (jumpWarning && step === 0) ? "#854d0e" : "#0f172a" }}>
-                        Project Basics
+                        Project basics
                       </h2>
                       {jumpWarning && step === 0 && (
                         <span
@@ -1839,6 +1839,7 @@ export default function AddNewProjectPage() {
                     values={customValues}
                     onTemplateChange={(template) => setProjectFieldRows(fieldsToRows(template))}
                     onValueChange={(key, value) => setCustomValues((cur) => ({ ...cur, [key]: value }))}
+                    errorFor={(key) => (invalid(`cf_${key}`) ? fieldError(`cf_${key}`) : "")}
                   />
                   <UnitFieldRows rows={unitFieldRows} onChange={setUnitFieldRows} roleBaseline={unitRoleBaseline} />
                   <div className="hint">Unit counts come from the Units section after publishing.</div>

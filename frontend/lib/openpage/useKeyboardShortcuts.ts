@@ -7,11 +7,19 @@ import { useConfigStore } from "@/components/openpage/store/configStore";
 import { findBlock, findBlockLocation } from "@/lib/openpage/block-tree";
 
 export function useOpenPageKeyboard() {
-  const { toggleJsonDrawer, toggleHistory, toggleShortcutsModal, togglePreview, toggleTemplates, toggleSpotlight, selectBlock, setClipboardStyle, setRightSidebarTab } = useEditorStore();
+  const { toggleJsonDrawer, toggleHistory, toggleShortcutsModal, togglePreview, toggleSpotlight, selectBlock, setClipboardStyle, setRightSidebarTab } = useEditorStore();
   const { undo, redo, removeBlock, duplicateBlock } = useConfigStore();
 
   useEffect(() => {
     function handleKeyDown(e: KeyboardEvent) {
+      // Ctrl/Cmd+K must work even while an input is focused — it toggles the
+      // command palette, which autofocuses its own search field.
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") {
+        e.preventDefault();
+        toggleSpotlight();
+        return;
+      }
+
       const tag = (e.target as HTMLElement).tagName;
       if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") return;
 
@@ -85,12 +93,6 @@ export function useOpenPageKeyboard() {
       if ((e.metaKey || e.ctrlKey) && e.key === "s") {
         e.preventDefault();
         window.dispatchEvent(new CustomEvent("op:save"));
-        return;
-      }
-
-      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") {
-        e.preventDefault();
-        toggleSpotlight();
         return;
       }
 
@@ -179,5 +181,5 @@ export function useOpenPageKeyboard() {
 
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [toggleJsonDrawer, toggleHistory, toggleShortcutsModal, togglePreview, toggleTemplates, selectBlock, undo, redo, removeBlock, duplicateBlock, setClipboardStyle, setRightSidebarTab]);
+  }, [toggleJsonDrawer, toggleHistory, toggleShortcutsModal, togglePreview, toggleSpotlight, selectBlock, undo, redo, removeBlock, duplicateBlock, setClipboardStyle, setRightSidebarTab]);
 }

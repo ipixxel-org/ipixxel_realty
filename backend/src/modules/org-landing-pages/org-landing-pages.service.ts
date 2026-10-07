@@ -23,6 +23,7 @@ import {
   assertOrgCanPublish,
   assertOrgLandingPageQuota,
 } from '../../common/utils/subscription-lifecycle.util';
+import { PageRevisionsService } from '../page-revisions/page-revisions.service';
 
 function defaultThankYouContent(pageName: string, slug: string) {
   const brandName = pageName.replace(/\s*—\s*Thank You$/i, '').trim() || 'Property';
@@ -198,6 +199,7 @@ export class OrgLandingPagesService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly storage: StorageService,
+    private readonly revisions: PageRevisionsService,
   ) {}
 
   // Presigned PUT URL for a builder image. Ownership is checked (getOwned)
@@ -223,7 +225,15 @@ export class OrgLandingPagesService {
     await assertOrgLandingPageQuota(this.prisma, orgId);
 
     if (!dto.templateId) {
-      return this.createBlank(orgId, dto);
+      const blank = await this.createBlank(orgId, dto);
+      // Seed version history with the page exactly as created, so the
+      // builder's Version History panel has a "day one" restore point.
+      await this.revisions.captureLandingPage(
+        orgId,
+        blank.id,
+        blank.content as Prisma.InputJsonValue,
+      );
+      return blank;
     }
 
     // An org may only copy a template it was actually granted — verified
@@ -303,6 +313,11 @@ export class OrgLandingPagesService {
       return page;
     });
 
+    await this.revisions.captureLandingPage(
+      orgId,
+      created.id,
+      created.content as Prisma.InputJsonValue,
+    );
     return this.getOwned(orgId, created.id);
   }
 
@@ -593,6 +608,7 @@ export class OrgLandingPagesService {
     const page = await this.getOwned(orgId, id);
 
     const data: Prisma.LandingPageUpdateInput = {};
+    let contentChanged = false;
     if (dto.name !== undefined) data.name = dto.name;
     if (dto.slug !== undefined) {
       const cleanSlug = dto.slug.trim().toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-_]/g, '');
@@ -618,6 +634,7 @@ export class OrgLandingPagesService {
         site: dto.content.site,
       };
       data.content = nextContent as Prisma.InputJsonValue;
+      contentChanged = !deepEqual(page.content, nextContent);
 
       // Editing a published page reverts it to draft — only when the
       // content actually changed (deep equality against what's stored, not
@@ -627,14 +644,25 @@ export class OrgLandingPagesService {
       // history for why this was tried without the revert and reverted:
       // the Publish/Unpublish button looked stuck on "Unpublish" after an
       // edit, giving no signal the live page hadn't picked up the change.
-      const contentChanged = !deepEqual(page.content, nextContent);
       if (contentChanged && page.status === 'published') {
         data.status = 'draft';
       }
     }
 
     try {
-      return await this.prisma.landingPage.update({ where: { id }, data });
+      const updated = await this.prisma.landingPage.update({ where: { id }, data });
+      // Version history: snapshot only real content changes — name/slug/
+      // thumbnail-only saves and no-op PATCHes (identical content) must not
+      // burn a revision slot. captureLandingPage is best-effort internally
+      // and can never fail this save.
+      if (contentChanged) {
+        await this.revisions.captureLandingPage(
+          orgId,
+          id,
+          data.content as Prisma.InputJsonValue,
+        );
+      }
+      return updated;
     } catch (err: any) {
       if (err?.code === 'P2002') {
         throw new BadRequestException('You already have a page with that slug');

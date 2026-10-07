@@ -11,7 +11,7 @@ function node(type: string, settings: Record<string, unknown> = {}, children?: S
     label: type,
     icon: "SquareStack",
     settings,
-    style: { colors: {}, typography: {}, spacing: {}, layout: {}, responsive: {} },
+    style: { colors: {}, typography: {}, spacing: {}, layout: { align: "center" }, responsive: {} },
     ...(children ? { children } : {}),
   };
 }
@@ -85,7 +85,7 @@ describe("widget library migrations (merged ids)", () => {
       const types = collect(buildTemplateSections(p.designId ?? p.template));
       for (const t of types) {
         expect(removedIds.has(t)).toBe(false);
-        expect(currentIds.has(t) || ["header", "footer"].includes(t)).toBe(true);
+        expect(currentIds.has(t) || ["header", "footer", "floorplans"].includes(t)).toBe(true);
       }
     }
   });

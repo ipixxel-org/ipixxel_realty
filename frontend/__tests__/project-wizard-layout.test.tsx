@@ -16,7 +16,7 @@ vi.stubGlobal("IntersectionObserver", NoopIntersectionObserver);
 
 vi.mock("next/navigation", () => ({ useRouter: () => ({ push: vi.fn() }) }));
 vi.mock("@/lib/auth-context", () => ({
-  useAuth: () => ({ accessToken: "test-token", user: { org_id: "org-1" } }),
+  useAuth: () => ({ accessToken: "test-token", user: { org_id: "org-1" }, hasPermission: () => true }),
 }));
 
 const type = (id: string, name: string, extra = {}) => ({
@@ -103,7 +103,7 @@ vi.mock("@/lib/api", () => ({
       unitFields: [
         { key: "configuration", label: "Configuration", type: "choice", required: false, role: "configuration", options: ["2 BHK"] },
         { key: "built_up_area", label: "Built-up Area", type: "number", required: false, role: "area", unit: "sq ft" },
-        { key: "plot_area", label: "Plot Area", type: "number", required: false, unit: "sq ft" },
+        { key: "plot_area", label: "Plot Area", type: "number", required: false, unit: "sq ft", extraDefault: true },
         { key: "price", label: "Price", type: "number", required: false, role: "price" },
       ],
     }),
@@ -162,7 +162,7 @@ async function toStep2(user: ReturnType<typeof userEvent.setup>, typeName: strin
   await user.click(nameInput);
   await user.paste("Test Project");
   await user.click(await screen.findByText(typeName));
-  await user.click(screen.getByRole("button", { name: /Continue/ }));
+  await user.click(screen.getByRole("button", { name: /Next Step/ }));
   expect(await screen.findByRole("heading", { name: /Inventory & configuration/ })).toBeInTheDocument();
 }
 
@@ -176,10 +176,13 @@ describe("project wizard — Step 2 follows the project type's layout", () => {
     await toStep2(user, "Apartments");
 
     expect(screen.getByText(/Unit configurations \(select all\)/)).toBeInTheDocument();
-    expect(screen.getByText("No. of Towers / Blocks")).toBeInTheDocument();
-    expect(screen.getByText("Floors / Structure")).toBeInTheDocument();
-    expect(screen.getByText("Area Range")).toBeInTheDocument();
-    expect(screen.getByText("Total Land Area")).toBeInTheDocument();
+    // The picked type's project fields are prefilled rows — their labels live
+    // in editable label inputs, a deliberate redesign from the old hardcoded
+    // tower/floor/area inputs.
+    expect(screen.getByDisplayValue("No. of Towers / Blocks")).toBeInTheDocument();
+    expect(screen.getByDisplayValue("Floors / Structure")).toBeInTheDocument();
+    expect(screen.getByDisplayValue("Area Range")).toBeInTheDocument();
+    expect(screen.getByDisplayValue("Total Land Area")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "+ Add project field" })).toBeInTheDocument();
     expect(screen.getByText("Unit fields")).toBeInTheDocument();
   });
@@ -189,10 +192,13 @@ describe("project wizard — Step 2 follows the project type's layout", () => {
     render(<AddNewProjectPage />);
     await toStep2(user, "Plots");
 
-    expect(screen.queryByText("No. of Towers / Blocks")).not.toBeInTheDocument();
-    expect(screen.queryByText("Floors / Structure")).not.toBeInTheDocument();
-    expect(screen.getByText("Number of plots")).toBeInTheDocument();
-    expect(screen.getByText("Total land")).toBeInTheDocument();
+    expect(screen.queryByDisplayValue("No. of Towers / Blocks")).not.toBeInTheDocument();
+    expect(screen.queryByDisplayValue("Floors / Structure")).not.toBeInTheDocument();
+    expect(screen.getByDisplayValue("Number of plots")).toBeInTheDocument();
+    expect(screen.getByDisplayValue("Total land")).toBeInTheDocument();
+    // The single configuration chip is off by default; toggling it on seeds the
+    // area default the plot's template carries.
+    await user.click(screen.getByText("Residential"));
     expect(screen.getByLabelText("Plot Area for Residential")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "+ Add project field" })).toBeInTheDocument();
     expect(screen.getByText("Unit fields")).toBeInTheDocument();
@@ -203,18 +209,23 @@ describe("project wizard — Step 2 follows the project type's layout", () => {
     render(<AddNewProjectPage />);
     await toStep2(user, "Plots");
 
-    await user.click(screen.getByRole("button", { name: /Continue/ }));
+    await user.click(screen.getByRole("button", { name: /Next Step/ }));
     expect(screen.getByText("Number of plots is required.")).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: /Inventory & configuration/ })).toBeInTheDocument();
   });
 
   it("plot and villa: show the project-specific default area fields for each configuration", async () => {
-    const user = userEvent.setup();
-    render(<AddNewProjectPage />);
+    let user = userEvent.setup();
+    let view = render(<AddNewProjectPage />);
     await toStep2(user, "Plots");
-    expect(screen.getByLabelText("Plot Area for 2 BHK")).toBeInTheDocument();
+    await user.click(screen.getByText("Residential"));
+    expect(screen.getByLabelText("Plot Area for Residential")).toBeInTheDocument();
+    view.unmount();
 
+    user = userEvent.setup();
+    render(<AddNewProjectPage />);
     await toStep2(user, "Villas");
+    await user.click(screen.getByText("2 BHK"));
     expect(screen.getByLabelText("Built-up Area for 2 BHK")).toBeInTheDocument();
     expect(screen.getByLabelText("Plot Area for 2 BHK")).toBeInTheDocument();
   });
@@ -225,7 +236,7 @@ describe("project wizard — Step 2 follows the project type's layout", () => {
     await toStep2(user, "Farmhouses");
 
     expect(screen.queryByText(/No\. of/)).not.toBeInTheDocument();
-    expect(screen.queryByText("Floors / structure")).not.toBeInTheDocument();
+    expect(screen.queryByText("Floors / Structure")).not.toBeInTheDocument();
     expect(screen.queryByText(/Unit configurations/)).not.toBeInTheDocument();
   });
 });

@@ -81,8 +81,13 @@ export function getFormAnalytics(formId: string): FormLocalAnalytics {
   if (typeof window === "undefined" || !formId) return { starts: 0, submissions: 0, abandonments: 0 };
   try {
     const raw = window.localStorage.getItem(FORM_ANALYTICS_KEY);
-    const all = raw ? (JSON.parse(raw) as Record<string, FormLocalAnalytics>) : {};
-    return { starts: 0, submissions: 0, abandonments: 0, ...all[formId] };
+    const all = raw ? (JSON.parse(raw) as Record<string, Partial<FormLocalAnalytics>>) : {};
+    const prev = all[formId];
+    return {
+      starts: prev?.starts ?? 0,
+      submissions: prev?.submissions ?? 0,
+      abandonments: prev?.abandonments ?? 0,
+    };
   } catch {
     return { starts: 0, submissions: 0, abandonments: 0 };
   }
@@ -93,12 +98,17 @@ export function bumpFormAnalytics(formId: string, key: keyof FormLocalAnalytics)
   const all = (() => {
     try {
       const raw = window.localStorage.getItem(FORM_ANALYTICS_KEY);
-      return raw ? (JSON.parse(raw) as Record<string, FormLocalAnalytics>) : {};
+      return raw ? (JSON.parse(raw) as Record<string, Partial<FormLocalAnalytics>>) : {};
     } catch {
-      return {} as Record<string, FormLocalAnalytics>;
+      return {} as Record<string, Partial<FormLocalAnalytics>>;
     }
   })();
-  const cur = { starts: 0, submissions: 0, abandonments: 0, ...all[formId] };
+  const prev = all[formId];
+  const cur: FormLocalAnalytics = {
+    starts: prev?.starts ?? 0,
+    submissions: prev?.submissions ?? 0,
+    abandonments: prev?.abandonments ?? 0,
+  };
   cur[key] += 1;
   all[formId] = cur;
   try {

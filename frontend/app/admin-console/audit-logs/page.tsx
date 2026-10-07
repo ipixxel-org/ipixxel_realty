@@ -331,7 +331,7 @@ export default function SuperAdminAuditLogsPage() {
               Live Activity Stream
             </span>
           </div>
-          <h1 style={{ margin: 0, fontSize: 26, fontWeight: 800, color: "#0f172a", tracking: "-0.02em" }}>
+          <h1 style={{ margin: 0, fontSize: 26, fontWeight: 800, color: "#0f172a", letterSpacing: "-0.02em" }}>
             Platform Audit Logs
           </h1>
           <p style={{ margin: "4px 0 0", fontSize: 13.5, color: "#64748b" }}>

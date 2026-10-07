@@ -13,6 +13,7 @@ import { OrgTemplatesModule } from './modules/org-templates/org-templates.module
 import { PlansModule } from './modules/plans/plans.module';
 import { SubscriptionsModule } from './modules/subscriptions/subscriptions.module';
 import { OrgLandingPagesModule } from './modules/org-landing-pages/org-landing-pages.module';
+import { PageRevisionsModule } from './modules/page-revisions/page-revisions.module';
 import { AdminLandingPagesModule } from './modules/admin-landing-pages/admin-landing-pages.module';
 import { OrgActivityModule } from './modules/org-activity/org-activity.module';
 import { OrgTypographySetsModule } from './modules/org-typography-sets/org-typography-sets.module';
@@ -65,6 +66,7 @@ import { MarketingModule } from './modules/marketing/marketing.module';
     PlansModule,
     SubscriptionsModule,
     OrgLandingPagesModule,
+    PageRevisionsModule,
     AdminLandingPagesModule,
     OrgActivityModule,
     OrgTypographySetsModule,
