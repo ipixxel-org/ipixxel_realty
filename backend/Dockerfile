@@ -12,7 +12,7 @@ COPY prisma ./prisma
 # ---------------------------------------------------------------------------
 FROM base AS dev
 RUN npm install
-RUN npx prisma generate
+RUN ./node_modules/.bin/prisma generate
 COPY . .
 EXPOSE 3000
 CMD ["npm", "run", "start:dev"]
@@ -22,7 +22,7 @@ CMD ["npm", "run", "start:dev"]
 # ---------------------------------------------------------------------------
 FROM base AS build
 RUN npm ci
-RUN npx prisma generate
+RUN ./node_modules/.bin/prisma generate
 COPY . .
 RUN npm run build
 
@@ -36,7 +36,7 @@ RUN apk add --no-cache python3 make g++
 COPY package*.json ./
 COPY prisma ./prisma
 RUN npm ci --omit=dev
-RUN npx prisma generate
+RUN ./node_modules/.bin/prisma generate
 COPY --from=build /app/dist ./dist
 ENV PORT=3000
 EXPOSE 3000
