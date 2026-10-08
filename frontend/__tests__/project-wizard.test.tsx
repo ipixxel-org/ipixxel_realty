@@ -20,7 +20,7 @@ vi.stubGlobal("IntersectionObserver", NoopIntersectionObserver);
 const push = vi.fn();
 vi.mock("next/navigation", () => ({ useRouter: () => ({ push }) }));
 vi.mock("@/lib/auth-context", () => ({
-  useAuth: () => ({ accessToken: "test-token", user: { org_id: "org-1" } }),
+  useAuth: () => ({ accessToken: "test-token", user: { org_id: "org-1" }, hasPermission: () => true }),
 }));
 
 const CATALOG = [
@@ -88,7 +88,7 @@ describe("project wizard — per-step required-field validation", () => {
     render(<AddNewProjectPage />);
 
     expect(screen.getByRole("heading", { name: "Project basics" })).toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: /Continue/ }));
+    await user.click(screen.getByRole("button", { name: /Next Step/ }));
 
     // Still on step 1 — nothing advanced.
     expect(screen.getByRole("heading", { name: "Project basics" })).toBeInTheDocument();
@@ -113,7 +113,7 @@ describe("project wizard — per-step required-field validation", () => {
     await fill(user, "e.g. Palm Residency", "Palm Residency");
     await user.click(await screen.findByText("Apartments"));
     // No RERA number entered — it's optional, so Step 1 still advances.
-    await user.click(screen.getByRole("button", { name: /Continue/ }));
+    await user.click(screen.getByRole("button", { name: /Next Step/ }));
 
     expect(screen.getByRole("heading", { name: /Inventory & configuration/ })).toBeInTheDocument();
   });
@@ -124,11 +124,11 @@ describe("project wizard — per-step required-field validation", () => {
 
     await fill(user, "e.g. Palm Residency", "Palm Residency");
     await user.click(await screen.findByText("Apartments"));
-    await fill(user, "PR/GJ/AHM/2026/00842", "R1");
-    await user.click(screen.getByRole("button", { name: /Continue/ }));
+    await fill(user, "e.g. PR/GJ/AHM/2026/00842", "R1");
+    await user.click(screen.getByRole("button", { name: /Next Step/ }));
 
     // Step 2 (Inventory) has no asterisked fields.
-    await user.click(screen.getByRole("button", { name: /Continue/ }));
+    await user.click(screen.getByRole("button", { name: /Next Step/ }));
     expect(screen.getByRole("heading", { name: /Pricing & payment/ })).toBeInTheDocument();
   });
 
@@ -138,20 +138,21 @@ describe("project wizard — per-step required-field validation", () => {
 
     // Step 3 — Price range from.
     await jumpTo(user, "Pricing & payment");
-    await user.click(screen.getByRole("button", { name: /Continue/ }));
+    await user.click(screen.getByRole("button", { name: /Next Step/ }));
     expect(screen.getByText("Enter the starting price.")).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: /Pricing & payment/ })).toBeInTheDocument();
 
     // Step 4 — Full address + City.
     await jumpTo(user, "Location");
-    await user.click(screen.getByRole("button", { name: /Continue/ }));
+    await user.click(screen.getByRole("button", { name: /Next Step/ }));
     expect(screen.getByText("Full address is required.")).toBeInTheDocument();
     expect(screen.getByText("City is required.")).toBeInTheDocument();
 
-    // Step 7 — Project manager.
+    // Step 7 — Project manager auto-assigns when the org has no managers, so it
+    // no longer blocks: Team & access continues straight through.
     await jumpTo(user, "Team & access");
-    await user.click(screen.getByRole("button", { name: /Continue/ }));
-    expect(screen.getByText("Assign a project manager.")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: /Next Step/ }));
+    expect(screen.getByRole("heading", { name: /Documents & media/ })).toBeInTheDocument();
   });
 
   it("warns before a step-rail jump ahead out of an incomplete step", async () => {
@@ -188,9 +189,10 @@ describe("project wizard — per-step required-field validation", () => {
 
     await jumpTo(user, "Review & launch");
 
-    // name, type, price-from, address, city, manager. RERA is optional, and
-    // Status / Currency start pre-selected, so none of those three count.
-    expect(screen.getByText(/6 required fields still empty/)).toBeInTheDocument();
+    // name, type, price-from, address, city. RERA is optional, and Status /
+    // Currency start pre-selected. The manager list loads empty, so the
+    // project is auto-assigned to the org admin and not required.
+    expect(screen.getByText(/5 required fields still empty/)).toBeInTheDocument();
   });
 
   it("has no Skip button on any step, including Marketing and Team & access", async () => {

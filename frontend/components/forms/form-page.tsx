@@ -4,6 +4,7 @@ import { useEffect } from "react";
 import Link from "next/link";
 import { Icon, type IconName } from "@/components/icons";
 import { PasswordInput } from "@/components/auth/password-input";
+import { Modal } from "@/components/ui/modal";
 import styles from "./form-page.module.css";
 
 // Presentational building blocks for the full-width create / edit form pages
@@ -378,6 +379,7 @@ export function FormActions({
   busyLabel,
   submitIcon = "check",
   onSubmit,
+  extra,
 }: {
   /** Route Cancel goes to. Use `onCancel` instead for an in-page form view. */
   cancelHref?: string;
@@ -389,9 +391,12 @@ export function FormActions({
   submitIcon?: IconName;
   /** Click handler for forms that don't submit through a <form>. */
   onSubmit?: () => void;
+  /** Extra buttons placed before Cancel (e.g. a destructive Delete). */
+  extra?: React.ReactNode;
 }) {
   return (
     <div className={styles.actions}>
+      {extra}
       {onCancel ? (
         <button type="button" className={styles.btn} onClick={onCancel} disabled={busy}>
           Cancel
@@ -418,5 +423,48 @@ export function FormActions({
         {busy ? busyLabel : submitLabel}
       </button>
     </div>
+  );
+}
+
+/**
+ * Short create / edit form (one or two fields) shown as a popup instead of
+ * a full page. Same Field / TextInput / FormAlert / FormActions building
+ * blocks as FormPage — the wrapper only provides the kit's style scope
+ * (the modal renders in a portal, outside any FormPage) and a <form> so
+ * Enter submits. Closing is blocked while `busy`.
+ */
+export function FormModal({
+  open,
+  onClose,
+  title,
+  description,
+  busy,
+  size = "md",
+  onSubmit,
+  children,
+}: {
+  open: boolean;
+  onClose: () => void;
+  title: string;
+  description?: React.ReactNode;
+  busy?: boolean;
+  size?: "sm" | "md" | "lg";
+  /** Submit handler for the wrapped <form>; omit for click-driven actions. */
+  onSubmit?: (e: React.FormEvent<HTMLFormElement>) => void;
+  children: React.ReactNode;
+}) {
+  return (
+    <Modal open={open} onClose={onClose} title={title} description={description} size={size} closeDisabled={busy}>
+      <form
+        className={styles.page}
+        noValidate
+        onSubmit={(e) => {
+          e.preventDefault();
+          if (!busy) onSubmit?.(e);
+        }}
+      >
+        {children}
+      </form>
+    </Modal>
   );
 }

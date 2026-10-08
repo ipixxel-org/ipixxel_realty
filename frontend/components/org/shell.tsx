@@ -631,13 +631,7 @@ export function OrgAdminShell({ children }: { children: ReactNode }) {
             </div>
           </div>
 
-          <div className="tb-search" style={{ maxWidth: 460 }}>
-            <span className="si"><Icon name="search" size={14} /></span>
-            <input placeholder="Search leads, pages, agents…" />
-            <span className="kbd">⌘K</span>
-          </div>
-
-          <div className="tb-right" style={{ display: "flex", alignItems: "center", gap: 10 }}>
+          <div className="tb-right" style={{ display: "flex", alignItems: "center", gap: 10, marginLeft: "auto" }}>
             <div style={{ position: "relative" }} data-notification-menu>
               <button
                 type="button"
@@ -774,7 +768,7 @@ export function OrgAdminShell({ children }: { children: ReactNode }) {
                 <div className="tb-avatar" style={{ width: 36, height: 36, fontSize: 12 }}>
                   {avatarInitials}
                 </div>
-                <div style={{ display: "flex", flexDirection: "column", lineHeight: 1.15, textAlign: "left" }}>
+                <div className="tb-profile-text" style={{ display: "flex", flexDirection: "column", lineHeight: 1.15, textAlign: "left" }}>
                   <span style={{ fontWeight: 700, fontSize: 12, color: "#0f172a" }}>{userName}</span>
                   <span style={{ fontSize: 11, color: "#64748b" }}>{user.roleLabel}</span>
                 </div>

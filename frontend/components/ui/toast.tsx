@@ -85,7 +85,7 @@ function ToastViewport({
 }) {
   if (!mounted) return null;
   return createPortal(
-    <div className="pointer-events-none fixed bottom-4 right-4 z-[60] flex w-full max-w-sm flex-col gap-2">
+    <div className="pointer-events-none fixed bottom-4 right-4 z-[700] flex w-full max-w-sm flex-col gap-2">
       {toasts.map((t) => {
         const styles = variantStyles[t.variant];
         return (

@@ -109,11 +109,14 @@ export function ProjectFieldRows({
   values,
   onTemplateChange,
   onValueChange,
+  errorFor,
 }: {
   template: FieldDef[];
   values: CustomValueDraft;
   onTemplateChange: (template: FieldDef[]) => void;
   onValueChange: (key: string, value: string) => void;
+  /** The inline error for a field key (id `cf_<key>`), once a blocked Continue has surfaced it. */
+  errorFor?: (key: string) => string;
 }) {
   return (
     <RowListEditor<FieldDef>
@@ -138,6 +141,7 @@ export function ProjectFieldRows({
             value={values[field.key] ?? ""}
             onChange={(value) => onValueChange(field.key, value)}
             showLabel={false}
+            error={errorFor?.(field.key) ?? ""}
             className="field-compact"
           />
         </>

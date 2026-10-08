@@ -9,7 +9,7 @@ import {
   ImageIcon, Play, GalleryHorizontalEnd, Eye, EyeOff,
   Building2, MapPin, Home, Trees, FileText, Download, Mail, Save, Layers,
   ChevronDown, ChevronRight, Type, Box, Code2,
-  LayoutTemplate, Blocks, Globe, PanelLeftClose, X,
+  LayoutTemplate, Blocks, Globe, PanelLeftClose, X, ClipboardList,
 } from "lucide-react";
 import {
   DndContext,
@@ -38,6 +38,7 @@ import {
 } from "@/lib/openpage/section-presets";
 import type { BlockType, BlockConfig } from "@/components/openpage/blocks/types";
 import { EMPTY_GLOBAL_WIDGETS } from "./AdvancedPanel";
+import { FormBuilder } from "./FormBuilder";
 
 const blockIcons: Partial<Record<BlockType, typeof Layout>> = {
   navbar: Layout,
@@ -581,13 +582,14 @@ function GlobalWidgetsPanel() {
   )
 }
 
-type Tab = 'layers' | 'components' | 'templates' | 'globals'
+type Tab = 'layers' | 'components' | 'templates' | 'globals' | 'forms'
 
 const TAB_DEFS: { id: Tab; label: string; hint: string; icon: typeof Layout; color: string }[] = [
   { id: 'templates', label: 'Templates', hint: 'Ready-made sections', icon: LayoutTemplate, color: "#f59e0b" },
   { id: 'components', label: 'Blocks', hint: 'Drag widgets onto the canvas', icon: Blocks, color: "#38bdf8" },
   { id: 'globals', label: 'Globals', hint: 'Reusable saved widgets', icon: Globe, color: "#a78bfa" },
   { id: 'layers', label: 'Layers', hint: 'Page structure & reorder', icon: Layers, color: "#34d399" },
+  { id: 'forms', label: 'Forms', hint: 'Build the forms used on this page', icon: ClipboardList, color: "#fb7185" },
 ]
 
 export function LayersPanel() {
@@ -600,7 +602,8 @@ export function LayersPanel() {
   const { duplicateBlock, removeBlock, moveBlock, addBlock, updateBlockStyle } = useConfigStore()
   const { selectedBlockId, selectBlock, toggleLeftSidebar } = useEditorStore()
   const [showPopover, setShowPopover] = useState(false)
-  const [tab, setTab] = useState<Tab>('components')
+  const tab = useEditorStore((s) => s.leftTab)
+  const setTab = useEditorStore((s) => s.setLeftTab)
   const activeDef = TAB_DEFS.find((t) => t.id === tab) ?? TAB_DEFS[1]
 
   const sensors = useSensors(
@@ -711,7 +714,23 @@ export function LayersPanel() {
                     <div className="px-2 py-6 text-center">
                       <Layers size={18} className="text-text-3 mx-auto mb-2" />
                       <p className="text-[11px] text-text-2 font-medium">Canvas is empty</p>
-                      <p className="text-[10px] text-text-3 mt-0.5">Add a block or template to start</p>
+                      <p className="text-[10px] text-text-3 mt-0.5 mb-2.5">Add a block or template to start</p>
+                      <div className="flex flex-col gap-1.5">
+                        <button
+                          type="button"
+                          onClick={() => setTab('templates')}
+                          className="w-full py-1.5 rounded-lg bg-green/15 border border-green/30 text-green text-[11px] font-semibold hover:bg-green/20 transition-colors"
+                        >
+                          Browse templates
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setTab('components')}
+                          className="w-full py-1.5 rounded-lg border border-border-default text-text-2 text-[11px] font-semibold hover:bg-bg-3 hover:text-text-0 transition-colors"
+                        >
+                          Add a block
+                        </button>
+                      </div>
                     </div>
                   ) : (
                     blocks.map((block) => (
@@ -764,6 +783,10 @@ export function LayersPanel() {
           <ComponentsPanel />
         ) : tab === 'templates' ? (
           <SectionTemplatesPanel />
+        ) : tab === 'forms' ? (
+          <div className="flex flex-col flex-1 min-h-0 overflow-hidden">
+            <FormBuilder onClose={() => setTab('components')} />
+          </div>
         ) : (
           <GlobalWidgetsPanel />
         )}

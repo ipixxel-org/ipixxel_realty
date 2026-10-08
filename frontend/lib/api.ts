@@ -1485,6 +1485,54 @@ export async function disconnectOrgGoogleSheet(
   });
 }
 
+export interface GoogleSheetsAppsScriptConfig {
+  connectionId: string;
+  externalAccountName?: string;
+  projectId?: string | null;
+  projectName?: string | null;
+  spreadsheetId?: string;
+  spreadsheetUrl?: string;
+  webhookUrl: string;
+  webhookSecret: string;
+  appsScriptCode: string;
+  stats?: {
+    recordsAdded: number;
+    recordsUpdated: number;
+    failedRecords: number;
+    syncErrors: string[];
+    lastSyncAt: string | null;
+    lastError: string | null;
+    autoSync: boolean;
+  };
+}
+
+export async function getGoogleSheetsAppsScriptConfig(
+  connectionId?: string,
+): Promise<GoogleSheetsAppsScriptConfig> {
+  const query = connectionId
+    ? `?connectionId=${encodeURIComponent(connectionId)}`
+    : "";
+  return apiFetch(`/org/marketing/google-sheets/apps-script-config${query}`);
+}
+
+export async function regenerateGoogleSheetsWebhookToken(
+  connectionId?: string,
+): Promise<GoogleSheetsAppsScriptConfig> {
+  return apiFetch("/org/marketing/google-sheets/regenerate-token", {
+    method: "POST",
+    body: JSON.stringify({ connectionId }),
+  });
+}
+
+export async function resetGoogleSheetsSyncStats(
+  connectionId?: string,
+): Promise<{ ok: boolean; message: string }> {
+  return apiFetch("/org/marketing/google-sheets/reset-stats", {
+    method: "POST",
+    body: JSON.stringify({ connectionId }),
+  });
+}
+
 export async function getOrgMetaConfig(): Promise<
   import("./types").MetaPublicConfig
 > {
@@ -1606,7 +1654,7 @@ export async function getMarketingConnections(
 
 export async function updateMarketingConnection(
   id: string,
-  input: { projectId?: string | null },
+  input: { projectId?: string | null; externalAccountName?: string },
 ): Promise<import("./types").MarketingConnection> {
   return apiFetch(`/org/marketing/connections/${id}`, {
     method: "PATCH",

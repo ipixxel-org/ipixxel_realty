@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Edit2, Trash2 } from "lucide-react";
+import { Edit2, Plus, Trash2 } from "lucide-react";
 import { buildTemplateRows } from "@/components/superadmin/templates/shared";
 import {
   createTemplateCategory,
@@ -14,11 +14,20 @@ import {
 } from "@/lib/openpage/persist";
 import type { LandingPageData } from "@/lib/openpage/types";
 import { ConfirmModal } from "@/components/ui/confirm-modal";
-import { Field, FormAlert, FormPage, FormSection, TextInput, formPageStyles } from "@/components/forms/form-page";
+import {
+  Field,
+  FormActions,
+  FormAlert,
+  FormModal,
+  FormPage,
+  FormSection,
+  TextInput,
+  formPageStyles,
+} from "@/components/forms/form-page";
 
-// Manage template categories — full page (was the "Manage Template Categories
-// & Taxonomy" modal on /admin-console/templates). Same add / edit / delete
-// calls; counts come from the same template rows the gallery uses.
+// Manage template categories — list page; add / rename open a short popup.
+// Same add / edit / delete calls; counts come from the same template rows
+// the gallery uses.
 
 const TEMPLATES_PATH = "/admin-console/templates";
 
@@ -29,6 +38,7 @@ export default function TemplateCategoriesPage() {
   const [editingCat, setEditingCat] = useState<TemplateCategory | null>(null);
   const [catError, setCatError] = useState<string | null>(null);
   const [catBusy, setCatBusy] = useState(false);
+  const [catModalOpen, setCatModalOpen] = useState(false);
   const [categoryToDelete, setCategoryToDelete] = useState<TemplateCategory | null>(null);
   const [categoryDeleteBusy, setCategoryDeleteBusy] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
@@ -82,12 +92,35 @@ export default function TemplateCategoriesPage() {
       }
       setCatName("");
       setEditingCat(null);
+      setCatModalOpen(false);
       reloadCategories();
     } catch (err) {
       setCatError(err instanceof Error ? err.message : "Failed to save category");
     } finally {
       setCatBusy(false);
     }
+  }
+
+  function openAddCategory() {
+    setEditingCat(null);
+    setCatName("");
+    setCatError(null);
+    setCatModalOpen(true);
+  }
+
+  function openEditCategory(c: TemplateCategory) {
+    setEditingCat(c);
+    setCatName(c.name);
+    setCatError(null);
+    setCatModalOpen(true);
+  }
+
+  function closeCategoryModal() {
+    if (catBusy) return;
+    setCatModalOpen(false);
+    setEditingCat(null);
+    setCatName("");
+    setCatError(null);
   }
 
   async function confirmDeleteCategory() {
@@ -113,37 +146,15 @@ export default function TemplateCategoriesPage() {
       backHref={TEMPLATES_PATH}
       backLabel="Back to Templates"
     >
-      <form className={formPageStyles.panel} onSubmit={handleSaveCategory}>
-        <FormSection title={editingCat ? `Edit category: "${editingCat.name}"` : "Add new template category"} />
-        <FormAlert message={catError} />
-        <Field htmlFor="tc-name" label="Category name" icon="tag">
-          <div className={formPageStyles.inlineRow} style={{ marginBottom: 0 }}>
-            <TextInput
-              id="tc-name"
-              icon="tag"
-              value={catName}
-              placeholder="e.g. Commercial, Luxury Villas…"
-              onChange={(e) => setCatName(e.target.value)}
-            />
-            <button type="submit" className={formPageStyles.btnPrimary} disabled={catBusy}>
-              {editingCat ? "Update" : "Add"}
+      <div className={formPageStyles.panel}>
+        <FormSection
+          title={`Categories (${categories.length})`}
+          actions={
+            <button type="button" className="btn btn-primary btn-sm" onClick={openAddCategory}>
+              <Plus size={13} /> Add category
             </button>
-            {editingCat ? (
-              <button
-                type="button"
-                className={formPageStyles.btn}
-                onClick={() => {
-                  setEditingCat(null);
-                  setCatName("");
-                }}
-              >
-                Cancel
-              </button>
-            ) : null}
-          </div>
-        </Field>
-
-        <FormSection title={`Categories (${categories.length})`} />
+          }
+        />
         <div style={{ border: "1px solid #e2e8f0", borderRadius: 12, overflowX: "auto" }}>
           <table className="tbl" style={{ width: "100%" }}>
             <thead>
@@ -172,11 +183,7 @@ export default function TemplateCategoriesPage() {
                         <button
                           type="button"
                           className="btn btn-ghost btn-sm"
-                          onClick={() => {
-                            setEditingCat(c);
-                            setCatName(c.name);
-                            setCatError(null);
-                          }}
+                          onClick={() => openEditCategory(c)}
                         >
                           <Edit2 size={12} /> Edit
                         </button>
@@ -196,7 +203,36 @@ export default function TemplateCategoriesPage() {
             </tbody>
           </table>
         </div>
-      </form>
+      </div>
+
+      <FormModal
+        open={catModalOpen}
+        onClose={closeCategoryModal}
+        title={editingCat ? "Rename category" : "Add template category"}
+        description={editingCat ? `Rename "${editingCat.name}". Templates keep this category.` : "Templates are grouped under these categories in the library."}
+        busy={catBusy}
+        size="sm"
+        onSubmit={(e) => void handleSaveCategory(e)}
+      >
+        <FormAlert message={catError} />
+        <Field htmlFor="tc-name" label="Category name *" icon="tag">
+          <TextInput
+            id="tc-name"
+            icon="tag"
+            autoFocus
+            value={catName}
+            placeholder="e.g. Commercial, Luxury Villas…"
+            onChange={(e) => setCatName(e.target.value)}
+          />
+        </Field>
+        <FormActions
+          onCancel={closeCategoryModal}
+          busy={catBusy}
+          busyLabel="Saving…"
+          submitLabel={editingCat ? "Save changes" : "Add category"}
+          submitIcon={editingCat ? "check" : "plus"}
+        />
+      </FormModal>
 
       <ConfirmModal
         open={categoryToDelete !== null}

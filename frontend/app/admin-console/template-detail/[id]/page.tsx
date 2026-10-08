@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { ArrowLeft, CheckCircle2, Copy, Eye, LayoutTemplate, Pencil, X } from "lucide-react";
 import { Reveal } from "@/components/superadmin/reveal";
+import { formPageStyles } from "@/components/forms/form-page";
 import {
   ACCESS_TIERS,
   accessTierOptionLabel,
@@ -318,7 +319,7 @@ export default function SuperAdminTemplateDetailPage() {
               <div className="card-h">
                 <span className="t">Template details</span>
               </div>
-              <div className="card-b">
+              <div className={`card-b ${formPageStyles.page}`}>
                 <div className="field">
                   <label>Template name</label>
                   <input className="inp" value={name} onChange={(e) => setName(e.target.value)} />
@@ -474,8 +475,8 @@ export default function SuperAdminTemplateDetailPage() {
                     </div>
                   )}
                 </div>
-                <div style={{ display: "flex", justifyContent: "flex-end", gap: 10, marginTop: 12 }}>
-                  <button type="button" className="btn btn-ghost" disabled={!dirty} onClick={() => {
+                <div className={formPageStyles.actions}>
+                  <button type="button" className={formPageStyles.btn} disabled={!dirty} onClick={() => {
                     setName(template.name);
                     setSlug(template.slug);
                     setStatus(template.status);
@@ -486,7 +487,8 @@ export default function SuperAdminTemplateDetailPage() {
                   }}>
                     Reset
                   </button>
-                  <button type="button" className="btn btn-primary" disabled={!dirty || noPlanSelected} onClick={() => void save()}>
+                  <button type="button" className={formPageStyles.btnPrimary} disabled={!dirty || noPlanSelected} onClick={() => void save()}>
+                    <CheckCircle2 size={16} />
                     Save changes
                   </button>
                 </div>

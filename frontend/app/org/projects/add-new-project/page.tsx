@@ -54,6 +54,7 @@ import { Reveal } from "@/components/superadmin/reveal";
 import { Modal } from "@/components/ui/modal";
 import { Icon, type IconName } from "@/components/icons";
 import { orgBuilderPath } from "@/lib/openpage/paths";
+import { FormPage, formPageStyles } from "@/components/forms/form-page";
 import "@/app/org/org.css";
 import type {
   CreateProjectInput,
@@ -1107,7 +1108,13 @@ export default function AddNewProjectPage() {
   }
 
   return (
-    <>
+    <FormPage
+      eyebrow="Projects · New"
+      title="Create New Project"
+      subtitle="Add project details, inventory, pricing and more. After creation, a landing page will be automatically generated."
+      backHref="/org/projects"
+      backLabel="Back to Projects"
+    >
       {pendingDraft && (
         <div
           className="card reveal in"
@@ -1126,44 +1133,6 @@ export default function AddNewProjectPage() {
           </div>
         </div>
       )}
-
-      {/* Breadcrumbs */}
-      <div style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13, color: "#64748b", marginBottom: 14 }}>
-        <Link href="/org" style={{ color: "#64748b", display: "inline-flex", alignItems: "center" }}>
-          <Icon name="home" size={15} />
-        </Link>
-        <Icon name="chevron-right" size={12} />
-        <Link href="/org/projects" style={{ color: "#64748b", textDecoration: "none" }}>
-          Projects
-        </Link>
-        <Icon name="chevron-right" size={12} />
-        <span style={{ color: "#0f172a", fontWeight: 600 }}>Add New Project</span>
-      </div>
-
-      {/* Page Header */}
-      <div className="page-head reveal in" style={{ marginBottom: 20, borderBottom: "none", paddingBottom: 0 }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
-          <div style={{ width: 44, height: 44, borderRadius: 12, background: "#eff6ff", border: "1px solid #bfdbfe", display: "flex", alignItems: "center", justifyContent: "center", color: "#0066f5", flexShrink: 0 }}>
-            <Icon name="building" size={24} />
-          </div>
-          <div>
-            <h1 style={{ fontSize: 22, fontWeight: 800, margin: 0, letterSpacing: "-0.02em" }}>Create New Project</h1>
-            <div className="sub" style={{ fontSize: 13, color: "#64748b", marginTop: 3 }}>
-              Add project details, inventory, pricing and more. After creation, a landing page will be automatically generated.
-            </div>
-          </div>
-        </div>
-        <div className="actions">
-          <button
-            type="button"
-            className="btn btn-ghost"
-            onClick={() => router.push("/org/projects")}
-            style={{ borderRadius: 9, fontSize: 13, display: "inline-flex", alignItems: "center", gap: 6 }}
-          >
-            ← Back to Projects
-          </button>
-        </div>
-      </div>
 
       {/* Horizontal Stepper (8 Steps matching Image 4) */}
       <div
@@ -1386,7 +1355,7 @@ export default function AddNewProjectPage() {
                   <div style={{ flex: 1 }}>
                     <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
                       <h2 style={{ fontSize: 16, fontWeight: 700, margin: 0, color: (jumpWarning && step === 0) ? "#854d0e" : "#0f172a" }}>
-                        Project Basics
+                        Project basics
                       </h2>
                       {jumpWarning && step === 0 && (
                         <span
@@ -1413,30 +1382,29 @@ export default function AddNewProjectPage() {
                 {/* Row 1: Name and Developer */}
                 <div className="grid g2" style={{ gap: 16, marginBottom: 18 }}>
                   <div className={fieldClass("name")}>
-                    <label style={{ fontSize: 12.5, fontWeight: 600, color: "#334155", marginBottom: 6, display: "block" }}>
-                      Project name <span className="req" style={{ color: "#ef4444" }}>*</span>
+                    <label>
+                      Project name <span className="req">*</span>
                     </label>
                     <input
                       className="inp"
                       placeholder="e.g. Palm Residency"
                       value={name}
                       onChange={(e) => setName(e.target.value)}
-                      style={{ height: 40, borderRadius: 9, fontSize: 13 }}
                     />
                     {invalid("name") && <div className="field-err">Project name is required.</div>}
                   </div>
 
                   <div className="field">
-                    <label style={{ fontSize: 12.5, fontWeight: 600, color: "#334155", marginBottom: 6, display: "block" }}>
-                      Developer / channel partner <span className="req" style={{ color: "#ef4444" }}>*</span>
+                    <label>
+                      Developer / channel partner <span className="req">*</span>
                     </label>
                     <input
                       className="inp"
                       value={orgName || "Skyline Developers"}
                       readOnly
-                      style={{ height: 40, borderRadius: 9, fontSize: 13, background: "#f8fafc", color: "#334155" }}
+                     
                     />
-                    <div className="hint" style={{ fontSize: 11, color: "#94a3b8", marginTop: 4 }}>
+                    <div className="hint">
                       Your organisation, set during onboarding. Change it in Settings → General.
                     </div>
                   </div>
@@ -1444,8 +1412,8 @@ export default function AddNewProjectPage() {
 
                 {/* Row 2: Project type * */}
                 <div className={fieldClass("projectType")} style={{ marginBottom: 18 }}>
-                  <label style={{ fontSize: 12.5, fontWeight: 600, color: "#334155", marginBottom: 8, display: "block" }}>
-                    Project type <span className="req" style={{ color: "#ef4444" }}>*</span>
+                  <label>
+                    Project type <span className="req">*</span>
                   </label>
 
                   {/* Visual Card Selector */}
@@ -1566,41 +1534,39 @@ export default function AddNewProjectPage() {
                 {/* Row 3: Currency & Area unit */}
                 <div className="grid g2" style={{ gap: 16, marginBottom: 18 }}>
                   <div className={fieldClass("currency")}>
-                    <label style={{ fontSize: 12.5, fontWeight: 600, color: "#334155", marginBottom: 6, display: "block" }}>
-                      Currency <span className="req" style={{ color: "#ef4444" }}>*</span>
+                    <label>
+                      Currency <span className="req">*</span>
                     </label>
                     <select
                       className="inp"
                       value={currency}
                       onChange={(e) => setCurrency(e.target.value)}
-                      style={{ height: 40, borderRadius: 9, fontSize: 13 }}
                     >
                       {CURRENCY_OPTIONS.map((c) => (
                         <option key={c.value} value={c.value}>{c.label}</option>
                       ))}
                     </select>
-                    <div className="hint" style={{ fontSize: 11, color: "#94a3b8", marginTop: 4 }}>
+                    <div className="hint">
                       Every price on this project is in this currency.
                     </div>
                     {invalid("currency") && <div className="field-err">Pick a currency before entering any prices.</div>}
                   </div>
 
                   <div className="field">
-                    <label style={{ fontSize: 12.5, fontWeight: 600, color: "#334155", marginBottom: 6, display: "block" }}>
-                      Area unit <span className="req" style={{ color: "#ef4444" }}>*</span>
+                    <label>
+                      Area unit <span className="req">*</span>
                     </label>
                     <select
                       className="inp"
                       value={areaUnit}
                       onChange={(e) => setAreaUnit(e.target.value)}
-                      style={{ height: 40, borderRadius: 9, fontSize: 13 }}
                     >
                       <option value="sqft">sq ft</option>
                       <option value="sqyd">sq yd</option>
                       <option value="sqm">sq m</option>
                       <option value="acre">acre</option>
                     </select>
-                    <div className="hint" style={{ fontSize: 11, color: "#94a3b8", marginTop: 4 }}>
+                    <div className="hint">
                       Used for every area-role value and price per unit area on this project.
                     </div>
                   </div>
@@ -1608,7 +1574,7 @@ export default function AddNewProjectPage() {
 
                 {/* Row 4: Short tagline */}
                 <div className="field" style={{ marginBottom: 18 }}>
-                  <label style={{ fontSize: 12.5, fontWeight: 600, color: "#334155", marginBottom: 6, display: "block" }}>
+                  <label>
                     Short tagline
                   </label>
                   <input
@@ -1616,9 +1582,8 @@ export default function AddNewProjectPage() {
                     placeholder="e.g. 2 &amp; 3 BHK homes on SG Highway"
                     value={tagline}
                     onChange={(e) => setTagline(e.target.value)}
-                    style={{ height: 40, borderRadius: 9, fontSize: 13 }}
                   />
-                  <div className="hint" style={{ fontSize: 11, color: "#94a3b8", marginTop: 4 }}>
+                  <div className="hint">
                     Shown on the public page and landing pages.
                   </div>
                 </div>
@@ -1627,7 +1592,7 @@ export default function AddNewProjectPage() {
                 <div style={{ borderTop: "1px solid #f1f5f9", paddingTop: 16, marginTop: 10 }}>
                   <div className="grid g2" style={{ gap: 16 }}>
                     <div className="field">
-                      <label style={{ fontSize: 12.5, fontWeight: 600, color: "#334155", marginBottom: 6, display: "block" }}>
+                      <label>
                         RERA registration no.
                       </label>
                       <input
@@ -1635,19 +1600,17 @@ export default function AddNewProjectPage() {
                         placeholder="e.g. PR/GJ/AHM/2026/00842"
                         value={reraId}
                         onChange={(e) => setReraId(e.target.value)}
-                        style={{ height: 40, borderRadius: 9, fontSize: 13 }}
                       />
                     </div>
 
                     <div className={fieldClass("status")}>
-                      <label style={{ fontSize: 12.5, fontWeight: 600, color: "#334155", marginBottom: 6, display: "block" }}>
-                        Status <span className="req" style={{ color: "#ef4444" }}>*</span>
+                      <label>
+                        Status <span className="req">*</span>
                       </label>
                       <select
                         className="inp"
                         value={status}
                         onChange={(e) => setStatus(e.target.value as ProjectStatus)}
-                        style={{ height: 40, borderRadius: 9, fontSize: 13 }}
                       >
                         <option value="active">Active</option>
                         <option value="inactive">Inactive</option>
@@ -1839,6 +1802,7 @@ export default function AddNewProjectPage() {
                     values={customValues}
                     onTemplateChange={(template) => setProjectFieldRows(fieldsToRows(template))}
                     onValueChange={(key, value) => setCustomValues((cur) => ({ ...cur, [key]: value }))}
+                    errorFor={(key) => (invalid(`cf_${key}`) ? fieldError(`cf_${key}`) : "")}
                   />
                   <UnitFieldRows rows={unitFieldRows} onChange={setUnitFieldRows} roleBaseline={unitRoleBaseline} />
                   <div className="hint">Unit counts come from the Units section after publishing.</div>
@@ -2359,9 +2323,8 @@ export default function AddNewProjectPage() {
         >
           <button
             type="button"
-            className="btn btn-ghost"
+            className={formPageStyles.btn}
             onClick={() => router.push("/org/projects")}
-            style={{ borderRadius: 9, padding: "8px 18px", fontSize: 13, color: "#64748b" }}
           >
             Cancel
           </button>
@@ -2371,51 +2334,34 @@ export default function AddNewProjectPage() {
           <div className="row gap-10" style={{ display: "flex", gap: 10, alignItems: "center" }}>
             <button
               type="button"
-              className="btn btn-ghost"
+              className={formPageStyles.btn}
               disabled={step === 0}
               onClick={goBack}
-              style={{
-                borderRadius: 9,
-                padding: "8px 18px",
-                fontSize: 13,
-                opacity: step === 0 ? 0.45 : 1,
-                cursor: step === 0 ? "not-allowed" : "pointer",
-              }}
             >
               Previous
             </button>
             {step < STEPS.length - 1 ? (
               <button
                 type="button"
-                className="btn btn-primary"
+                className={formPageStyles.btnPrimary}
                 onClick={goNext}
-                style={{
-                  background: "#0066f5",
-                  borderRadius: 9,
-                  padding: "9px 22px",
-                  fontSize: 13,
-                  fontWeight: 600,
-                  boxShadow: "0 4px 14px rgba(0, 102, 245, 0.35)",
-                }}
               >
-                Next Step →
+                Next Step <Icon name="chevron-right" size={16} />
               </button>
             ) : publishedProjectId && !createdLandingPage ? (
               <button
                 type="button"
-                className="btn btn-primary"
+                className={formPageStyles.btnPrimary}
                 onClick={() => router.push(`/org/projects/${publishedProjectId}`)}
-                style={{ background: "#0066f5", borderRadius: 9, padding: "9px 22px", fontSize: 13, fontWeight: 600 }}
               >
                 Go to project →
               </button>
             ) : (
               <button
                 type="button"
-                className="btn btn-primary"
+                className={formPageStyles.btnPrimary}
                 disabled={submitting}
                 onClick={() => void submit()}
-                style={{ background: "#0066f5", borderRadius: 9, padding: "9px 22px", fontSize: 13, fontWeight: 600 }}
               >
                 {submitting ? "Publishing…" : <><Icon name="flag" size={14} /> Publish project</>}
               </button>
@@ -2600,6 +2546,6 @@ export default function AddNewProjectPage() {
           </>
         ) : null}
       </Modal>
-    </>
+    </FormPage>
   );
 }

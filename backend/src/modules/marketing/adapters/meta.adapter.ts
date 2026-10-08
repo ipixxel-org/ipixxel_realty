@@ -149,21 +149,27 @@ export class MetaAdapter implements PlatformAdapter {
   }
 
   async disconnect(connection: MarketingConnectionRow): Promise<void> {
-    await this.prisma.marketingConnection.deleteMany({
-      where: {
-        orgId: connection.orgId,
-        externalAccountId: connection.externalAccountId,
-        platformKey: { in: ['meta', 'instagram', 'whatsapp'] },
-      },
-    });
-    const page = await this.prisma.metaPageConnection.findFirst({
-      where: {
-        orgId: connection.orgId,
-        pageId: connection.externalAccountId,
-      },
-    });
-    if (page) {
-      await this.prisma.metaPageConnection.delete({ where: { id: page.id } });
+    if (connection.platformKey === 'meta') {
+      await this.prisma.marketingConnection.deleteMany({
+        where: {
+          orgId: connection.orgId,
+          externalAccountId: connection.externalAccountId,
+          platformKey: 'meta',
+        },
+      });
+      const page = await this.prisma.metaPageConnection.findFirst({
+        where: {
+          orgId: connection.orgId,
+          pageId: connection.externalAccountId,
+        },
+      });
+      if (page) {
+        await this.prisma.metaPageConnection.delete({ where: { id: page.id } });
+      }
+    } else {
+      await this.prisma.marketingConnection.delete({
+        where: { id: connection.id },
+      });
     }
   }
 }

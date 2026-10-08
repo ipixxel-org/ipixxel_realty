@@ -18,6 +18,7 @@ export function CanvasEmpty() {
 
   return (
     <div
+      data-tour="canvas"
       onDragOver={(e) => {
         e.preventDefault();
         e.dataTransfer.dropEffect = "copy";
@@ -96,9 +97,29 @@ export function CanvasEmpty() {
       </div>
 
       {!isDragging && (
-        <div className="flex items-center gap-2 text-[11px] text-text-3 border border-border-subtle rounded-full px-3 py-1 bg-bg-3/60">
-          <span className="inline-block w-2 h-2 rounded-full bg-green animate-ping" />
-          Drag widgets directly from the left sidebar
+        <div className="flex flex-col items-center gap-3">
+          <div className="flex flex-wrap items-center justify-center gap-2">
+            <button
+              type="button"
+              onClick={() => useEditorStore.getState().openLeftTab("templates")}
+              className="flex items-center gap-1.5 px-3.5 py-2 rounded-lg bg-green text-bg-0 text-[12px] font-semibold hover:bg-green/90 transition-colors"
+            >
+              <LayoutTemplate size={14} />
+              Browse section templates
+            </button>
+            <button
+              type="button"
+              onClick={() => useEditorStore.getState().openLeftTab("components")}
+              className="flex items-center gap-1.5 px-3.5 py-2 rounded-lg border border-border-default bg-bg-2 text-text-1 text-[12px] font-semibold hover:bg-bg-3 hover:text-text-0 transition-colors"
+            >
+              <Plus size={14} />
+              Add a block
+            </button>
+          </div>
+          <div className="flex items-center gap-2 text-[11px] text-text-3 border border-border-subtle rounded-full px-3 py-1 bg-bg-3/60">
+            <span className="inline-block w-2 h-2 rounded-full bg-green animate-ping" />
+            Drag widgets from the left, or press Ctrl+K to search everything
+          </div>
         </div>
       )}
     </div>

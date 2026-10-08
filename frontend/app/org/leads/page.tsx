@@ -18,6 +18,7 @@ import { useAuth } from "@/lib/auth-context";
 import type { CrmLead, CrmLeadStatus } from "@/lib/types";
 import { leadDisplayName, leadDisplayPhone, leadDisplaySource } from "@/lib/lead-display";
 import { LEADS_FLASH_KEY } from "@/components/org/add-lead-form";
+import { ImportLeadsModal } from "@/components/org/import-leads-modal";
 import { useFlash } from "@/lib/flash";
 import { useToast } from "@/components/ui/toast";
 import { LIST_PAGE_SIZE, ListPager } from "@/components/ui/list-pager";
@@ -71,6 +72,14 @@ export default function OrgLeadsPage() {
   const [sheetUrl, setSheetUrl] = useState<string | null>(null);
   const [sheetsConnected, setSheetsConnected] = useState<boolean | null>(null);
   const [showConnectModal, setShowConnectModal] = useState(false);
+  // Import CSV popup. Old /org/leads/import links arrive as ?import=1 and
+  // open it (still gated on canAdd where it renders); the query is then
+  // dropped from the URL.
+  const [importOpen, setImportOpen] = useState(() => searchParams.get("import") === "1");
+  useEffect(() => {
+    if (searchParams.get("import") === "1") router.replace("/org/leads");
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- only for the initial URL
+  }, []);
 
   useEffect(() => {
     let mounted = true;
@@ -315,7 +324,7 @@ export default function OrgLeadsPage() {
               {syncingSheets ? "Syncing…" : "Sync with Google Sheet"}
             </button>
 
-            <button className="lc-btn-outline" type="button" onClick={() => router.push("/org/leads/import")}>
+            <button className="lc-btn-outline" type="button" onClick={() => setImportOpen(true)}>
               <Icon name="document" size={14} /> Import CSV
             </button>
             <button className="lc-btn-primary" type="button" onClick={() => router.push("/org/leads/new")}>
@@ -802,6 +811,10 @@ export default function OrgLeadsPage() {
           </p>
         </div>
       </Modal>
+
+      {importOpen && canAdd ? (
+        <ImportLeadsModal onClose={() => setImportOpen(false)} onImported={() => void load()} />
+      ) : null}
     </div>
   );
 }

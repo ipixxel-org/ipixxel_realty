@@ -47,7 +47,7 @@ import { SiteRenderer } from "@/components/openpage/renderer/SiteRenderer";
 import { siteFromLandingPage } from "@/lib/openpage/content";
 import { buildRealEstateTemplate } from "@/lib/openpage/re-templates";
 import { Modal } from "@/components/ui/modal";
-import { Field, FormActions, FormAlert, FormPage, TextInput, formPageStyles } from "@/components/forms/form-page";
+import { Field, FormActions, FormAlert, FormModal, FormPage, TextInput, formPageStyles } from "@/components/forms/form-page";
 import { ConfirmModal } from "@/components/ui/confirm-modal";
 import type {
   LandingPageRow,
@@ -201,6 +201,16 @@ export default function OrgLandingPagesPage() {
   const [loadError, setLoadError] = useState<string | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [toast, setToast] = useState<string | null>(null);
+
+  // Bulk actions — multi-select over the current result set. The selection is
+  // keyed to the active filters, so changing tab/search/page implicitly drops
+  // rows that are no longer visible (no effect, no stale bulk operations).
+  const selectionKey = `${page}|${tabIndex}|${searchInput}|${filterProject}|${filterTemplate}`;
+  const [selection, setSelection] = useState<{ key: string; ids: string[] }>({ key: "", ids: [] });
+  const selectedIds = selection.key === selectionKey ? selection.ids : [];
+  const [bulkBusy, setBulkBusy] = useState<"publish" | "unpublish" | "delete" | null>(null);
+  const [bulkConfirmDelete, setBulkConfirmDelete] = useState(false);
+  const applySelection = (ids: string[]) => setSelection({ key: selectionKey, ids });
 
   const [landingPageQuota, setLandingPageQuota] = useState<{
     used: number;
@@ -475,6 +485,59 @@ export default function OrgLandingPagesPage() {
     }
   }
 
+  function toggleSelect(id: string) {
+    setBulkConfirmDelete(false);
+    applySelection(
+      selectedIds.includes(id) ? selectedIds.filter((x) => x !== id) : [...selectedIds, id],
+    );
+  }
+
+  function toggleSelectAll() {
+    setBulkConfirmDelete(false);
+    applySelection(allVisibleSelected ? [] : filteredRows.map((r) => r.id));
+  }
+
+  async function runBulk(action: "publish" | "unpublish" | "delete") {
+    if (!accessToken || selectedIds.length === 0 || bulkBusy) return;
+    if (action === "publish" && atPublishLimit) {
+      notify(publishLimitReason || "Publish limit reached for your plan.");
+      return;
+    }
+    const ids = [...selectedIds];
+    const label = action === "publish" ? "Published" : action === "unpublish" ? "Unpublished" : "Deleted";
+    setBulkBusy(action);
+    let ok = 0;
+    let failed = 0;
+    for (const id of ids) {
+      try {
+        if (action === "delete") {
+          await apiFetch(`/org/landing-pages/${id}`, {
+            method: "DELETE",
+            headers: { Authorization: `Bearer ${accessToken}` },
+          });
+        } else {
+          await apiFetch(`/org/landing-pages/${id}/${action}`, {
+            method: "POST",
+            headers: { Authorization: `Bearer ${accessToken}` },
+          });
+        }
+        ok += 1;
+      } catch {
+        failed += 1;
+      }
+    }
+    setBulkBusy(null);
+    applySelection([]);
+    setBulkConfirmDelete(false);
+    notify(
+      failed === 0
+        ? `${label} ${ok} page${ok === 1 ? "" : "s"}`
+        : `${label} ${ok} page${ok === 1 ? "" : "s"} — ${failed} failed`,
+    );
+    fetchList();
+    fetchAllPages();
+  }
+
   async function confirmCreateFromScratch() {
     if (!accessToken) return;
     let pageName = scratchName.trim();
@@ -601,6 +664,10 @@ export default function OrgLandingPagesPage() {
     ? "You've reached your plan's published landing page limit"
     : undefined;
 
+  const allVisibleSelected =
+    filteredRows.length > 0 && filteredRows.every((r) => selectedIds.includes(r.id));
+  const selectedCount = selectedIds.length;
+
   // 100% Dynamic KPI Metrics calculated from real database pages
   const dynamicSource = allPages.length > 0 ? allPages : rawRows;
   const totalKpi = allPages.length > 0 ? allPages.length : (result?.total ?? rawRows.length);
@@ -612,106 +679,9 @@ export default function OrgLandingPagesPage() {
   const draftPct = totalKpi > 0 ? Math.round((draftKpi / totalKpi) * 100) : 0;
   const unpublishedPct = totalKpi > 0 ? Math.round((unpublishedKpi / totalKpi) * 100) : 0;
 
-  // Create flows as full-width in-page views (were modals). The list stays
-  // mounted but hidden; the preview / plan-limit / domain modals portal to
-  // <body>, so they still open on top of these views exactly as before.
-  const formView = scratchOpen ? (
-    <FormPage
-      eyebrow="Website · Landing Pages"
-      title="Create a blank landing page"
-      subtitle="Starts with an empty canvas. Bind a project or standalone unit to auto-fill property tokens."
-      onBack={() => {
-        if (!scratchSubmitting) setScratchOpen(false);
-      }}
-      backDisabled={scratchSubmitting}
-      backLabel="Back to Landing Pages"
-    >
-      <div className={formPageStyles.panel}>
-        <FormAlert message={scratchError} />
-        <Field htmlFor="lp-scratch-name" label="Landing page name" icon="landing">
-          <TextInput
-            id="lp-scratch-name"
-            icon="landing"
-            placeholder="e.g. Waterfront Residences"
-            value={scratchName}
-            onChange={(e) => setScratchName(e.target.value)}
-            autoFocus
-          />
-        </Field>
-        <Field htmlFor="lp-scratch-bind" label="Project or standalone unit" icon="building">
-          <InventoryBindFields
-            accessToken={accessToken}
-            value={scratchBind}
-            onChange={setScratchBind}
-            onSelectOption={(opt) => {
-              setScratchSelectedLabel(opt.label);
-              if (opt.label && !scratchName.trim()) {
-                setScratchName(opt.label);
-              }
-            }}
-            onAvailabilityChange={setScratchHasInventory}
-            hideLabel
-          />
-        </Field>
-        <FormActions
-          onCancel={() => setScratchOpen(false)}
-          busy={scratchSubmitting}
-          busyLabel="Creating…"
-          submitLabel="Create & Launch Builder"
-          submitIcon="plus"
-          onSubmit={() => void confirmCreateFromScratch()}
-        />
-      </div>
-    </FormPage>
-  ) : useTemplate ? (
-    <FormPage
-      eyebrow="Website · Landing Pages"
-      title="Create landing page"
-      subtitle={`Start a new landing page based on "${useTemplate.name}".`}
-      onBack={() => {
-        if (!useSubmitting) setUseTemplate(null);
-      }}
-      backDisabled={useSubmitting}
-      backLabel="Back to Landing Pages"
-    >
-      <div className={formPageStyles.panel}>
-        <FormAlert message={useError} />
-        <Field htmlFor="lp-use-name" label="Landing page name" icon="landing">
-          <TextInput
-            id="lp-use-name"
-            icon="landing"
-            placeholder="e.g. Skyline Residence Launch"
-            value={useName}
-            onChange={(e) => setUseName(e.target.value)}
-            autoFocus
-          />
-        </Field>
-        <Field htmlFor="lp-use-bind" label="Project or standalone unit" icon="building">
-          <InventoryBindFields
-            accessToken={accessToken}
-            value={useBind}
-            onChange={setUseBind}
-            onSelectOption={(opt) => {
-              setUseSelectedLabel(opt.label);
-              if (opt.label && !useName.trim()) {
-                setUseName(`${opt.label}${useTemplate?.name ? ` — ${useTemplate.name}` : ""}`);
-              }
-            }}
-            onAvailabilityChange={setUseHasInventory}
-            hideLabel
-          />
-        </Field>
-        <FormActions
-          onCancel={() => setUseTemplate(null)}
-          busy={useSubmitting}
-          busyLabel="Creating…"
-          submitLabel="Create & Launch Builder"
-          submitIcon="plus"
-          onSubmit={() => void confirmUseTemplate()}
-        />
-      </div>
-    </FormPage>
-  ) : templatePickerOpen ? (
+  // The template picker is a full-width in-page view; the two short create
+  // forms are popups (rendered below) so they open over the list.
+  const formView = templatePickerOpen ? (
     <FormPage
       eyebrow="Website · Landing Pages"
       title="Choose a landing page template"
@@ -867,6 +837,98 @@ export default function OrgLandingPagesPage() {
   return (
     <>
       {formView}
+      <FormModal
+        open={scratchOpen}
+        onClose={() => {
+          if (!scratchSubmitting) setScratchOpen(false);
+        }}
+        title="Create a blank landing page"
+        description="Starts with an empty canvas. Bind a project or standalone unit to auto-fill property tokens."
+        busy={scratchSubmitting}
+        onSubmit={() => void confirmCreateFromScratch()}
+      >
+        <FormAlert message={scratchError} />
+        <Field htmlFor="lp-scratch-name" label="Landing page name" icon="landing">
+          <TextInput
+            id="lp-scratch-name"
+            icon="landing"
+            placeholder="e.g. Waterfront Residences"
+            value={scratchName}
+            onChange={(e) => setScratchName(e.target.value)}
+            autoFocus
+          />
+        </Field>
+        <Field htmlFor="lp-scratch-bind" label="Project or standalone unit" icon="building">
+          <InventoryBindFields
+            accessToken={accessToken}
+            value={scratchBind}
+            onChange={setScratchBind}
+            onSelectOption={(opt) => {
+              setScratchSelectedLabel(opt.label);
+              if (opt.label && !scratchName.trim()) {
+                setScratchName(opt.label);
+              }
+            }}
+            onAvailabilityChange={setScratchHasInventory}
+            hideLabel
+          />
+        </Field>
+        <FormActions
+          onCancel={() => {
+            if (!scratchSubmitting) setScratchOpen(false);
+          }}
+          busy={scratchSubmitting}
+          busyLabel="Creating…"
+          submitLabel="Create & Launch Builder"
+          submitIcon="plus"
+        />
+      </FormModal>
+      <FormModal
+        open={useTemplate !== null}
+        onClose={() => {
+          if (!useSubmitting) setUseTemplate(null);
+        }}
+        title="Create landing page"
+        description={`Start a new landing page based on "${useTemplate?.name ?? ""}".`}
+        busy={useSubmitting}
+        onSubmit={() => void confirmUseTemplate()}
+      >
+        <FormAlert message={useError} />
+        <Field htmlFor="lp-use-name" label="Landing page name" icon="landing">
+          <TextInput
+            id="lp-use-name"
+            icon="landing"
+            placeholder="e.g. Skyline Residence Launch"
+            value={useName}
+            onChange={(e) => setUseName(e.target.value)}
+            autoFocus
+          />
+        </Field>
+        <Field htmlFor="lp-use-bind" label="Project or standalone unit" icon="building">
+          <InventoryBindFields
+            accessToken={accessToken}
+            value={useBind}
+            onChange={setUseBind}
+            onSelectOption={(opt) => {
+              setUseSelectedLabel(opt.label);
+              if (opt.label && !useName.trim()) {
+                setUseName(`${opt.label}${useTemplate?.name ? ` — ${useTemplate.name}` : ""}`);
+              }
+            }}
+            onAvailabilityChange={setUseHasInventory}
+            hideLabel
+          />
+        </Field>
+        <FormActions
+          onCancel={() => {
+            if (!useSubmitting) setUseTemplate(null);
+          }}
+          busy={useSubmitting}
+          busyLabel="Creating…"
+          submitLabel="Create & Launch Builder"
+          submitIcon="plus"
+        />
+      </FormModal>
     <div className="lp-wrap" style={formView ? { display: "none" } : undefined}>
       {/* Studio Header */}
       <div className="lp-header reveal in">
@@ -1224,6 +1286,80 @@ export default function OrgLandingPagesPage() {
         </div>
       </div>
 
+      {/* Bulk action bar — appears when rows are selected */}
+      {selectedCount > 0 ? (
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: 10,
+            flexWrap: "wrap",
+            padding: "10px 14px",
+            borderRadius: 12,
+            border: "1px solid var(--brand-100, #e0e3fd)",
+            background: "var(--surface-2, #f8fafc)",
+            marginBottom: 4,
+          }}
+        >
+          <span style={{ fontSize: 13, fontWeight: 700, color: "var(--ink)" }}>
+            {selectedCount} selected
+          </span>
+          <div style={{ flex: 1 }} />
+          <button type="button" className="btn btn-ghost btn-sm" onClick={() => applySelection([])}>
+            Clear
+          </button>
+          {canPause ? (
+            <button
+              type="button"
+              className="btn btn-soft btn-sm"
+              disabled={!!bulkBusy}
+              onClick={() => runBulk("unpublish")}
+            >
+              {bulkBusy === "unpublish" ? "Unpublishing…" : "Unpublish"}
+            </button>
+          ) : null}
+          {canPublish ? (
+            <button
+              type="button"
+              className="btn btn-primary btn-sm"
+              disabled={!!bulkBusy || atPublishLimit}
+              title={publishLimitReason}
+              onClick={() => runBulk("publish")}
+            >
+              {bulkBusy === "publish" ? "Publishing…" : "Publish"}
+            </button>
+          ) : null}
+          {canDelete ? (
+            bulkConfirmDelete ? (
+              <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+                <button
+                  type="button"
+                  className="btn btn-sm"
+                  disabled={!!bulkBusy}
+                  onClick={() => runBulk("delete")}
+                  style={{ background: "var(--rose)", color: "#fff", fontWeight: 700 }}
+                >
+                  {bulkBusy === "delete" ? "Deleting…" : `Yes, delete ${selectedCount}`}
+                </button>
+                <button type="button" className="btn btn-ghost btn-sm" onClick={() => setBulkConfirmDelete(false)}>
+                  Cancel
+                </button>
+              </span>
+            ) : (
+              <button
+                type="button"
+                className="btn btn-ghost btn-sm"
+                disabled={!!bulkBusy}
+                onClick={() => setBulkConfirmDelete(true)}
+                style={{ color: "var(--rose)" }}
+              >
+                Delete
+              </button>
+            )
+          ) : null}
+        </div>
+      ) : null}
+
       {/* Content Area */}
       {loading ? (
         <div style={{ textAlign: "center", padding: "60px 20px", color: "var(--muted)" }}>
@@ -1332,6 +1468,15 @@ export default function OrgLandingPagesPage() {
             <table className="tbl" style={{ width: "100%" }}>
               <thead>
                 <tr>
+                  <th style={{ width: 36 }}>
+                    <input
+                      type="checkbox"
+                      checked={allVisibleSelected}
+                      onChange={toggleSelectAll}
+                      aria-label="Select all visible pages"
+                      style={{ cursor: "pointer" }}
+                    />
+                  </th>
                   <th>Page Name</th>
                   <th>Domain</th>
                   <th>Source Template</th>
@@ -1342,7 +1487,16 @@ export default function OrgLandingPagesPage() {
               </thead>
               <tbody>
                 {filteredRows.map((row) => (
-                  <tr key={row.id}>
+                  <tr key={row.id} style={selectedIds.includes(row.id) ? { background: "var(--surface-2, #f8fafc)" } : undefined}>
+                    <td>
+                      <input
+                        type="checkbox"
+                        checked={selectedIds.includes(row.id)}
+                        onChange={() => toggleSelect(row.id)}
+                        aria-label={`Select ${row.name}`}
+                        style={{ cursor: "pointer" }}
+                      />
+                    </td>
                     <td>
                       <span style={{ fontWeight: 700, color: "var(--ink)" }}>{row.name}</span>
                       <div style={{ fontSize: 11.5, color: "var(--muted)", marginTop: 2 }}>{row.slug}</div>
@@ -1489,6 +1643,8 @@ export default function OrgLandingPagesPage() {
               row={row}
               accessToken={accessToken}
               busy={busyId === row.id}
+              selected={selectedIds.includes(row.id)}
+              onToggleSelect={() => toggleSelect(row.id)}
               onEdit={canEdit ? () => startEdit(row) : undefined}
               onEditThankYou={canEdit ? () => startEditThankYou(row) : undefined}
               onView={() => openView(row.id)}
@@ -1699,6 +1855,8 @@ function OrgLandingPageVisualCard({
   row,
   accessToken,
   busy,
+  selected,
+  onToggleSelect,
   onEdit,
   onEditThankYou,
   onView,
@@ -1714,6 +1872,8 @@ function OrgLandingPageVisualCard({
   row: LandingPageRow;
   accessToken?: string | null;
   busy: boolean;
+  selected?: boolean;
+  onToggleSelect?: () => void;
   onEdit?: () => void;
   onEditThankYou?: () => void;
   onView: () => void;
@@ -1802,8 +1962,40 @@ function OrgLandingPageVisualCard({
           }}
         />
 
+        {/* Selection checkbox (bulk actions) */}
+        {onToggleSelect ? (
+          <label
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              position: "absolute",
+              top: 8,
+              left: 8,
+              zIndex: 2,
+              display: "inline-flex",
+              alignItems: "center",
+              justifyContent: "center",
+              width: 22,
+              height: 22,
+              borderRadius: 6,
+              background: selected ? "var(--brand)" : "rgba(15, 23, 42, 0.55)",
+              border: selected ? "none" : "1px solid rgba(255,255,255,0.55)",
+              cursor: "pointer",
+              backdropFilter: "blur(4px)",
+            }}
+            title={selected ? "Deselect page" : "Select page for bulk actions"}
+          >
+            <input
+              type="checkbox"
+              checked={!!selected}
+              onChange={onToggleSelect}
+              aria-label={`Select ${row.name}`}
+              style={{ cursor: "pointer", width: 13, height: 13, accentColor: "#fff" }}
+            />
+          </label>
+        ) : null}
+
         {/* Overlaid Top-Left Status Pill */}
-        <div className="lp-badge-status">
+        <div className="lp-badge-status" style={onToggleSelect ? { left: 38 } : undefined}>
           <span
             className={`lp-dot ${
               isPublished ? "lp-dot-green" : isDraft ? "lp-dot-amber" : "lp-dot-red"

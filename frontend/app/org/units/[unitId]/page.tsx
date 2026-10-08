@@ -17,6 +17,7 @@ import { parseAmount, parseDecimal } from "@/lib/parse";
 import { formatMoney } from "@/lib/money";
 import { Reveal } from "@/components/superadmin/reveal";
 import { ConfirmModal } from "@/components/ui/confirm-modal";
+import { FormActions, FormAlert, FormPage } from "@/components/forms/form-page";
 import {
   ConfigurationSelect,
   NoManagersNote,
@@ -294,6 +295,248 @@ export default function StandaloneUnitPage() {
     },
   ];
 
+  const cancelEdit = () => {
+    setForm(toForm(unit));
+    setEditing(false);
+    setError(null);
+  };
+
+  if (editing) {
+    return (
+      <FormPage
+        eyebrow="Units · Standalone"
+        title={`Edit ${unit.unitNo}`}
+        subtitle="Resale / broker listing — not attached to a project."
+        onBack={cancelEdit}
+        backDisabled={saving}
+        backLabel="Cancel editing"
+      >
+        <FormAlert message={error} />
+        <div className="card pad-26">
+          <div className="sec">
+            <div className="lbl">🏠 Unit details</div>
+            <div className="grid g3">
+              <div className="field">
+                <label>
+                  Unit number <span className="req">*</span>
+                </label>
+                <input
+                  className="inp mono"
+                  value={form.unitNo}
+                  onChange={(e) => patch({ unitNo: e.target.value })}
+                />
+              </div>
+              <div className="field">
+                <label>
+                  Configuration <span className="req">*</span>
+                </label>
+                <ConfigurationSelect
+                  catalog={catalog?.filter((option) => option.category === "unit_type") ?? null}
+                  error={catalogError}
+                  value={form.configuration}
+                  onChange={(v) => patch({ configuration: v })}
+                />
+              </div>
+              <div className="field">
+                <label>Unit variant</label>
+                <UnitAttributeSelect
+                  options={variantOptions}
+                  loaded={catalog !== null}
+                  error={catalogError}
+                  value={form.variantLabel}
+                  onChange={(v) => patch({ variantLabel: v })}
+                  placeholder="None"
+                  emptyHint="No unit variants configured yet."
+                />
+                <div className="hint">Optional — e.g. Type A, Corner.</div>
+              </div>
+            </div>
+            <div className="grid g3">
+              <div className="field">
+                <label>Area (sqft)</label>
+                <input
+                  className="inp"
+                  type="number"
+                  min={0}
+                  value={form.area}
+                  onChange={(e) => patch({ area: e.target.value })}
+                />
+              </div>
+              <div className="field">
+                <label>Facing</label>
+                <UnitAttributeSelect
+                  options={facingOptions}
+                  loaded={catalog !== null}
+                  error={catalogError}
+                  value={form.facing}
+                  onChange={(v) => patch({ facing: v })}
+                  placeholder="Select…"
+                  emptyHint="No facing options configured yet."
+                />
+              </div>
+            </div>
+            <div className="field mb-0" style={{ marginTop: 4 }}>
+              <label>Parking</label>
+              <UnitAttributeSelect
+                options={parkingOptions}
+                loaded={catalog !== null}
+                error={catalogError}
+                value={form.parking}
+                onChange={(v) => patch({ parking: v })}
+                emptyHint="No parking options configured yet."
+              />
+            </div>
+          </div>
+
+          <div className="sec">
+            <div className="lbl">💰 Pricing &amp; status</div>
+            <div className="grid g3">
+              <div className="field">
+                <label>Price</label>
+                <input
+                  className="inp"
+                  type="number"
+                  min={0}
+                  value={form.price}
+                  onChange={(e) => patch({ price: e.target.value })}
+                />
+              </div>
+              <div className="field">
+                <label>Price / {unit.areaUnit || "sqft"}</label>
+                <input className="inp" disabled placeholder="—" value={pricePerArea} />
+              </div>
+              <div className="field">
+                <label>Status</label>
+                <select
+                  className="inp"
+                  value={form.status}
+                  onChange={(e) =>
+                    patch({ status: e.target.value as UnitStatus })
+                  }
+                >
+                  {STATUSES.map((s) => (
+                    <option key={s.value} value={s.value}>
+                      {s.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
+          </div>
+
+          <div className="sec">
+            <div className="lbl">👤 Team &amp; access</div>
+            <div className="grid g2">
+              <div className="field">
+                <label>Manager</label>
+                {managersLoaded && managers.length === 0 ? (
+                  <NoManagersNote noun="unit" />
+                ) : (
+                  <select
+                    className="inp"
+                    value={form.managerId}
+                    onChange={(e) => patch({ managerId: e.target.value })}
+                  >
+                    <option value="">Unassigned</option>
+                    {managers.map((m) => (
+                      <option key={m.id} value={m.id}>
+                        {userLabel(m)}
+                      </option>
+                    ))}
+                    {/* The current manager (e.g. an auto-assigned admin) stays selectable. */}
+                    {unit.manager && !managers.some((m) => m.id === unit.manager?.id) ? (
+                      <option value={unit.manager.id}>{unit.manager.name}</option>
+                    ) : null}
+                  </select>
+                )}
+              </div>
+            </div>
+            <div className="field mb-0">
+              <label>Assign sales agents</label>
+              {salesAgentCandidates.length === 0 ? (
+                <div className="hint">No assignable users in your organisation yet — add them under Users.</div>
+              ) : (
+                <div className="opts">
+                  {salesAgentCandidates.map((a) => {
+                    const on = form.agentAssign.includes(a.id);
+                    return (
+                      <span
+                        key={a.id}
+                        className={`opt ${on ? "on" : ""}`}
+                        onClick={() =>
+                          patch({
+                            agentAssign: on
+                              ? form.agentAssign.filter((x) => x !== a.id)
+                              : [...form.agentAssign, a.id],
+                          })
+                        }
+                      >
+                        <span className="b">{on ? "✓" : ""}</span>{a.name}
+                      </span>
+                    );
+                  })}
+                </div>
+              )}
+              <div className="hint">
+                Controls whose All Units list this shows up in — org admins always see every unit.
+              </div>
+            </div>
+          </div>
+
+          <div className="sec">
+            <div className="lbl">🖼️ Media &amp; documents</div>
+            <UnitMediaFields
+              floorPlanUrl={form.floorPlanUrl}
+              galleryUrls={form.galleryUrls}
+              onFloorPlanChange={(v) => patch({ floorPlanUrl: v })}
+              onGalleryChange={(urls) => patch({ galleryUrls: urls })}
+            />
+          </div>
+
+          <div className="sec nb">
+            <div className="lbl">📋 Listing details</div>
+            <div className="grid g2">
+              <div className="field">
+                <label>Location / address</label>
+                <input
+                  className="inp"
+                  value={form.addressLine}
+                  onChange={(e) => patch({ addressLine: e.target.value })}
+                />
+              </div>
+              <div className="field">
+                <label>Owner / seller name</label>
+                <input
+                  className="inp"
+                  value={form.ownerName}
+                  onChange={(e) => patch({ ownerName: e.target.value })}
+                />
+              </div>
+            </div>
+            <div className="field mb-0">
+              <label>Notes</label>
+              <textarea
+                className="inp"
+                rows={2}
+                value={form.notes}
+                onChange={(e) => patch({ notes: e.target.value })}
+              />
+            </div>
+          </div>
+        </div>
+
+        <FormActions
+          onCancel={cancelEdit}
+          busy={saving}
+          busyLabel="Saving…"
+          submitLabel="Save changes"
+          submitIcon="check"
+          onSubmit={() => void save()}
+        />
+      </FormPage>
+    );
+  }
+
   return (
     <>
       <div className="page-head reveal in">
@@ -312,51 +555,24 @@ export default function StandaloneUnitPage() {
           </div>
         </div>
         <div className="actions">
-          {editing ? (
-            <>
-              <button
-                className="btn btn-ghost"
-                type="button"
-                onClick={() => {
-                  setForm(toForm(unit));
-                  setEditing(false);
-                  setError(null);
-                }}
-                disabled={saving}
-              >
-                Cancel
-              </button>
-              <button
-                className="btn btn-primary"
-                type="button"
-                onClick={() => void save()}
-                disabled={saving}
-              >
-                {saving ? "Saving…" : "💾 Save"}
-              </button>
-            </>
-          ) : (
-            <>
-              {canDeleteUnit ? (
-                <button
-                  className="btn btn-ghost text-rose"
-                  type="button"
-                  onClick={() => setConfirmDelete(true)}
-                >
-                  🗑 Delete
-                </button>
-              ) : null}
-              {canEditUnit ? (
-                <button
-                  className="btn btn-primary"
-                  type="button"
-                  onClick={() => setEditing(true)}
-                >
-                  ✏️ Edit
-                </button>
-              ) : null}
-            </>
-          )}
+          {canDeleteUnit ? (
+            <button
+              className="btn btn-ghost text-rose"
+              type="button"
+              onClick={() => setConfirmDelete(true)}
+            >
+              🗑 Delete
+            </button>
+          ) : null}
+          {canEditUnit ? (
+            <button
+              className="btn btn-primary"
+              type="button"
+              onClick={() => setEditing(true)}
+            >
+              ✏️ Edit
+            </button>
+          ) : null}
         </div>
       </div>
 
@@ -367,276 +583,61 @@ export default function StandaloneUnitPage() {
       ) : null}
 
       <Reveal delay={1}>
-        {editing ? (
-          <div className="card pad-26">
-            <div className="sec">
-              <div className="lbl">🏠 Unit details</div>
-              <div className="grid g3">
-                <div className="field">
-                  <label>
-                    Unit number <span className="req">*</span>
-                  </label>
-                  <input
-                    className="inp mono"
-                    value={form.unitNo}
-                    onChange={(e) => patch({ unitNo: e.target.value })}
-                  />
-                </div>
-                <div className="field">
-                  <label>
-                    Configuration <span className="req">*</span>
-                  </label>
-                  <ConfigurationSelect
-                    catalog={catalog?.filter((option) => option.category === "unit_type") ?? null}
-                    error={catalogError}
-                    value={form.configuration}
-                    onChange={(v) => patch({ configuration: v })}
-                  />
-                </div>
-                <div className="field">
-                  <label>Unit variant</label>
-                  <UnitAttributeSelect
-                    options={variantOptions}
-                    loaded={catalog !== null}
-                    error={catalogError}
-                    value={form.variantLabel}
-                    onChange={(v) => patch({ variantLabel: v })}
-                    placeholder="None"
-                    emptyHint="No unit variants configured yet."
-                  />
-                  <div className="hint">Optional — e.g. Type A, Corner.</div>
-                </div>
-              </div>
-              <div className="grid g3">
-                <div className="field">
-                  <label>Area (sqft)</label>
-                  <input
-                    className="inp"
-                    type="number"
-                    min={0}
-                    value={form.area}
-                    onChange={(e) => patch({ area: e.target.value })}
-                  />
-                </div>
-                <div className="field">
-                  <label>Facing</label>
-                  <UnitAttributeSelect
-                    options={facingOptions}
-                    loaded={catalog !== null}
-                    error={catalogError}
-                    value={form.facing}
-                    onChange={(v) => patch({ facing: v })}
-                    placeholder="Select…"
-                    emptyHint="No facing options configured yet."
-                  />
-                </div>
-              </div>
-              <div className="field mb-0" style={{ marginTop: 4 }}>
-                <label>Parking</label>
-                <UnitAttributeSelect
-                  options={parkingOptions}
-                  loaded={catalog !== null}
-                  error={catalogError}
-                  value={form.parking}
-                  onChange={(v) => patch({ parking: v })}
-                  emptyHint="No parking options configured yet."
-                />
-              </div>
+        <div className="cgrid">
+          <div className="card">
+            <div className="card-h">
+              <span className="t">Details</span>
             </div>
-
-            <div className="sec">
-              <div className="lbl">💰 Pricing &amp; status</div>
-              <div className="grid g3">
-                <div className="field">
-                  <label>Price</label>
-                  <input
-                    className="inp"
-                    type="number"
-                    min={0}
-                    value={form.price}
-                    onChange={(e) => patch({ price: e.target.value })}
-                  />
-                </div>
-                <div className="field">
-                  <label>Price / {unit.areaUnit || "sqft"}</label>
-                  <input className="inp" disabled placeholder="—" value={pricePerArea} />
-                </div>
-                <div className="field">
-                  <label>Status</label>
-                  <select
-                    className="inp"
-                    value={form.status}
-                    onChange={(e) =>
-                      patch({ status: e.target.value as UnitStatus })
-                    }
-                  >
-                    {STATUSES.map((s) => (
-                      <option key={s.value} value={s.value}>
-                        {s.label}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              </div>
-            </div>
-
-            <div className="sec">
-              <div className="lbl">👤 Team &amp; access</div>
-              <div className="grid g2">
-                <div className="field">
-                  <label>Manager</label>
-                  {managersLoaded && managers.length === 0 ? (
-                    <NoManagersNote noun="unit" />
-                  ) : (
-                    <select
-                      className="inp"
-                      value={form.managerId}
-                      onChange={(e) => patch({ managerId: e.target.value })}
-                    >
-                      <option value="">Unassigned</option>
-                      {managers.map((m) => (
-                        <option key={m.id} value={m.id}>
-                          {userLabel(m)}
-                        </option>
-                      ))}
-                      {/* The current manager (e.g. an auto-assigned admin) stays selectable. */}
-                      {unit.manager && !managers.some((m) => m.id === unit.manager?.id) ? (
-                        <option value={unit.manager.id}>{unit.manager.name}</option>
-                      ) : null}
-                    </select>
-                  )}
-                </div>
-              </div>
-              <div className="field mb-0">
-                <label>Assign sales agents</label>
-                {salesAgentCandidates.length === 0 ? (
-                  <div className="hint">No assignable users in your organisation yet — add them under Users.</div>
-                ) : (
-                  <div className="opts">
-                    {salesAgentCandidates.map((a) => {
-                      const on = form.agentAssign.includes(a.id);
-                      return (
-                        <span
-                          key={a.id}
-                          className={`opt ${on ? "on" : ""}`}
-                          onClick={() =>
-                            patch({
-                              agentAssign: on
-                                ? form.agentAssign.filter((x) => x !== a.id)
-                                : [...form.agentAssign, a.id],
-                            })
-                          }
-                        >
-                          <span className="b">{on ? "✓" : ""}</span>{a.name}
-                        </span>
-                      );
-                    })}
+            <div className="card-b">
+              <div className="rev">
+                {specs.map((r) => (
+                  <div className="sp" key={r.k}>
+                    <span className="k">{r.k}</span>
+                    <span className="v">{r.v}</span>
                   </div>
-                )}
-                <div className="hint">
-                  Controls whose All Units list this shows up in — org admins always see every unit.
-                </div>
+                ))}
               </div>
-            </div>
-
-            <div className="sec">
-              <div className="lbl">🖼️ Media &amp; documents</div>
-              <UnitMediaFields
-                floorPlanUrl={form.floorPlanUrl}
-                galleryUrls={form.galleryUrls}
-                onFloorPlanChange={(v) => patch({ floorPlanUrl: v })}
-                onGalleryChange={(urls) => patch({ galleryUrls: urls })}
-              />
-            </div>
-
-            <div className="sec nb">
-              <div className="lbl">📋 Listing details</div>
-              <div className="grid g2">
-                <div className="field">
-                  <label>Location / address</label>
-                  <input
-                    className="inp"
-                    value={form.addressLine}
-                    onChange={(e) => patch({ addressLine: e.target.value })}
-                  />
-                </div>
-                <div className="field">
-                  <label>Owner / seller name</label>
-                  <input
-                    className="inp"
-                    value={form.ownerName}
-                    onChange={(e) => patch({ ownerName: e.target.value })}
-                  />
-                </div>
-              </div>
-              <div className="field mb-0">
-                <label>Notes</label>
-                <textarea
-                  className="inp"
-                  rows={2}
-                  value={form.notes}
-                  onChange={(e) => patch({ notes: e.target.value })}
-                />
-              </div>
+              {unit.notes ? (
+                <p className="muted fs-12-5 mt-12" style={{ whiteSpace: "pre-line" }}>
+                  {unit.notes}
+                </p>
+              ) : null}
             </div>
           </div>
-        ) : (
-          <div className="cgrid">
+          <div className="col gap-18">
             <div className="card">
               <div className="card-h">
-                <span className="t">Details</span>
+                <span className="t">Media</span>
               </div>
               <div className="card-b">
-                <div className="rev">
-                  {specs.map((r) => (
-                    <div className="sp" key={r.k}>
-                      <span className="k">{r.k}</span>
-                      <span className="v">{r.v}</span>
-                    </div>
-                  ))}
-                </div>
-                {unit.notes ? (
-                  <p className="muted fs-12-5 mt-12" style={{ whiteSpace: "pre-line" }}>
-                    {unit.notes}
-                  </p>
+                {unit.floorPlanUrl ? (
+                  <a href={unit.floorPlanUrl} target="_blank" rel="noreferrer">
+                    <img
+                      src={unit.floorPlanUrl}
+                      alt="Floor plan"
+                      style={{ width: "100%", borderRadius: 10 }}
+                    />
+                  </a>
+                ) : (
+                  <p className="muted fs-12-5">No floor plan.</p>
+                )}
+                {unit.galleryUrls.length > 0 ? (
+                  <div className="row wrap gap-8 mt-8">
+                    {unit.galleryUrls.map((g) => (
+                      <a key={g} href={g} target="_blank" rel="noreferrer">
+                        <img
+                          src={g}
+                          alt=""
+                          style={{ width: 72, height: 72, objectFit: "cover", borderRadius: 8 }}
+                        />
+                      </a>
+                    ))}
+                  </div>
                 ) : null}
               </div>
             </div>
-            <div className="col gap-18">
-              <div className="card">
-                <div className="card-h">
-                  <span className="t">Media</span>
-                </div>
-                <div className="card-b">
-                  {unit.floorPlanUrl ? (
-                    <a href={unit.floorPlanUrl} target="_blank" rel="noreferrer">
-                      <img
-                        src={unit.floorPlanUrl}
-                        alt="Floor plan"
-                        style={{ width: "100%", borderRadius: 10 }}
-                      />
-                    </a>
-                  ) : (
-                    <p className="muted fs-12-5">No floor plan.</p>
-                  )}
-                  {unit.galleryUrls.length > 0 ? (
-                    <div className="row wrap gap-8 mt-8">
-                      {unit.galleryUrls.map((g) => (
-                        <a key={g} href={g} target="_blank" rel="noreferrer">
-                          <img
-                            src={g}
-                            alt=""
-                            style={{ width: 72, height: 72, objectFit: "cover", borderRadius: 8 }}
-                          />
-                        </a>
-                      ))}
-                    </div>
-                  ) : null}
-                </div>
-              </div>
-            </div>
           </div>
-        )}
+        </div>
       </Reveal>
 
       <ConfirmModal

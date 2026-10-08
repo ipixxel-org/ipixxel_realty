@@ -661,3 +661,34 @@
     grid-template-columns: 1fr;
   }
 }
+
+
+/* ---------- Phones: hero + tabs ----------
+   The hero kept its feature list and 220px image side by side, and the tab
+   pills could not wrap, so the page was ~630px wide on a phone. */
+@media (max-width: 640px) {
+  .tpl-hero-right {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 16px;
+  }
+
+  .tpl-hero-feature-item {
+    white-space: normal;
+  }
+
+  .tpl-hero-img-wrap {
+    width: 100%;
+    max-width: 260px;
+  }
+
+  .tpl-tab-pills {
+    max-width: 100%;
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+
+  .tpl-tab-pills::-webkit-scrollbar {
+    display: none;
+  }
+}

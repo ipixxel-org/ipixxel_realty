@@ -1700,8 +1700,8 @@ export function MediaLibraryView({ mode }: MediaLibraryViewProps) {
         busy={deleteBusy}
         onConfirm={() => void confirmPendingDelete()}
         onClose={() => setPendingDelete(null)}
-        // Sits above the asset detail modal, which can trigger a delete.
-        containerClassName="z-[60]!"
+        // Sits above the asset detail modal (z-index 200), which can trigger a delete.
+        containerClassName="z-[210]!"
       />
     </div>
   );

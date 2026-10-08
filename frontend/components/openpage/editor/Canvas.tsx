@@ -306,6 +306,10 @@ export function Canvas() {
         collisionDetection={closestCenter}
         onDragStart={handleDragStart}
         onDragEnd={handleDragEnd}
+        onDragCancel={() => {
+          setActiveId(null);
+          setIsDragging(false);
+        }}
       >
         <SortableContext items={blocks.map((b) => b.id)} strategy={verticalListSortingStrategy}>
           <CanvasDropZone index={0} isFirst />

@@ -288,8 +288,9 @@ export function CanvasToolbar() {
         </button>
       </div>
 
-      {/* Spotlight Command Modal */}
-      <SpotlightSearch isOpen={spotlightOpen} onClose={toggleSpotlight} />
+      {/* Spotlight Command Modal — mounted only while open so its state
+          (query/selection) resets on every open */}
+      {spotlightOpen && <SpotlightSearch onClose={toggleSpotlight} />}
     </div>
   );
 }

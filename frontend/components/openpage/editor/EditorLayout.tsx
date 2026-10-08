@@ -7,11 +7,13 @@ import { JsonDrawer } from "./JsonDrawer";
 import { VersionHistory } from "./VersionHistory";
 import { CanvasToolbar } from "./CanvasToolbar";
 import { ShortcutsModal } from "./ShortcutsModal";
+import { OnboardingTour } from "./OnboardingTour";
 import { useEditorStore } from "@/components/openpage/store/editorStore";
 import { OpenPageRuntimeProvider } from "@/components/openpage/runtime/OpenPageRuntime";
 import { useConfigStore } from "@/components/openpage/store/configStore";
 import { Toaster } from "sonner";
 import { useOpenPageKeyboard } from "@/lib/openpage/useKeyboardShortcuts";
+import type { Resource } from "@/lib/openpage/persist";
 import { PanelLeft, PanelRight } from "lucide-react";
 
 function EdgeStrip({
@@ -42,10 +44,15 @@ function EdgeStrip({
 export function EditorLayout({
   pageId,
   captureLeads = true,
+  resource = "landing-page",
 }: {
   pageId?: string;
   /** When true and pageId is set, canvas form submits write to CRM (same as Preview). */
   captureLeads?: boolean;
+  /** Which backend resource this session edits — gates Version History's
+   *  server-side saved versions (org landing pages have them; templates
+   *  don't yet). */
+  resource?: Resource;
 }) {
   useOpenPageKeyboard();
   const previewMode = useEditorStore((s) => s.previewMode);
@@ -95,8 +102,9 @@ export function EditorLayout({
               <EdgeStrip side="right" title="Open inspector" />
             ))}
         </div>
-        <VersionHistory />
+        <VersionHistory pageId={pageId} resource={resource} />
         <ShortcutsModal />
+        <OnboardingTour />
       </div>
     </OpenPageRuntimeProvider>
   );

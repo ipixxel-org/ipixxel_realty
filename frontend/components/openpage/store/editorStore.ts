@@ -7,6 +7,9 @@ export type Viewport = 'desktop' | 'tablet' | 'mobile'
 
 export type RightSidebarTab = 'properties' | 'style' | 'typography' | 'advanced' | 'element'
 
+/** Tabs of the left builder rail — shared so shortcuts and the command palette can drive it. */
+export type LeftTab = 'templates' | 'components' | 'globals' | 'layers' | 'forms'
+
 /** The individually-editable node currently being styled, if any. */
 export interface SelectedElement {
   blockId: string
@@ -41,9 +44,7 @@ interface EditorState {
   insertIndex: number | null
   isDragging: boolean
   draggedItem: DraggedItemInfo | null
-  templatesOpen: boolean
-  globalsOpen: boolean
-  formBuilderOpen: boolean
+  leftTab: LeftTab
   isGenerating: boolean
   generationPrompt: string | null
   generationError: string | null
@@ -64,6 +65,8 @@ interface EditorState {
   togglePreview: () => void
   setActiveProject: (id: string | null) => void
   setRightSidebarTab: (tab: RightSidebarTab) => void
+  setLeftTab: (tab: LeftTab) => void
+  openLeftTab: (tab: LeftTab) => void
   toggleLeftSidebar: () => void
   toggleRightSidebar: () => void
   openLeftSidebar: () => void
@@ -75,9 +78,6 @@ interface EditorState {
   setInsertIndex: (index: number | null) => void
   setIsDragging: (dragging: boolean) => void
   setDraggedItem: (item: DraggedItemInfo | null) => void
-  toggleTemplates: () => void
-  toggleGlobals: () => void
-  toggleFormBuilder: () => void
   setGenerating: (prompt: string | null) => void
   setGenerationError: (err: string | null) => void
   clearGeneration: () => void
@@ -103,9 +103,7 @@ export const useEditorStore = create<EditorState>()((set) => ({
   insertIndex: null,
   isDragging: false,
   draggedItem: null,
-  templatesOpen: false,
-  globalsOpen: false,
-  formBuilderOpen: false,
+  leftTab: 'components',
   isGenerating: false,
   generationPrompt: null,
   generationError: null,
@@ -141,9 +139,8 @@ export const useEditorStore = create<EditorState>()((set) => ({
   setInsertIndex: (index) => set({ insertIndex: index }),
   setIsDragging: (dragging) => set({ isDragging: dragging }),
   setDraggedItem: (item) => set({ draggedItem: item }),
-  toggleTemplates: () => set((s) => ({ templatesOpen: !s.templatesOpen })),
-  toggleGlobals: () => set((s) => ({ globalsOpen: !s.globalsOpen })),
-  toggleFormBuilder: () => set((s) => ({ formBuilderOpen: !s.formBuilderOpen })),
+  setLeftTab: (tab) => set({ leftTab: tab }),
+  openLeftTab: (tab) => set({ leftTab: tab, leftSidebarOpen: true }),
   setGenerating: (prompt) => set({ isGenerating: !!prompt, generationPrompt: prompt, generationError: null }),
   setGenerationError: (err) => set({ generationError: err }),
   clearGeneration: () => set({ isGenerating: false, generationPrompt: null }),

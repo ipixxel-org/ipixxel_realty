@@ -1,10 +1,20 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
-import { Icon } from "@/components/icons";
-import { SwitchRow, TeamsSubNav, displayName, useOrgUsersList } from "@/components/org/team-fields";
+import { SwitchRow, displayName, useOrgUsersList } from "@/components/org/team-fields";
+import {
+  Field,
+  FormActions,
+  FormAlert,
+  FormGrid,
+  FormNote,
+  FormPage,
+  SelectInput,
+  TextArea,
+  TextInput,
+  formPageStyles,
+} from "@/components/forms/form-page";
 import { ApiError, getTeam, updateTeam } from "@/lib/api";
 import type { TeamDetail, TeamStatus } from "@/lib/types";
 
@@ -74,124 +84,117 @@ export default function EditTeamPage() {
     }
   }
 
+  const detailHref = `/org/teams/${teamId}`;
+
   if (loading) {
     return (
-      <div className="page-head reveal in">
-        <div>
-          <div className="eyebrow"><Icon name="team" size={14} /> Teams · Edit</div>
-          <h1>Loading…</h1>
-        </div>
-      </div>
+      <FormPage eyebrow="Teams · Edit" title="Edit team" subtitle="Loading…" backHref="/org/teams" backLabel="Back to Teams">
+        <div className="muted">Loading…</div>
+      </FormPage>
     );
   }
 
   if (loadError || !team) {
     return (
-      <div className="page-head reveal in">
-        <div>
-          <div className="eyebrow"><Icon name="team" size={14} /> Teams · Edit</div>
-          <h1>{loadError === "not_found" ? "Team not found" : "Couldn't load this team"}</h1>
-          {loadError && loadError !== "not_found" ? (
-            <div className="sub" style={{ color: "var(--rose)" }}>{loadError}</div>
-          ) : null}
-        </div>
-        <div className="actions">
-          <Link className="btn btn-ghost" href="/org/teams"><Icon name="chevron-left" size={14} /> Back to Teams</Link>
-        </div>
-      </div>
+      <FormPage
+        eyebrow="Teams · Edit"
+        title={loadError === "not_found" ? "Team not found" : "Couldn't load this team"}
+        subtitle={loadError && loadError !== "not_found" ? loadError : "This team may have been removed."}
+        backHref="/org/teams"
+        backLabel="Back to Teams"
+      >
+        <span />
+      </FormPage>
     );
   }
 
   return (
-    <>
-      <div className="page-head reveal in">
-        <div>
-          <div className="eyebrow">
-            <Link href={`/org/teams/${teamId}`} style={{ color: "inherit", textDecoration: "none" }}>
-              <Icon name="team" size={14} /> {team.name}
-            </Link> · Edit
-          </div>
-          <h1>Edit team</h1>
-          <div className="sub">Update the team&apos;s basic details.</div>
-        </div>
-        <div className="actions">
-          <Link className="btn btn-ghost" href={`/org/teams/${teamId}`}>✕ Cancel</Link>
-          <button type="button" className="btn btn-primary" disabled={submitting} onClick={handleSubmit}>
-            <Icon name="check" size={14} /> {submitting ? "Saving…" : "Save changes"}
-          </button>
-        </div>
-      </div>
+    <FormPage
+      eyebrow={`Teams · ${team.name}`}
+      title="Edit team"
+      subtitle="Update the team's basic details. Members and project access are managed from the team page."
+      backHref={detailHref}
+      backLabel="Back to team"
+    >
+      <form
+        className={formPageStyles.panel}
+        noValidate
+        onSubmit={(e) => {
+          e.preventDefault();
+          if (!submitting) void handleSubmit();
+        }}
+      >
+        <FormAlert message={submitError} />
 
-      <TeamsSubNav active="teams" />
+        <div className="field">
+          <SwitchRow
+            title="Active"
+            description={status === "active" ? "Team is active." : "Team is inactive — hidden from active-team views."}
+            checked={status === "active"}
+            onToggle={(on) => setStatus(on ? "active" : "inactive")}
+          />
+        </div>
 
-      <div className="cgrid">
-        <div className="card" style={{ padding: 26 }}>
-          <div className="sec">
-            <div className="lbl">🏷️ Basics</div>
-            <SwitchRow
-              title="Active"
-              description={status === "active" ? "Team is active." : "Team is inactive — hidden from active-team views."}
-              checked={status === "active"}
-              onToggle={(on) => setStatus(on ? "active" : "inactive")}
+        <FormGrid>
+          <Field htmlFor="te-name" label="Team name *" icon="team">
+            <TextInput
+              id="te-name"
+              icon="team"
+              placeholder="Enter team name"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
             />
-            <div className="row2" style={{ marginTop: 14 }}>
-              <div className="field">
-                <label>Team name <span className="req">*</span></label>
-                <input className="inp" value={name} onChange={(e) => setName(e.target.value)} />
-              </div>
-              <div className="field">
-                <label>Team lead</label>
-                <select value={leadId} onChange={(e) => setLeadId(e.target.value)} disabled={usersLoading || !!usersError}>
-                  <option value="">
-                    {usersLoading ? "Loading…" : usersError ? "Couldn't load users" : "No lead assigned"}
-                  </option>
-                  {users.map((u) => (
-                    <option key={u.id} value={u.id}>{displayName(u)}</option>
-                  ))}
-                </select>
-                {usersError ? (
-                  <div className="hint" style={{ color: "var(--rose)" }}>Couldn&apos;t load org users — {usersError}</div>
-                ) : null}
-              </div>
-            </div>
-            <div className="row2">
-              <div className="field">
-                <label>Region / branch</label>
-                <input className="inp" value={region} onChange={(e) => setRegion(e.target.value)} />
-              </div>
-              <div className="field">
-                <label>Working hours</label>
-                <input className="inp" value={workingHours} onChange={(e) => setWorkingHours(e.target.value)} />
-              </div>
-            </div>
-            <div className="field" style={{ marginBottom: 0 }}>
-              <label>Description</label>
-              <textarea className="inp" rows={2} value={description} onChange={(e) => setDescription(e.target.value)} />
-            </div>
-          </div>
+          </Field>
+          <Field
+            htmlFor="te-lead"
+            label="Team lead"
+            icon="profile"
+            error={usersError ? `Couldn't load org users — ${usersError}` : undefined}
+          >
+            <SelectInput
+              id="te-lead"
+              value={leadId}
+              onChange={(e) => setLeadId(e.target.value)}
+              disabled={usersLoading || !!usersError}
+              invalid={!!usersError}
+            >
+              <option value="">
+                {usersLoading ? "Loading…" : usersError ? "Couldn't load users" : "No lead assigned"}
+              </option>
+              {users.map((u) => (
+                <option key={u.id} value={u.id}>{displayName(u)}</option>
+              ))}
+            </SelectInput>
+          </Field>
+        </FormGrid>
+
+        <FormGrid>
+          <Field htmlFor="te-region" label="Region / branch" icon="pin">
+            <TextInput id="te-region" icon="pin" placeholder="e.g. Mumbai West" value={region} onChange={(e) => setRegion(e.target.value)} />
+          </Field>
+          <Field htmlFor="te-hours" label="Working hours" icon="clock">
+            <TextInput id="te-hours" icon="clock" placeholder="e.g. 10:00 AM – 7:00 PM" value={workingHours} onChange={(e) => setWorkingHours(e.target.value)} />
+          </Field>
+        </FormGrid>
+
+        <Field htmlFor="te-desc" label="Description" icon="document">
+          <TextArea id="te-desc" rows={3} placeholder="What does this team do?" value={description} onChange={(e) => setDescription(e.target.value)} />
+        </Field>
+
+        <div style={{ marginBottom: 20 }}>
+        <FormNote title={`${team.memberCount} members · ${team.projectCount} projects`}>
+          Members and project access are managed from the team page, not here.
+        </FormNote>
         </div>
 
-        <div style={{ display: "flex", flexDirection: "column", gap: 18 }}>
-          <div className="card">
-            <div className="card-h"><span className="t">This team</span></div>
-            <div className="card-b" style={{ fontSize: 13, display: "flex", flexDirection: "column", gap: 9 }}>
-              <div style={{ display: "flex", justifyContent: "space-between" }}><span className="muted">Members</span><b>{team.memberCount}</b></div>
-              <div style={{ display: "flex", justifyContent: "space-between" }}><span className="muted">Projects</span><b>{team.projectCount}</b></div>
-            </div>
-          </div>
-          <div className="help">
-            💡 Members and project access are managed from the team page, not here.
-          </div>
-          {submitError ? (
-            <div className="help" style={{ background: "#fef2f2", borderColor: "#fecaca", color: "var(--rose)" }}>
-              {submitError}
-            </div>
-          ) : null}
-          <button type="button" className="btn btn-primary btn-block" disabled={submitting} onClick={handleSubmit}>
-            <Icon name="check" size={14} /> {submitting ? "Saving…" : "Save changes"}
-          </button>
-        </div>
-      </div>
-    </>
+        <FormActions
+          cancelHref={detailHref}
+          busy={submitting}
+          busyLabel="Saving…"
+          submitLabel="Save changes"
+          submitIcon="check"
+        />
+      </form>
+    </FormPage>
   );
 }

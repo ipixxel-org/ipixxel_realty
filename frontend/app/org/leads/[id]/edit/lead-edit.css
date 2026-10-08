@@ -685,3 +685,21 @@
     grid-template-columns: 1fr;
   }
 }
+
+/* ---------- Standard form look (components/forms/form-page) ----------
+   Fields use the shared `.field` / `.inp` markup; the grids above already
+   space them, so drop the standalone field margin inside a grid row, and
+   match the multi-select box to the standard 48px control. */
+.org .led-container .led-grid-2 > .field,
+.org .led-container .led-grid-3 > .field,
+.org .led-container .led-grid-4 > .field,
+.org .led-container .led-grid-req-notes > .field {
+  margin-bottom: 0;
+}
+
+.org .led-container .led-tags-box {
+  min-height: 48px;
+  padding: 6px 14px;
+  border-color: #e2e8f0;
+  border-radius: 12px;
+}

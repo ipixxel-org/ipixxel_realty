@@ -22,6 +22,7 @@ import {
   areaPricePerAreaLabel,
   UnitAttributeSelect,
 } from "@/components/org/project-form-fields";
+import { FormActions, FormAlert, FormPage } from "@/components/forms/form-page";
 import "@/app/org/org.css";
 import type {
   CreateUnitInput,
@@ -206,42 +207,14 @@ export default function UnitCreatePage() {
   }
 
   return (
-    <>
-      <div className="page-head reveal in">
-        <div>
-          <div className="eyebrow">
-            <Link href="/org/projects/all-units">
-              <Icon name="building" size={14} /> Units
-            </Link>{" "}
-            · Add
-          </div>
-          <h1>Add a unit</h1>
-          <div className="sub">
-            Add a standalone resale / broker listing with no project.
-          </div>
-        </div>
-        <div className="actions">
-          <Link href="/org/projects/all-units" className="btn btn-ghost">
-              <Icon name="close" size={14} /> Cancel
-          </Link>
-          {standalone ? (
-            <button
-              type="button"
-              className="btn btn-primary"
-              disabled={!canSave}
-              onClick={() => void submit()}
-            >
-              {saving ? "Saving…" : <><Icon name="check" size={14} /> Save unit</>}
-            </button>
-          ) : null}
-        </div>
-      </div>
-
-      {error ? (
-        <Reveal delay={1}>
-          <div className="form-alert mb-14">{error}</div>
-        </Reveal>
-      ) : null}
+    <FormPage
+      eyebrow="Units · Add"
+      title="Add a unit"
+      subtitle="Add a standalone resale / broker listing with no project."
+      backHref="/org/projects/all-units"
+      backLabel="Back to Units"
+    >
+      <FormAlert message={error} />
 
       <Reveal delay={1}>
         <div className="cgrid">
@@ -553,18 +526,22 @@ export default function UnitCreatePage() {
                 </Link>
                 .
               </div>
-              <button
-                type="button"
-                className="btn btn-primary btn-block"
-                disabled={!canSave}
-                onClick={() => void submit()}
-              >
-                {saving ? "Saving…" : <><Icon name="check" size={14} /> Save unit</>}
-              </button>
             </div>
           ) : null}
         </div>
       </Reveal>
-    </>
+
+      {standalone ? (
+        <FormActions
+          cancelHref="/org/projects/all-units"
+          busy={saving}
+          submitDisabled={!canSave}
+          busyLabel="Saving…"
+          submitLabel="Save unit"
+          submitIcon="check"
+          onSubmit={() => void submit()}
+        />
+      ) : null}
+    </FormPage>
   );
 }

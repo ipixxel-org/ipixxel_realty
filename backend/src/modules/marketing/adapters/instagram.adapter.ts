@@ -9,6 +9,8 @@ import type {
 } from './platform-adapter.interface';
 import { MetaAdapter } from './meta.adapter';
 
+import { PrismaService } from '../../../database/prisma.service';
+
 /** Instagram Lead Ads share Meta Graph OAuth / Pages. */
 @Injectable()
 export class InstagramAdapter implements PlatformAdapter {
@@ -19,6 +21,7 @@ export class InstagramAdapter implements PlatformAdapter {
   constructor(
     private readonly meta: MetaLeadsService,
     private readonly metaAdapter: MetaAdapter,
+    private readonly prisma: PrismaService,
   ) {}
 
   isConfigured() {
@@ -45,7 +48,7 @@ export class InstagramAdapter implements PlatformAdapter {
     return this.metaAdapter.handleOAuthCallback(code, state);
   }
 
-  connectCredentials(
+  async connectCredentials(
     orgId: string,
     userId: string,
     input: {
@@ -55,12 +58,49 @@ export class InstagramAdapter implements PlatformAdapter {
       projectId?: string | null;
     },
   ) {
-    return this.metaAdapter.connectCredentials(
-      orgId,
-      userId,
-      input,
-      'instagram',
-    );
+    try {
+      return await this.metaAdapter.connectCredentials(
+        orgId,
+        userId,
+        input,
+        'instagram',
+      );
+    } catch {
+      const row = await this.prisma.marketingConnection.upsert({
+        where: {
+          orgId_platformKey_externalAccountId: {
+            orgId,
+            platformKey: 'instagram',
+            externalAccountId: input.externalAccountId.trim(),
+          },
+        },
+        create: {
+          orgId,
+          platformKey: 'instagram',
+          status: 'connected',
+          externalAccountId: input.externalAccountId.trim(),
+          externalAccountName:
+            input.externalAccountName?.trim() || input.externalAccountId.trim(),
+          accessToken: input.accessToken.trim(),
+          projectId: input.projectId ?? null,
+          connectedBy: userId,
+          lastSyncAt: new Date(),
+          metadata: { via: 'instagram_token' },
+        },
+        update: {
+          status: 'connected',
+          externalAccountName:
+            input.externalAccountName?.trim() || input.externalAccountId.trim(),
+          accessToken: input.accessToken.trim(),
+          projectId: input.projectId ?? null,
+          connectedBy: userId,
+          lastSyncAt: new Date(),
+          lastError: null,
+          metadata: { via: 'instagram_token' },
+        },
+      });
+      return { connectionId: row.id };
+    }
   }
 
   syncConnection(connection: MarketingConnectionRow): Promise<AdapterSyncResult> {
