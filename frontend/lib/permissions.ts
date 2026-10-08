@@ -12,7 +12,8 @@ export const MODULES = {
   domains: "domains",
   calling: "calling",
   whatsapp: "whatsapp",
-  teams: "teams",
+  teams: "teams", // [DISABLED-TEAMS] no longer in the catalog
+  team_chat: "team_chat",
   reports: "reports",
   billing: "billing",
   integrations: "integrations",

@@ -106,9 +106,27 @@ export const PERMISSION_MODULES: ModuleDefinition[] = [
   // have their own modules above. Only the Media Library remains under it.
   { key: 'websites', label: 'Media Library', description: 'Central media & assets library', actions: ['view'] },
   { key: 'domains', label: 'Domains', description: 'Subdomain & custom-domain management' },
-  { key: 'calling', label: 'Calling', description: 'Calls, queues, numbers and automation' },
-  { key: 'whatsapp', label: 'WhatsApp', description: 'WhatsApp inbox and broadcasts' },
-  { key: 'teams', label: 'Teams', description: 'Organising members into teams' },
+  // Hidden from Roles & Permissions while these pages are switched off.
+  // Stored grant rows stay in the DB; uncomment to restore.
+  // { key: 'calling', label: 'Calling', description: 'Calls, queues, numbers and automation' }, // [DISABLED-CALLING]
+  // { key: 'whatsapp', label: 'WhatsApp', description: 'WhatsApp inbox and broadcasts' }, // [DISABLED-WHATSAPP]
+  // { key: 'teams', label: 'Teams', description: 'Organising members into teams' }, // [DISABLED-TEAMS]
+  // Team Chat. View alone is everyday chatting: read/send in your own
+  // conversations, start DMs, reply, forward, pin, react. Membership is
+  // always enforced on top — no action here unlocks someone else's DM.
+  {
+    key: 'team_chat',
+    label: 'Team Chat',
+    description:
+      'Internal chat: channels, direct messages and files. Custom roles have no chat access until granted.',
+    actions: ['view', 'add', 'edit', 'delete'],
+    actionLabels: {
+      view: 'Use chat',
+      add: 'Create channels',
+      edit: 'Manage channels & members',
+      delete: "Delete channels & others' messages",
+    },
+  },
   { key: 'reports', label: 'Reports', description: 'Reports and analytics' },
   { key: 'integrations', label: 'Integrations', description: 'Connected apps and channels' },
   { key: 'billing', label: 'Billing', description: 'Plan, subscription and invoices' },
@@ -346,21 +364,24 @@ const DEFAULT_BY_KEY: Record<
     websites: { view: true },
     landing_pages: { view: true },
     templates: { view: true },
-    calling: { view: true, add: true, edit: true },
-    whatsapp: { view: true, add: true, edit: true },
+    // calling: { view: true, add: true, edit: true }, // [DISABLED-CALLING]
+    // whatsapp: { view: true, add: true, edit: true }, // [DISABLED-WHATSAPP]
     reports: { view: true },
+    team_chat: { view: true, add: true, edit: true },
   },
   sales: {
     dashboard: { view: true },
     crm: { view: true, add: true, edit: true },
-    calling: { view: true, add: true, edit: true },
-    whatsapp: { view: true, add: true, edit: true },
+    // calling: { view: true, add: true, edit: true }, // [DISABLED-CALLING]
+    // whatsapp: { view: true, add: true, edit: true }, // [DISABLED-WHATSAPP]
+    team_chat: { view: true, add: true },
   },
   telecaller: {
     dashboard: { view: true },
     crm: { view: true, add: true, edit: true },
-    calling: { view: true, add: true, edit: true },
-    whatsapp: { view: true, add: true, edit: true },
+    // calling: { view: true, add: true, edit: true }, // [DISABLED-CALLING]
+    // whatsapp: { view: true, add: true, edit: true }, // [DISABLED-WHATSAPP]
+    team_chat: { view: true },
   },
 };
 

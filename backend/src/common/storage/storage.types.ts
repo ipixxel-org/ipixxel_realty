@@ -158,3 +158,38 @@ export interface CreateUploadUrlResult {
   /** Seconds until `uploadUrl` expires. */
   expiresIn: number;
 }
+
+// ---------------------------------------------------------------------------
+// Private objects (Team Chat attachments) — see StorageService.
+// ---------------------------------------------------------------------------
+
+export interface CreatePrivateUploadUrlInput {
+  /** The caller's own org (from the JWT). */
+  orgId: string;
+  /** Top-level key prefix, e.g. 'team-chat'. */
+  scope: string;
+  filename: string;
+  /** Any type is accepted; unknown/empty becomes application/octet-stream. */
+  contentType: string;
+  size: number;
+  maxBytes: number;
+}
+
+export interface CreatePrivateUploadUrlResult {
+  /** Short-lived signed PUT URL. The browser must send `contentType` as its
+   *  Content-Type header (it is part of the signature). */
+  uploadUrl: string;
+  key: string;
+  contentType: string;
+  expiresIn: number;
+}
+
+export interface CreatePrivateDownloadUrlInput {
+  key: string;
+  fileName: string;
+  contentType: string;
+  /** `attachment` forces a download; use `inline` only for media types that
+   *  are safe to render (images other than SVG, video). */
+  disposition: 'inline' | 'attachment';
+  ttlSeconds?: number;
+}

@@ -195,6 +195,11 @@ model Organisation {
   supportTickets        SupportTicket[]
   teamChannels          TeamChannel[]
   teamMessages          TeamMessage[]
+  teamChannelMembers    TeamChannelMember[]
+  teamChatAttachments   TeamMessageAttachment[]
+  teamChatMentions      TeamMessageMention[]
+  teamChatReactions     TeamMessageReaction[]
+  teamChatPresence      TeamChatPresence[]
   packageChangeRequests PackageChangeRequest[]
   mediaFiles            MediaFile[]
   metaPageConnections   MetaPageConnection[]
@@ -277,6 +282,11 @@ model User {
   teamChannelsDm       TeamChannel[]     @relation("TeamChannelDmUser")
   teamChannelMembers   TeamChannelMember[]
   sentTeamMessages     TeamMessage[]     @relation("TeamMessageSender")
+  pinnedTeamMessages   TeamMessage[]     @relation("TeamMessagePinnedBy")
+  teamChatAttachments  TeamMessageAttachment[] @relation("TeamAttachmentUploadedBy")
+  teamChatMentions     TeamMessageMention[]
+  teamChatReactions    TeamMessageReaction[]
+  teamChatPresence     TeamChatPresence?
   packageChangeRequests PackageChangeRequest[] @relation("PackageChangeRequestedBy")
   packageChangeReviews  PackageChangeRequest[] @relation("PackageChangeReviewedBy")
 
@@ -529,81 +539,197 @@ model UserModulePermission {
 }
 
 // ---------------------------------------------------------------------------
-// Team Chat — internal chat for each team (channels + direct messages). Plain
-// REST + the frontend polls, no websockets — same call/response model as
-// Support tickets. A channel is either a team channel (`kind` = 'channel',
-// optionally linked to a Team row so its members auto-join) or a two-person
-// DM (`kind` = 'dm', `name` = the other user). Tagging a Lead attaches its id
-// to a message so the UI can render a "shared lead" card; `assignedTo` is a
-// free-text label ("Rohit", "NRI Desk") copied at send time so later renames
-// never rewrite chat history.
+// Team Chat — WhatsApp-style internal chat (see docs/team-chat-investigation.md).
+//
+// A conversation (`TeamChannel`) is one of:
+//   * general — the org-wide channel. Exactly one per org (partial unique
+//     index `team_channels_one_general_per_org`, raw SQL in the migration —
+//     Prisma can't express partial indexes). Every active member is in it.
+//   * channel — a named group, created by a user with team_chat:add.
+//   * dm      — exactly two participants. `dmKey` = the two user ids sorted
+//     and joined with ':'; unique per org, so a duplicate DM is impossible.
+//     A DM's display name is always the *other* participant, derived per
+//     viewer — `name` is unused ('') for DMs.
+// `kind`, member `role` and message `kind` are TEXT guarded by CHECK
+// constraints (raw SQL in the migration), not Prisma enums.
+//
+// Access: every read/write requires a TeamChannelMember row — there is no
+// auto-join, and no role (org admin included) can read a DM it isn't in.
 // ---------------------------------------------------------------------------
 
 model TeamChannel {
-  id          String   @id @default(uuid())
-  orgId       String   @map("org_id")
-  kind        String   @default("channel") // channel | dm
-  name        String
-  // channel → the Team it was created from (nullable for ad-hoc channels);
-  // dm      → always null.
-  teamId      String?  @map("team_id")
-  // dm → the *other* participant (never the creator). Null for channels.
-  dmUserId    String?  @map("dm_user_id")
-  createdById String   @map("created_by_id")
-  createdAt   DateTime @default(now()) @map("created_at")
-  updatedAt   DateTime @updatedAt @map("updated_at")
+  id            String    @id @default(uuid())
+  orgId         String    @map("org_id")
+  kind          String    @default("channel") // general | channel | dm
+  name          String
+  // Legacy (pre-rebuild): channel -> Team link, dm -> the non-creator. Kept
+  // so nothing is dropped; no longer read or written. Teams is disabled.
+  teamId        String?   @map("team_id")
+  dmUserId      String?   @map("dm_user_id")
+  dmKey         String?   @map("dm_key")
+  // SetNull — deleting a user never deletes a conversation (was Cascade).
+  createdById   String?   @map("created_by_id")
+  // Time of the newest message (system messages included); orders the rail.
+  lastMessageAt DateTime? @map("last_message_at")
+  createdAt     DateTime  @default(now()) @map("created_at")
+  updatedAt     DateTime  @updatedAt @map("updated_at")
 
-  organisation Organisation     @relation(fields: [orgId], references: [id], onDelete: Cascade)
-  team         Team?            @relation(fields: [teamId], references: [id], onDelete: SetNull)
-  createdBy    User?            @relation("TeamChannelCreatedBy", fields: [createdById], references: [id], onDelete: Cascade)
-  dmUser       User?            @relation("TeamChannelDmUser", fields: [dmUserId], references: [id], onDelete: SetNull)
+  organisation Organisation        @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  team         Team?               @relation(fields: [teamId], references: [id], onDelete: SetNull)
+  createdBy    User?               @relation("TeamChannelCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  dmUser       User?               @relation("TeamChannelDmUser", fields: [dmUserId], references: [id], onDelete: SetNull)
   members      TeamChannelMember[]
   messages     TeamMessage[]
 
+  @@unique([orgId, dmKey])
   @@index([orgId])
+  @@index([orgId, lastMessageAt])
   @@index([teamId])
   @@map("team_channels")
   @@schema("access")
 }
 
-// Membership for a channel plus the per-user last-read marker. `lastReadAt`
-// null = the user has never opened the channel yet (every message counts as
-// unread until they do). Opening a channel (GET detail) stamps it to now.
+// Membership plus the per-user read pointer. A row's absence means no access.
+// Leaving / being removed deletes the row (messages the user sent stay, with
+// their sender). `lastReadAt` + `lastReadMessageId` mark the newest message
+// the user has read: unread = messages after that (createdAt, id) pair that
+// are neither system messages nor the user's own.
 model TeamChannelMember {
-  channelId  String    @map("channel_id")
-  userId     String    @map("user_id")
-  lastReadAt DateTime? @map("last_read_at")
-  joinedAt   DateTime  @default(now()) @map("joined_at")
+  channelId         String    @map("channel_id")
+  userId            String    @map("user_id")
+  orgId             String    @map("org_id")
+  role              String    @default("member") // admin | member
+  lastReadAt        DateTime? @map("last_read_at")
+  lastReadMessageId String?   @map("last_read_message_id")
+  joinedAt          DateTime  @default(now()) @map("joined_at")
 
-  channel TeamChannel @relation(fields: [channelId], references: [id], onDelete: Cascade)
-  user    User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  channel      TeamChannel  @relation(fields: [channelId], references: [id], onDelete: Cascade)
+  user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  organisation Organisation @relation(fields: [orgId], references: [id], onDelete: Cascade)
 
   @@id([channelId, userId])
   @@index([userId])
+  @@index([orgId, userId])
   @@map("team_channel_members")
   @@schema("access")
 }
 
 model TeamMessage {
-  id         String   @id @default(uuid())
-  channelId  String   @map("channel_id")
-  orgId      String   @map("org_id")
-  senderId   String   @map("sender_id")
-  body       String
-  // Tagged lead card — links the tagged Lead row.
-  leadId     String?  @map("lead_id")
-  // Free-text "assigned to" label ("Rohit", "NRI Desk", "this channel").
-  assignedTo String?  @map("assigned_to")
-  createdAt  DateTime @default(now()) @map("created_at")
+  id          String    @id @default(uuid())
+  channelId   String    @map("channel_id")
+  orgId       String    @map("org_id")
+  kind        String    @default("text") // text | system | file
+  // Null for system messages, and once the sender's account is deleted.
+  senderId    String?   @map("sender_id")
+  body        String
+  parentId    String?   @map("parent_id") // reply-to
+  forwarded   Boolean   @default(false)
+  editedAt    DateTime? @map("edited_at")
+  // Soft delete: the row stays, body is cleared, attachments are hidden and
+  // reactions removed.
+  deletedAt   DateTime? @map("deleted_at")
+  pinnedAt    DateTime? @map("pinned_at")
+  pinnedById  String?   @map("pinned_by_id")
+  // Client-generated id for idempotent sends (a retry returns the original).
+  clientMsgId String?   @map("client_msg_id")
+  // Legacy tagged-lead card. Kept, unused by the rebuilt chat.
+  leadId      String?   @map("lead_id")
+  assignedTo  String?   @map("assigned_to")
+  createdAt   DateTime  @default(now()) @map("created_at")
 
-  channel TeamChannel @relation(fields: [channelId], references: [id], onDelete: Cascade)
-  sender  User        @relation("TeamMessageSender", fields: [senderId], references: [id], onDelete: Cascade)
-  lead    Lead?       @relation(fields: [leadId], references: [id], onDelete: SetNull)
-  organisation Organisation @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  channel      TeamChannel             @relation(fields: [channelId], references: [id], onDelete: Cascade)
+  sender       User?                   @relation("TeamMessageSender", fields: [senderId], references: [id], onDelete: SetNull)
+  pinnedBy     User?                   @relation("TeamMessagePinnedBy", fields: [pinnedById], references: [id], onDelete: SetNull)
+  parent       TeamMessage?            @relation("TeamMessageReplies", fields: [parentId], references: [id], onDelete: SetNull)
+  replies      TeamMessage[]           @relation("TeamMessageReplies")
+  lead         Lead?                   @relation(fields: [leadId], references: [id], onDelete: SetNull)
+  organisation Organisation            @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  attachments  TeamMessageAttachment[]
+  mentions     TeamMessageMention[]
+  reactions    TeamMessageReaction[]
 
-  @@index([channelId, createdAt])
+  @@unique([channelId, clientMsgId])
+  @@index([channelId, createdAt, id])
+  @@index([parentId])
   @@index([orgId])
   @@map("team_messages")
+  @@schema("access")
+}
+
+// A file uploaded for chat. Created at presign time (messageId null) and
+// linked when the message is sent. Objects live under a private key prefix
+// and are only ever served through short-lived signed GET URLs.
+model TeamMessageAttachment {
+  id           String   @id @default(uuid())
+  messageId    String?  @map("message_id")
+  orgId        String   @map("org_id")
+  uploadedById String?  @map("uploaded_by_id")
+  storageKey   String   @map("storage_key")
+  fileName     String   @map("file_name")
+  mimeType     String   @map("mime_type")
+  sizeBytes    Int      @map("size_bytes")
+  width        Int?
+  height       Int?
+  durationSec  Int?     @map("duration_sec")
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  message      TeamMessage? @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  organisation Organisation @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  uploadedBy   User?        @relation("TeamAttachmentUploadedBy", fields: [uploadedById], references: [id], onDelete: SetNull)
+
+  @@index([messageId])
+  @@index([orgId])
+  @@map("team_message_attachments")
+  @@schema("access")
+}
+
+model TeamMessageMention {
+  messageId String @map("message_id")
+  userId    String @map("user_id")
+  orgId     String @map("org_id")
+
+  message      TeamMessage  @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  organisation Organisation @relation(fields: [orgId], references: [id], onDelete: Cascade)
+
+  @@id([messageId, userId])
+  @@index([userId])
+  @@map("team_message_mentions")
+  @@schema("access")
+}
+
+// One reaction per user per message (WhatsApp-style): choosing another emoji
+// replaces it, choosing the same one removes it.
+model TeamMessageReaction {
+  id        String   @id @default(uuid())
+  messageId String   @map("message_id")
+  userId    String   @map("user_id")
+  orgId     String   @map("org_id")
+  emoji     String
+  createdAt DateTime @default(now()) @map("created_at")
+
+  message      TeamMessage  @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  organisation Organisation @relation(fields: [orgId], references: [id], onDelete: Cascade)
+
+  @@unique([messageId, userId])
+  @@index([messageId])
+  @@map("team_message_reactions")
+  @@schema("access")
+}
+
+// Chat-owned "last seen". Online state itself is in-memory in the socket
+// gateway (Phase 2); this row is written when a user's last socket closes.
+model TeamChatPresence {
+  userId     String   @id @map("user_id")
+  orgId      String   @map("org_id")
+  lastSeenAt DateTime @map("last_seen_at")
+
+  user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  organisation Organisation @relation(fields: [orgId], references: [id], onDelete: Cascade)
+
+  @@index([orgId])
+  @@map("team_chat_presence")
   @@schema("access")
 }
 
@@ -666,6 +792,9 @@ enum NotificationType {
   package_change_request
   package_change_approved
   package_change_rejected
+  // Someone @mentioned the recipient in Team Chat. entity "TeamChannel",
+  // entityId = the conversation id. See TeamChatMessagesService.
+  team_chat_mention
 
   @@schema("audit")
 }

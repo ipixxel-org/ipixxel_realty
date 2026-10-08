@@ -1,23 +1,8 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
+import { hostname, platformHosts } from "@/lib/platform-hosts";
 
-const PLATFORM_HOSTS = new Set(
-  [
-    "localhost",
-    "127.0.0.1",
-    "ipixxel.ae",
-    "www.ipixxel.ae",
-    process.env.NEXT_PUBLIC_APP_HOST,
-    process.env.NEXT_PUBLIC_SUBDOMAIN_BASE_DOMAIN,
-    process.env.SUBDOMAIN_BASE_DOMAIN,
-  ]
-    .filter((host): host is string => Boolean(host))
-    .map((host) => host.toLowerCase()),
-);
-
-function hostname(host: string): string {
-  return host.trim().toLowerCase().replace(/:\d+$/, "").replace(/\.$/, "");
-}
+const PLATFORM_HOSTS = platformHosts();
 
 function isCustomDomain(host: string): boolean {
   const h = hostname(host);

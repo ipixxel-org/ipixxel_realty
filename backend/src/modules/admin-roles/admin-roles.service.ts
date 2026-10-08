@@ -6,6 +6,7 @@ import {
 } from '@nestjs/common';
 import type { RoleScope } from '@prisma/client';
 import { PrismaService } from '../../database/prisma.service';
+import { publishChatAccessChanged } from '../../common/utils/team-chat-bus';
 import { CreateRoleDto } from './dto/create-role.dto';
 import { UpdateRoleDto } from './dto/update-role.dto';
 import { UpdateRolePermissionsDto } from './dto/update-role-permissions.dto';
@@ -380,6 +381,8 @@ export class AdminRolesService {
         });
       }
     });
+    // System defaults apply to every org: re-check all chat connections.
+    publishChatAccessChanged();
 
     return allowed.includes('platform')
       ? this.getPlatformRolePermissions(roleId)

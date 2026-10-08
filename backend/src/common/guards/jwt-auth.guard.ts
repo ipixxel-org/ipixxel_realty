@@ -21,15 +21,24 @@ export class JwtAuthGuard implements CanActivate {
     }
 
     const token = authHeader.slice('Bearer '.length);
+    (request as Request & { user: JwtPayload }).user = verifyAccessToken(
+      this.jwtService,
+      token,
+    );
+    return true;
+  }
+}
 
-    try {
-      const payload = this.jwtService.verify<JwtPayload>(token, {
-        secret: process.env.JWT_SECRET,
-      });
-      (request as Request & { user: JwtPayload }).user = payload;
-      return true;
-    } catch {
-      throw new UnauthorizedException('Invalid or expired token');
-    }
+/** Verifies an access JWT (also used by the Team Chat socket handshake). */
+export function verifyAccessToken(
+  jwtService: JwtService,
+  token: string,
+): JwtPayload {
+  try {
+    return jwtService.verify<JwtPayload>(token, {
+      secret: process.env.JWT_SECRET,
+    });
+  } catch {
+    throw new UnauthorizedException('Invalid or expired token');
   }
 }

@@ -72,98 +72,108 @@ export class OrgApprovedGuard implements CanActivate {
     const request = context
       .switchToHttp()
       .getRequest<Request & { user: JwtPayload }>();
-
-    const orgId = request.user?.orgId;
-    if (!orgId) {
-      throw new ForbiddenException('Organisation Admin access required');
-    }
-
-    const organisation = await this.prisma.organisation.findUnique({
-      where: { id: orgId },
-      select: { status: true },
-    });
-
-    if (!organisation) {
-      throw new ForbiddenException('Organisation not found');
-    }
-    // Draft/pending are expected mid-signup under the old atomic signup()
-    // fallback — they must NOT be tagged ORG_INACTIVE or the frontend will
-    // force-logout mid-wizard. The simplified wizard's Step 2 activates the
-    // org immediately, so a request that gets here with a draft/pending org
-    // is almost always a leftover from before that change — self-heal it
-    // rather than leave the org admin stuck behind an approval gate that no
-    // longer exists in the UI.
-    if (organisation.status === 'pending' || organisation.status === 'draft') {
-      const requester = await this.prisma.user.findUnique({
-        where: { id: request.user.sub },
-        select: { onboardingStep: true },
-      });
-      if (requester && isLegacyOnboardingStep(requester.onboardingStep)) {
-        await finalizeLegacyOnboardingDraft(this.prisma, orgId, request.user.sub);
-        // Falls through to the checks below — organisation is now 'active'.
-      } else if (organisation.status === 'pending') {
-        throw new ForbiddenException({
-          statusCode: 403,
-          error: 'ORG_NOT_READY',
-          message:
-            'Organisation pending approval — please wait for super admin approval',
-        });
-      } else {
-        throw new ForbiddenException({
-          statusCode: 403,
-          error: 'ORG_NOT_READY',
-          message: 'Organisation not yet activated',
-        });
-      }
-    } else if (organisation.status === 'disabled') {
-      throw orgInactive('Organisation is disabled');
-    } else if (organisation.status === 'rejected') {
-      throw orgInactive('Organisation registration was rejected');
-    }
-
-    const user = await this.prisma.user.findUnique({
-      where: { id: request.user.sub },
-      select: {
-        status: true,
-        mustChangePassword: true,
-        tokenInvalidBefore: true,
-        onboardingStep: true,
-      },
-    });
-
-    if (user && user.onboardingStep !== 'completed') {
-      throw new ForbiddenException('Onboarding incomplete');
-    }
-
-    // Account disapproved / deactivated after this token was issued — reject
-    // immediately so a still-valid access JWT cannot keep working (mirrors the
-    // Super Admin -> deactivate-Organisation model).
-    if (user?.status === 'disabled') {
-      throw userInactive(
-        'Your account access has been revoked. Please contact your administrator.',
-      );
-    }
-
-    // Access token predates a password reset / forced session invalidation.
-    const iatMs = request.user.iat ? request.user.iat * 1000 : null;
-    if (
-      user?.tokenInvalidBefore &&
-      iatMs !== null &&
-      iatMs < user.tokenInvalidBefore.getTime()
-    ) {
-      throw userInactive('Your session has ended. Please sign in again.');
-    }
-
-    // Approved member who still has to set their own password: allowed to
-    // reach /auth/change-password (JwtAuthGuard only), but not normal
-    // dashboard APIs. Plain 403 (not USER_INACTIVE) — the frontend shell
-    // routes them to the change-password screen rather than force-logging out.
-    if (user?.mustChangePassword) {
-      throw new ForbiddenException(
-        'Password change required before accessing the organisation',
-      );
-    }
-
+    await assertOrgSessionActive(this.prisma, request.user);
     return true;
+  }
+}
+
+/**
+ * The OrgApprovedGuard checks as a function, so the Team Chat socket
+ * handshake (and its periodic re-check) applies exactly the same rules.
+ */
+export async function assertOrgSessionActive(
+  prisma: PrismaService,
+  actor: JwtPayload | undefined,
+): Promise<void> {
+  const request = { user: actor as JwtPayload };
+  const orgId = request.user?.orgId;
+  if (!orgId) {
+    throw new ForbiddenException('Organisation Admin access required');
+  }
+
+  const organisation = await prisma.organisation.findUnique({
+    where: { id: orgId },
+    select: { status: true },
+  });
+
+  if (!organisation) {
+    throw new ForbiddenException('Organisation not found');
+  }
+  // Draft/pending are expected mid-signup under the old atomic signup()
+  // fallback — they must NOT be tagged ORG_INACTIVE or the frontend will
+  // force-logout mid-wizard. The simplified wizard's Step 2 activates the
+  // org immediately, so a request that gets here with a draft/pending org
+  // is almost always a leftover from before that change — self-heal it
+  // rather than leave the org admin stuck behind an approval gate that no
+  // longer exists in the UI.
+  if (organisation.status === 'pending' || organisation.status === 'draft') {
+    const requester = await prisma.user.findUnique({
+      where: { id: request.user.sub },
+      select: { onboardingStep: true },
+    });
+    if (requester && isLegacyOnboardingStep(requester.onboardingStep)) {
+      await finalizeLegacyOnboardingDraft(prisma, orgId, request.user.sub);
+      // Falls through to the checks below — organisation is now 'active'.
+    } else if (organisation.status === 'pending') {
+      throw new ForbiddenException({
+        statusCode: 403,
+        error: 'ORG_NOT_READY',
+        message:
+          'Organisation pending approval — please wait for super admin approval',
+      });
+    } else {
+      throw new ForbiddenException({
+        statusCode: 403,
+        error: 'ORG_NOT_READY',
+        message: 'Organisation not yet activated',
+      });
+    }
+  } else if (organisation.status === 'disabled') {
+    throw orgInactive('Organisation is disabled');
+  } else if (organisation.status === 'rejected') {
+    throw orgInactive('Organisation registration was rejected');
+  }
+
+  const user = await prisma.user.findUnique({
+    where: { id: request.user.sub },
+    select: {
+      status: true,
+      mustChangePassword: true,
+      tokenInvalidBefore: true,
+      onboardingStep: true,
+    },
+  });
+
+  if (user && user.onboardingStep !== 'completed') {
+    throw new ForbiddenException('Onboarding incomplete');
+  }
+
+  // Account disapproved / deactivated after this token was issued — reject
+  // immediately so a still-valid access JWT cannot keep working (mirrors the
+  // Super Admin -> deactivate-Organisation model).
+  if (user?.status === 'disabled') {
+    throw userInactive(
+      'Your account access has been revoked. Please contact your administrator.',
+    );
+  }
+
+  // Access token predates a password reset / forced session invalidation.
+  const iatMs = request.user.iat ? request.user.iat * 1000 : null;
+  if (
+    user?.tokenInvalidBefore &&
+    iatMs !== null &&
+    iatMs < user.tokenInvalidBefore.getTime()
+  ) {
+    throw userInactive('Your session has ended. Please sign in again.');
+  }
+
+  // Approved member who still has to set their own password: allowed to
+  // reach /auth/change-password (JwtAuthGuard only), but not normal
+  // dashboard APIs. Plain 403 (not USER_INACTIVE) — the frontend shell
+  // routes them to the change-password screen rather than force-logging out.
+  if (user?.mustChangePassword) {
+    throw new ForbiddenException(
+      'Password change required before accessing the organisation',
+    );
   }
 }

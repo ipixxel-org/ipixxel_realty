@@ -122,10 +122,10 @@
   box-shadow: 0 4px 12px rgba(5, 150, 105, 0.35);
 }
 
-/* 3-Column Chat Shell */
+/* 2-Column Chat Shell (conversation list + thread) */
 .org .tch-shell {
   display: grid;
-  grid-template-columns: 260px 1fr 310px;
+  grid-template-columns: 260px 1fr;
   gap: 16px;
   height: calc(100vh - 215px);
   min-height: 600px;
@@ -134,9 +134,6 @@
 @media (max-width: 1200px) {
   .org .tch-shell {
     grid-template-columns: 240px 1fr;
-  }
-  .org .tch-right {
-    display: none;
   }
 }
 
@@ -688,196 +685,1679 @@
   background: #047857;
 }
 
-/* Right Column */
-.org .tch-right {
-  background: #ffffff;
-  border: 1px solid #e5e7eb;
-  border-radius: 16px;
-  padding: 18px 16px;
-  display: flex;
-  flex-direction: column;
-  gap: 20px;
-  overflow-y: auto;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.02);
-}
+/* ============================================================
+   Live chat additions (same look and palette as above).
+   Elements the static mock didn't have: unread/online/typing,
+   system messages, dividers, members panel, dialogs, search.
+   ============================================================ */
 
-.org .tch-panel-card {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-}
-
-.org .tch-panel-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  font-size: 13.5px;
-  font-weight: 700;
-  color: #111827;
-}
-
-.org .tch-panel-head-left {
-  display: flex;
-  align-items: center;
-  gap: 7px;
-}
-
-.org .tch-panel-link {
-  font-size: 12px;
-  font-weight: 600;
-  color: #2563eb;
-  cursor: pointer;
-  text-decoration: none;
-}
-
-.org .tch-pinned-box {
-  background: #ffffff;
-  border: 1px solid #f3f4f6;
-  border-radius: 10px;
-  padding: 12px;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.02);
-}
-
-.org .tch-pinned-top {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-}
-
-.org .tch-pinned-user {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.org .tch-pinned-name {
-  font-size: 12.5px;
-  font-weight: 700;
-  color: #111827;
-}
-
-.org .tch-pinned-time {
+/* Sidebar unread badge (every org page) */
+.org .nav a .tc-nav-badge {
+  margin-left: auto;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 6px;
+  border-radius: 999px;
+  background: #059669;
+  color: #ffffff;
   font-size: 11px;
+  font-weight: 700;
+  line-height: 18px;
+  text-align: center;
+}
+.org .app.collapsed .nav a .tc-nav-badge {
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  min-width: 15px;
+  height: 15px;
+  padding: 0 4px;
+  font-size: 9px;
+  line-height: 15px;
+}
+
+.org .tch-spin {
+  animation: tch-spin 0.9s linear infinite;
   color: #9ca3af;
 }
+@keyframes tch-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
 
-.org .tch-pinned-text {
+/* Left column extras */
+.org .tch-left {
+  gap: 14px;
+}
+.org .tch-clear {
+  display: inline-flex;
+  border: none;
+  background: none;
+  color: #9ca3af;
+  cursor: pointer;
+  padding: 2px;
+}
+.org .tch-conn-banner {
+  font-size: 12px;
+  font-weight: 600;
+  color: #92400e;
+  background: #fffbeb;
+  border: 1px solid #fde68a;
+  border-radius: 10px;
+  padding: 6px 10px;
+}
+.org .tch-rail-note {
   font-size: 12.5px;
-  color: #4b5563;
-  line-height: 1.45;
+  color: #6b7280;
+  text-align: center;
+  padding: 12px 6px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+}
+.org .tch-rail-note p {
+  margin: 0;
+}
+.org .tch-rail-note.is-left {
+  text-align: left;
+  align-items: flex-start;
+  padding: 4px 10px;
+}
+.org .tch-row-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
+.org .tch-channel-left {
+  min-width: 0;
+}
+.org .tch-dm-btn .tch-row-name {
+  flex: 1;
+}
+.org .tch-row-typing {
+  font-size: 11px;
+  font-style: italic;
+  font-weight: 500;
+  color: #059669;
+  flex-shrink: 0;
+}
+.org .tch-badge-count.is-unread {
+  background: #059669;
+  color: #ffffff;
+}
+.org .tch-dm-btn:disabled {
+  opacity: 0.6;
+}
+
+/* Avatars: online dot */
+.org .tch-avatar-rel {
+  position: relative;
+}
+.org .tch-online-dot {
+  position: absolute;
+  right: -1px;
+  bottom: -1px;
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: #22c55e;
+  border: 2px solid #ffffff;
+}
+
+/* Center column */
+.org .tch-center {
+  position: relative;
+  min-height: 0;
+  min-width: 0;
+}
+.org .tch-center-empty {
+  align-items: center;
+  justify-content: center;
+}
+.org .tch-thread-empty {
+  margin: auto;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 24px;
+  text-align: center;
+  color: #6b7280;
+  font-size: 13.5px;
+}
+.org .tch-thread-empty h3 {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 800;
+  color: #111827;
+}
+.org .tch-thread-empty p {
+  margin: 0;
+}
+.org .tch-center-head {
+  gap: 10px;
+}
+.org .tch-center-title-area {
+  background: none;
+  border: none;
+  padding: 0;
+  text-align: left;
+  cursor: pointer;
+  min-width: 0;
+  flex: 1;
+  color: inherit;
+}
+.org .tch-center-channel-name span:last-child {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.org .tch-center-sub.is-typing,
+.org .tch-center-sub.is-online {
+  color: #059669;
+  font-weight: 600;
+}
+.org .tch-back {
+  display: none;
+}
+.org .tch-icon-action.is-on {
+  color: #059669;
+}
+.org .tch-menu-wrap {
+  position: relative;
+}
+.org .tch-menu {
+  position: absolute;
+  right: 0;
+  top: 32px;
+  z-index: 20;
+  min-width: 180px;
+  padding: 6px;
+  background: #ffffff;
+  border: 1px solid #e5e7eb;
+  border-radius: 12px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.08);
+}
+.org .tch-menu button {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 8px 10px;
+  border: none;
+  border-radius: 8px;
+  background: none;
+  font-size: 13px;
+  font-weight: 500;
+  color: #374151;
+  cursor: pointer;
+  text-align: left;
+}
+.org .tch-menu button:hover {
+  background: #f9fafb;
+}
+.org .tch-menu button.is-danger {
+  color: #dc2626;
+}
+.org .tch-thread-body {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  position: relative;
+}
+.org .tch-thread-main {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+}
+.org .tch-loading {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 28px 12px;
+  color: #6b7280;
+  font-size: 13px;
+  text-align: center;
+}
+.org .tch-loading p {
+  margin: 0;
+}
+.org .tch-older {
+  display: flex;
+  justify-content: center;
+  min-height: 18px;
+}
+.org .tch-empty-thread {
+  margin: auto 0;
+  text-align: center;
+  color: #6b7280;
+  font-size: 13.5px;
+}
+.org .tch-empty-thread p {
   margin: 0;
 }
 
-/* Members Avatars Row */
-.org .tch-members-row {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  flex-wrap: wrap;
+/* Message rows: grouping, system lines, states */
+.org .tch-msg-row {
+  position: relative;
+  border-radius: 10px;
 }
-
-.org .tch-member-circle {
-  width: 32px;
-  height: 32px;
-  border-radius: 50%;
-  color: #ffffff;
+.org .tch-msg-row.is-grouped {
+  margin-top: -14px;
+}
+.org .tch-msg-row:hover {
+  background: #fafafa;
+}
+.org .tch-msg-avatar-space {
+  width: 36px;
+  flex-shrink: 0;
+}
+.org .tch-msg-row.is-highlight {
+  animation: tch-flash 2.4s ease;
+}
+@keyframes tch-flash {
+  0%,
+  40% {
+    background: #fef9c3;
+  }
+  100% {
+    background: transparent;
+  }
+}
+.org .tch-msg-you {
+  font-weight: 500;
+  color: #9ca3af;
+}
+.org .tch-msg-text {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.org .tch-msg-text a {
+  color: #2563eb;
+  text-decoration: underline;
+}
+.org .tch-msg-text.is-deleted {
+  font-style: italic;
+  color: #9ca3af;
+}
+.org .tch-msg-edited {
+  font-size: 11px;
+  color: #9ca3af;
+}
+.org .tch-msg-time-inline {
+  margin-left: 8px;
+  opacity: 0;
+}
+.org .tch-msg-row:hover .tch-msg-time-inline {
+  opacity: 1;
+}
+.org .tch-msg-forwarded {
+  font-size: 11.5px;
+  font-style: italic;
+  color: #6b7280;
+}
+.org .tch-quote {
+  display: flex;
+  flex-direction: column;
+  max-width: 420px;
+  padding: 4px 10px;
+  border-left: 3px solid #059669;
+  background: #f9fafb;
+  border-radius: 6px;
+  font-size: 12px;
+}
+.org .tch-quote span {
+  color: #6b7280;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.org .tch-msg-status {
+  font-size: 11px;
+  color: #9ca3af;
+}
+.org .tch-msg-row.is-failed .tch-msg-text {
+  opacity: 0.6;
+}
+.org .tch-retry {
+  align-self: flex-start;
+  border: none;
+  background: none;
+  padding: 0;
+  font-size: 11.5px;
+  font-weight: 600;
+  color: #dc2626;
+  cursor: pointer;
+}
+.org .tch-system {
+  align-self: center;
+  max-width: 85%;
+  text-align: center;
+  font-size: 12px;
+  color: #6b7280;
+  background: #f9fafb;
+  border: 1px solid #f3f4f6;
+  border-radius: 999px;
+  padding: 3px 14px;
+}
+.org .tch-new-divider {
   display: flex;
   align-items: center;
-  justify-content: center;
+  gap: 10px;
+  color: #dc2626;
   font-size: 11.5px;
   font-weight: 700;
 }
+.org .tch-new-divider::before,
+.org .tch-new-divider::after {
+  content: "";
+  flex: 1;
+  height: 1px;
+  background: #fecaca;
+}
+.org .tch-date-divider {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+}
 
-.org .tch-member-overflow {
-  width: 32px;
-  height: 32px;
+/* Reactions */
+.org .tch-reactions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.org button.tch-reaction-pill {
+  cursor: pointer;
+  font-family: inherit;
+}
+.org .tch-reaction-pill.is-me {
+  background: #ecfdf5;
+  border-color: #6ee7b7;
+  color: #047857;
+}
+.org .tch-msg-tools {
+  position: absolute;
+  top: -6px;
+  right: 8px;
+  opacity: 0;
+  transition: opacity 0.12s;
+  background: #ffffff;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.05);
+}
+.org .tch-msg-row:hover .tch-msg-tools,
+.org .tch-msg-row:focus-within .tch-msg-tools {
+  opacity: 1;
+}
+.org .tch-quick-react {
+  display: flex;
+  gap: 2px;
+  padding: 3px 4px;
+}
+.org .tch-quick-react button {
+  border: none;
+  background: none;
+  font-size: 18px;
+  cursor: pointer;
+  padding: 2px 3px;
+  border-radius: 6px;
+}
+.org .tch-quick-react button:hover {
+  background: #f3f4f6;
+}
+
+/* File card as a button */
+.org button.tch-file-card {
+  cursor: pointer;
+  text-align: left;
+  font-family: inherit;
+}
+
+/* Typing, jump-to-latest, read-only */
+.org .tch-typing {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 20px 6px;
+  font-size: 12px;
+  font-style: italic;
+  color: #059669;
+}
+.org .tch-typing-dots {
+  display: inline-flex;
+  gap: 3px;
+}
+.org .tch-typing-dots i {
+  width: 5px;
+  height: 5px;
   border-radius: 50%;
+  background: #059669;
+  animation: tch-blink 1.2s infinite ease-in-out;
+}
+.org .tch-typing-dots i:nth-child(2) {
+  animation-delay: 0.15s;
+}
+.org .tch-typing-dots i:nth-child(3) {
+  animation-delay: 0.3s;
+}
+@keyframes tch-blink {
+  0%,
+  80%,
+  100% {
+    opacity: 0.25;
+  }
+  40% {
+    opacity: 1;
+  }
+}
+.org .tch-jump {
+  position: absolute;
+  right: 20px;
+  bottom: 76px;
+  z-index: 5;
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  border: 1px solid #e5e7eb;
+  background: #ffffff;
+  color: #374151;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+.org .tch-jump-count {
+  position: absolute;
+  top: -7px;
+  right: -7px;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  border-radius: 999px;
+  background: #059669;
+  color: #ffffff;
+  font-size: 10.5px;
+  font-weight: 700;
+  line-height: 18px;
+}
+.org .tch-readonly {
+  padding: 14px 18px;
+  border-top: 1px solid #e5e7eb;
+  text-align: center;
+  font-size: 13px;
+  color: #6b7280;
+}
+
+/* Composer: multi-line input in the original bar */
+.org .tch-composer {
+  align-items: flex-end;
+}
+.org textarea.tch-composer-input {
+  resize: none;
+  font-family: inherit;
+  line-height: 1.5;
+  padding: 8px 0;
+  max-height: 160px;
+}
+.org .tch-composer-attach:disabled,
+.org .tch-composer-emoji:disabled {
+  cursor: default;
+  opacity: 0.5;
+}
+.org .tch-composer-send:disabled {
+  background: #a7d7c5;
+  cursor: default;
+}
+.org .tch-composer > button {
+  margin-bottom: 2px;
+}
+
+/* Search in conversation */
+.org .tch-conv-search {
+  padding: 10px 20px;
+  border-bottom: 1px solid #e5e7eb;
+}
+.org .tch-conv-results {
+  list-style: none;
+  margin: 8px 0 0;
+  padding: 0;
+  max-height: 240px;
+  overflow-y: auto;
+}
+.org .tch-conv-results button {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  width: 100%;
+  padding: 8px 6px;
+  border: none;
+  border-bottom: 1px solid #f3f4f6;
+  background: none;
+  text-align: left;
+  cursor: pointer;
+}
+.org .tch-conv-results button:hover {
+  background: #f9fafb;
+}
+.org .tch-res-top {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 12.5px;
+  color: #111827;
+}
+.org .tch-res-top small {
+  color: #9ca3af;
+}
+.org .tch-res-body {
+  font-size: 13px;
+  color: #6b7280;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.org .tch-empty-line {
+  padding: 10px 8px;
+  font-size: 12.5px;
+  color: #6b7280;
+}
+
+/* Members panel (opens beside the thread) */
+.org .tch-drawer {
+  width: 280px;
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  border-left: 1px solid #e5e7eb;
+  background: #ffffff;
+  min-height: 0;
+}
+.org .tch-drawer-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 16px 8px;
+}
+.org .tch-drawer-head h3 {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 800;
+  color: #111827;
+}
+.org .tch-drawer-add {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 0 16px 10px;
+}
+.org .tch-member-list {
+  list-style: none;
+  margin: 0;
+  padding: 0 8px 12px;
+  overflow-y: auto;
+  flex: 1;
+}
+.org .tch-member {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 7px 8px;
+  border-radius: 10px;
+}
+.org .tch-member:hover {
+  background: #f9fafb;
+}
+.org .tch-member-main {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-width: 0;
+}
+.org .tch-member-main strong {
+  font-size: 13px;
+  font-weight: 600;
+  color: #111827;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.org .tch-member-main em {
+  font-style: normal;
+  font-weight: 500;
+  color: #9ca3af;
+}
+.org .tch-member-main small {
+  font-size: 11.5px;
+  color: #6b7280;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.org .tch-role {
+  font-size: 10.5px;
+  font-weight: 700;
+  padding: 1px 8px;
+  border-radius: 999px;
+  background: #dcfce7;
+  color: #16a34a;
+}
+
+/* Buttons used in panels and dialogs */
+.org .tch-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  background: #ffffff;
+  border: 1px solid #e5e7eb;
+  border-radius: 10px;
+  padding: 8px 14px;
+  font-size: 13px;
+  font-weight: 600;
+  color: #374151;
+  cursor: pointer;
+}
+.org .tch-btn:hover:not(:disabled) {
+  background: #f9fafb;
+}
+.org .tch-btn:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+.org .tch-btn.is-primary {
+  background: #059669;
+  border-color: #059669;
+  color: #ffffff;
+}
+.org .tch-btn.is-primary:hover:not(:disabled) {
+  background: #047857;
+}
+.org .tch-btn.is-danger {
+  background: #dc2626;
+  border-color: #dc2626;
+  color: #ffffff;
+}
+.org .tch-btn.is-link {
+  border: none;
+  background: none;
+  color: #059669;
+  padding: 4px 0;
+}
+
+/* People picker (new channel, new message, add members) */
+.org .tch-picker,
+.org .tch-member-pick {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.org .tch-picker-list {
+  list-style: none;
+  margin: 0;
+  padding: 4px;
+  max-height: 260px;
+  overflow-y: auto;
+  border: 1px solid #e5e7eb;
+  border-radius: 10px;
+}
+.org .tch-picker-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 7px 8px;
+  border: none;
+  border-radius: 8px;
+  background: none;
+  cursor: pointer;
+  text-align: left;
+}
+.org .tch-picker-item:hover {
+  background: #f9fafb;
+}
+.org .tch-picker-name {
+  display: flex;
+  flex-direction: column;
+  font-size: 13px;
+  font-weight: 600;
+  color: #111827;
+  min-width: 0;
+}
+.org .tch-picker-name small {
+  font-weight: 400;
+  color: #6b7280;
+  font-size: 11.5px;
+}
+.org .tch-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.org .tch-pick-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 6px 3px 10px;
+  border-radius: 999px;
+  background: #f0fdf4;
+  border: 1px solid #bbf7d0;
+  color: #047857;
+  font-size: 12.5px;
+  font-weight: 600;
+}
+.org .tch-pick-chip button {
+  border: none;
+  background: none;
+  color: inherit;
+  cursor: pointer;
+  font-size: 14px;
+  line-height: 1;
+  padding: 0 2px;
+}
+
+/* Dialogs (rename / leave / delete / remove member) */
+.org .tch-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 80;
+  background: rgba(17, 24, 39, 0.4);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+}
+.org .tch-modal {
+  width: 100%;
+  max-width: 420px;
+  max-height: calc(100dvh - 32px);
+  display: flex;
+  flex-direction: column;
+  background: #ffffff;
+  border: 1px solid #e5e7eb;
+  border-radius: 16px;
+  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.15);
+}
+.org .tch-modal-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 18px 6px;
+}
+.org .tch-modal-head h3 {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 800;
+  color: #111827;
+}
+.org .tch-modal-body {
+  padding: 6px 18px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  overflow-y: auto;
+}
+.org .tch-modal-text {
+  margin: 0;
+  font-size: 13.5px;
+  line-height: 1.5;
+  color: #374151;
+}
+.org .tch-modal-foot {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  padding: 10px 18px 16px;
+}
+.org .tch-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.org .tch-field > span {
+  font-size: 12.5px;
+  font-weight: 700;
+  color: #374151;
+}
+.org .tch-field input {
+  height: 38px;
+  padding: 0 12px;
+  border: 1px solid #e5e7eb;
+  border-radius: 10px;
+  font-size: 13.5px;
+  outline: none;
+  background: #f9fafb;
+}
+.org .tch-field input:focus {
+  border-color: #059669;
+}
+.org .tch-form-error {
+  margin: 0;
+  font-size: 12.5px;
+  color: #dc2626;
+}
+
+/* No access / wrong domain */
+.org .tch-noaccess {
+  min-height: 60vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  text-align: center;
+  padding: 24px 16px;
+}
+.org .tch-noaccess h2 {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 800;
+  color: #111827;
+}
+.org .tch-noaccess p {
+  margin: 0;
+  font-size: 13.5px;
+  color: #6b7280;
+  max-width: 420px;
+}
+.org .tch-noaccess-icon {
+  width: 52px;
+  height: 52px;
+  border-radius: 14px;
   background: #f3f4f6;
   color: #6b7280;
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 11.5px;
-  font-weight: 700;
 }
 
-/* Shared Leads List */
-.org .tch-shared-leads-list {
+/* Narrow screens */
+@media (max-width: 1100px) {
+  .org .tch-drawer {
+    position: absolute;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 15;
+    box-shadow: -8px 0 24px rgba(0, 0, 0, 0.08);
+  }
+}
+@media (max-width: 768px) {
+  /* List OR thread, with a back button in the thread header. */
+  .org .tch-shell {
+    height: calc(100dvh - 215px);
+    min-height: 460px;
+  }
+  .org .tch-shell .tch-left {
+    display: flex;
+  }
+  .org .tch-shell .tch-center {
+    display: none;
+  }
+  .org .tch-shell.has-active .tch-left {
+    display: none;
+  }
+  .org .tch-shell.has-active .tch-center {
+    display: flex;
+  }
+  .org .tch-back {
+    display: flex;
+  }
+  .org .tch-drawer {
+    width: 100%;
+  }
+  .org .tch-msgs-area {
+    padding: 14px 12px;
+  }
+  .org .tch-typing {
+    padding: 0 12px 6px;
+  }
+  .org .tch-msg-tools {
+    display: none;
+  }
+}
+
+/* ---------- Two-sided conversation (yours right, others left) ---------- */
+.org .tch-msg-row {
+  align-items: flex-start;
+}
+.org .tch-msg-row:hover {
+  background: transparent;
+}
+.org .tch-msg-row .tch-msg-content {
+  flex: 0 1 auto;
+  max-width: min(70%, 640px);
+  align-items: flex-start;
+}
+.org .tch-msg-row.is-mine {
+  flex-direction: row-reverse;
+}
+.org .tch-msg-row.is-mine .tch-msg-content {
+  align-items: flex-end;
+}
+.org .tch-msg-row.is-grouped {
+  margin-top: -14px;
+}
+.org .tch-bubble {
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 4px;
+  padding: 8px 12px 6px;
+  background: #f3f4f6;
+  border: 1px solid #e5e7eb;
+  border-radius: 4px 14px 14px 14px;
+  min-width: 70px;
+}
+.org .tch-msg-row.is-grouped .tch-bubble {
+  border-radius: 14px;
+}
+.org .tch-msg-row.is-mine .tch-bubble {
+  background: #ecfdf5;
+  border-color: #bbf7d0;
+  border-radius: 14px 4px 14px 14px;
+}
+.org .tch-msg-row.is-mine.is-grouped .tch-bubble {
+  border-radius: 14px;
+}
+.org .tch-bubble.is-deleted {
+  background: #ffffff;
+}
+.org .tch-bubble-time {
+  align-self: flex-end;
+  font-size: 10.5px;
+  color: #9ca3af;
+  line-height: 1;
+  white-space: nowrap;
+}
+.org .tch-msg-row.is-highlight {
+  animation: none;
+}
+.org .tch-msg-row.is-highlight .tch-bubble {
+  animation: tch-flash 2.4s ease;
+}
+/* The react button sits beside the bubble (left of yours, right of theirs). */
+.org .tch-msg-tools {
+  position: static;
+  align-self: center;
+  margin: 0 6px;
+}
+.org .tch-msg-row.is-mine .tch-retry {
+  align-self: flex-end;
 }
 
-.org .tch-lead-item {
+/* People search field (popups and members panel) */
+.org .tch-picker-input {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  background: #ffffff;
+  gap: 8px;
+  height: 40px;
+  padding: 0 12px;
+  background: #f9fafb;
   border: 1px solid #e5e7eb;
   border-radius: 10px;
-  padding: 10px 12px;
-  cursor: pointer;
-  transition: all 0.15s;
+  color: #9ca3af;
+  transition: border-color 0.15s;
 }
-
-.org .tch-lead-item:hover {
+.org .tch-picker-input:focus-within {
   border-color: #059669;
-  background: #f0fdf4;
+  background: #ffffff;
 }
-
-.org .tch-lead-item-left {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-}
-
-.org .tch-lead-user-ic {
-  color: #6b7280;
-}
-
-.org .tch-lead-name-group {
-  display: flex;
-  flex-direction: column;
-}
-
-.org .tch-lead-name {
-  font-size: 13px;
-  font-weight: 700;
+.org .tch-picker-input input {
+  flex: 1;
+  min-width: 0;
+  height: 100%;
+  border: none;
+  outline: none;
+  background: transparent;
+  font-size: 13.5px;
   color: #111827;
 }
-
-.org .tch-lead-type {
-  font-size: 11.5px;
-  color: #6b7280;
+.org .tch-optional {
+  font-style: normal;
+  font-weight: 400;
+  color: #9ca3af;
+}
+.org .tch-modal.is-wide {
+  max-width: 520px;
 }
 
-.org .tch-lead-item-right {
+@media (max-width: 768px) {
+  .org .tch-msg-row .tch-msg-content {
+    max-width: 85%;
+  }
+}
+
+/* ---------- Files & emoji (phase 3) ---------- */
+
+/* Composer: pending-files tray above the input bar */
+.org .tch-composer-wrap {
+  border-top: 1px solid #e5e7eb;
+  background: #ffffff;
+}
+.org .tch-composer-wrap .tch-composer {
+  border-top: none;
+}
+.org .tch-tray {
+  display: flex;
+  gap: 10px;
+  padding: 12px 18px 0;
+  overflow-x: auto;
+}
+.org .tch-tray-item {
+  position: relative;
+  flex: 0 0 auto;
+  width: 84px;
+  height: 84px;
+  border-radius: 10px;
+  border: 1px solid #e5e7eb;
+  background: #f9fafb;
+  overflow: hidden;
+}
+.org .tch-tray-item img,
+.org .tch-tray-item video {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+.org .tch-tray-item.is-error {
+  border-color: #fecaca;
+}
+.org .tch-tray-file {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  padding: 6px;
+  color: #059669;
+  text-align: center;
+}
+.org .tch-tray-file span {
+  width: 100%;
+  font-size: 10.5px;
+  font-weight: 600;
+  color: #111827;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.org .tch-tray-file small {
+  font-size: 10px;
+  color: #6b7280;
+}
+.org .tch-tray-play {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: rgba(17, 24, 39, 0.55);
+  color: #ffffff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.org .tch-tray-progress {
+  position: absolute;
+  left: 6px;
+  right: 6px;
+  bottom: 6px;
+  height: 4px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.85);
+  overflow: hidden;
+}
+.org .tch-tray-progress span {
+  display: block;
+  height: 100%;
+  background: #059669;
+  transition: width 0.15s;
+}
+.org .tch-tray-remove {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  border: none;
+  background: rgba(17, 24, 39, 0.65);
+  color: #ffffff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+.org .tch-tray-error {
+  position: absolute;
+  inset: 0;
+  border: none;
+  background: rgba(254, 242, 242, 0.88);
+  color: #dc2626;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  cursor: pointer;
+}
+.org .tch-tray-msg {
+  padding: 6px 18px 0;
+  font-size: 12px;
+  color: #dc2626;
+}
+
+/* Emoji picker popover */
+.org .tch-emoji-wrap {
+  position: relative;
+  display: flex;
+}
+.org .tch-emoji-pop {
+  position: absolute;
+  right: -40px;
+  bottom: 44px;
+  z-index: 30;
+  border-radius: 12px;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.14);
+}
+.org .tch-emoji-pop.is-loading {
+  width: 320px;
+  height: 120px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #ffffff;
+  border: 1px solid #e5e7eb;
+  font-size: 12.5px;
+  color: #6b7280;
+}
+.org .tch-emoji-pop .EmojiPickerReact {
+  --epr-highlight-color: #059669;
+  --epr-hover-bg-color: #f0fdf4;
+  --epr-focus-bg-color: #ecfdf5;
+  --epr-search-input-bg-color: #f9fafb;
+  --epr-category-label-bg-color: rgba(255, 255, 255, 0.95);
+  font-family: inherit;
+}
+
+/* Drag & drop */
+.org .tch-drop-overlay {
+  position: absolute;
+  inset: 8px;
+  z-index: 25;
+  border: 2px dashed #059669;
+  border-radius: 14px;
+  background: rgba(240, 253, 244, 0.92);
+  color: #047857;
+  font-size: 14px;
+  font-weight: 700;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  pointer-events: none;
+}
+
+/* Photos & videos inside a bubble */
+.org .tch-media-grid {
+  display: grid;
+  gap: 3px;
+  width: min(320px, 100%);
+  border-radius: 10px;
+  overflow: hidden;
+}
+.org .tch-media-grid.is-1 {
+  grid-template-columns: 1fr;
+}
+.org .tch-media-grid.is-2,
+.org .tch-media-grid.is-3,
+.org .tch-media-grid.is-4 {
+  grid-template-columns: 1fr 1fr;
+}
+.org .tch-media-grid.is-3 .tch-media-tile:first-child {
+  grid-column: span 2;
+}
+.org .tch-media-tile {
+  position: relative;
+  display: block;
+  width: 100%;
+  aspect-ratio: 1 / 1;
+  padding: 0;
+  border: none;
+  background: #e5e7eb;
+  cursor: zoom-in;
+  overflow: hidden;
+}
+.org .tch-media-tile.is-single {
+  aspect-ratio: 4 / 3;
+  max-height: 360px;
+}
+.org .tch-media-tile img,
+.org .tch-media-tile video {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+.org .tch-media-loading {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(90deg, #e5e7eb 25%, #f3f4f6 50%, #e5e7eb 75%);
+  background-size: 200% 100%;
+  animation: tch-shimmer 1.2s infinite linear;
+}
+@keyframes tch-shimmer {
+  to {
+    background-position: -200% 0;
+  }
+}
+.org .tch-media-play {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
   display: flex;
   align-items: center;
   gap: 6px;
-}
-
-.org .tch-status-badge {
-  font-size: 11px;
-  font-weight: 600;
-  padding: 2px 8px;
+  padding: 8px 12px;
   border-radius: 999px;
+  background: rgba(17, 24, 39, 0.6);
+  color: #ffffff;
+}
+.org .tch-media-play em {
+  font-style: normal;
+  font-size: 11.5px;
+  font-weight: 600;
+}
+.org .tch-media-more {
+  position: absolute;
+  inset: 0;
+  background: rgba(17, 24, 39, 0.5);
+  color: #ffffff;
+  font-size: 22px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.org .tch-bubble .tch-file-card {
+  margin-top: 0;
+  width: min(300px, 100%);
+}
+.org .tch-bubble .tch-file-card:disabled {
+  opacity: 0.7;
 }
 
-.org .tch-status-badge.new {
+@media (max-width: 768px) {
+  .org .tch-emoji-pop {
+    right: -60px;
+  }
+  .org .tch-tray {
+    padding: 10px 12px 0;
+  }
+}
+
+/* ---------- Phase 4: message actions ---------- */
+/* Hover tools beside the bubble: react + more. */
+.org .tch-msg-tools {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 2px;
+}
+.org .tch-msg-tools.is-open {
+  opacity: 1;
+}
+.org .tch-float {
+  border-radius: 12px;
+}
+.org .tch-float .tch-quick-react {
+  align-items: center;
+  background: #ffffff;
+  border: 1px solid #e5e7eb;
+  border-radius: 999px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.08);
+  padding: 4px 6px;
+}
+.org .tch-quick-react .tch-quick-more {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  margin-left: 2px;
+  border-radius: 999px;
+  background: #f3f4f6;
+  color: #6b7280;
+}
+.org .tch-float .tch-menu {
+  position: static;
+}
+.org .tch-float .tch-emoji-pop,
+.org .tch-sheet-emoji .tch-emoji-pop {
+  position: static;
+}
+.org .tch-float .tch-menu button svg,
+.org .tch-sheet-actions button svg {
+  color: #6b7280;
+  flex-shrink: 0;
+}
+.org .tch-float .tch-menu button.is-danger svg,
+.org .tch-sheet-actions button.is-danger svg {
+  color: #dc2626;
+}
+
+/* Mentions inside a message */
+.org .tch-msg-text .tch-mention.is-me {
   background: #ecfdf5;
+  color: #047857;
+  border-radius: 4px;
+  padding: 0 2px;
+}
+
+/* "Pinned" label and clickable reply quote inside a bubble */
+.org .tch-msg-pinned {
+  font-size: 11.5px;
+  font-weight: 600;
   color: #059669;
 }
-
-.org .tch-status-badge.in-progress {
-  background: #eff6ff;
-  color: #2563eb;
+.org button.tch-quote-link {
+  border-top: none;
+  border-right: none;
+  border-bottom: none;
+  text-align: left;
+  font-family: inherit;
+  color: inherit;
+  cursor: pointer;
+  min-width: 0;
+}
+.org button.tch-quote-link:disabled {
+  cursor: default;
+}
+.org .tch-msg-row.is-mine .tch-quote {
+  background: rgba(255, 255, 255, 0.7);
 }
 
-.org .tch-status-badge.follow-up {
-  background: #f5f3ff;
-  color: #7c3aed;
+/* Pinned messages bar (top of the thread) */
+.org .tch-pinbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 20px;
+  border-bottom: 1px solid #e5e7eb;
+  background: #ffffff;
+}
+.org .tch-pinbar-steps {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  align-self: stretch;
+  justify-content: center;
+}
+.org .tch-pinbar-steps i {
+  display: block;
+  width: 3px;
+  flex: 1;
+  max-height: 10px;
+  border-radius: 2px;
+  background: #d1d5db;
+}
+.org .tch-pinbar-steps i.is-on {
+  background: #059669;
+}
+.org .tch-pinbar-main {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex: 1;
+  min-width: 0;
+  padding: 0;
+  border: none;
+  background: none;
+  font-family: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.org .tch-pinbar-icon {
+  color: #059669;
+  flex-shrink: 0;
+}
+.org .tch-pinbar-text {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  font-size: 12px;
+}
+.org .tch-pinbar-text strong {
+  color: #059669;
+  font-weight: 600;
+}
+.org .tch-pinbar-text span {
+  color: #374151;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Reply / edit banner above the composer */
+.org .tch-composer-wrap {
+  position: relative;
+}
+.org .tch-reply-bar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 18px 0;
+  color: #059669;
+}
+.org .tch-reply-bar .tch-quote {
+  flex: 1;
+  min-width: 0;
+  max-width: none;
+}
+.org .tch-reply-bar .tch-quote strong {
+  color: #374151;
+}
+
+/* @mention suggestions */
+.org .tch-mention-pop {
+  position: absolute;
+  left: 18px;
+  bottom: calc(100% + 6px);
+  z-index: 30;
+  width: min(280px, calc(100% - 36px));
+  list-style: none;
+  margin: 0;
+  padding: 6px;
+  background: #ffffff;
+  border: 1px solid #e5e7eb;
+  border-radius: 12px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.08);
+}
+.org .tch-mention-pop button {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 6px 8px;
+  border: none;
+  border-radius: 8px;
+  background: none;
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 500;
+  color: #374151;
+  text-align: left;
+  cursor: pointer;
+}
+.org .tch-mention-pop button:hover,
+.org .tch-mention-pop button.is-active {
+  background: #f0fdf4;
+}
+
+/* Forward picker */
+.org .tch-forward-preview {
+  max-width: none;
+  margin-bottom: 12px;
+}
+.org .tch-forward-list .tch-picker-item {
+  width: 100%;
+}
+.org .tch-forward-list .tch-picker-name {
+  flex: 1;
+  min-width: 0;
+}
+.org .tch-forward-hash {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 999px;
+  background: #f3f4f6;
+  color: #6b7280;
+  font-weight: 700;
+  flex-shrink: 0;
+}
+.org .tch-check {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  border: 1.5px solid #d1d5db;
+  border-radius: 5px;
+  color: #ffffff;
+  flex-shrink: 0;
+}
+.org .tch-check.is-on {
+  background: #059669;
+  border-color: #059669;
+}
+.org .tch-picker-item.is-picked {
+  background: #f0fdf4;
+}
+.org .tch-form-hint {
+  margin: 8px 0 0;
+  font-size: 12px;
+  color: #6b7280;
+}
+
+/* Mobile long-press action sheet */
+.org .tch-sheet-backdrop {
+  align-items: flex-end;
+  padding: 0;
+}
+.org .tch-sheet {
+  width: 100%;
+  max-width: 480px;
+  margin: 0 auto;
+  padding: 14px 14px calc(14px + env(safe-area-inset-bottom));
+  background: #ffffff;
+  border-radius: 16px 16px 0 0;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.org .tch-sheet-preview {
+  display: flex;
+  flex-direction: column;
+  padding: 4px 10px;
+  border-left: 3px solid #059669;
+  background: #f9fafb;
+  border-radius: 6px;
+  font-size: 12px;
+}
+.org .tch-sheet-preview span {
+  color: #6b7280;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.org .tch-sheet .tch-quick-react {
+  justify-content: space-between;
+}
+.org .tch-sheet .tch-quick-react button {
+  font-size: 24px;
+}
+.org .tch-sheet-actions {
+  display: flex;
+  flex-direction: column;
+}
+.org .tch-sheet-actions button {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 8px;
+  border: none;
+  border-radius: 8px;
+  background: none;
+  font-family: inherit;
+  font-size: 14px;
+  font-weight: 500;
+  color: #374151;
+  text-align: left;
+  cursor: pointer;
+}
+.org .tch-sheet-actions button:active {
+  background: #f9fafb;
+}
+.org .tch-sheet-actions button.is-danger {
+  color: #dc2626;
+}
+.org .tch-sheet-emoji .EmojiPickerReact {
+  width: 100% !important;
+}
+
+@media (max-width: 768px) {
+  .org .tch-pinbar {
+    padding: 8px 12px;
+  }
+  .org .tch-reply-bar {
+    padding: 10px 12px 0;
+  }
+  .org .tch-mention-pop {
+    left: 12px;
+  }
+}
+
+/* A mouse keeps the hover tools at any width (the old <=768px rule hid
+   them, and long-press is touch only). */
+@media (hover: hover) and (pointer: fine) {
+  .org .tch-msg-tools {
+    display: flex;
+  }
+}
+/* Touch screens use long-press instead of the hover tools. */
+@media (hover: none) {
+  .org .tch-msg-tools {
+    display: none;
+  }
+  /* Long-press opens the action sheet instead of the text callout. */
+  .org .tch-bubble {
+    -webkit-touch-callout: none;
+    -webkit-user-select: none;
+    user-select: none;
+  }
+}
+
+/* Danger buttons stay red on hover (the generic .tch-btn hover turned them
+   white, hiding the white label). */
+.org .tch-btn.is-danger:hover:not(:disabled) {
+  background: #b91c1c;
+  border-color: #b91c1c;
 }
