@@ -74,6 +74,15 @@
     grid-template-columns: 1fr;
     gap: 20px;
   }
+
+  /* One column: the nav sits above the form, so it must scroll with the
+     page. Left sticky, it pinned under the topbar and the form fields slid
+     through it while scrolling. (.os-page raises specificity over the
+     sticky base rule further down this file.) */
+  .org .os-page .os-nav {
+    position: static;
+    top: auto;
+  }
 }
 
 /* Navigation Sidebar */
@@ -519,4 +528,43 @@
   justify-content: center;
   color: #059669;
   font-weight: 700;
+}
+
+
+/* ---------- Phones ----------
+   Card headers kept the title and the action (Save changes, Add common
+   types, plan toggle…) on one non-wrapping row inside an overflow:hidden
+   card, so the action was clipped off-screen and the description was
+   squeezed to one word per line. Let the header wrap with the action on its
+   own row, and trim the nested padding so inputs get the screen width. */
+@media (max-width: 640px) {
+  .org .os-page .set-header {
+    margin-bottom: 18px;
+  }
+
+  .org .os-page .set-header-title {
+    font-size: 20px;
+  }
+
+  .org .os-page .os-card-top {
+    flex-wrap: wrap;
+    padding: 16px;
+    gap: 12px;
+  }
+
+  .org .os-page .os-card-htext {
+    flex: 1 1 calc(100% - 60px);
+  }
+
+  .org .os-page .os-card-action {
+    margin-left: 0;
+    flex: 1 1 100%;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+
+  .org .os-page .os-content .card-b {
+    padding: 16px;
+  }
 }

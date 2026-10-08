@@ -398,6 +398,7 @@ export default function OrgProjectsPage() {
       {/* Toolbar / Filters */}
       <Reveal delay={1}>
         <div
+          className="proj-toolbar"
           style={{
             background: "#fff",
             border: "1px solid #e2e8f0",

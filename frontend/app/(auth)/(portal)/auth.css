@@ -584,6 +584,40 @@
   }
 }
 
+/* Phones / small tablets: the one-screen lock above clips tall forms (the
+   register wizard loses Mobile, Password and Continue on a 667px phone,
+   and any page loses fields when the keyboard opens). Below 900px — where
+   the photo side is already hidden — let the page grow and scroll. Desktop
+   keeps the fixed split layout. */
+@media (max-width: 900px) {
+  .superadmin:has(.auth2) {
+    height: auto;
+    max-height: none;
+    min-height: 100dvh;
+    overflow: visible;
+  }
+
+  .superadmin .auth2 {
+    height: auto;
+    max-height: none;
+    min-height: 100dvh;
+    overflow: visible;
+  }
+
+  .superadmin .auth2 .auth2-formside {
+    height: auto;
+    min-height: 100dvh;
+    overflow: visible;
+    justify-content: flex-start;
+    padding: 24px 16px 32px;
+  }
+
+  .superadmin .auth2 .auth2-card {
+    max-height: none;
+    overflow: visible;
+  }
+}
+
 /* ---------- Signup wizard: brand rail ---------- */
 .steps-rail{position:relative;display:flex;flex-direction:column;gap:0;margin-top:30px}
 .steps-rail .sr{display:flex;align-items:center;gap:13px;padding:9px 0;color:#8891b4;transition:.2s}
