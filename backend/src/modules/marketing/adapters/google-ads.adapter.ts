@@ -123,7 +123,8 @@ export class GoogleAdsAdapter implements PlatformAdapter, OnModuleInit {
       response_type: 'code',
       access_type: 'offline',
       prompt: 'consent',
-      scope: 'https://www.googleapis.com/auth/adwords',
+      scope:
+        'https://www.googleapis.com/auth/adwords https://www.googleapis.com/auth/userinfo.email',
       state,
     });
     return {

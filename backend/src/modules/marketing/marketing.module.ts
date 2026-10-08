@@ -10,6 +10,7 @@ import {
   MarketingOAuthController,
   OrgMarketingController,
 } from './marketing.controller';
+import { GoogleSheetsWebhookController } from './google-sheets-webhook.controller';
 import { PlatformAdapterRegistry } from './adapters/platform-adapter.registry';
 import { MetaAdapter } from './adapters/meta.adapter';
 import { InstagramAdapter } from './adapters/instagram.adapter';
@@ -23,6 +24,7 @@ import { GoogleSheetsAdapter } from './adapters/google-sheets.adapter';
     AdminMarketingController,
     OrgMarketingController,
     MarketingOAuthController,
+    GoogleSheetsWebhookController,
   ],
   providers: [
     MarketingService,

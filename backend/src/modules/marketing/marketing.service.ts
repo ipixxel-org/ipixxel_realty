@@ -853,15 +853,34 @@ export class MarketingService implements OnModuleInit {
             json.error ?? 'Google token exchange failed',
           );
         }
+        let userEmail = '';
+        try {
+          const userRes = await fetch(
+            'https://www.googleapis.com/oauth2/v2/userinfo',
+            { headers: { Authorization: `Bearer ${json.access_token}` } },
+          );
+          if (userRes.ok) {
+            const u = (await userRes.json()) as { email?: string };
+            userEmail = u.email ?? '';
+          }
+        } catch {}
+
         const platformKey = 'google_ads';
+        const externalAccountId = userEmail
+          ? `gads:${userEmail.trim().toLowerCase()}`
+          : `gads:${parsed.orgId}:${Date.now()}`;
+        const externalAccountName = userEmail
+          ? `Google Ads (${userEmail})`
+          : 'Google Ads Account';
+
         return {
           orgId: parsed.orgId!,
           userId: parsed.userId,
           platformKey,
           accessToken: json.access_token,
           refreshToken: json.refresh_token,
-          externalAccountId: `${platformKey}:${parsed.orgId}`,
-          externalAccountName: 'Google Ads',
+          externalAccountId,
+          externalAccountName,
         };
       },
     });
@@ -952,6 +971,9 @@ export class MarketingService implements OnModuleInit {
       data: {
         projectId:
           dto.projectId === undefined ? existing.projectId : dto.projectId,
+        ...(dto.externalAccountName !== undefined && dto.externalAccountName.trim()
+          ? { externalAccountName: dto.externalAccountName.trim() }
+          : {}),
       },
       include: { project: { select: { id: true, name: true } } },
     });
@@ -965,7 +987,12 @@ export class MarketingService implements OnModuleInit {
       await this.prisma.metaPageConnection
         .updateMany({
           where: { orgId, pageId: row.externalAccountId },
-          data: { projectId: row.projectId },
+          data: {
+            projectId: row.projectId,
+            ...(dto.externalAccountName !== undefined && dto.externalAccountName.trim()
+              ? { pageName: dto.externalAccountName.trim() }
+              : {}),
+          },
         })
         .catch(() => undefined);
       await this.prisma.marketingConnection

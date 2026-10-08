@@ -286,6 +286,39 @@ export class OrgMarketingController {
     );
   }
 
+  @Get('google-sheets/apps-script-config')
+  getGoogleSheetsAppsScriptConfig(
+    @CurrentUser() user: JwtPayload,
+    @Query('connectionId') connectionId?: string,
+  ) {
+    return this.googleSheets.getWebhookConfig(
+      user.orgId as string,
+      connectionId,
+    );
+  }
+
+  @Post('google-sheets/regenerate-token')
+  regenerateGoogleSheetsWebhookToken(
+    @CurrentUser() user: JwtPayload,
+    @Body('connectionId') connectionId?: string,
+  ) {
+    return this.googleSheets.regenerateWebhookToken(
+      user.orgId as string,
+      connectionId,
+    );
+  }
+
+  @Post('google-sheets/reset-stats')
+  resetGoogleSheetsSyncStats(
+    @CurrentUser() user: JwtPayload,
+    @Body('connectionId') connectionId?: string,
+  ) {
+    return this.googleSheets.resetSyncStats(
+      user.orgId as string,
+      connectionId,
+    );
+  }
+
   @Delete('google-sheets')
   disconnectGoogleSheets(
     @CurrentUser() user: JwtPayload,

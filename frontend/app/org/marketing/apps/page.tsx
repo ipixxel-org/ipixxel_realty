@@ -206,12 +206,20 @@ const PLATFORM_COPY: Record<
 function StatusPill({
   connected,
   configured,
+  connectionCount = 0,
 }: {
   connected: boolean;
   configured: boolean;
+  connectionCount?: number;
 }) {
   if (connected) {
-    return <span className="mkt-hub-status is-on">Connected</span>;
+    return (
+      <span className="mkt-hub-status is-on">
+        {connectionCount > 1
+          ? `${connectionCount} Accounts Active`
+          : "Connected"}
+      </span>
+    );
   }
   if (!configured) {
     return <span className="mkt-hub-status is-warn">Not configured</span>;
@@ -508,6 +516,7 @@ export default function OrgMarketingAppsPage() {
                             <StatusPill
                               connected={connected}
                               configured={configured}
+                              connectionCount={p.connectionCount || p.connections?.length || 0}
                             />
                           </div>
                           <p className="mkt-hub-card-desc">
@@ -564,7 +573,9 @@ export default function OrgMarketingAppsPage() {
                             className="btn btn-ghost"
                             href={`/org/marketing/apps/${p.key}`}
                           >
-                            View Details
+                            {(p.connectionCount || p.connections?.length || 0) > 1
+                              ? `Manage Accounts (${p.connectionCount || p.connections?.length})`
+                              : "View Details"}
                           </Link>
                         </>
                       ) : (
