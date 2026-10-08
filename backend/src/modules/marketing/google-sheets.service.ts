@@ -4,7 +4,10 @@ import {
   Logger,
   NotFoundException,
   ServiceUnavailableException,
+  UnauthorizedException,
 } from '@nestjs/common';
+import * as crypto from 'crypto';
+import { LeadStatus } from '@prisma/client';
 import { PrismaService } from '../../database/prisma.service';
 import { leadContactFromData } from '../../common/utils/lead-data.util';
 
@@ -35,10 +38,17 @@ export interface GoogleSheetMetadata {
   autoSync?: boolean;
   googleEmail?: string;
   lastSyncCount?: number;
+  webhookSecret?: string;
   // Per-project sheet behavior
   sheetPerProject?: boolean;
   createSheetPerProject?: boolean;
   projectSheetNames?: Record<string, string>; // projectId -> sheet/tab name
+  // Real-time synchronization metrics
+  recordsAdded?: number;
+  recordsUpdated?: number;
+  failedRecords?: number;
+  syncErrors?: string[];
+  lastSyncAt?: string;
   [key: string]: unknown;
 }
 
@@ -54,8 +64,10 @@ type ConnectionRow = {
   projectId: string | null;
   metadata: unknown;
   lastSyncAt: Date | null;
+  lastError?: string | null;
   connectedAt: Date;
   connectedBy?: string | null;
+  updatedAt?: Date;
 };
 
 @Injectable()
@@ -76,6 +88,16 @@ export class GoogleSheetsService {
       process.env.BACKEND_PUBLIC_URL ??
       `${process.env.FRONTEND_URL ?? 'http://localhost:3001'}/api`
     ).replace(/\/$/, '');
+  }
+
+  private backendUrl(): string {
+    const raw =
+      process.env.BACKEND_PUBLIC_URL ||
+      process.env.PUBLIC_BACKEND_URL ||
+      process.env.BACKEND_URL ||
+      process.env.APP_URL ||
+      `http://localhost:${process.env.PORT || '3000'}`;
+    return raw.replace(/\/$/, '');
   }
 
   private parseMetadata(raw: unknown): GoogleSheetMetadata {
@@ -1266,5 +1288,930 @@ export class GoogleSheetsService {
         `Could not ensure headers in Google Sheet ${spreadsheetId}: ${String(err)}`,
       );
     }
+  }
+
+  // --- Real-time Apps Script & Inbound Webhook -------------------------------
+
+  /**
+   * Returns the webhook configuration, sync metrics, and customized Google Apps Script code
+   * for the given organisation and connection/project.
+   */
+  async getWebhookConfig(orgId: string, connectionId?: string) {
+    const connection = await this.resolveConnection(orgId, connectionId);
+    let metadata = this.parseMetadata(connection.metadata);
+    if (!metadata.webhookSecret) {
+      const secret = crypto.randomBytes(24).toString('hex');
+      metadata = {
+        ...metadata,
+        webhookSecret: secret,
+        recordsAdded: metadata.recordsAdded || 0,
+        recordsUpdated: metadata.recordsUpdated || 0,
+        failedRecords: metadata.failedRecords || 0,
+        syncErrors: metadata.syncErrors || [],
+      };
+      await this.prisma.marketingConnection.update({
+        where: { id: connection.id },
+        data: { metadata: metadata as any },
+      });
+    }
+
+    let projectName: string | null = null;
+    if (connection.projectId) {
+      const project = await this.prisma.project.findUnique({
+        where: { id: connection.projectId },
+        select: { name: true },
+      });
+      projectName = project?.name || null;
+    }
+
+    const appUrl = this.backendUrl();
+    const webhookSecret = metadata.webhookSecret || '';
+    // Unique secure webhook URL for this specific connection
+    const webhookUrl = `${appUrl}/webhooks/google-sheets/${connection.id}?token=${webhookSecret}`;
+
+    const appsScriptCode = this.generateAppsScriptCode({
+      webhookUrl,
+      webhookToken: webhookSecret,
+      connectionId: connection.id,
+      accountName: connection.externalAccountName,
+      projectId: connection.projectId,
+      projectName,
+    });
+
+    return {
+      connectionId: connection.id,
+      externalAccountName: connection.externalAccountName,
+      projectId: connection.projectId,
+      projectName,
+      spreadsheetId: metadata.spreadsheetId,
+      spreadsheetUrl: metadata.spreadsheetUrl,
+      webhookUrl,
+      webhookSecret: metadata.webhookSecret,
+      appsScriptCode,
+      stats: {
+        recordsAdded: metadata.recordsAdded ?? 0,
+        recordsUpdated: metadata.recordsUpdated ?? 0,
+        failedRecords: metadata.failedRecords ?? 0,
+        syncErrors: metadata.syncErrors ?? [],
+        lastSyncAt: connection.lastSyncAt
+          ? connection.lastSyncAt.toISOString()
+          : (metadata.lastSyncAt ?? null),
+        lastError: connection.lastError ?? null,
+        autoSync: metadata.autoSync !== false,
+      },
+    };
+  }
+
+  /**
+   * Regenerates a new unique secure webhook token for the connection.
+   */
+  async regenerateWebhookToken(orgId: string, connectionId?: string) {
+    const connection = await this.resolveConnection(orgId, connectionId);
+    const metadata = this.parseMetadata(connection.metadata);
+    const newSecret = crypto.randomBytes(24).toString('hex');
+    const updatedMetadata: GoogleSheetMetadata = {
+      ...metadata,
+      webhookSecret: newSecret,
+    };
+    await this.prisma.marketingConnection.update({
+      where: { id: connection.id },
+      data: { metadata: updatedMetadata as any },
+    });
+    return this.getWebhookConfig(orgId, connection.id);
+  }
+
+  /**
+   * Resets the sync metrics (added, updated, failed records and errors) for a connection.
+   */
+  async resetSyncStats(orgId: string, connectionId?: string) {
+    const connection = await this.resolveConnection(orgId, connectionId);
+    const metadata = this.parseMetadata(connection.metadata);
+    const updatedMetadata: GoogleSheetMetadata = {
+      ...metadata,
+      recordsAdded: 0,
+      recordsUpdated: 0,
+      failedRecords: 0,
+      syncErrors: [],
+    };
+    await this.prisma.marketingConnection.update({
+      where: { id: connection.id },
+      data: {
+        lastError: null,
+        metadata: updatedMetadata as any,
+      },
+    });
+    return { ok: true, message: 'Sync statistics reset successfully' };
+  }
+
+  /**
+   * Normalizes human-entered lead statuses to valid Prisma LeadStatus enum values.
+   */
+  normalizeLeadStatus(statusStr?: string | null): LeadStatus {
+    if (!statusStr) return LeadStatus.new;
+    const clean = statusStr.trim().toLowerCase().replace(/[\s-]+/g, '_');
+    switch (clean) {
+      case 'contacted':
+        return LeadStatus.contacted;
+      case 'follow_up':
+      case 'followup':
+        return LeadStatus.follow_up;
+      case 'site_visit':
+      case 'sitevisit':
+      case 'visit':
+        return LeadStatus.site_visit;
+      case 'negotiation':
+      case 'negotiating':
+        return LeadStatus.negotiation;
+      case 'won':
+      case 'closed_won':
+      case 'booked':
+        return LeadStatus.won;
+      case 'lost':
+      case 'closed_lost':
+      case 'dropped':
+        return LeadStatus.lost;
+      default:
+        return LeadStatus.new;
+    }
+  }
+
+  /**
+   * Handles incoming webhooks triggered by Google Apps Script on the connected sheet.
+   */
+  async handleWebhook(payload: {
+    token?: string;
+    secret?: string;
+    connectionId?: string;
+    action?: string;
+    spreadsheetId?: string;
+    sheetName?: string;
+    sheetTabId?: string | number;
+    rowNumber?: number;
+    lead?: Record<string, unknown>;
+    leads?: Array<Record<string, unknown>>;
+    [key: string]: unknown;
+  }) {
+    const token = (payload.token || payload.secret || '').trim();
+    if (!token) {
+      throw new UnauthorizedException('Missing webhook authorization token');
+    }
+
+    let connection: any = null;
+    if (payload.connectionId) {
+      connection = await this.prisma.marketingConnection.findUnique({
+        where: { id: payload.connectionId },
+      });
+      if (connection) {
+        const meta = this.parseMetadata(connection.metadata);
+        if (meta.webhookSecret !== token) {
+          connection = null;
+        }
+      }
+    }
+
+    if (!connection) {
+      const candidates = await this.prisma.marketingConnection.findMany({
+        where: { platformKey: 'google_sheets' },
+      });
+      connection = candidates.find((c) => {
+        const meta = this.parseMetadata(c.metadata);
+        return meta.webhookSecret === token;
+      });
+    }
+
+    if (!connection) {
+      throw new UnauthorizedException('Invalid Google Sheets webhook token');
+    }
+
+    const metadata = this.parseMetadata(connection.metadata);
+
+    // Ping / verification action
+    if (payload.action === 'ping') {
+      return {
+        ok: true,
+        message: 'Google Sheets webhook connected to CRM successfully!',
+        connectionId: connection.id,
+        accountName: connection.externalAccountName,
+        projectId: connection.projectId,
+      };
+    }
+
+    // Check if auto-sync is turned off
+    const isAutoSyncOn = metadata.autoSync !== false;
+    if (!isAutoSyncOn && payload.action !== 'manual_sync' && payload.action !== 'batch') {
+      return {
+        ok: false,
+        paused: true,
+        message: 'Real-time auto-sync is currently paused for this connection. Re-enable in CRM to sync leads.',
+      };
+    }
+
+    let recordsAdded = metadata.recordsAdded ?? 0;
+    let recordsUpdated = metadata.recordsUpdated ?? 0;
+    let failedRecords = metadata.failedRecords ?? 0;
+    let syncErrors = Array.isArray(metadata.syncErrors) ? [...metadata.syncErrors] : [];
+
+    // Single row edit sync
+    if (payload.lead) {
+      const result = await this.syncSingleLeadFromSheet(
+        connection,
+        payload.lead,
+        payload.spreadsheetId,
+        payload.sheetName,
+        payload.sheetTabId,
+        payload.rowNumber,
+      );
+
+      if (result.action === 'created') {
+        recordsAdded++;
+      } else if (result.action === 'updated' || result.action === 'linked') {
+        recordsUpdated++;
+      } else if (!result.ok && result.action !== 'skipped') {
+        failedRecords++;
+        if (result.message) {
+          syncErrors.unshift(`Row ${payload.rowNumber || '?'}: ${result.message}`);
+          if (syncErrors.length > 10) syncErrors = syncErrors.slice(0, 10);
+        }
+      }
+
+      await this.prisma.marketingConnection.update({
+        where: { id: connection.id },
+        data: {
+          lastSyncAt: new Date(),
+          lastError: syncErrors.length > 0 ? syncErrors[0] : null,
+          metadata: {
+            ...metadata,
+            recordsAdded,
+            recordsUpdated,
+            failedRecords,
+            syncErrors,
+            lastSyncAt: new Date().toISOString(),
+          } as any,
+        },
+      });
+
+      return {
+        ...result,
+        stats: {
+          recordsAdded,
+          recordsUpdated,
+          failedRecords,
+        },
+      };
+    }
+
+    // Batch sync from sheet menu
+    if (Array.isArray(payload.leads)) {
+      const results: Array<{
+        rowNumber: number;
+        leadId: string;
+        action: string;
+      }> = [];
+
+      for (const item of payload.leads) {
+        const itemRowNumber = Number(item.rowNumber) || 0;
+        const res = await this.syncSingleLeadFromSheet(
+          connection,
+          item,
+          payload.spreadsheetId,
+          payload.sheetName || (item.sheetName as string),
+          payload.sheetTabId || (item.sheetTabId as string | number),
+          itemRowNumber,
+        );
+
+        if (res && res.leadId) {
+          if (res.action === 'created') recordsAdded++;
+          else if (res.action === 'updated' || res.action === 'linked') recordsUpdated++;
+          results.push({
+            rowNumber: itemRowNumber,
+            leadId: res.leadId,
+            action: res.action,
+          });
+        } else if (!res.ok && res.action !== 'skipped') {
+          failedRecords++;
+          if (res.message) {
+            syncErrors.unshift(`Row ${itemRowNumber}: ${res.message}`);
+            if (syncErrors.length > 10) syncErrors = syncErrors.slice(0, 10);
+          }
+        }
+      }
+
+      await this.prisma.marketingConnection.update({
+        where: { id: connection.id },
+        data: {
+          lastSyncAt: new Date(),
+          lastError: syncErrors.length > 0 ? syncErrors[0] : null,
+          metadata: {
+            ...metadata,
+            recordsAdded,
+            recordsUpdated,
+            failedRecords,
+            syncErrors,
+            lastSyncAt: new Date().toISOString(),
+          } as any,
+        },
+      });
+
+      return {
+        ok: true,
+        synced: results.length,
+        recordsAdded,
+        recordsUpdated,
+        failedRecords,
+        results,
+      };
+    }
+
+    return { ok: true, message: 'Payload received' };
+  }
+
+  /**
+   * Upserts a lead captured or edited directly inside Google Sheet.
+   * Performs deduplication:
+   * 1. By explicit Lead ID (Column K)
+   * 2. By Google Sheet coordinates (spreadsheetId + sheetName/tabId + rowNumber)
+   * 3. By existing Lead Center duplicate check (phone / email within org/project)
+   */
+  private async syncSingleLeadFromSheet(
+    connection: ConnectionRow,
+    leadInput: Record<string, unknown>,
+    spreadsheetId?: string,
+    sheetName?: string,
+    sheetTabId?: string | number,
+    rowNumber?: number,
+  ): Promise<{ leadId?: string; action: string; ok: boolean; message?: string }> {
+    const orgId = connection.orgId;
+    const name = String(leadInput.name || '').trim();
+    const phone = String(leadInput.phone || '').trim();
+    const email = String(leadInput.email || '').trim().toLowerCase();
+    const leadId = String(leadInput.id || leadInput.leadId || '').trim();
+    const status = this.normalizeLeadStatus(String(leadInput.status || ''));
+    const notes = String(leadInput.notes || leadInput.message || '').trim();
+    const projectStr = String(leadInput.project || '').trim();
+    const source = String(leadInput.source || 'google_sheets').trim();
+    const platform = String(leadInput.platform || 'google_sheets').trim();
+    const campaign = String(leadInput.campaign || '').trim();
+
+    // Skip empty lines with no identifying info
+    if (!name && !phone && !email && !leadId) {
+      return { ok: false, action: 'skipped', message: 'Empty lead row skipped' };
+    }
+
+    // Resolve project ID:
+    // 1. By project name or ID specified in sheet column
+    // 2. By sheetName matching a project name (multi-tab support)
+    // 3. Fallback to connection.projectId
+    let resolvedProjectId = connection.projectId;
+    const projectLookupTarget = projectStr || sheetName;
+    if (projectLookupTarget) {
+      const matchedProject = await this.prisma.project.findFirst({
+        where: {
+          orgId,
+          OR: [
+            { name: { equals: projectLookupTarget, mode: 'insensitive' } },
+            { id: projectLookupTarget },
+          ],
+        },
+        select: { id: true },
+      });
+      if (matchedProject) {
+        resolvedProjectId = matchedProject.id;
+      }
+    }
+
+    let existingLead: any = null;
+
+    // 1. Check by explicit Lead ID (Column K)
+    if (leadId) {
+      existingLead = await this.prisma.lead.findFirst({
+        where: { id: leadId, orgId },
+      });
+    }
+
+    // 2. Check by Google Sheet coordinates (same sheet + same tab + same row)
+    if (!existingLead && spreadsheetId && rowNumber) {
+      existingLead = await this.prisma.lead.findFirst({
+        where: {
+          orgId,
+          AND: [
+            { data: { path: ['googleSheetId'], equals: spreadsheetId } },
+            { data: { path: ['googleSheetRow'], equals: rowNumber } },
+            ...(sheetName
+              ? [{ data: { path: ['googleSheetTabName'], equals: sheetName } }]
+              : []),
+          ],
+        },
+        orderBy: { createdAt: 'desc' },
+      });
+    }
+
+    // 3. Check by contact deduplication (existing Lead Center logic)
+    if (!existingLead && (phone || email)) {
+      const orConditions: any[] = [];
+      if (phone) {
+        orConditions.push({ data: { path: ['phone'], equals: phone } });
+      }
+      if (email) {
+        orConditions.push({ data: { path: ['email'], equals: email } });
+      }
+      if (orConditions.length > 0) {
+        existingLead = await this.prisma.lead.findFirst({
+          where: {
+            orgId,
+            ...(resolvedProjectId ? { projectId: resolvedProjectId } : {}),
+            OR: orConditions,
+          },
+          orderBy: { createdAt: 'desc' },
+        });
+      }
+    }
+
+    // If existing lead found: UPDATE
+    if (existingLead) {
+      const existingData = (existingLead.data as Record<string, unknown>) ?? {};
+      const updatedData = {
+        ...existingData,
+        ...(name ? { fullName: name, name } : {}),
+        ...(phone ? { phone } : {}),
+        ...(email ? { email } : {}),
+        ...(notes ? { notes } : {}),
+        googleSheetId: spreadsheetId || existingData.googleSheetId || null,
+        googleSheetTabId:
+          sheetTabId != null
+            ? String(sheetTabId)
+            : (existingData.googleSheetTabId || null),
+        googleSheetTabName: sheetName || existingData.googleSheetTabName || null,
+        googleSheetRow: rowNumber || existingData.googleSheetRow || null,
+        projectId: resolvedProjectId || existingLead.projectId || null,
+        lastSyncedFromSheetAt: new Date().toISOString(),
+      };
+
+      const updated = await this.prisma.lead.update({
+        where: { id: existingLead.id },
+        data: {
+          data: updatedData,
+          status,
+          ...(resolvedProjectId ? { projectId: resolvedProjectId } : {}),
+          ...(campaign ? { campaign } : {}),
+        },
+      });
+
+      return { ok: true, leadId: updated.id, action: 'updated' };
+    }
+
+    // If not found: CREATE new lead
+    const capturedAtStr = String(leadInput.capturedAt || '');
+    const createdAt =
+      capturedAtStr && !isNaN(Date.parse(capturedAtStr))
+        ? new Date(capturedAtStr)
+        : new Date();
+
+    const leadData = {
+      fullName: name || 'Google Sheets Lead',
+      name: name || 'Google Sheets Lead',
+      phone: phone || '',
+      email: email || '',
+      notes,
+      source: 'google_sheets',
+      firstTouchSource: 'google_sheets',
+      lastTouchSource: 'google_sheets',
+      googleSheetId: spreadsheetId || null,
+      googleSheetTabId: sheetTabId != null ? String(sheetTabId) : null,
+      googleSheetTabName: sheetName || null,
+      googleSheetRow: rowNumber || null,
+      projectId: resolvedProjectId || null,
+      lastSyncedFromSheetAt: new Date().toISOString(),
+    };
+
+    const created = await this.prisma.lead.create({
+      data: {
+        orgId,
+        projectId: resolvedProjectId || null,
+        source: source || 'google_sheets',
+        platform: platform || 'google_sheets',
+        campaign: campaign || null,
+        status,
+        data: leadData,
+        configurations: [],
+        tags: [],
+        createdAt,
+      },
+    });
+
+    return { ok: true, leadId: created.id, action: 'created' };
+  }
+
+  /**
+   * Generates production-ready Google Apps Script (Code.gs) for real-time sync
+   * with automatic row detection, exponential backoff retries, and failed-queue management.
+   */
+  generateAppsScriptCode(params: {
+    webhookUrl: string;
+    webhookToken?: string;
+    connectionId: string;
+    accountName?: string;
+    projectId?: string | null;
+    projectName?: string | null;
+  }): string {
+    const {
+      webhookUrl,
+      webhookToken,
+      connectionId,
+      accountName,
+      projectId,
+      projectName,
+    } = params;
+
+    return `/**
+ * ============================================================================
+ * REAL-TIME GOOGLE SHEETS TO CRM LEAD SYNC (GOOGLE APPS SCRIPT)
+ * Account: ${accountName || 'Google Sheets & Drive'}
+ * Project: ${projectName || 'All Projects / Unassigned'}
+ * ============================================================================
+ * 
+ * INSTRUCTIONS:
+ * 1. In this Google Sheet, open Extensions > Apps Script in the top menu.
+ * 2. Select and delete all existing code inside "Code.gs", then paste this script.
+ * 3. Click the Save icon (💾) at the top.
+ * 4. In the function dropdown, select "initialSetup" and click "Run".
+ *    (Google will prompt for one-time permission to allow web requests - click Allow).
+ * 5. Return to your Google Sheet and reload the page.
+ *    A new menu "⚡ Lead Center CRM" will appear in the top toolbar!
+ *
+ * FEATURES:
+ * - Real-time auto-sync on new row additions and edits.
+ * - Deduplication: automatically writes CRM Lead ID back into Column K.
+ * - Automatic exponential backoff retries on network failures.
+ * - Multi-tab support: active tab name and sheet ID are transmitted.
+ */
+
+const CRM_CONFIG = {
+  WEBHOOK_URL: '${webhookUrl}',
+  WEBHOOK_TOKEN: '${webhookToken || ''}',
+  CONNECTION_ID: '${connectionId}',
+  PROJECT_ID: '${projectId || ''}',
+  PROJECT_NAME: '${projectName || ''}',
+
+  // Column Mapping (1-based index)
+  COL_CAPTURED_AT: 1, // Col A: Captured At
+  COL_NAME: 2,        // Col B: Name
+  COL_PHONE: 3,       // Col C: Phone
+  COL_EMAIL: 4,       // Col D: Email
+  COL_SOURCE: 5,      // Col E: Source
+  COL_PLATFORM: 6,    // Col F: Platform
+  COL_CAMPAIGN: 7,    // Col G: Campaign
+  COL_PROJECT: 8,     // Col H: Project
+  COL_STATUS: 9,      // Col I: Status
+  COL_NOTES: 10,      // Col J: Notes / Message
+  COL_LEAD_ID: 11,    // Col K: Lead ID (Auto-populated by CRM)
+};
+
+/**
+ * Creates custom CRM menu when spreadsheet is opened.
+ */
+function onOpen() {
+  SpreadsheetApp.getUi()
+    .createMenu('⚡ Lead Center CRM')
+    .addItem('🚀 Setup Real-Time Auto-Sync', 'initialSetup')
+    .addItem('🔄 Sync Entire Sheet to CRM', 'syncAllSheetLeads')
+    .addItem('🎯 Sync Selected Row to CRM', 'syncSelectedRow')
+    .addItem('⚠️ Retry Failed Rows', 'retryFailedRows')
+    .addSeparator()
+    .addItem('🔌 Test CRM Connection', 'testConnection')
+    .addToUi();
+}
+
+/**
+ * One-time setup: registers an installable trigger to catch all edits
+ * and send them to the CRM webhook.
+ */
+function initialSetup() {
+  const sheet = SpreadsheetApp.getActiveSpreadsheet();
+
+  // Clear existing triggers to prevent duplicate trigger executions
+  const triggers = ScriptApp.getUserTriggers(sheet);
+  for (let i = 0; i < triggers.length; i++) {
+    if (triggers[i].getHandlerFunction() === 'handleSheetEdit') {
+      ScriptApp.deleteTrigger(triggers[i]);
+    }
+  }
+
+  // Create an installable onEdit trigger (allows UrlFetchApp requests)
+  ScriptApp.newTrigger('handleSheetEdit')
+    .forSpreadsheet(sheet)
+    .onEdit()
+    .create();
+
+  // Test connection to verify webhook
+  const testRes = testConnection(true);
+
+  if (testRes) {
+    SpreadsheetApp.getUi().alert(
+      '✅ Real-Time Auto-Sync Active!',
+      'Auto-sync has been successfully enabled for this spreadsheet.\\n\\nEvery time a row is added or updated, it will automatically push to Lead Center CRM in real time.\\n\\nYou can also use the "⚡ Lead Center CRM" menu anytime to batch sync.',
+      SpreadsheetApp.getUi().ButtonSet.OK
+    );
+  }
+}
+
+/**
+ * Trigger handler executed automatically whenever any cell is edited.
+ */
+function handleSheetEdit(e) {
+  if (!e || !e.range) return;
+  const range = e.range;
+  const sheet = range.getSheet();
+  const row = range.getRow();
+
+  // Skip header row
+  if (row <= 1) return;
+
+  // Don't loop if editing the Lead ID column itself
+  if (range.getColumn() === CRM_CONFIG.COL_LEAD_ID) return;
+
+  syncSingleRow(sheet, row);
+}
+
+/**
+ * Performs HTTP fetch with exponential backoff retry for network resilience.
+ */
+function fetchWithRetry(url, options, maxRetries) {
+  const retries = maxRetries || 3;
+  let delay = 1000;
+  for (let i = 0; i < retries; i++) {
+    try {
+      const response = UrlFetchApp.fetch(url, options);
+      const code = response.getResponseCode();
+      if (code >= 200 && code < 500) {
+        return response;
+      }
+      Logger.log('Server response ' + code + ', retrying in ' + delay + 'ms...');
+    } catch (e) {
+      Logger.log('Fetch attempt ' + (i + 1) + ' failed: ' + e.toString());
+      if (i === retries - 1) throw e;
+    }
+    Utilities.sleep(delay);
+    delay *= 2;
+  }
+  throw new Error('Request failed after ' + retries + ' retries.');
+}
+
+/**
+ * Reads row columns and sends to CRM webhook with retry support.
+ */
+function syncSingleRow(sheet, row) {
+  const values = sheet.getRange(row, 1, 1, 11).getValues()[0];
+
+  const leadData = {
+    capturedAt: values[CRM_CONFIG.COL_CAPTURED_AT - 1] ? String(values[CRM_CONFIG.COL_CAPTURED_AT - 1]) : '',
+    name: String(values[CRM_CONFIG.COL_NAME - 1] || '').trim(),
+    phone: String(values[CRM_CONFIG.COL_PHONE - 1] || '').trim(),
+    email: String(values[CRM_CONFIG.COL_EMAIL - 1] || '').trim(),
+    source: String(values[CRM_CONFIG.COL_SOURCE - 1] || 'google_sheets').trim(),
+    platform: String(values[CRM_CONFIG.COL_PLATFORM - 1] || 'google_sheets').trim(),
+    campaign: String(values[CRM_CONFIG.COL_CAMPAIGN - 1] || '').trim(),
+    project: String(values[CRM_CONFIG.COL_PROJECT - 1] || CRM_CONFIG.PROJECT_NAME || '').trim(),
+    status: String(values[CRM_CONFIG.COL_STATUS - 1] || 'New').trim(),
+    notes: String(values[CRM_CONFIG.COL_NOTES - 1] || '').trim(),
+    id: String(values[CRM_CONFIG.COL_LEAD_ID - 1] || '').trim(),
+  };
+
+  // Skip completely empty rows
+  if (!leadData.name && !leadData.phone && !leadData.email && !leadData.id) {
+    return null;
+  }
+
+  const payload = {
+    token: CRM_CONFIG.WEBHOOK_TOKEN,
+    connectionId: CRM_CONFIG.CONNECTION_ID,
+    spreadsheetId: sheet.getParent().getId(),
+    sheetName: sheet.getName(),
+    sheetTabId: sheet.getSheetId(),
+    action: 'edit',
+    rowNumber: row,
+    lead: leadData,
+  };
+
+  try {
+    const options = {
+      method: 'post',
+      contentType: 'application/json',
+      payload: JSON.stringify(payload),
+      muteHttpExceptions: true,
+    };
+
+    const response = fetchWithRetry(CRM_CONFIG.WEBHOOK_URL, options, 3);
+    const code = response.getResponseCode();
+    if (code >= 200 && code < 300) {
+      const result = JSON.parse(response.getContentText());
+      // If newly created in CRM, write back the generated Lead ID into Column K
+      if (result.leadId && !leadData.id) {
+        sheet.getRange(row, CRM_CONFIG.COL_LEAD_ID).setValue(result.leadId);
+      }
+      return result;
+    } else {
+      Logger.log('CRM Webhook error response: ' + response.getContentText());
+      saveFailedRow(row);
+    }
+  } catch (err) {
+    Logger.log('CRM Sync exception for row ' + row + ': ' + err.toString());
+    saveFailedRow(row);
+  }
+  return null;
+}
+
+/**
+ * Stores a failed row number in ScriptProperties for future retry.
+ */
+function saveFailedRow(rowNumber) {
+  try {
+    const props = PropertiesService.getScriptProperties();
+    const existing = props.getProperty('FAILED_ROWS') || '';
+    const set = new Set(existing ? existing.split(',').map(Number) : []);
+    set.add(rowNumber);
+    props.setProperty('FAILED_ROWS', Array.from(set).join(','));
+  } catch (e) {}
+}
+
+/**
+ * Retries all previously failed rows recorded in ScriptProperties.
+ */
+function retryFailedRows() {
+  const sheet = SpreadsheetApp.getActiveSheet();
+  const props = PropertiesService.getScriptProperties();
+  const raw = props.getProperty('FAILED_ROWS') || '';
+  if (!raw) {
+    SpreadsheetApp.getUi().alert('No failed rows pending retry.');
+    return;
+  }
+
+  const rows = raw.split(',').map(Number).filter(function(r) { return r > 1; });
+  let succeeded = 0;
+  const stillFailed = [];
+
+  for (let i = 0; i < rows.length; i++) {
+    const r = rows[i];
+    const res = syncSingleRow(sheet, r);
+    if (res && res.ok) {
+      succeeded++;
+    } else {
+      stillFailed.push(r);
+    }
+  }
+
+  props.setProperty('FAILED_ROWS', stillFailed.join(','));
+  SpreadsheetApp.getUi().alert(
+    'Retry Complete',
+    'Retried ' + rows.length + ' rows. Succeeded: ' + succeeded + ', Remaining failed: ' + stillFailed.length,
+    SpreadsheetApp.getUi().ButtonSet.OK
+  );
+}
+
+/**
+ * Manually syncs the currently selected row.
+ */
+function syncSelectedRow() {
+  const sheet = SpreadsheetApp.getActiveSheet();
+  const row = sheet.getActiveCell().getRow();
+  if (row <= 1) {
+    SpreadsheetApp.getUi().alert('Please select a lead row below the header (Row 2 or later).');
+    return;
+  }
+  const result = syncSingleRow(sheet, row);
+  if (result && result.ok) {
+    SpreadsheetApp.getActiveSpreadsheet().toast('Row ' + row + ' synced to CRM successfully!', 'Sync Complete', 3);
+  } else {
+    SpreadsheetApp.getUi().alert('Sync completed or row had no lead contact data.');
+  }
+}
+
+/**
+ * Batch syncs all rows from Row 2 down to the CRM.
+ */
+function syncAllSheetLeads() {
+  const sheet = SpreadsheetApp.getActiveSheet();
+  const lastRow = sheet.getLastRow();
+  if (lastRow <= 1) {
+    SpreadsheetApp.getUi().alert('No leads found in this sheet.');
+    return;
+  }
+
+  const range = sheet.getRange(2, 1, lastRow - 1, 11);
+  const rows = range.getValues();
+  const leadsToSync = [];
+
+  for (let i = 0; i < rows.length; i++) {
+    const values = rows[i];
+    const rowNumber = i + 2;
+    const name = String(values[CRM_CONFIG.COL_NAME - 1] || '').trim();
+    const phone = String(values[CRM_CONFIG.COL_PHONE - 1] || '').trim();
+    const email = String(values[CRM_CONFIG.COL_EMAIL - 1] || '').trim();
+    const id = String(values[CRM_CONFIG.COL_LEAD_ID - 1] || '').trim();
+
+    if (!name && !phone && !email && !id) continue;
+
+    leadsToSync.push({
+      rowNumber: rowNumber,
+      id: id,
+      capturedAt: values[CRM_CONFIG.COL_CAPTURED_AT - 1] ? String(values[CRM_CONFIG.COL_CAPTURED_AT - 1]) : '',
+      name: name,
+      phone: phone,
+      email: email,
+      source: String(values[CRM_CONFIG.COL_SOURCE - 1] || 'google_sheets').trim(),
+      platform: String(values[CRM_CONFIG.COL_PLATFORM - 1] || 'google_sheets').trim(),
+      campaign: String(values[CRM_CONFIG.COL_CAMPAIGN - 1] || '').trim(),
+      project: String(values[CRM_CONFIG.COL_PROJECT - 1] || CRM_CONFIG.PROJECT_NAME || '').trim(),
+      status: String(values[CRM_CONFIG.COL_STATUS - 1] || 'New').trim(),
+      notes: String(values[CRM_CONFIG.COL_NOTES - 1] || '').trim(),
+    });
+  }
+
+  if (leadsToSync.length === 0) {
+    SpreadsheetApp.getUi().alert('No lead rows found to sync.');
+    return;
+  }
+
+  const payload = {
+    token: CRM_CONFIG.WEBHOOK_TOKEN,
+    connectionId: CRM_CONFIG.CONNECTION_ID,
+    spreadsheetId: sheet.getParent().getId(),
+    sheetName: sheet.getName(),
+    sheetTabId: sheet.getSheetId(),
+    action: 'batch',
+    leads: leadsToSync,
+  };
+
+  const options = {
+    method: 'post',
+    contentType: 'application/json',
+    payload: JSON.stringify(payload),
+    muteHttpExceptions: true,
+  };
+
+  try {
+    const response = fetchWithRetry(CRM_CONFIG.WEBHOOK_URL, options, 3);
+    const result = JSON.parse(response.getContentText());
+    if (result && result.results) {
+      for (let j = 0; j < result.results.length; j++) {
+        const item = result.results[j];
+        if (item.leadId && item.rowNumber) {
+          sheet.getRange(item.rowNumber, CRM_CONFIG.COL_LEAD_ID).setValue(item.leadId);
+        }
+      }
+      SpreadsheetApp.getUi().alert(
+        'Sync Complete',
+        'Successfully synced ' + result.synced + ' lead(s) to CRM!\\nAdded: ' + (result.recordsAdded || 0) + ', Updated: ' + (result.recordsUpdated || 0),
+        SpreadsheetApp.getUi().ButtonSet.OK
+      );
+    } else {
+      SpreadsheetApp.getUi().alert('Sync response: ' + response.getContentText());
+    }
+  } catch (err) {
+    SpreadsheetApp.getUi().alert('Sync error: ' + err.toString());
+  }
+}
+
+/**
+ * Tests connection with the CRM webhook endpoint.
+ */
+function testConnection(silent) {
+  const payload = {
+    token: CRM_CONFIG.WEBHOOK_TOKEN,
+    connectionId: CRM_CONFIG.CONNECTION_ID,
+    action: 'ping',
+  };
+
+  try {
+    const response = fetchWithRetry(CRM_CONFIG.WEBHOOK_URL, {
+      method: 'post',
+      contentType: 'application/json',
+      payload: JSON.stringify(payload),
+      muteHttpExceptions: true,
+    }, 2);
+
+    const code = response.getResponseCode();
+    if (code >= 200 && code < 300) {
+      if (!silent) {
+        SpreadsheetApp.getUi().alert(
+          '✅ Connection OK!',
+          'Your Google Sheet is successfully connected to Lead Center CRM.\\n\\n' + response.getContentText(),
+          SpreadsheetApp.getUi().ButtonSet.OK
+        );
+      }
+      return true;
+    } else {
+      if (!silent) {
+        SpreadsheetApp.getUi().alert('❌ Connection Failed (HTTP ' + code + '):\\n' + response.getContentText());
+      }
+      return false;
+    }
+  } catch (err) {
+    if (!silent) {
+      SpreadsheetApp.getUi().alert('❌ Connection Error:\\n' + err.toString());
+    }
+    return false;
+  }
+}
+`;
   }
 }

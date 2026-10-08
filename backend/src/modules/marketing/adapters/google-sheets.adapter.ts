@@ -26,7 +26,7 @@ export class GoogleSheetsAdapter implements PlatformAdapter {
   }
 
   supportsWebhook(): boolean {
-    return false;
+    return true;
   }
 
   supportsCredentials(): boolean {

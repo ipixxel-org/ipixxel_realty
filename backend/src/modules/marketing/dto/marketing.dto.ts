@@ -64,6 +64,11 @@ export class UpdateMarketingConnectionDto {
   @IsOptional()
   @IsUUID()
   projectId?: string | null;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(200)
+  externalAccountName?: string;
 }
 
 export class ConnectMarketingCredentialsDto {
