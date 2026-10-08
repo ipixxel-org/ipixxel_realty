@@ -8,9 +8,8 @@ import {
   useMemo,
   useRef,
   useState,
-  type ReactNode,
 } from "react";
-import { Loader2, SmilePlus } from "lucide-react";
+import { Loader2 } from "lucide-react";
 import { Icon } from "@/components/icons";
 import { useAuth } from "@/lib/auth-context";
 import { useToast } from "@/components/ui/toast";
@@ -22,12 +21,14 @@ import {
   initials,
   lastSeenLabel,
   newClientMsgId,
+  previewOf,
   sameDay,
   timeOfDay,
   typingLine,
 } from "@/lib/team-chat/format";
 import type {
   ChatMessage,
+  ChatUserRef,
   MessageDeletedEvent,
   ReactionEvent,
 } from "@/lib/team-chat/types";
@@ -35,8 +36,18 @@ import { Avatar, ConfirmDialog, PromptDialog, errorText } from "./chat-ui";
 import { AttachmentsView } from "./attachments-view";
 import { Composer, type ComposerHandle, type SentAttachment } from "./composer";
 import { MembersDrawer } from "./members-drawer";
+import {
+  ForwardDialog,
+  MessageActionSheet,
+  MessageText,
+  MessageTools,
+  PinnedBar,
+  messageActions,
+  useLongPress,
+  type ActionPolicy,
+  type MessageAction,
+} from "./message-actions";
 
-const QUICK_REACTIONS = ["👍", "❤️", "😂", "😮", "😢", "🙏"];
 const GROUP_WINDOW_MS = 5 * 60 * 1000;
 const NEAR_BOTTOM_PX = 120;
 
@@ -65,19 +76,6 @@ const realCursor = (list: ChatMessage[], from: "first" | "last") => {
   const m = from === "first" ? real[0] : real[real.length - 1];
   return m?.cursor || null;
 };
-
-const URL_RE = /(https?:\/\/[^\s<]+[^\s<.,;:!?)\]'"])/g;
-function linkify(text: string): ReactNode[] {
-  return text.split(URL_RE).map((part, i) =>
-    i % 2 === 1 ? (
-      <a key={i} href={part} target="_blank" rel="noopener noreferrer">
-        {part}
-      </a>
-    ) : (
-      <Fragment key={i}>{part}</Fragment>
-    ),
-  );
-}
 
 type PendingScroll =
   | { type: "bottom" }
@@ -120,6 +118,13 @@ export function ThreadView({
   const [focusTick, setFocusTick] = useState(0);
   const [dragging, setDragging] = useState(false);
   const composerRef = useRef<ComposerHandle>(null);
+  const [replyTo, setReplyTo] = useState<ChatMessage | null>(null);
+  const [editing, setEditing] = useState<ChatMessage | null>(null);
+  const [forwarding, setForwarding] = useState<ChatMessage | null>(null);
+  const [deleting, setDeleting] = useState<ChatMessage | null>(null);
+  const [sheetFor, setSheetFor] = useState<ChatMessage | null>(null);
+  const [pins, setPins] = useState<ChatMessage[]>([]);
+  const [mentionable, setMentionable] = useState<ChatUserRef[]>([]);
 
   const scrollRef = useRef<HTMLDivElement>(null);
   const pendingScroll = useRef<PendingScroll | null>(null);
@@ -308,6 +313,9 @@ export function ThreadView({
               : m,
           ),
         );
+        setReplyTo((r) => (r?.id === e.id ? null : r));
+        setEditing((r) => (r?.id === e.id ? null : r));
+        setSheetFor((r) => (r?.id === e.id ? null : r));
       }),
       chat.on<ReactionEvent>("reaction:updated", (e) => {
         if (e.conversationId !== conversationId) return;
@@ -323,8 +331,45 @@ export function ThreadView({
     return () => offs.forEach((off) => off());
   }, [chat, conversationId, forMe, myId]);
 
-  // Reconnected: fetch whatever arrived while the socket was down.
+  // --- pins and @mention candidates ------------------------------------------
   const resync = chat?.resyncCount ?? 0;
+  const loadPins = useCallback(
+    () =>
+      chatApi
+        .listPins(conversationId)
+        .then((list) => setPins(list.map(forMe)))
+        .catch(() => undefined),
+    [conversationId, forMe],
+  );
+  const loadMembers = useCallback(
+    () =>
+      chatApi
+        .listMembers(conversationId)
+        .then((list) =>
+          setMentionable(list.filter((u) => u.active && u.id !== myId).map((u) => ({ id: u.id, name: u.name }))),
+        )
+        .catch(() => undefined),
+    [conversationId, myId],
+  );
+  useEffect(() => {
+    // State is only set once the requests resolve.
+    void loadPins();
+    void loadMembers();
+  }, [loadPins, loadMembers, resync]);
+  useEffect(() => {
+    if (!chat) return;
+    const offs = [
+      chat.on<{ conversationId: string }>("pins:updated", (p) => {
+        if (p.conversationId === conversationId) void loadPins();
+      }),
+      chat.on<{ conversationId: string }>("members:updated", (p) => {
+        if (p.conversationId === conversationId) void loadMembers();
+      }),
+    ];
+    return () => offs.forEach((off) => off());
+  }, [chat, conversationId, loadPins, loadMembers]);
+
+  // Reconnected: fetch whatever arrived while the socket was down.
   useEffect(() => {
     if (resync === 0) return;
     let cancelled = false;
@@ -375,7 +420,9 @@ export function ThreadView({
         const real = await chatApi.sendMessage(conversationId, {
           body: optimistic.body,
           clientMsgId: optimistic.clientMsgId as string,
+          parentId: optimistic.parent?.id,
           attachmentIds: optimistic.attachments.map((a) => a.id),
+          mentionUserIds: optimistic.mentions.map((u) => u.id),
         });
         setMessages((prev) => merge(prev, [forMe(real)]));
         chat?.applyMessage(real);
@@ -388,8 +435,9 @@ export function ThreadView({
   );
 
   const send = useCallback(
-    (body: string, files: SentAttachment[] = []) => {
+    (body: string, files: SentAttachment[] = [], mentionUserIds: string[] = []) => {
       const clientMsgId = newClientMsgId();
+      const parent = replyTo;
       const optimistic: ChatMessage = {
         id: `pending-${clientMsgId}`,
         conversationId,
@@ -403,15 +451,18 @@ export function ThreadView({
         pinnedAt: null,
         pinnedBy: null,
         clientMsgId,
-        parent: null,
+        parent: parent
+          ? { id: parent.id, sender: parent.sender, preview: previewOf(parent), deleted: false }
+          : null,
         // Shown from their local previews until the page is reloaded.
         attachments: files.map(({ previewUrl: _preview, ...a }) => (void _preview, a)),
-        mentions: [],
+        mentions: mentionable.filter((u) => mentionUserIds.includes(u.id)),
         reactions: [],
         cursor: "",
         status: "sending",
       };
       setDividerId(null);
+      setReplyTo(null);
       if (stateRef.current.hasMoreAfter) {
         // Jump back to the present first so the new message isn't orphaned.
         void jumpToLatest().then(() => {
@@ -424,7 +475,7 @@ export function ThreadView({
       }
       void deliver(optimistic);
     },
-    [conversationId, deliver, jumpToLatest, myId, myName],
+    [conversationId, deliver, jumpToLatest, mentionable, myId, myName, replyTo],
   );
 
   const retry = (m: ChatMessage) => {
@@ -444,6 +495,94 @@ export function ThreadView({
       );
     } catch (err) {
       toast({ title: "Couldn't react", description: errorText(err, ""), variant: "error" });
+    }
+  };
+
+  const saveEdit = async (body: string, mentionUserIds: string[]) => {
+    const m = editing;
+    if (!m) return;
+    setEditing(null);
+    const sameMentions =
+      mentionUserIds.length === m.mentions.length && m.mentions.every((u) => mentionUserIds.includes(u.id));
+    if (body === m.body && sameMentions) return;
+    try {
+      const updated = await chatApi.editMessage(m.id, { body, mentionUserIds });
+      setMessages((prev) => merge(prev, [forMe(updated)]));
+      chat?.applyMessage(updated);
+    } catch (err) {
+      toast({ title: "Couldn't edit message", description: errorText(err, ""), variant: "error" });
+    }
+  };
+
+  const togglePin = async (m: ChatMessage, pin: boolean) => {
+    try {
+      const updated = pin ? await chatApi.pinMessage(m.id) : await chatApi.unpinMessage(m.id);
+      setMessages((prev) => (prev.some((x) => x.id === m.id) ? merge(prev, [forMe(updated)]) : prev));
+      void loadPins();
+    } catch (err) {
+      toast({ title: pin ? "Couldn't pin message" : "Couldn't unpin message", description: errorText(err, ""), variant: "error" });
+    }
+  };
+
+  const copyText = async (m: ChatMessage) => {
+    try {
+      await navigator.clipboard.writeText(m.body);
+      toast({ title: "Copied", variant: "success" });
+    } catch {
+      toast({ title: "Couldn't copy", description: "Your browser blocked clipboard access.", variant: "error" });
+    }
+  };
+
+  /** Throws on failure; the confirm dialog shows the error. */
+  const deleteMessage = async (target: ChatMessage) => {
+    const updated = await chatApi.deleteMessage(target.id);
+    setMessages((prev) => merge(prev, [forMe(updated)]));
+    setReplyTo((r) => (r?.id === target.id ? null : r));
+    setEditing((r) => (r?.id === target.id ? null : r));
+    if (target.pinnedAt) void loadPins();
+  };
+
+  /** Throws on failure; the forward dialog shows the error. */
+  const forwardMessage = async (source: ChatMessage, ids: string[]) => {
+    const res = await chatApi.forwardMessage(source.id, ids);
+    for (const m of res.messages) {
+      chat?.applyMessage(m);
+      if (m.conversationId === conversationId) {
+        pendingScroll.current = { type: "bottom" };
+        setMessages((prev) => merge(prev, [forMe(m)]));
+      }
+    }
+    toast({
+      title: ids.length === 1 ? "Message forwarded" : `Message forwarded to ${ids.length} conversations`,
+      variant: "success",
+    });
+  };
+
+  const cancelReply = () => setReplyTo(null);
+
+  const runAction = (m: ChatMessage, action: MessageAction) => {
+    switch (action) {
+      case "reply":
+        setEditing(null);
+        setReplyTo(m);
+        break;
+      case "edit":
+        setReplyTo(null);
+        setEditing(m);
+        break;
+      case "forward":
+        setForwarding(m);
+        break;
+      case "copy":
+        void copyText(m);
+        break;
+      case "pin":
+      case "unpin":
+        void togglePin(m, action === "pin");
+        break;
+      case "delete":
+        setDeleting(m);
+        break;
     }
   };
 
@@ -488,6 +627,12 @@ export function ThreadView({
   const canRename = conv.kind === "channel" ? canManage : conv.kind === "general" && isOrgAdminUser;
   const canDelete = conv.kind === "channel" && hasPermission("team_chat", "delete");
   const canLeave = conv.kind === "channel";
+  const policy: ActionPolicy = {
+    myId,
+    readOnly: conv.readOnly,
+    isDm: conv.kind === "dm",
+    canDeleteOthers: hasPermission("team_chat", "delete"),
+  };
 
   const typists = chat.typingIn(conversationId).filter((t) => t.userId !== myId);
   const peerPresence = conv.peer
@@ -612,6 +757,12 @@ export function ThreadView({
             />
           ) : null}
 
+          <PinnedBar
+            pins={pins}
+            onJump={(id) => void jumpTo(id)}
+            onUnpin={conv.readOnly ? null : (m) => void togglePin(m, false)}
+          />
+
           <div className="tch-msgs-area" ref={scrollRef} onScroll={onScroll}>
             {loading ? (
               <div className="tch-loading">
@@ -643,6 +794,10 @@ export function ThreadView({
                   onRetry={retry}
                   onReact={react}
                   canReact={!conv.readOnly}
+                  policy={policy}
+                  onAction={runAction}
+                  onLongPress={setSheetFor}
+                  onJump={(id) => void jumpTo(id)}
                 />
                 {hasMoreAfter ? (
                   <div className="tch-older">{loadingNewer ? <Loader2 size={16} className="tch-spin" /> : null}</div>
@@ -678,7 +833,13 @@ export function ThreadView({
               key={conversationId}
               ref={composerRef}
               conversationId={conversationId}
+              members={mentionable}
+              replyTo={replyTo}
+              editing={editing}
               onSend={send}
+              onSaveEdit={(body, ids) => void saveEdit(body, ids)}
+              onCancelReply={cancelReply}
+              onCancelEdit={() => setEditing(null)}
               onTyping={(t) => chat.sendTyping(conversationId, t)}
             />
           )}
@@ -720,8 +881,14 @@ export function ThreadView({
       {dialog === "delete" ? (
         <ConfirmDialog
           title="Delete channel?"
-          message={<>#{conv.name} and all of its messages will be deleted for everyone. This can&apos;t be undone.</>}
+          message={
+            <>
+              #{conv.name} and all of its messages and files will be deleted for all {conv.memberCount} member
+              {conv.memberCount === 1 ? "" : "s"}. This can&apos;t be undone.
+            </>
+          }
           confirmLabel="Delete channel"
+          requireText={conv.name}
           danger
           onClose={() => setDialog("none")}
           onConfirm={async () => {
@@ -729,6 +896,37 @@ export function ThreadView({
             chat.removeConversation(conv.id);
             onOpenConversation(null);
           }}
+        />
+      ) : null}
+      {deleting ? (
+        <ConfirmDialog
+          title="Delete message?"
+          message={
+            deleting.sender?.id === myId
+              ? "This message will be deleted for everyone in this conversation."
+              : `This deletes ${deleting.sender?.name ?? "this person"}'s message for everyone in this channel.`
+          }
+          confirmLabel="Delete"
+          danger
+          onClose={() => setDeleting(null)}
+          onConfirm={() => deleteMessage(deleting)}
+        />
+      ) : null}
+      {forwarding ? (
+        <ForwardDialog
+          message={forwarding}
+          onClose={() => setForwarding(null)}
+          onForward={(ids) => forwardMessage(forwarding, ids)}
+        />
+      ) : null}
+      {sheetFor ? (
+        <MessageActionSheet
+          message={sheetFor}
+          canReact={!conv.readOnly}
+          actions={messageActions(sheetFor, policy)}
+          onReact={(e) => void react(sheetFor, e)}
+          onAction={(a) => runAction(sheetFor, a)}
+          onClose={() => setSheetFor(null)}
         />
       ) : null}
     </section>
@@ -745,6 +943,10 @@ function MessageList({
   onRetry,
   onReact,
   canReact,
+  policy,
+  onAction,
+  onLongPress,
+  onJump,
 }: {
   messages: ChatMessage[];
   myId: string;
@@ -753,6 +955,10 @@ function MessageList({
   onRetry: (m: ChatMessage) => void;
   onReact: (m: ChatMessage, emoji: string) => void;
   canReact: boolean;
+  policy: ActionPolicy;
+  onAction: (m: ChatMessage, action: MessageAction) => void;
+  onLongPress: (m: ChatMessage) => void;
+  onJump: (messageId: string) => void;
 }) {
   return (
     <>
@@ -782,12 +988,17 @@ function MessageList({
             ) : (
               <MessageRow
                 m={m}
+                myId={myId}
                 mine={m.sender?.id === myId}
                 grouped={grouped}
                 highlighted={m.id === highlightId}
                 onRetry={onRetry}
                 onReact={onReact}
                 canReact={canReact && !m.status && !m.deletedAt}
+                actions={messageActions(m, policy)}
+                onAction={onAction}
+                onLongPress={onLongPress}
+                onJump={onJump}
               />
             )}
           </Fragment>
@@ -801,29 +1012,38 @@ function MessageList({
  *  shown on the first of a run). Time sits inside the bubble. */
 function MessageRow({
   m,
+  myId,
   mine,
   grouped,
   highlighted,
   onRetry,
   onReact,
   canReact,
+  actions,
+  onAction,
+  onLongPress,
+  onJump,
 }: {
   m: ChatMessage;
+  myId: string;
   mine: boolean;
   grouped: boolean;
   highlighted: boolean;
   onRetry: (m: ChatMessage) => void;
   onReact: (m: ChatMessage, emoji: string) => void;
   canReact: boolean;
+  actions: MessageAction[];
+  onAction: (m: ChatMessage, action: MessageAction) => void;
+  onLongPress: (m: ChatMessage) => void;
+  onJump: (messageId: string) => void;
 }) {
-  const [picker, setPicker] = useState(false);
   const deleted = !!m.deletedAt;
   const name = m.sender?.name ?? "Deleted user";
+  const press = useLongPress(() => onLongPress(m), canReact || actions.length > 0);
   return (
     <div
       data-mid={m.id}
       className={`tch-msg-row${mine ? " is-mine" : ""}${grouped ? " is-grouped" : ""}${highlighted ? " is-highlight" : ""}${m.status === "failed" ? " is-failed" : ""}`}
-      onMouseLeave={() => setPicker(false)}
     >
       {mine ? null : grouped ? (
         <div className="tch-msg-avatar-space" />
@@ -838,18 +1058,29 @@ function MessageRow({
             <span className="tch-msg-sender">{name}</span>
           </div>
         ) : null}
-        <div className={`tch-bubble${deleted ? " is-deleted" : ""}`}>
+        <div className={`tch-bubble${deleted ? " is-deleted" : ""}`} {...press}>
+          {m.pinnedAt && !deleted ? (
+            <div className="tch-msg-pinned">Pinned{m.pinnedBy ? ` by ${m.pinnedBy.name}` : ""}</div>
+          ) : null}
           {m.forwarded && !deleted ? <div className="tch-msg-forwarded">Forwarded</div> : null}
           {m.parent && !deleted ? (
-            <div className="tch-quote">
+            <button
+              type="button"
+              className="tch-quote tch-quote-link"
+              onClick={() => !m.parent?.deleted && m.parent && onJump(m.parent.id)}
+              disabled={m.parent.deleted}
+              title={m.parent.deleted ? undefined : "Go to the original message"}
+            >
               <strong>{m.parent.sender?.name ?? "Message"}</strong>
               <span>{m.parent.preview}</span>
-            </div>
+            </button>
           ) : null}
           {deleted ? (
             <div className="tch-msg-text is-deleted">This message was deleted</div>
           ) : m.body ? (
-            <div className="tch-msg-text">{linkify(m.body)}</div>
+            <div className="tch-msg-text">
+              <MessageText body={m.body} mentions={m.mentions} myId={myId} />
+            </div>
           ) : null}
           {!deleted && m.attachments.length ? <AttachmentsView attachments={m.attachments} /> : null}
           <span className="tch-bubble-time">
@@ -879,30 +1110,13 @@ function MessageRow({
           </div>
         ) : null}
       </div>
-      {canReact ? (
-        <div className="tch-msg-tools">
-          {picker ? (
-            <div className="tch-quick-react">
-              {QUICK_REACTIONS.map((e) => (
-                <button
-                  key={e}
-                  type="button"
-                  onClick={() => {
-                    setPicker(false);
-                    onReact(m, e);
-                  }}
-                >
-                  {e}
-                </button>
-              ))}
-            </div>
-          ) : (
-            <button type="button" className="tch-icon-action" onClick={() => setPicker(true)} title="React">
-              <SmilePlus size={16} />
-            </button>
-          )}
-        </div>
-      ) : null}
+      <MessageTools
+        canReact={canReact}
+        actions={actions}
+        mine={mine}
+        onReact={(e) => onReact(m, e)}
+        onAction={(a) => onAction(m, a)}
+      />
     </div>
   );
 }

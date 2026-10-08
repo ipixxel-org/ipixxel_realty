@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState, type ReactNode } from "react";
+import { createPortal } from "react-dom";
 import { Loader2 } from "lucide-react";
 import { Icon } from "@/components/icons";
 import { ApiError } from "@/lib/api";
@@ -36,6 +37,23 @@ export function Avatar({
   );
 }
 
+/**
+ * Renders into document.body, so position:fixed overlays cover the viewport.
+ * Inside the page, an animated ancestor of the org layout becomes the
+ * containing block and shifts them (same fix as components/org/team-fields).
+ * The wrapper re-declares `.org` so its CSS variables and `.org .tch-*`
+ * styles still apply; `.org`'s page min-height and background are undone.
+ */
+export function OrgPortal({ children }: { children: ReactNode }) {
+  if (typeof document === "undefined") return null;
+  return createPortal(
+    <div className="org tch-portal" style={{ minHeight: 0, background: "transparent" }}>
+      {children}
+    </div>,
+    document.body,
+  );
+}
+
 export function Modal({
   title,
   onClose,
@@ -58,18 +76,20 @@ export function Modal({
   }, [onClose]);
 
   return (
-    <div className="tch-modal-backdrop" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
-      <div className={`tch-modal${wide ? " is-wide" : ""}`} role="dialog" aria-modal="true" aria-label={title}>
-        <div className="tch-modal-head">
-          <h3>{title}</h3>
-          <button type="button" className="tch-icon-action" onClick={onClose} aria-label="Close">
-            <Icon name="close" size={16} />
-          </button>
+    <OrgPortal>
+      <div className="tch-modal-backdrop" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
+        <div className={`tch-modal${wide ? " is-wide" : ""}`} role="dialog" aria-modal="true" aria-label={title}>
+          <div className="tch-modal-head">
+            <h3>{title}</h3>
+            <button type="button" className="tch-icon-action" onClick={onClose} aria-label="Close">
+              <Icon name="close" size={16} />
+            </button>
+          </div>
+          <div className="tch-modal-body">{children}</div>
+          {footer ? <div className="tch-modal-foot">{footer}</div> : null}
         </div>
-        <div className="tch-modal-body">{children}</div>
-        {footer ? <div className="tch-modal-foot">{footer}</div> : null}
       </div>
-    </div>
+    </OrgPortal>
   );
 }
 
@@ -78,6 +98,7 @@ export function ConfirmDialog({
   message,
   confirmLabel,
   danger,
+  requireText,
   onConfirm,
   onClose,
 }: {
@@ -85,11 +106,15 @@ export function ConfirmDialog({
   message: ReactNode;
   confirmLabel: string;
   danger?: boolean;
+  /** The confirm button stays disabled until this exact text is typed. */
+  requireText?: string;
   onConfirm: () => Promise<void>;
   onClose: () => void;
 }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [typed, setTyped] = useState("");
+  const confirmed = !requireText || typed.trim() === requireText.trim();
   return (
     <Modal
       title={title}
@@ -102,7 +127,7 @@ export function ConfirmDialog({
           <button
             type="button"
             className={`tch-btn ${danger ? "is-danger" : "is-primary"}`}
-            disabled={busy}
+            disabled={busy || !confirmed}
             onClick={async () => {
               setBusy(true);
               setError(null);
@@ -122,6 +147,14 @@ export function ConfirmDialog({
       }
     >
       <p className="tch-modal-text">{message}</p>
+      {requireText ? (
+        <label className="tch-field">
+          <span>
+            Type <strong>{requireText}</strong> to confirm
+          </span>
+          <input autoFocus value={typed} onChange={(e) => setTyped(e.target.value)} autoComplete="off" spellCheck={false} />
+        </label>
+      ) : null}
       {error ? <p className="tch-form-error">{error}</p> : null}
     </Modal>
   );

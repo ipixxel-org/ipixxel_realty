@@ -792,6 +792,9 @@ enum NotificationType {
   package_change_request
   package_change_approved
   package_change_rejected
+  // Someone @mentioned the recipient in Team Chat. entity "TeamChannel",
+  // entityId = the conversation id. See TeamChatMessagesService.
+  team_chat_mention
 
   @@schema("audit")
 }

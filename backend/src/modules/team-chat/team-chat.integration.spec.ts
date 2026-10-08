@@ -470,6 +470,57 @@ suite('Team Chat access rules (integration)', () => {
         forwarded: true,
       }),
     ]);
+    // The copy is stored as the forwarder's, but can't be reworded.
+    await expect(
+      msgs.edit(users.sales, messages[0].id, { body: 'changed' }),
+    ).rejects.toThrow('Forwarded messages cannot be edited');
+  });
+
+  it('notifies mentioned members once, in their own bell', async () => {
+    const ch = await conv.createChannel(users.manager, {
+      name: 'mentions',
+      memberIds: [users.sales.sub],
+    });
+    const bell = (who: JwtPayload) =>
+      prisma.notification.findMany({
+        where: {
+          recipientId: who.sub,
+          type: 'team_chat_mention',
+          entityId: ch.id,
+        },
+      });
+
+    // Non-members can't be mentioned.
+    await expect(
+      msgs.send(users.manager, ch.id, {
+        body: '@tele hi',
+        clientMsgId: cid(),
+        mentionUserIds: [users.tele.sub],
+      }),
+    ).rejects.toThrow(BadRequestException);
+
+    const m = await msgs.send(users.manager, ch.id, {
+      body: '@sales please check',
+      clientMsgId: cid(),
+      mentionUserIds: [users.sales.sub, users.manager.sub],
+    });
+    expect(m.mentions.map((u) => u.id)).toEqual([users.sales.sub]);
+    const first = await bell(users.sales);
+    expect(first).toHaveLength(1);
+    expect(first[0]).toMatchObject({
+      orgId: orgA,
+      title: 'manager mentioned you in #mentions',
+      body: '@sales please check',
+      entity: 'TeamChannel',
+    });
+    expect(await bell(users.manager)).toHaveLength(0); // never yourself
+
+    // Editing with the same mention doesn't notify again.
+    await msgs.edit(users.manager, m.id, {
+      body: '@sales please check now',
+      mentionUserIds: [users.sales.sub],
+    });
+    expect(await bell(users.sales)).toHaveLength(1);
   });
 
   it('on deactivation removes the user from channels and makes their DMs read-only', async () => {

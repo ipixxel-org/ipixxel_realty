@@ -16,7 +16,7 @@ const FINAL = new Set(["ORG_INACTIVE", "USER_INACTIVE", "ORG_NOT_READY", "NO_ORG
 /**
  * Team Chat runs on the app host only, never on an organisation's custom
  * domain (proxy.ts still serves /org/* there). The API enforces the same
- * thing with its socket origin allow-list (CHAT_WS_ORIGINS).
+ * thing with its socket origin allow-list (FRONTEND_URL).
  */
 export function isChatHost(): boolean {
   return typeof window !== "undefined" && isPlatformHost(window.location.host);

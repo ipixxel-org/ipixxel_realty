@@ -158,6 +158,25 @@ export function attachmentUrl(id: string): Promise<string> {
   return p;
 }
 
+/** Saves an attachment to the device. Uses a short-lived "save as" link
+ *  (never cached), or the local preview of a file you just sent. */
+export async function downloadAttachment(a: { id: string; fileName: string }): Promise<void> {
+  const link = document.createElement("a");
+  const local = localPreviews.get(a.id);
+  if (local) {
+    link.href = local;
+    link.download = a.fileName;
+  } else {
+    const r = await apiFetch<{ url: string }>(`/org/team-chat/attachments/${a.id}/url?download=1`);
+    // Cross-origin: the signed link's Content-Disposition makes it a download.
+    link.href = r.url;
+    link.rel = "noopener";
+  }
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+}
+
 /** A signed URL for showing an attachment inline (null while loading or on error). */
 export function useAttachmentUrl(id: string, enabled = true): string | null {
   const [state, setState] = useState<{ id: string; url: string } | null>(null);

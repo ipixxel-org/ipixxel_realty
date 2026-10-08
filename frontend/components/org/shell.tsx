@@ -18,7 +18,7 @@ import {
 import type { OrgBillingSummary, OrgNotification, PermissionAction } from "@/lib/types";
 import { useToast } from "@/components/ui/toast";
 import { SETTINGS_ACTIONS } from "@/lib/permissions";
-import { TeamChatProvider, useTeamChat } from "@/lib/team-chat/context";
+import { TEAM_CHAT_OPEN_EVENT, TeamChatProvider, useTeamChat } from "@/lib/team-chat/context";
 import { isChatHost } from "@/lib/team-chat/socket";
 import {
   applyThemeVariables,
@@ -194,6 +194,7 @@ const NOTIFICATION_ACCENT: Record<string, string> = {
   support_ticket_created: "#0f1424",
   support_ticket_message: "#0f1424",
   support_ticket_status_changed: "#10b981",
+  team_chat_mention: "#059669",
 };
 
 function relativeNotificationTime(iso: string): string {
@@ -479,6 +480,13 @@ export function OrgAdminShell({ children }: { children: ReactNode }) {
     setNotificationOpen(false);
     if (item.type.startsWith("support_ticket")) {
       router.push(item.entityId ? `/org/support/${item.entityId}` : "/org/support");
+    } else if (item.type === "team_chat_mention") {
+      if (item.entityId && pathname.startsWith("/org/team-chat")) {
+        // Already on Team Chat: switch conversations without a navigation.
+        window.dispatchEvent(new CustomEvent(TEAM_CHAT_OPEN_EVENT, { detail: item.entityId }));
+      } else {
+        router.push(item.entityId ? `/org/team-chat?c=${item.entityId}` : "/org/team-chat");
+      }
     }
   }
 

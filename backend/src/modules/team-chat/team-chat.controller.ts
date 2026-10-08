@@ -243,11 +243,17 @@ export class TeamChatController {
     return this.attachments.cancel(user, id);
   }
 
+  /** ?download=1 asks for a save-as link instead of one shown inline. */
   @Get('attachments/:id/url')
   attachmentUrl(
     @CurrentUser() user: JwtPayload,
     @Param('id', uuid) id: string,
+    @Query('download') download?: string,
   ) {
-    return this.attachments.downloadUrl(user, id);
+    return this.attachments.downloadUrl(
+      user,
+      id,
+      download === '1' || download === 'true',
+    );
   }
 }

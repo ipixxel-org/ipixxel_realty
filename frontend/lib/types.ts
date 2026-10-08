@@ -2135,7 +2135,8 @@ export type NotificationType =
   | "support_ticket_assigned"
   | "subscription_expiring"
   | "subscription_past_due"
-  | "subscription_expired";
+  | "subscription_expired"
+  | "team_chat_mention";
 
 /** True when the notification is a subscription-lifecycle popup. */
 export function isSubscriptionNotification(type: NotificationType): boolean {

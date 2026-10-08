@@ -100,9 +100,49 @@ export function searchMessages(
 
 export function sendMessage(
   id: string,
-  input: { body: string; clientMsgId: string; parentId?: string; attachmentIds?: string[] },
+  input: {
+    body: string;
+    clientMsgId: string;
+    parentId?: string;
+    attachmentIds?: string[];
+    mentionUserIds?: string[];
+  },
 ): Promise<ChatMessage> {
   return post(`/conversations/${id}/messages`, input);
+}
+
+/** Own text messages only. mentionUserIds replaces the message's mentions. */
+export function editMessage(
+  messageId: string,
+  input: { body: string; mentionUserIds: string[] },
+): Promise<ChatMessage> {
+  return apiFetch(`${BASE}/messages/${messageId}`, {
+    method: "PATCH",
+    body: JSON.stringify(input),
+  });
+}
+
+export function deleteMessage(messageId: string): Promise<ChatMessage> {
+  return apiFetch(`${BASE}/messages/${messageId}`, { method: "DELETE" });
+}
+
+export function listPins(id: string): Promise<ChatMessage[]> {
+  return apiFetch(`${BASE}/conversations/${id}/pins`);
+}
+
+export function pinMessage(messageId: string): Promise<ChatMessage> {
+  return post(`/messages/${messageId}/pin`);
+}
+
+export function unpinMessage(messageId: string): Promise<ChatMessage> {
+  return apiFetch(`${BASE}/messages/${messageId}/pin`, { method: "DELETE" });
+}
+
+export function forwardMessage(
+  messageId: string,
+  conversationIds: string[],
+): Promise<{ messages: ChatMessage[] }> {
+  return post(`/messages/${messageId}/forward`, { conversationIds });
 }
 
 export function markRead(id: string, messageId?: string): Promise<UnreadSummary> {

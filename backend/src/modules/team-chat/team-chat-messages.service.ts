@@ -3,6 +3,7 @@ import {
   ConflictException,
   ForbiddenException,
   Injectable,
+  Logger,
   NotFoundException,
 } from '@nestjs/common';
 import type { Prisma, TeamChannel } from '@prisma/client';
@@ -33,6 +34,7 @@ import {
   encodeCursor,
   MAX_PINS_PER_CONVERSATION,
   MESSAGE_INCLUDE,
+  messagePreview,
   ORDER_ASC,
   ORDER_DESC,
   serializeMessage,
@@ -42,6 +44,8 @@ import {
 
 @Injectable()
 export class TeamChatMessagesService {
+  private readonly logger = new Logger('TeamChatMessages');
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly access: TeamChatAccessService,
@@ -299,6 +303,7 @@ export class TeamChatMessagesService {
       });
       const serialized = serializeMessage(message, actor.sub);
       this.realtime.messageNew(orgId, serialized);
+      await this.notifyMentions(channel, actor.sub, body, mentionIds);
       return serialized;
     } catch (err) {
       // Two concurrent sends with the same clientMsgId: the loser returns
@@ -364,6 +369,55 @@ export class TeamChatMessagesService {
     return wanted;
   }
 
+  /**
+   * A bell notification (GET /org/notifications) for each mentioned member
+   * who is still active. Runs after the message has committed and is
+   * best-effort: a failure here never fails the send or edit.
+   */
+  private async notifyMentions(
+    channel: TeamChannel,
+    senderId: string,
+    body: string,
+    userIds: string[],
+  ) {
+    if (userIds.length === 0) return;
+    try {
+      const [sender, recipients] = await Promise.all([
+        this.prisma.user.findUnique({
+          where: { id: senderId },
+          select: USER_SELECT,
+        }),
+        this.prisma.user.findMany({
+          where: {
+            id: { in: userIds },
+            orgId: channel.orgId,
+            status: { not: 'disabled' },
+          },
+          select: { id: true },
+        }),
+      ]);
+      if (recipients.length === 0) return;
+      const who = sender ? chatDisplayName(sender) : 'Someone';
+      const where =
+        channel.kind === 'dm' ? 'a direct message' : `#${channel.name}`;
+      await this.prisma.notification.createMany({
+        data: recipients.map((r) => ({
+          orgId: channel.orgId,
+          recipientId: r.id,
+          type: 'team_chat_mention' as const,
+          title: `${who} mentioned you in ${where}`,
+          body: messagePreview({ kind: 'text', body, deletedAt: null }),
+          entity: 'TeamChannel',
+          entityId: channel.id,
+        })),
+      });
+    } catch (err) {
+      this.logger.warn(
+        `Mention notifications failed: ${err instanceof Error ? err.message : String(err)}`,
+      );
+    }
+  }
+
   // -------------------------------------------------------------------------
   // Edit / delete
   // -------------------------------------------------------------------------
@@ -376,12 +430,28 @@ export class TeamChatMessagesService {
     if (message.kind !== 'text' || message.deletedAt) {
       throw new BadRequestException('Only text messages can be edited');
     }
+    // A forwarded copy is stored as the forwarder's, but the words are
+    // someone else's.
+    if (message.forwarded) {
+      throw new BadRequestException('Forwarded messages cannot be edited');
+    }
     const body = dto.body.trim();
     if (!body) throw new BadRequestException('Message is empty');
     const mentionIds =
       dto.mentionUserIds !== undefined
         ? await this.validMentions(channel.id, dto.mentionUserIds, actor.sub)
         : null;
+    // Only people this edit newly mentions get a notification.
+    const alreadyMentioned = new Set(
+      mentionIds
+        ? (
+            await this.prisma.teamMessageMention.findMany({
+              where: { messageId },
+              select: { userId: true },
+            })
+          ).map((x) => x.userId)
+        : [],
+    );
 
     const updated = await this.prisma.$transaction(async (tx) => {
       if (mentionIds) {
@@ -404,6 +474,14 @@ export class TeamChatMessagesService {
     });
     const serialized = serializeMessage(updated, actor.sub);
     this.realtime.messageUpdated(serialized);
+    if (mentionIds) {
+      await this.notifyMentions(
+        channel,
+        actor.sub,
+        body,
+        mentionIds.filter((id) => !alreadyMentioned.has(id)),
+      );
+    }
     return serialized;
   }
 

@@ -75,7 +75,11 @@ export class TeamChatAttachmentsService {
    * live (not deleted) message in a conversation the caller is a member of,
    * or is the caller's own not-yet-sent upload. Everything else 404s.
    */
-  async downloadUrl(actor: JwtPayload, attachmentId: string) {
+  async downloadUrl(
+    actor: JwtPayload,
+    attachmentId: string,
+    forceDownload = false,
+  ) {
     const orgId = actor.orgId as string;
     const att = await this.prisma.teamMessageAttachment.findFirst({
       where: { id: attachmentId, orgId },
@@ -99,7 +103,8 @@ export class TeamChatAttachmentsService {
       key: att.storageKey,
       fileName: att.fileName,
       contentType: att.mimeType,
-      disposition: isInlineSafe(att.mimeType) ? 'inline' : 'attachment',
+      disposition:
+        !forceDownload && isInlineSafe(att.mimeType) ? 'inline' : 'attachment',
     });
     return { url, expiresIn, fileName: att.fileName, mimeType: att.mimeType };
   }

@@ -24,6 +24,10 @@ import type {
   UnreadUpdateEvent,
 } from "./types";
 
+/** window event (detail: conversation id) asking an open Team Chat page to
+ *  switch conversations, e.g. from a mention notification in the bell. */
+export const TEAM_CHAT_OPEN_EVENT = "team-chat:open";
+
 /** How long a "typing" signal lasts without a refresh from the typist. */
 const TYPING_TTL_MS = 6000;
 
@@ -245,7 +249,19 @@ export function TeamChatProvider({
       dispatch("message:new", m);
     });
 
-    socket.on("message:updated", (m: ChatMessage) => dispatch("message:updated", m));
+    socket.on("message:updated", (m: ChatMessage) => {
+      // An edit to the latest message changes the rail preview.
+      setConversations((prev) =>
+        prev
+          ? prev.map((c) =>
+              c.id === m.conversationId && c.lastMessage?.id === m.id
+                ? { ...c, lastMessage: { ...c.lastMessage, preview: previewOf(m) } }
+                : c,
+            )
+          : prev,
+      );
+      dispatch("message:updated", m);
+    });
 
     socket.on("message:deleted", (e: MessageDeletedEvent) => {
       setConversations((prev) =>

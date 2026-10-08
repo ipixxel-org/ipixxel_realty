@@ -1,12 +1,12 @@
 "use client";
 
-import { useCallback, useMemo, useState, useSyncExternalStore } from "react";
+import { useCallback, useEffect, useMemo, useState, useSyncExternalStore } from "react";
 import { Lock } from "lucide-react";
 import { Reveal } from "@/components/superadmin/reveal";
 import { useToast } from "@/components/ui/toast";
 import { useAuth } from "@/lib/auth-context";
 import * as chatApi from "@/lib/team-chat/api";
-import { useTeamChat } from "@/lib/team-chat/context";
+import { TEAM_CHAT_OPEN_EVENT, useTeamChat } from "@/lib/team-chat/context";
 import { isChatHost } from "@/lib/team-chat/socket";
 import type { ChatUserResult } from "@/lib/team-chat/types";
 import { Modal, UserPicker, errorText } from "./chat-ui";
@@ -52,9 +52,22 @@ export default function OrgTeamChatPage() {
     writeSelected(id);
   }, []);
 
-  // Desktop with nothing chosen yet: show the most recent conversation.
+  // A mention notification clicked while this page is open.
+  useEffect(() => {
+    const onOpen = (e: Event) => {
+      const id = (e as CustomEvent<string>).detail;
+      if (typeof id === "string" && id) select(id);
+    };
+    window.addEventListener(TEAM_CHAT_OPEN_EVENT, onOpen);
+    return () => window.removeEventListener(TEAM_CHAT_OPEN_EVENT, onOpen);
+  }, [select]);
+
+  // Desktop with nothing chosen yet: open the most recent conversation, and
+  // keep it open. Following the top of the rail would switch away whenever
+  // another conversation gets a newer message.
   const first = chat?.conversations?.[0]?.id ?? null;
-  const activeId = chosen === undefined ? (isDesktop ? first : null) : chosen;
+  if (chosen === undefined && isDesktop && first) setChosen(first);
+  const activeId = chosen === undefined ? null : chosen;
 
   if (isLoading || !user) return null;
 

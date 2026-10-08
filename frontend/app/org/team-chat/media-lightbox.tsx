@@ -3,12 +3,14 @@
 import { useEffect, useState } from "react";
 import Lightbox, { type Slide } from "yet-another-react-lightbox";
 import Counter from "yet-another-react-lightbox/plugins/counter";
+import Download from "yet-another-react-lightbox/plugins/download";
 import Video from "yet-another-react-lightbox/plugins/video";
 import Zoom from "yet-another-react-lightbox/plugins/zoom";
 import "yet-another-react-lightbox/styles.css";
 import "yet-another-react-lightbox/plugins/counter.css";
+import { useToast } from "@/components/ui/toast";
 import type { ChatAttachment } from "@/lib/team-chat/types";
-import { attachmentUrl, mediaKind } from "@/lib/team-chat/uploads";
+import { attachmentUrl, downloadAttachment, mediaKind } from "@/lib/team-chat/uploads";
 
 /** Full-screen viewer for a message's photos and videos (lazy-loaded). */
 export default function MediaLightbox({
@@ -20,6 +22,7 @@ export default function MediaLightbox({
   index: number;
   onClose: () => void;
 }) {
+  const { toast } = useToast();
   const [slides, setSlides] = useState<Slide[] | null>(null);
 
   useEffect(() => {
@@ -52,7 +55,17 @@ export default function MediaLightbox({
       close={onClose}
       index={index}
       slides={slides}
-      plugins={[Video, Zoom, ...(slides.length > 1 ? [Counter] : [])]}
+      plugins={[Video, Zoom, Download, ...(slides.length > 1 ? [Counter] : [])]}
+      download={{
+        // Viewing links are "inline"; ask for a save-as link instead.
+        download: ({ slide }) => {
+          const a = items[slides.indexOf(slide)];
+          if (!a) return;
+          downloadAttachment(a).catch(() =>
+            toast({ title: "Couldn't download the file", description: "It may have been removed.", variant: "error" }),
+          );
+        },
+      }}
       carousel={{ finite: true }}
       controller={{ closeOnBackdropClick: true }}
     />

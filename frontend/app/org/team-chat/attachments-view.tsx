@@ -7,7 +7,7 @@ import { Icon } from "@/components/icons";
 import { useToast } from "@/components/ui/toast";
 import type { ChatAttachment } from "@/lib/team-chat/types";
 import {
-  attachmentUrl,
+  downloadAttachment,
   formatBytes,
   formatDuration,
   mediaKind,
@@ -97,19 +97,20 @@ function MediaTile({
 function FileCard({ a }: { a: ChatAttachment }) {
   const { toast } = useToast();
   const [busy, setBusy] = useState(false);
+  // Saves straight to the device (no new tab).
   const open = async () => {
     setBusy(true);
     try {
-      window.open(await attachmentUrl(a.id), "_blank", "noopener,noreferrer");
+      await downloadAttachment(a);
     } catch {
-      toast({ title: "Couldn't open the file", description: "It may have been removed.", variant: "error" });
+      toast({ title: "Couldn't download the file", description: "It may have been removed.", variant: "error" });
     } finally {
       setBusy(false);
     }
   };
   const ext = a.fileName.includes(".") ? a.fileName.split(".").pop()?.slice(0, 4).toUpperCase() : "";
   return (
-    <button type="button" className="tch-file-card" onClick={() => void open()} disabled={busy}>
+    <button type="button" className="tch-file-card" onClick={() => void open()} disabled={busy} title={`Download ${a.fileName}`}>
       <div className="tch-file-icon">
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
           <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />

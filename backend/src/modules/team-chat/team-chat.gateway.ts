@@ -32,9 +32,9 @@ import {
 import { USER_SELECT } from './team-chat.shared';
 
 /** Comma-separated browser origins allowed to open the chat socket
- *  (CHAT_WS_ORIGINS, else FRONTEND_URL). */
+ *  (FRONTEND_URL). */
 export function chatSocketOrigins(): string[] {
-  const raw = process.env.CHAT_WS_ORIGINS || process.env.FRONTEND_URL || '';
+  const raw = process.env.FRONTEND_URL || '';
   return raw
     .split(',')
     .map((o) => o.trim().replace(/\/+$/, ''))
