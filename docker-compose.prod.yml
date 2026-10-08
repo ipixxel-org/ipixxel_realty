@@ -19,6 +19,7 @@ services:
     build:
       context: ./backend
       target: prod
+      network: host
     container_name: realestate-api
     restart: unless-stopped
     env_file:
