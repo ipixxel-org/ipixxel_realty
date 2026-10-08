@@ -740,7 +740,7 @@ export function OrgAdminShell({ children }: { children: ReactNode }) {
                 <div className="tb-avatar" style={{ width: 36, height: 36, fontSize: 12 }}>
                   {avatarInitials}
                 </div>
-                <div style={{ display: "flex", flexDirection: "column", lineHeight: 1.15, textAlign: "left" }}>
+                <div className="tb-profile-text" style={{ display: "flex", flexDirection: "column", lineHeight: 1.15, textAlign: "left" }}>
                   <span style={{ fontWeight: 700, fontSize: 12, color: "#0f172a" }}>{userName}</span>
                   <span style={{ fontSize: 11, color: "#64748b" }}>{user.roleLabel}</span>
                 </div>

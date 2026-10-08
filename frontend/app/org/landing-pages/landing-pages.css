@@ -618,3 +618,27 @@
     grid-template-columns: 1fr;
   }
 }
+
+
+/* ---------- Phones: filter bar ----------
+   The bar is forced onto one row (nowrap !important above), so on phones the
+   three filters + view toggle pushed the page to ~750px wide. Wrap instead:
+   search on its own row, filters share the next. */
+@media (max-width: 640px) {
+  .org .lp-filter-bar {
+    flex-wrap: wrap !important;
+    padding: 10px !important;
+    gap: 8px !important;
+  }
+
+  .org .lp-search-box {
+    flex: 1 1 100% !important;
+    min-width: 0 !important;
+  }
+
+  .org .lp-filter-select {
+    flex: 1 1 calc(50% - 8px) !important;
+    min-width: 0 !important;
+    max-width: none !important;
+  }
+}

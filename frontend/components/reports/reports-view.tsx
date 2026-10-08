@@ -550,6 +550,7 @@ export function ReportsView({ mode = "org" }: ReportsViewProps) {
 
       {/* KPI Cards Grid (8 Cards: 2 Rows x 4 Columns) */}
       <div
+        className="kpi-grid"
         style={{
           display: "grid",
           gridTemplateColumns: "repeat(4, 1fr)",
@@ -815,7 +816,7 @@ export function ReportsView({ mode = "org" }: ReportsViewProps) {
       </div>
 
       {/* Middle Grid Row: Lead Pipeline Stages & Project Performance */}
-      <div style={{ display: "grid", gridTemplateColumns: "1.1fr 0.9fr", gap: 20, marginBottom: 24 }}>
+      <div className="kpi-split" style={{ display: "grid", gridTemplateColumns: "1.1fr 0.9fr", gap: 20, marginBottom: 24 }}>
         {/* Lead Pipeline Stages Card */}
         <div
           style={{
@@ -935,7 +936,7 @@ export function ReportsView({ mode = "org" }: ReportsViewProps) {
       </div>
 
       {/* Bottom Grid Row: Call Outcomes & Team Leaderboard */}
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 20, marginBottom: 24 }}>
+      <div className="kpi-split" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 20, marginBottom: 24 }}>
         {/* Call Outcomes Card */}
         <div
           style={{

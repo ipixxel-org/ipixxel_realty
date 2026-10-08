@@ -9156,3 +9156,111 @@
     min-height: 180px;
   }
 }
+
+/* ---------- Mobile topbar ----------
+   On phones the chip, two-line crumb and header actions do not fit in one
+   row and the page title slid under the bell / profile button. Below 640px:
+   hide the portal chip and the crumb eyebrow, truncate the page title, and
+   show only the avatar on the profile button. Desktop is unchanged. */
+@media (max-width: 640px) {
+  .org .topbar {
+    padding: 0 12px;
+    gap: 10px;
+  }
+
+  .org .tb-left {
+    flex: 1 1 auto;
+    min-width: 0;
+    gap: 10px;
+  }
+
+  .org .tb-chip,
+  .org .crumbs .crumbs-eyebrow {
+    display: none;
+  }
+
+  .org .crumbs {
+    min-width: 0;
+    overflow: hidden;
+  }
+
+  .org .crumbs b {
+    display: block;
+    font-size: 15px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .org .tb-right {
+    flex-shrink: 0;
+    gap: 8px !important;
+  }
+
+  .org .tb-profile-text {
+    display: none !important;
+  }
+}
+
+
+/* ---------- Phones: page card ----------
+   The page card keeps its desktop 22px margin + 24-28px padding on phones,
+   which (with nested cards) left forms ~175px wide on a 375px screen. */
+@media (max-width: 640px) {
+  .org .page {
+    margin: 10px;
+    padding: 16px;
+  }
+}
+
+
+/* ---------- Dashboard / Reports grids on small screens ----------
+   The KPI tiles and chart rows use inline grid columns (4 across, 2 across)
+   that forced a 967px-wide page on phones. Inline styles need !important to
+   be overridden. Desktop (> 900px) keeps the inline layout. */
+@media (max-width: 900px) {
+  .org .kpi-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+  }
+
+  .org .kpi-split {
+    grid-template-columns: minmax(0, 1fr) !important;
+  }
+}
+
+@media (max-width: 560px) {
+  .org .kpi-grid {
+    grid-template-columns: minmax(0, 1fr) !important;
+  }
+}
+
+
+/* ---------- Phones: grids and toolbars ----------
+   Grid items default to their content's min width, so a wide table inside a
+   one-column grid (Marketing tables, Support) stretched the whole page.
+   Let items shrink — tables already scroll inside .tbl-wrap. The Projects
+   toolbar wraps instead of overflowing. */
+@media (max-width: 900px) {
+  .org .grid > *,
+  .org .mkt-tables-row > *,
+  .org .mkt-charts-row > * {
+    min-width: 0;
+  }
+}
+
+@media (max-width: 640px) {
+  .org .proj-toolbar {
+    flex-wrap: wrap !important;
+    overflow-x: visible !important;
+  }
+
+  .org .proj-toolbar > div:first-child {
+    flex: 1 1 100% !important;
+    min-width: 0 !important;
+  }
+
+  .org .proj-toolbar > select {
+    flex: 1 1 calc(50% - 10px);
+    min-width: 0 !important;
+  }
+}
