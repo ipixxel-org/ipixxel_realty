@@ -5,7 +5,7 @@ _Last updated 2026-10-08. Read this first in a new session, then `docs/team-chat
 ## Where things stand
 
 - **Branch:** `vidya_new`, clean, pushed to `origin/vidya_new`.
-- **Phases:** 0, 1, 2 and 3 are done and committed. **Phase 4** (message actions) is built and passes builds and tests (2026-10-08). It waits for the user's commit. See "Phase 4" below.
+- **Phases:** 0–4 are done and committed (Phase 4 on 2026-10-08). See "Phase 4" below.
 - **Commits, oldest first:**
 
 | Commit | What |
