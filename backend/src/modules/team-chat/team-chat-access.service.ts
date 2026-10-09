@@ -84,7 +84,7 @@ export class TeamChatAccessService {
   async canManageChannel(actor: JwtPayload, m: Membership): Promise<boolean> {
     if (m.channel.kind !== 'channel') return false;
     if (m.member.role === 'admin') return true;
-    return hasOrgPermission(this.prisma, actor, 'team_chat', 'edit');
+    return hasOrgPermission(this.prisma, actor, 'team_chat', 'edit', true);
   }
 
   async assertCanManageChannel(actor: JwtPayload, m: Membership) {

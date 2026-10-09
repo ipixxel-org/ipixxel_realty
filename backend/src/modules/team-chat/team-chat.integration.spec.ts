@@ -602,4 +602,39 @@ suite('Team Chat access rules (integration)', () => {
     });
     expect(await ids('sales')).not.toContain(users.sales2.sub);
   });
+
+  it('applies the Admin role setting to the org admin too', async () => {
+    const outsider = users.outsider; // the only admin in org B
+    const can = (action: 'view' | 'delete') =>
+      hasOrgPermission(prisma, outsider, 'team_chat', action, true);
+    // No row for the Admin role: full access, as before.
+    expect(await can('view')).toBe(true);
+
+    // Team Chat switched off for the Admin role (Super Admin's system row
+    // and an org row merge the same way; an org row keeps this test local).
+    const adminRole = await role('admin');
+    await prisma.roleModulePermission.create({
+      data: {
+        orgId: orgB,
+        roleId: adminRole.id,
+        moduleKey: 'team_chat',
+        canView: false,
+      },
+    });
+    expect(await can('view')).toBe(false);
+    expect(await can('delete')).toBe(false);
+    // ...without the flag the admin would still pass (the old bug).
+    expect(
+      await hasOrgPermission(prisma, outsider, 'team_chat', 'view'),
+    ).toBe(true);
+
+    // Nobody can find or message them either.
+    const second = await user('obadmin2', orgB, 'sales');
+    expect(
+      (await conv.search(second, 'outsider')).users.map((u) => u.id),
+    ).not.toContain(outsider.sub);
+    await expect(
+      conv.openDm(second, { userId: outsider.sub }),
+    ).rejects.toThrow("doesn't have access to Team Chat");
+  });
 });

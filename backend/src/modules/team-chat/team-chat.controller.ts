@@ -39,6 +39,10 @@ import {
 
 const uuid = new ParseUUIDPipe();
 
+// Super Admin's Organisation roles setting for the Admin role applies to the
+// Org Admin too (`enforceForOrgAdmin`), as for Dashboard, Users and Forms.
+const ENFORCE = { enforceForOrgAdmin: true } as const;
+
 /**
  * Team Chat REST API. Every route needs team_chat:view (class level); add /
  * delete are raised per route. Edit-type rights (rename, members) are
@@ -47,7 +51,7 @@ const uuid = new ParseUUIDPipe();
  * own membership — see TeamChatAccessService.
  */
 @UseGuards(JwtAuthGuard, OrgApprovedGuard, PermissionGuard)
-@RequirePermission('team_chat', 'view')
+@RequirePermission('team_chat', 'view', ENFORCE)
 @Controller('org/team-chat')
 export class TeamChatController {
   constructor(
@@ -74,7 +78,7 @@ export class TeamChatController {
   }
 
   @Post('channels')
-  @RequirePermission('team_chat', 'add')
+  @RequirePermission('team_chat', 'add', ENFORCE)
   createChannel(
     @CurrentUser() user: JwtPayload,
     @Body() dto: CreateChannelDto,
@@ -92,7 +96,7 @@ export class TeamChatController {
   }
 
   @Delete('channels/:id')
-  @RequirePermission('team_chat', 'delete')
+  @RequirePermission('team_chat', 'delete', ENFORCE)
   deleteChannel(
     @CurrentUser() user: JwtPayload,
     @Param('id', uuid) id: string,

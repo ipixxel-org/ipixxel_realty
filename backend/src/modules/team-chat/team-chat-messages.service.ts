@@ -501,7 +501,7 @@ export class TeamChatMessagesService {
     if (message.senderId !== actor.sub) {
       const allowed =
         channel.kind !== 'dm' &&
-        (await hasOrgPermission(this.prisma, actor, 'team_chat', 'delete'));
+        (await hasOrgPermission(this.prisma, actor, 'team_chat', 'delete', true));
       if (!allowed) {
         throw new ForbiddenException('You can only delete your own messages');
       }

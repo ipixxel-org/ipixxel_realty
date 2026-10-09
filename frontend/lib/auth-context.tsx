@@ -49,6 +49,7 @@ const ORG_ADMIN_ENFORCED_MODULES: ReadonlySet<string> = new Set([
   "settings",
   "support",
   "roles_permissions",
+  "team_chat",
 ]);
 
 interface AuthContextValue {
