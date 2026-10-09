@@ -107,7 +107,7 @@ function PageTab({ page, isActive, onClick, onRename, onDelete, canDelete }: {
         onDoubleClick={(e) => { e.stopPropagation(); setEditing(true) }}
         onContextMenu={(e) => { e.preventDefault(); setShowContext(true) }}
         className={`px-2 py-1 rounded text-xs transition-all ${
-          isActive ? 'bg-bg-3 text-text-0' : 'text-text-3 hover:text-text-1 hover:bg-bg-2'
+          isActive ? 'bg-bg-3 text-text-0 font-medium' : 'text-text-2 hover:text-text-0 hover:bg-bg-2'
         }`}
         title={`${page.name} (${page.path})`}
       >
@@ -160,7 +160,7 @@ export function CanvasToolbar() {
   const toggleSpotlight = useEditorStore((s) => s.toggleSpotlight);
 
   return (
-    <div className="h-10 bg-bg-1 border-b border-border-default flex items-center px-3 gap-2 justify-between">
+    <div className="h-11 bg-bg-1 border-b border-border-default flex items-center px-3 gap-2 justify-between">
       {/* Page tabs */}
       <div className="flex items-center gap-0.5 relative overflow-x-auto min-w-0">
         {pages.map((page) => (
@@ -177,7 +177,7 @@ export function CanvasToolbar() {
         <div className="relative">
           <button
             onClick={() => setShowAddPage(!showAddPage)}
-            className="w-6 h-6 rounded flex items-center justify-center text-text-3 hover:text-green hover:bg-bg-2 transition-all"
+            className="w-6 h-6 rounded flex items-center justify-center text-text-3 hover:text-[#6d5dfc] hover:bg-bg-2 transition-all"
             title="Add page"
             aria-label="Add page"
           >
@@ -199,7 +199,7 @@ export function CanvasToolbar() {
           id="op-spotlight-trigger"
           type="button"
           onClick={toggleSpotlight}
-          className="px-2 py-1 rounded-md bg-bg-2 hover:bg-bg-3 border border-border-default text-text-2 hover:text-white flex items-center gap-1.5 text-xs transition-colors"
+          className="px-2 py-1 rounded-md bg-bg-2 hover:bg-bg-3 border border-border-default text-text-2 hover:text-text-0 flex items-center gap-1.5 text-xs transition-colors"
           title="Spotlight Search (Ctrl+K)"
         >
           <Search size={12} className="text-text-3" />
@@ -212,13 +212,13 @@ export function CanvasToolbar() {
         <div className="w-[1px] h-4 bg-border-subtle mx-0.5" />
 
         {/* Viewport switch */}
-        <div className="flex items-center rounded-lg border border-border-default bg-bg-2 p-0.5">
+        <div className="flex items-center rounded-lg border border-border-default bg-bg-3 p-0.5">
           <button
             type="button"
             onClick={() => setViewport("desktop")}
             className={`p-1 rounded transition-colors ${
               viewport === "desktop"
-                ? "bg-green/15 text-green"
+                ? "bg-bg-1 text-[#6d5dfc] shadow-[0_1px_3px_rgba(15,23,42,0.12)]"
                 : "text-text-3 hover:text-text-1"
             }`}
             title="Desktop View"
@@ -230,7 +230,7 @@ export function CanvasToolbar() {
             onClick={() => setViewport("tablet")}
             className={`p-1 rounded transition-colors ${
               viewport === "tablet"
-                ? "bg-green/15 text-green"
+                ? "bg-bg-1 text-[#6d5dfc] shadow-[0_1px_3px_rgba(15,23,42,0.12)]"
                 : "text-text-3 hover:text-text-1"
             }`}
             title="Tablet View"
@@ -242,7 +242,7 @@ export function CanvasToolbar() {
             onClick={() => setViewport("mobile")}
             className={`p-1 rounded transition-colors ${
               viewport === "mobile"
-                ? "bg-green/15 text-green"
+                ? "bg-bg-1 text-[#6d5dfc] shadow-[0_1px_3px_rgba(15,23,42,0.12)]"
                 : "text-text-3 hover:text-text-1"
             }`}
             title="Mobile View"
@@ -257,7 +257,7 @@ export function CanvasToolbar() {
           onClick={toggleShowGrid}
           className={`p-1.5 rounded-lg border transition-colors ${
             showGrid
-              ? "bg-blue-500/20 border-blue-500/40 text-blue-400"
+              ? "bg-[#6d5dfc]/10 border-[#6d5dfc]/40 text-[#6d5dfc]"
               : "bg-bg-2 border-border-default text-text-3 hover:text-text-1"
           }`}
           title={showGrid ? "Hide Alignment Grid" : "Show Alignment Grid"}

@@ -51,16 +51,16 @@ export function RightSidebar() {
   return (
     <div data-tour="inspector" className="hidden md:flex w-[300px] h-full min-h-0 bg-bg-1 border-l border-border-default flex-col shrink-0 overflow-hidden">
       {/* Inspector header */}
-      <div className="h-11 px-3.5 border-b border-border-default flex items-center justify-between shrink-0">
+      <div className="h-12 px-3.5 flex items-center justify-between shrink-0">
         <div className="flex items-center gap-2 min-w-0">
-          <span className="text-[10.5px] font-bold uppercase tracking-wider text-text-2 flex items-center gap-1.5 shrink-0">
-            <SlidersHorizontal size={12} className="text-green" />
+          <span className="text-[13px] font-semibold text-[#6d5dfc] flex items-center gap-1.5 shrink-0">
+            <SlidersHorizontal size={14} />
             Inspector
           </span>
           {selectedBlock && (
             <>
               <span className="text-text-3">/</span>
-              <span className="text-[10.5px] font-semibold text-text-0 truncate">{blockLabel(selectedBlock.type)}</span>
+              <span className="text-[12px] font-medium text-text-1 truncate">{blockLabel(selectedBlock.type)}</span>
             </>
           )}
         </div>
@@ -75,45 +75,36 @@ export function RightSidebar() {
       </div>
 
       {/* Icon tabs */}
-      <div className="grid grid-cols-4 border-b border-border-default shrink-0">
-        {tabs.map(({ id, label, icon: Icon, color }) => {
-          const isActive = rightSidebarTab === id
-          return (
-            <button
-              key={id}
-              type="button"
-              onClick={() => setRightSidebarTab(id)}
-              className={`relative flex flex-col items-center gap-1 py-2 transition-all duration-150 group ${
-                isActive ? 'bg-bg-2/80 shadow-sm' : 'text-text-3 hover:text-text-1 hover:bg-bg-2/40'
-              }`}
-              title={label}
-            >
-              {isActive && (
-                <span
-                  className="absolute top-0 left-2 right-2 h-[2px] rounded-b shadow-[0_0_8px_currentColor]"
-                  style={{ backgroundColor: color, color }}
-                />
-              )}
-              <Icon
-                size={14}
-                strokeWidth={isActive ? 2.25 : 1.75}
-                style={{ color: isActive ? color : undefined }}
-                className={isActive ? 'drop-shadow-[0_0_5px_currentColor]' : 'group-hover:text-text-1'}
-              />
-              <span className={`text-[9px] font-bold uppercase tracking-wider ${isActive ? '' : 'text-text-3'}`} style={isActive ? { color } : undefined}>
-                {label}
-              </span>
-            </button>
-          )
-        })}
+      <div className="px-3 pb-3 border-b border-border-default shrink-0">
+        <div className="grid grid-cols-5 gap-0.5 p-0.5 rounded-lg bg-bg-3" role="tablist" aria-label="Inspector sections">
+          {tabs.map(({ id, label, icon: Icon }) => {
+            const isActive = rightSidebarTab === id
+            return (
+              <button
+                key={id}
+                type="button"
+                role="tab"
+                aria-selected={isActive}
+                onClick={() => setRightSidebarTab(id)}
+                className={`flex flex-col items-center gap-0.5 py-1.5 rounded-md transition-colors duration-150 ${
+                  isActive ? 'bg-bg-1 text-[#6d5dfc] shadow-[0_1px_3px_rgba(15,23,42,0.1)]' : 'text-text-2 hover:text-text-0'
+                }`}
+                title={label}
+              >
+                <Icon size={13} strokeWidth={isActive ? 2.2 : 1.8} />
+                <span className="text-[10px] font-semibold leading-none">{label}</span>
+              </button>
+            )
+          })}
+        </div>
       </div>
 
       {/* Content */}
       <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain">
         {!selectedBlock ? (
           <div className="flex flex-col items-center justify-center text-center px-6 py-16 gap-3">
-            <div className="w-11 h-11 rounded-xl bg-bg-3 border border-border-default flex items-center justify-center">
-              <MousePointer2 size={18} className="text-text-3" />
+            <div className="w-11 h-11 rounded-xl bg-[#6d5dfc]/10 flex items-center justify-center">
+              <MousePointer2 size={18} className="text-[#6d5dfc]" />
             </div>
             <div>
               <p className="text-text-1 text-[12px] font-medium">Click a block to edit</p>
@@ -129,8 +120,8 @@ export function RightSidebar() {
             <ElementStylePanel block={selectedBlock} elementId={selectedElementId} />
           ) : (
             <div className="flex flex-col items-center justify-center text-center px-6 py-16 gap-3">
-              <div className="w-11 h-11 rounded-xl bg-bg-3 border border-border-default flex items-center justify-center">
-                <MousePointer2 size={18} className="text-text-3" />
+              <div className="w-11 h-11 rounded-xl bg-[#6d5dfc]/10 flex items-center justify-center">
+                <MousePointer2 size={18} className="text-[#6d5dfc]" />
               </div>
               <div>
                 <p className="text-text-1 text-[12px] font-medium">No element selected</p>

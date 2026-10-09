@@ -108,10 +108,10 @@ export function StatusBadge({ status }: { status: "published" | "draft" | "sched
     published: { label: "Published", bg: "var(--ps-success-soft)", fg: "var(--ps-success)" },
     live: { label: "Live", bg: "var(--ps-success-soft)", fg: "var(--ps-success)" },
     connected: { label: "Connected", bg: "var(--ps-success-soft)", fg: "var(--ps-success)" },
-    draft: { label: "Draft", bg: "rgba(255,255,255,0.06)", fg: "var(--ps-muted)" },
+    draft: { label: "Draft", bg: "var(--ps-surface-muted)", fg: "var(--ps-muted)" },
     scheduled: { label: "Scheduled", bg: "var(--ps-warn-soft)", fg: "var(--ps-warn)" },
     password: { label: "Password", bg: "var(--ps-secondary-soft)", fg: "var(--ps-secondary-dark)" },
-    unpublished: { label: "Unpublished", bg: "rgba(255,255,255,0.06)", fg: "var(--ps-muted)" },
+    unpublished: { label: "Unpublished", bg: "var(--ps-surface-muted)", fg: "var(--ps-muted)" },
     pending: { label: "Pending DNS", bg: "var(--ps-warn-soft)", fg: "var(--ps-warn)" },
     error: { label: "Error", bg: "var(--ps-danger-soft)", fg: "var(--ps-danger)" },
   };

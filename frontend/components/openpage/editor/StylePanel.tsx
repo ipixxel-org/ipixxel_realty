@@ -82,35 +82,38 @@ function DimensionField({
   placeholder?: string;
 }) {
   return (
-    <div className="space-y-1">
-      <div className="flex items-center justify-between">
-        <label className="text-[10px] font-semibold uppercase tracking-wider text-text-3">{label}</label>
-        {presets && (
-          <div className="flex items-center gap-1">
-            {presets.map((p) => (
-              <button
-                key={p}
-                type="button"
-                onClick={() => onChange(p)}
-                className={`text-[9px] px-1.5 py-0.5 rounded border transition-all ${
-                  value === p
-                    ? "bg-green/15 border-green/40 text-green font-medium"
-                    : "border-border-default text-text-3 hover:text-text-1 hover:bg-bg-3"
-                }`}
-              >
-                {p}
-              </button>
-            ))}
-          </div>
-        )}
-      </div>
+    <div className="min-w-0 space-y-1">
+      <label
+        className="block truncate whitespace-nowrap text-[10px] font-semibold uppercase tracking-wider text-text-3"
+        title={label}
+      >
+        {label}
+      </label>
       <input
         type="text"
         value={value || ""}
         onChange={(e) => onChange(e.target.value)}
         placeholder={placeholder}
-        className="w-full px-2.5 py-1.5 rounded-lg border border-border-default bg-bg-2/80 text-text-0 text-[11px] font-mono outline-none transition-all hover:border-border-hover focus:border-green focus:bg-bg-2 focus:shadow-[0_0_0_3px_rgba(34,197,94,0.12)]"
+        className="w-full min-w-0 px-2.5 py-1.5 rounded-lg border border-border-default bg-bg-2/80 text-text-0 text-[11px] font-mono outline-none transition-all hover:border-border-hover focus:border-green focus:bg-bg-2 focus:shadow-[0_0_0_3px_rgba(34,197,94,0.12)]"
       />
+      {presets && (
+        <div className="flex flex-wrap items-center gap-1">
+          {presets.map((p) => (
+            <button
+              key={p}
+              type="button"
+              onClick={() => onChange(p)}
+              className={`text-[9.5px] leading-none px-1.5 py-1 rounded-md border whitespace-nowrap transition-all ${
+                value === p
+                  ? "bg-green/15 border-green/40 text-green font-medium"
+                  : "border-border-default text-text-3 hover:text-text-1 hover:bg-bg-3"
+              }`}
+            >
+              {p}
+            </button>
+          ))}
+        </div>
+      )}
     </div>
   );
 }

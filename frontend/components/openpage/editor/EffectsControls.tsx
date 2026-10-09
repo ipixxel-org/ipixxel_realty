@@ -224,7 +224,7 @@ export function EffectsControls({
                   className={`px-2 py-1 text-[10px] rounded border transition-colors ${
                     boxShadow === p.value
                       ? "bg-green/15 border-green text-green font-semibold"
-                      : "border-border-default text-text-3 hover:text-white"
+                      : "border-border-default text-text-3 hover:text-text-0"
                   }`}
                 >
                   {p.label}
@@ -264,21 +264,21 @@ export function EffectsControls({
             <button
               type="button"
               onClick={() => onChange({ transform: "rotate(-2deg)" })}
-              className="px-2 py-1 text-[10px] rounded border border-border-default text-text-3 hover:text-white"
+              className="px-2 py-1 text-[10px] rounded border border-border-default text-text-3 hover:text-text-0"
             >
               Rotate -2°
             </button>
             <button
               type="button"
               onClick={() => onChange({ transform: "rotate(2deg)" })}
-              className="px-2 py-1 text-[10px] rounded border border-border-default text-text-3 hover:text-white"
+              className="px-2 py-1 text-[10px] rounded border border-border-default text-text-3 hover:text-text-0"
             >
               Rotate +2°
             </button>
             <button
               type="button"
               onClick={() => onChange({ transform: "scale(1.03)" })}
-              className="px-2 py-1 text-[10px] rounded border border-border-default text-text-3 hover:text-white"
+              className="px-2 py-1 text-[10px] rounded border border-border-default text-text-3 hover:text-text-0"
             >
               Scale 103%
             </button>
@@ -311,21 +311,21 @@ export function EffectsControls({
             <button
               type="button"
               onClick={() => onChange({ filter: "backdrop-filter: blur(12px)" })}
-              className="px-2 py-1 text-[10px] rounded border border-border-default text-text-3 hover:text-white"
+              className="px-2 py-1 text-[10px] rounded border border-border-default text-text-3 hover:text-text-0"
             >
               Glassmorphism
             </button>
             <button
               type="button"
               onClick={() => onChange({ filter: "grayscale(100%)" })}
-              className="px-2 py-1 text-[10px] rounded border border-border-default text-text-3 hover:text-white"
+              className="px-2 py-1 text-[10px] rounded border border-border-default text-text-3 hover:text-text-0"
             >
               Grayscale
             </button>
             <button
               type="button"
               onClick={() => onChange({ filter: "blur(4px)" })}
-              className="px-2 py-1 text-[10px] rounded border border-border-default text-text-3 hover:text-white"
+              className="px-2 py-1 text-[10px] rounded border border-border-default text-text-3 hover:text-text-0"
             >
               Blur 4px
             </button>

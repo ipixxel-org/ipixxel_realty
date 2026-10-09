@@ -318,11 +318,13 @@
 .ps-topnav {
   height: 58px;
   flex-shrink: 0;
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  /* Left group takes what it needs (only the page title truncates when space
+     runs out), right group never shrinks, and leftover space is split evenly
+     around the device toggle so nothing wraps onto two lines. */
+  display: flex;
   align-items: center;
-  padding: 0 14px;
-  gap: 10px;
+  padding: 0 16px;
+  gap: 16px;
   border-bottom: 1px solid var(--ps-line);
   position: relative;
   z-index: 300;
@@ -346,6 +348,104 @@
 .ps-topnav-right {
   justify-content: flex-end;
 }
+.ps-topnav-left {
+  gap: 12px;
+  flex: 0 1 auto;
+}
+.ps-topnav-center {
+  flex: 0 0 auto;
+  margin: 0 auto;
+}
+.ps-topnav-right {
+  flex: 0 0 auto;
+}
+.ps-topnav-left > * {
+  flex-shrink: 0;
+}
+/* Every divider in the bar gets the same breathing room. */
+.ps-topnav .ps-vdiv {
+  height: 22px !important;
+  margin: 0 6px !important;
+  flex-shrink: 0;
+}
+.ps-topnav button,
+.ps-topnav a {
+  white-space: nowrap;
+}
+.ps-topnav .ps-topnav-btn {
+  height: 34px;
+  flex-shrink: 0;
+}
+.ps-topnav-meta {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+  flex: 1 1 auto !important;
+}
+.ps-topnav-meta > * {
+  flex-shrink: 0;
+}
+.ps-topnav-meta > .ps-page-title {
+  flex-shrink: 1;
+  min-width: 80px;
+}
+/* Landing Page and Thank You Page render as two separate tabs. */
+.ps-companion-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+.ps-companion-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 34px;
+  padding: 0 14px;
+  border: 1px solid var(--ps-line-strong);
+  border-radius: 9px;
+  background: var(--ps-panel, #fff);
+  color: var(--ps-slate, var(--ps-muted));
+  font-size: 12.5px;
+  font-weight: 600;
+  cursor: pointer;
+  transition:
+    background 0.15s ease,
+    border-color 0.15s ease,
+    color 0.15s ease;
+}
+.ps-companion-btn:hover:not([data-active="true"]):not(:disabled) {
+  background: var(--ps-surface-muted);
+  border-color: var(--ps-primary, #6366f1);
+  color: var(--ps-ink);
+}
+.ps-companion-btn[data-active="true"] {
+  background: var(--ps-primary-soft, rgba(109, 93, 252, 0.12));
+  border-color: var(--ps-primary, #6366f1);
+  color: var(--ps-primary, #6366f1);
+  cursor: default;
+  box-shadow: inset 0 -2px 0 var(--ps-primary, #6366f1);
+}
+.ps-companion-btn:disabled {
+  opacity: 0.6;
+  cursor: wait;
+}
+/* Compact levels, set by TopNav only when the bar's contents don't fit.
+   1: drop the wordmark  2: icon-only Preview/Save/Publish
+   3: icon-only Landing/Thank You switch — last resort, small screens only.
+   Hidden labels stay available as each button's tooltip. */
+.ps-topnav:is([data-compact="1"], [data-compact="2"], [data-compact="3"]) .ps-topnav-brand-text {
+  display: none !important;
+}
+.ps-topnav:is([data-compact="2"], [data-compact="3"]) .ps-btn-label {
+  display: none;
+}
+.ps-topnav[data-compact="3"] .ps-companion-label {
+  display: none;
+}
+.ps-topnav[data-compact="3"] .ps-companion-btn {
+  padding: 0 10px;
+}
 .ps-page-title {
   display: inline-flex;
   align-items: center;
@@ -360,6 +460,7 @@
   text-overflow: ellipsis;
   white-space: nowrap;
   max-width: 220px;
+  min-width: 0;
 }
 .ps-page-title-edit {
   color: var(--ps-muted);
@@ -556,6 +657,8 @@
   display: inline-flex;
   align-items: center;
   gap: 5px;
+  white-space: nowrap;
+  flex-shrink: 0;
 }
 .ps-pill--published {
   background: rgba(52, 211, 153, 0.12);
@@ -1405,13 +1508,17 @@
     gap: 8px;
     height: auto;
     min-height: 58px;
-    grid-template-columns: 1fr;
+    flex-wrap: wrap;
     padding-top: 8px;
     padding-bottom: 8px;
   }
+  .ps-topnav-left,
   .ps-topnav-center,
   .ps-topnav-right {
+    flex: 1 1 100%;
+    margin: 0;
     justify-content: flex-start;
+    flex-wrap: wrap;
   }
   .ps-toast-stack {
     left: 12px;
@@ -1864,3 +1971,146 @@
   .op-block-anim { animation: none !important; }
 }
 
+
+/* ==========================================================================
+   Studio light theme ("Modern Clean & Minimal")
+   Scoped to .ps-studio-root, which only the builder (Super Admin templates
+   and org landing pages) renders. Published/preview pages never mount it,
+   and the canvas blocks don't read --ps-* tokens, so page output is
+   unaffected. Colour/surface overrides only — layout lives in the rules
+   above (and their responsive media queries).
+   ========================================================================== */
+.ps-studio-root {
+  --ps-primary: #6d5dfc;
+  --ps-primary-dark: #5448e8;
+  --ps-primary-soft: rgba(109, 93, 252, 0.1);
+  --ps-primary-mist: rgba(109, 93, 252, 0.07);
+  --ps-primary-glow: rgba(109, 93, 252, 0.28);
+  --ps-ink: #0f172a;
+  --ps-slate: #334155;
+  --ps-muted: #64748b;
+  --ps-line: #e7e9f0;
+  --ps-line-strong: #dcdfe8;
+  --ps-bg: #f5f6fa;
+  --ps-panel: #ffffff;
+  --ps-panel-raised: #ffffff;
+  --ps-surface-muted: #f3f4f8;
+  --ps-surface: #f8fafc;
+  --ps-glass: rgba(255, 255, 255, 0.94);
+  --ps-success: #16a34a;
+  --ps-success-soft: rgba(22, 163, 74, 0.1);
+  --ps-warn: #d97706;
+  --ps-warn-soft: rgba(217, 119, 6, 0.1);
+  --ps-danger: #dc2626;
+  --ps-danger-soft: rgba(220, 38, 38, 0.08);
+  --ps-shadow-sm: 0 1px 2px rgba(15, 23, 42, 0.05), 0 1px 3px rgba(15, 23, 42, 0.04);
+  --ps-shadow-md: 0 4px 16px rgba(15, 23, 42, 0.08), 0 1px 4px rgba(15, 23, 42, 0.04);
+  --ps-shadow-lg: 0 16px 40px rgba(15, 23, 42, 0.12), 0 2px 8px rgba(15, 23, 42, 0.05);
+  --ps-canvas-bg: #eef0f5;
+  color: var(--ps-ink);
+}
+
+/* scrollbars: the dark theme's white-alpha thumbs vanish on light panels */
+.ps-studio-root ::-webkit-scrollbar-thumb,
+.ps-studio-root ::-webkit-scrollbar-thumb:hover {
+  background: #cfd4de;
+  background-clip: padding-box;
+}
+.ps-studio-root * {
+  scrollbar-color: #cfd4de transparent;
+}
+
+/* editor shell + form controls */
+.ps-studio-root .op-root {
+  background: var(--ps-bg);
+  color: var(--ps-ink);
+}
+.ps-studio-root .op-root input:not([type="color"]):not([type="checkbox"]):not([type="radio"]):hover,
+.ps-studio-root .op-root select:hover,
+.ps-studio-root .op-root textarea:hover {
+  border-color: #c9cedb;
+}
+.ps-studio-root .op-root input:not([type="color"]):not([type="checkbox"]):not([type="radio"]):focus-visible,
+.ps-studio-root .op-root select:focus-visible,
+.ps-studio-root .op-root textarea:focus-visible {
+  border-color: var(--ps-primary);
+  box-shadow: 0 0 0 3px var(--ps-primary-soft);
+  background-color: #ffffff;
+}
+.ps-studio-root .op-root select option {
+  background: #ffffff;
+  color: var(--ps-ink);
+}
+
+/* top bar */
+.ps-studio-root .ps-topnav {
+  background: #ffffff;
+  border-bottom: 1px solid var(--ps-line);
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.03);
+}
+.ps-studio-root .ps-topnav-sub {
+  color: var(--ps-primary);
+}
+.ps-studio-root .ps-topnav-btn {
+  background: #ffffff;
+  border-color: var(--ps-line-strong);
+  color: var(--ps-slate);
+}
+.ps-studio-root .ps-topnav-btn:hover {
+  background: var(--ps-surface-muted);
+  border-color: #cdd2dd;
+  color: var(--ps-ink);
+}
+.ps-studio-root .ps-topnav-btn--publish,
+.ps-studio-root .ps-topnav-btn--publish:hover {
+  background: var(--ps-grad-primary);
+  border-color: transparent;
+  color: #ffffff;
+}
+.ps-studio-root .ps-topnav-btn--publish {
+  box-shadow: 0 4px 12px var(--ps-primary-glow);
+}
+.ps-studio-root .ps-topnav-btn--publish:hover {
+  box-shadow: 0 6px 18px rgba(109, 93, 252, 0.36);
+}
+.ps-studio-root .ps-topnav-icon-btn:hover:not(:disabled) {
+  background: var(--ps-surface-muted);
+}
+.ps-studio-root .ps-device-toggle {
+  background: var(--ps-surface-muted);
+  border-color: var(--ps-line);
+  box-shadow: none;
+}
+.ps-studio-root .ps-device-toggle button[data-active="true"] {
+  background: var(--ps-primary);
+  color: #ffffff;
+  box-shadow: 0 2px 6px var(--ps-primary-glow);
+}
+.ps-studio-root .ps-draft-pill {
+  background: var(--ps-surface-muted);
+}
+.ps-studio-root .ps-pill--published {
+  background: var(--ps-success-soft);
+  color: var(--ps-success);
+  border-color: rgba(22, 163, 74, 0.25);
+}
+.ps-studio-root .ps-pill--draft {
+  background: var(--ps-warn-soft);
+  color: var(--ps-warn);
+  border-color: rgba(217, 119, 6, 0.25);
+}
+.ps-studio-root .ps-unsaved-pill {
+  color: var(--ps-warn);
+  background: var(--ps-warn-soft);
+  border-color: rgba(217, 119, 6, 0.25);
+}
+
+/* toasts, slide-over panels, preview overlay */
+.ps-studio-root .ps-slide-panel {
+  box-shadow: -16px 0 40px rgba(15, 23, 42, 0.12);
+}
+
+/* canvas stage */
+.ps-builder-canvas {
+  background: var(--ps-canvas-bg, #eef0f5);
+}

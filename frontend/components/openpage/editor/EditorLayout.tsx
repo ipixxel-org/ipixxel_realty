@@ -33,7 +33,7 @@ function EdgeStrip({
       onClick={open}
       className={`hidden md:flex w-7 h-full items-center justify-center bg-bg-1 ${
         side === "left" ? "border-r" : "border-l"
-      } border-border-default text-text-3 hover:text-green hover:bg-bg-3 transition-colors shrink-0`}
+      } border-border-default text-text-3 hover:text-[#6d5dfc] hover:bg-bg-3 transition-colors shrink-0`}
       title={title}
     >
       <Icon size={14} />
@@ -80,7 +80,7 @@ export function EditorLayout({
       popups={config.popups ?? []}
     >
       <div className="op-root h-full flex flex-col relative min-h-0">
-        <Toaster theme="dark" position="bottom-right" />
+        <Toaster theme="light" position="bottom-right" />
         <div className="flex-1 flex overflow-hidden min-h-0">
           {!previewMode &&
             (leftSidebarOpen ? (

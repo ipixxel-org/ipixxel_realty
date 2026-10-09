@@ -294,6 +294,7 @@ export function Canvas() {
           color: (cssVars as Record<string, string>)["--op-text"] || "var(--color-text-0)",
           backgroundColor: (cssVars as Record<string, string>)["--op-bg"] || "#ffffff",
           borderColor: "var(--color-border-default)",
+          boxShadow: "0 1px 3px rgba(15, 23, 42, 0.06), 0 8px 24px rgba(15, 23, 42, 0.06)",
         } as React.CSSProperties}
         onClick={(e) => {
           if (e.target === e.currentTarget) selectBlock(null);
@@ -349,11 +350,11 @@ export function Canvas() {
   );
 
   return (
-    <div className="flex-1 flex items-start justify-center p-6 overflow-auto relative">
+    <div className="ps-builder-canvas flex-1 flex items-start justify-center p-6 overflow-auto relative">
       <div
-        className="absolute inset-0 opacity-40 pointer-events-none"
+        className="absolute inset-0 opacity-60 pointer-events-none"
         style={{
-          backgroundImage: "radial-gradient(circle, var(--color-bg-3) 1px, transparent 1px)",
+          backgroundImage: "radial-gradient(circle, var(--color-bg-5) 1px, transparent 1px)",
           backgroundSize: "20px 20px",
         }}
       />

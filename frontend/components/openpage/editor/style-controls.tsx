@@ -83,35 +83,35 @@ export function DimensionField({
   placeholder?: string;
 }) {
   return (
-    <div className="space-y-1">
-      <div className="flex items-center justify-between">
-        <label className={LABEL_CLS}>{label}</label>
-        {presets && (
-          <div className="flex items-center gap-1">
-            {presets.map((p) => (
-              <button
-                key={p}
-                type="button"
-                onClick={() => onChange(p)}
-                className={`text-[9px] px-1.5 py-0.5 rounded border transition-all ${
-                  value === p
-                    ? "bg-green/15 border-green/40 text-green font-medium"
-                    : "border-border-default text-text-3 hover:text-text-1 hover:bg-bg-3"
-                }`}
-              >
-                {p}
-              </button>
-            ))}
-          </div>
-        )}
-      </div>
+    <div className="min-w-0 space-y-1">
+      <label className={`${LABEL_CLS} truncate whitespace-nowrap`} title={label}>
+        {label}
+      </label>
       <input
         type="text"
         value={value || ""}
         onChange={(e) => onChange(e.target.value)}
         placeholder={placeholder}
-        className={INPUT_CLS}
+        className={`${INPUT_CLS} min-w-0`}
       />
+      {presets && (
+        <div className="flex flex-wrap items-center gap-1">
+          {presets.map((p) => (
+            <button
+              key={p}
+              type="button"
+              onClick={() => onChange(p)}
+              className={`text-[9.5px] leading-none px-1.5 py-1 rounded-md border whitespace-nowrap transition-all ${
+                value === p
+                  ? "bg-green/15 border-green/40 text-green font-medium"
+                  : "border-border-default text-text-3 hover:text-text-1 hover:bg-bg-3"
+              }`}
+            >
+              {p}
+            </button>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
@@ -303,7 +303,7 @@ export function SpacingControl({
               className="flex items-center gap-1.5 px-2 py-1 rounded-lg border border-border-default bg-bg-2/60"
             >
               <Icon size={11} className="text-text-3 shrink-0" />
-              <span className="text-[10px] text-text-3 w-3">{letter}</span>
+              <span className="text-[10px] text-text-3 w-3 shrink-0">{letter}</span>
               <input
                 type="text"
                 value={({ top, right, bottom, left })[key] || ""}
@@ -311,7 +311,7 @@ export function SpacingControl({
                   onChange({ top, right, bottom, left, [key]: e.target.value })
                 }
                 placeholder="0px"
-                className="w-full bg-transparent text-text-0 text-[11px] font-mono outline-none"
+                className="w-full min-w-0 bg-transparent text-text-0 text-[11px] font-mono outline-none"
               />
             </div>
           ))}

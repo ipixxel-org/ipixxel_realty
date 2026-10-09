@@ -45,11 +45,44 @@ export function formDefFromRecord(rec: LeadFormRecord): BackedForm {
   } as BackedForm;
 }
 
+/** Map a listing to definitions with unique `id`s. Two rows can carry the same
+ *  content.id (e.g. the sample forms seeded twice by concurrent loads); the
+ *  oldest row keeps that id so existing block references still resolve to it,
+ *  and later rows fall back to their own row uuid. */
+export function formDefsFromRecords(records: LeadFormRecord[]): BackedForm[] {
+  const byAge = [...records].sort(
+    (a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime(),
+  );
+  const claimed = new Set<string>();
+  const unique = new Map<string, BackedForm>();
+  for (const rec of byAge) {
+    const def = formDefFromRecord(rec);
+    if (claimed.has(def.id)) def.id = rec.id;
+    claimed.add(def.id);
+    unique.set(rec.id, def);
+  }
+  // Preserve the backend's listing order.
+  return records.map((rec) => unique.get(rec.id)!);
+}
+
+// One in-flight load per scope, so concurrent callers (React StrictMode's
+// double effect, refresh-on-focus) can't each see an empty library and seed
+// the samples twice.
+const pendingLibrary = new Map<FormScope, Promise<BackedForm[]>>();
+
 /** Load the scoped library from the backend; seed samples on first run; then
  *  mirror into localStorage so render paths see the same forms. */
-export async function ensureFormLibrary(scope: FormScope): Promise<BackedForm[]> {
+export function ensureFormLibrary(scope: FormScope): Promise<BackedForm[]> {
+  const pending = pendingLibrary.get(scope);
+  if (pending) return pending;
+  const load = loadFormLibrary(scope).finally(() => pendingLibrary.delete(scope));
+  pendingLibrary.set(scope, load);
+  return load;
+}
+
+async function loadFormLibrary(scope: FormScope): Promise<BackedForm[]> {
   const records = await listForms(scope);
-  let defs = records.map(formDefFromRecord);
+  let defs = formDefsFromRecords(records);
   if (defs.length === 0) {
     const seeded: BackedForm[] = [];
     for (const sample of sampleBuilderForms()) {
@@ -100,11 +133,11 @@ export async function duplicateFormDef(scope: FormScope, id: string): Promise<Ba
 export async function deleteFormDef(scope: FormScope, id: string): Promise<void> {
   await apiDeleteForm(scope, id);
   const records = await listForms(scope);
-  saveFormLibrary(records.map(formDefFromRecord));
+  saveFormLibrary(formDefsFromRecords(records));
 }
 
 async function refreshLibraryCopy(scope: FormScope, upsert: BackedForm): Promise<void> {
-  const all = (await listForms(scope)).map(formDefFromRecord);
+  const all = formDefsFromRecords(await listForms(scope));
   if (!all.some((f) => f.backendId === upsert.backendId)) {
     all.unshift(upsert);
   }

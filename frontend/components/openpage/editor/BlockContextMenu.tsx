@@ -94,7 +94,7 @@ export function BlockContextMenu({
     <div
       ref={menuRef}
       style={{ left: `${clampedX}px`, top: `${clampedY}px` }}
-      className="fixed z-50 w-52 bg-[#1b1f2b] border border-border-default rounded-xl shadow-2xl py-1.5 text-xs text-text-1 backdrop-blur-lg select-none animate-in fade-in duration-100"
+      className="fixed z-50 w-52 bg-bg-1 border border-border-default rounded-xl shadow-[0_12px_32px_rgba(15,23,42,0.14)] py-1.5 text-xs text-text-1 backdrop-blur-lg select-none animate-in fade-in duration-100"
       onClick={(e) => e.stopPropagation()}
     >
       <div className="px-3 py-1.5 text-[10px] font-bold text-text-3 uppercase tracking-wider border-b border-border-subtle flex items-center justify-between">
@@ -110,7 +110,7 @@ export function BlockContextMenu({
           setRightSidebarTab("properties");
           onClose();
         }}
-        className="w-full text-left px-3 py-1.5 flex items-center gap-2.5 hover:bg-bg-3 hover:text-white transition-colors"
+        className="w-full text-left px-3 py-1.5 flex items-center gap-2.5 hover:bg-bg-3 hover:text-text-0 transition-colors"
       >
         <Pencil size={13} className="text-blue-400" />
         <span>Edit Content</span>
@@ -124,7 +124,7 @@ export function BlockContextMenu({
           setRightSidebarTab("style");
           onClose();
         }}
-        className="w-full text-left px-3 py-1.5 flex items-center gap-2.5 hover:bg-bg-3 hover:text-white transition-colors"
+        className="w-full text-left px-3 py-1.5 flex items-center gap-2.5 hover:bg-bg-3 hover:text-text-0 transition-colors"
       >
         <Sliders size={13} className="text-pink-400" />
         <span>Edit Style</span>
@@ -140,7 +140,7 @@ export function BlockContextMenu({
           toast.success("Section duplicated");
           onClose();
         }}
-        className="w-full text-left px-3 py-1.5 flex items-center justify-between hover:bg-bg-3 hover:text-white transition-colors"
+        className="w-full text-left px-3 py-1.5 flex items-center justify-between hover:bg-bg-3 hover:text-text-0 transition-colors"
       >
         <div className="flex items-center gap-2.5">
           <Copy size={13} className="text-emerald-400" />
@@ -157,7 +157,7 @@ export function BlockContextMenu({
           toast.success("Section copied to clipboard");
           onClose();
         }}
-        className="w-full text-left px-3 py-1.5 flex items-center gap-2.5 hover:bg-bg-3 hover:text-white transition-colors"
+        className="w-full text-left px-3 py-1.5 flex items-center gap-2.5 hover:bg-bg-3 hover:text-text-0 transition-colors"
       >
         <Clipboard size={13} className="text-purple-400" />
         <span>Copy Section</span>
@@ -175,7 +175,7 @@ export function BlockContextMenu({
           }
           onClose();
         }}
-        className="w-full text-left px-3 py-1.5 flex items-center gap-2.5 hover:bg-bg-3 hover:text-white transition-colors"
+        className="w-full text-left px-3 py-1.5 flex items-center gap-2.5 hover:bg-bg-3 hover:text-text-0 transition-colors"
       >
         <Sparkles size={13} className="text-amber-400" />
         <span>Copy Style</span>
@@ -192,7 +192,7 @@ export function BlockContextMenu({
           }
           onClose();
         }}
-        className="w-full text-left px-3 py-1.5 flex items-center gap-2.5 hover:bg-bg-3 hover:text-white disabled:opacity-35 disabled:pointer-events-none transition-colors"
+        className="w-full text-left px-3 py-1.5 flex items-center gap-2.5 hover:bg-bg-3 hover:text-text-0 disabled:opacity-35 disabled:pointer-events-none transition-colors"
       >
         <Clipboard size={13} className="text-cyan-400" />
         <span>Paste Style</span>
@@ -211,7 +211,7 @@ export function BlockContextMenu({
           toast.success("Saved as Global Widget");
           onClose();
         }}
-        className="w-full text-left px-3 py-1.5 flex items-center gap-2.5 hover:bg-bg-3 hover:text-white transition-colors"
+        className="w-full text-left px-3 py-1.5 flex items-center gap-2.5 hover:bg-bg-3 hover:text-text-0 transition-colors"
       >
         <Globe size={13} className="text-indigo-400" />
         <span>Save as Global Widget</span>
@@ -230,7 +230,7 @@ export function BlockContextMenu({
           }
           onClose();
         }}
-        className="w-full text-left px-3 py-1.5 flex items-center justify-between hover:bg-bg-3 hover:text-white disabled:opacity-35 disabled:pointer-events-none transition-colors"
+        className="w-full text-left px-3 py-1.5 flex items-center justify-between hover:bg-bg-3 hover:text-text-0 disabled:opacity-35 disabled:pointer-events-none transition-colors"
       >
         <div className="flex items-center gap-2.5">
           <ChevronUp size={13} />
@@ -250,7 +250,7 @@ export function BlockContextMenu({
           }
           onClose();
         }}
-        className="w-full text-left px-3 py-1.5 flex items-center justify-between hover:bg-bg-3 hover:text-white disabled:opacity-35 disabled:pointer-events-none transition-colors"
+        className="w-full text-left px-3 py-1.5 flex items-center justify-between hover:bg-bg-3 hover:text-text-0 disabled:opacity-35 disabled:pointer-events-none transition-colors"
       >
         <div className="flex items-center gap-2.5">
           <ChevronDown size={13} />
@@ -270,7 +270,7 @@ export function BlockContextMenu({
           );
           onClose();
         }}
-        className="w-full text-left px-3 py-1.5 flex items-center gap-2.5 hover:bg-bg-3 hover:text-white transition-colors"
+        className="w-full text-left px-3 py-1.5 flex items-center gap-2.5 hover:bg-bg-3 hover:text-text-0 transition-colors"
       >
         <EyeOff size={13} className="text-amber-400" />
         <span>Hide on {viewport}</span>
