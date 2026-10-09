@@ -700,7 +700,7 @@ export default function SuperAdminDashboardPage() {
               <Icon name="puzzle" size={15} /> Template Marketplace Studio
             </Link>
             <Link
-              href="/admin-console/email"
+              href="/admin-console/integrations/smtp"
               style={{
                 display: "flex",
                 alignItems: "center",

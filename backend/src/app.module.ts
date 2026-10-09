@@ -51,6 +51,7 @@ import { OrgReportsModule } from './modules/org-reports/org-reports.module';
 import { AttributionLabelsModule } from './modules/attribution-labels/attribution-labels.module';
 import { MetaLeadsModule } from './modules/meta-leads/meta-leads.module';
 import { MarketingModule } from './modules/marketing/marketing.module';
+import { IntegrationsModule } from './modules/integrations/integrations.module';
 
 @Module({
   imports: [
@@ -102,6 +103,7 @@ import { MarketingModule } from './modules/marketing/marketing.module';
     AttributionLabelsModule,
     MetaLeadsModule,
     MarketingModule,
+    IntegrationsModule,
   ],
   controllers: [AppController],
   providers: [AppService],
