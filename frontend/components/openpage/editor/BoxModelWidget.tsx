@@ -62,100 +62,103 @@ export function BoxModelWidget({
     }
   };
 
+  const marginInput =
+    "w-full min-w-0 h-6 px-0.5 text-center rounded-md bg-bg-1 border border-amber-500/30 hover:border-amber-500 focus:border-amber-500 focus:shadow-[0_0_0_2px_rgba(245,158,11,0.15)] text-amber-700 placeholder:text-amber-700/40 text-[10px] font-mono outline-none transition-colors";
+  const paddingInput =
+    "w-full min-w-0 h-6 px-0.5 text-center rounded-md bg-bg-1 border border-emerald-500/30 hover:border-emerald-500 focus:border-emerald-500 focus:shadow-[0_0_0_2px_rgba(16,185,129,0.15)] text-emerald-700 placeholder:text-emerald-700/40 text-[10px] font-mono outline-none transition-colors";
+
   return (
     <div className="space-y-2">
-      <div className="flex items-center justify-between text-[10px] text-text-3 font-semibold uppercase tracking-wider">
-        <span>Box Model (Margin & Padding)</span>
-        <div className="flex items-center gap-2">
-          <button
-            type="button"
-            onClick={() => {
-              onChangeMargin({ top: "", right: "", bottom: "", left: "" });
-              onChangePadding({ top: "", right: "", bottom: "", left: "" });
-            }}
-            className="text-[9.5px] text-text-3 hover:text-white flex items-center gap-1 transition-colors"
-            title="Reset All Spacing"
-          >
-            <RotateCcw size={10} /> Reset
-          </button>
-        </div>
+      <div className="flex items-center justify-between gap-2 text-[10px] text-text-3 font-semibold uppercase tracking-wider">
+        <span className="truncate whitespace-nowrap">Margin & Padding</span>
+        <button
+          type="button"
+          onClick={() => {
+            onChangeMargin({ top: "", right: "", bottom: "", left: "" });
+            onChangePadding({ top: "", right: "", bottom: "", left: "" });
+          }}
+          className="shrink-0 inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md text-[9.5px] normal-case tracking-normal text-text-3 hover:text-text-0 hover:bg-bg-3 transition-colors"
+          title="Reset All Spacing"
+        >
+          <RotateCcw size={10} /> Reset
+        </button>
       </div>
 
       {/* Visual CSS Box Diagram */}
-      <div className="relative p-2.5 rounded-xl border border-border-default bg-[#151921] select-none text-[10px] font-mono">
+      <div className="rounded-xl border border-border-default bg-bg-2/60 p-1.5 select-none">
         {/* Margin Box (Outer) */}
-        <div className="relative border border-dashed border-amber-500/40 rounded-lg p-2 bg-amber-500/5">
-          <div className="absolute top-1 left-2 flex items-center gap-1 text-[9px] font-sans font-bold text-amber-400 uppercase tracking-widest">
+        <div className="rounded-lg border border-dashed border-amber-500/50 bg-amber-500/[0.04] px-1.5 pt-1 pb-1.5">
+          <div className="flex items-center gap-1 h-5 text-[9px] font-bold text-amber-600 uppercase tracking-widest">
             <span>Margin</span>
             <button
               type="button"
               onClick={() => setMarginLinked(!marginLinked)}
-              className="p-0.5 rounded hover:bg-amber-500/20 text-amber-400/80 hover:text-amber-400"
+              className={`p-0.5 rounded hover:bg-amber-500/15 ${marginLinked ? "text-amber-600" : "text-amber-600/60 hover:text-amber-600"}`}
               title={marginLinked ? "Unlink margin sides" : "Link all margin sides"}
             >
               {marginLinked ? <Link2 size={10} /> : <Link2Off size={10} />}
             </button>
           </div>
 
-          {/* Margin Top */}
-          <div className="flex justify-center mb-1">
-            <input
-              type="text"
-              value={cleanVal(marginTop)}
-              onChange={(e) => handleMarginChange("top", e.target.value)}
-              placeholder="0px"
-              className="w-14 text-center py-0.5 bg-bg-2 border border-border-default hover:border-amber-400 focus:border-amber-400 rounded text-amber-300 text-[10px] outline-none"
-            />
-          </div>
+          <div className="grid grid-cols-[minmax(0,1fr)_minmax(0,2.8fr)_minmax(0,1fr)] items-center gap-1">
+            {/* Margin Top */}
+            <div className="col-start-2 flex justify-center">
+              <input
+                type="text"
+                value={cleanVal(marginTop)}
+                onChange={(e) => handleMarginChange("top", e.target.value)}
+                placeholder="0px"
+                className={`${marginInput} max-w-[56px]`}
+              />
+            </div>
 
-          <div className="flex items-center justify-between gap-1">
             {/* Margin Left */}
             <input
               type="text"
               value={cleanVal(marginLeft)}
               onChange={(e) => handleMarginChange("left", e.target.value)}
               placeholder="auto"
-              className="w-12 text-center py-0.5 bg-bg-2 border border-border-default hover:border-amber-400 focus:border-amber-400 rounded text-amber-300 text-[10px] outline-none"
+              className={`${marginInput} col-start-1`}
             />
 
             {/* Padding Box (Inner) */}
-            <div className="flex-1 relative border border-dashed border-emerald-500/40 rounded-md p-2 bg-emerald-500/5">
-              <div className="absolute top-1 left-2 flex items-center gap-1 text-[9px] font-sans font-bold text-emerald-400 uppercase tracking-widest">
+            <div className="min-w-0 rounded-md border border-dashed border-emerald-500/50 bg-emerald-500/[0.05] px-1 pt-0.5 pb-1">
+              <div className="flex items-center gap-1 h-5 text-[9px] font-bold text-emerald-600 uppercase tracking-widest">
                 <span>Padding</span>
                 <button
                   type="button"
                   onClick={() => setPaddingLinked(!paddingLinked)}
-                  className="p-0.5 rounded hover:bg-emerald-500/20 text-emerald-400/80 hover:text-emerald-400"
+                  className={`p-0.5 rounded hover:bg-emerald-500/15 ${paddingLinked ? "text-emerald-600" : "text-emerald-600/60 hover:text-emerald-600"}`}
                   title={paddingLinked ? "Unlink padding sides" : "Link all padding sides"}
                 >
                   {paddingLinked ? <Link2 size={10} /> : <Link2Off size={10} />}
                 </button>
               </div>
 
-              {/* Padding Top */}
-              <div className="flex justify-center mb-1">
-                <input
-                  type="text"
-                  value={cleanVal(paddingTop)}
-                  onChange={(e) => handlePaddingChange("top", e.target.value)}
-                  placeholder="0px"
-                  className="w-14 text-center py-0.5 bg-bg-2 border border-border-default hover:border-emerald-400 focus:border-emerald-400 rounded text-emerald-300 text-[10px] outline-none"
-                />
-              </div>
+              <div className="grid grid-cols-[minmax(0,1fr)_minmax(0,1.2fr)_minmax(0,1fr)] items-center gap-1">
+                {/* Padding Top */}
+                <div className="col-start-2 flex justify-center">
+                  <input
+                    type="text"
+                    value={cleanVal(paddingTop)}
+                    onChange={(e) => handlePaddingChange("top", e.target.value)}
+                    placeholder="0px"
+                    className={paddingInput}
+                  />
+                </div>
 
-              <div className="flex items-center justify-between gap-1">
                 {/* Padding Left */}
                 <input
                   type="text"
                   value={cleanVal(paddingLeft)}
                   onChange={(e) => handlePaddingChange("left", e.target.value)}
                   placeholder="0px"
-                  className="w-12 text-center py-0.5 bg-bg-2 border border-border-default hover:border-emerald-400 focus:border-emerald-400 rounded text-emerald-300 text-[10px] outline-none"
+                  className={`${paddingInput} col-start-1`}
                 />
 
                 {/* Content Center */}
-                <div className="px-3 py-2 rounded bg-blue-500/10 border border-blue-500/30 text-blue-300 font-sans text-center text-[9px] uppercase tracking-wider font-semibold">
-                  Content
+                <div className="h-6 min-w-0 flex items-center justify-center rounded bg-blue-500/10 border border-blue-500/30 text-blue-600 text-[8px] uppercase tracking-wide font-semibold overflow-hidden">
+                  <span className="truncate px-0.5">Content</span>
                 </div>
 
                 {/* Padding Right */}
@@ -164,19 +167,19 @@ export function BoxModelWidget({
                   value={cleanVal(paddingRight)}
                   onChange={(e) => handlePaddingChange("right", e.target.value)}
                   placeholder="0px"
-                  className="w-12 text-center py-0.5 bg-bg-2 border border-border-default hover:border-emerald-400 focus:border-emerald-400 rounded text-emerald-300 text-[10px] outline-none"
+                  className={paddingInput}
                 />
-              </div>
 
-              {/* Padding Bottom */}
-              <div className="flex justify-center mt-1">
-                <input
-                  type="text"
-                  value={cleanVal(paddingBottom)}
-                  onChange={(e) => handlePaddingChange("bottom", e.target.value)}
-                  placeholder="0px"
-                  className="w-14 text-center py-0.5 bg-bg-2 border border-border-default hover:border-emerald-400 focus:border-emerald-400 rounded text-emerald-300 text-[10px] outline-none"
-                />
+                {/* Padding Bottom */}
+                <div className="col-start-2 flex justify-center">
+                  <input
+                    type="text"
+                    value={cleanVal(paddingBottom)}
+                    onChange={(e) => handlePaddingChange("bottom", e.target.value)}
+                    placeholder="0px"
+                    className={paddingInput}
+                  />
+                </div>
               </div>
             </div>
 
@@ -186,19 +189,19 @@ export function BoxModelWidget({
               value={cleanVal(marginRight)}
               onChange={(e) => handleMarginChange("right", e.target.value)}
               placeholder="auto"
-              className="w-12 text-center py-0.5 bg-bg-2 border border-border-default hover:border-amber-400 focus:border-amber-400 rounded text-amber-300 text-[10px] outline-none"
+              className={marginInput}
             />
-          </div>
 
-          {/* Margin Bottom */}
-          <div className="flex justify-center mt-1">
-            <input
-              type="text"
-              value={cleanVal(marginBottom)}
-              onChange={(e) => handleMarginChange("bottom", e.target.value)}
-              placeholder="0px"
-              className="w-14 text-center py-0.5 bg-bg-2 border border-border-default hover:border-amber-400 focus:border-amber-400 rounded text-amber-300 text-[10px] outline-none"
-            />
+            {/* Margin Bottom */}
+            <div className="col-start-2 flex justify-center">
+              <input
+                type="text"
+                value={cleanVal(marginBottom)}
+                onChange={(e) => handleMarginChange("bottom", e.target.value)}
+                placeholder="0px"
+                className={`${marginInput} max-w-[56px]`}
+              />
+            </div>
           </div>
         </div>
       </div>

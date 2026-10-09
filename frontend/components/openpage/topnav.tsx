@@ -2,12 +2,13 @@
 
 import type { ReactNode } from "react";
 import type * as React from "react";
-import { useEffect, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import Link from "next/link";
 import {
   ArrowLeft,
   Bell,
   Check,
+  CheckCircle2,
   ChevronDown,
   Clock,
   HelpCircle,
@@ -26,6 +27,7 @@ import {
   Undo2,
   User,
   Eye,
+  FileText,
 } from "lucide-react";
 import { useEditorStore, type Viewport } from "@/components/openpage/store/editorStore";
 import type { ModuleKey } from "@/lib/openpage/types";
@@ -183,6 +185,29 @@ export function TopNav({
   const [profileOpen, setProfileOpen] = useState(false);
   const [moduleMenuOpen, setModuleMenuOpen] = useState(false);
   const published = pageStatus === "published";
+  const headerRef = useRef<HTMLElement>(null);
+  const leftRef = useRef<HTMLDivElement>(null);
+
+  // How much the bar must condense depends on the role (Super Admin gets
+  // Unpublish) and page status, not just viewport width — so measure instead
+  // of guessing breakpoints. Each level hides one more label; we pick the
+  // first level at which the left group stops spilling into the device toggle.
+  // Done on the DOM directly so it settles in one synchronous pass.
+  useLayoutEffect(() => {
+    const header = headerRef.current;
+    const left = leftRef.current;
+    if (!header || !left) return;
+    const fit = () => {
+      for (let level = 0; level <= MAX_COMPACT_LEVEL; level++) {
+        header.dataset.compact = String(level);
+        if (left.scrollWidth <= left.clientWidth + 1) break;
+      }
+    };
+    fit();
+    const observer = new ResizeObserver(fit);
+    observer.observe(header);
+    return () => observer.disconnect();
+  });
 
   useEffect(() => {
     const handleOutsideClick = (event: MouseEvent) => {
@@ -199,9 +224,9 @@ export function TopNav({
   }, []);
 
   return (
-    <header className="ps-topnav ps-glass">
+    <header ref={headerRef} className="ps-topnav ps-glass">
       {/* Logo & Page Breadcrumbs */}
-      <div className="ps-topnav-left">
+      <div ref={leftRef} className="ps-topnav-left">
         {onMenu ? (
           <button
             type="button"
@@ -248,6 +273,7 @@ export function TopNav({
         >
           <OpenPageMark size={28} />
           <div
+            className="ps-topnav-brand-text"
             style={{
               display: "flex",
               flexDirection: "column",
@@ -264,14 +290,7 @@ export function TopNav({
           style={{ height: 20, margin: "0 2px" }}
         />
 
-        <div
-          style={{
-            display: "flex",
-            alignItems: "center",
-            gap: 8,
-            minWidth: 0,
-          }}
-        >
+        <div className="ps-topnav-meta">
           {module !== "builder" && setModule ? (
             <button
               type="button"
@@ -302,40 +321,19 @@ export function TopNav({
           {unsaved && !pageStatus ? <span className="ps-unsaved-pill">Unsaved</span> : null}
 
           {onSwitchCompanion || companionPage ? (
-            <div
-              style={{
-                display: "inline-flex",
-                alignItems: "center",
-                background: "rgba(255, 255, 255, 0.07)",
-                borderRadius: 8,
-                padding: 2,
-                border: "1px solid rgba(255, 255, 255, 0.12)",
-                marginLeft: 4,
-              }}
-            >
+            <div className="ps-companion-toggle" role="group" aria-label="Page being edited">
               <button
                 type="button"
                 onClick={() => {
                   if (pageType === "thank-you") onSwitchCompanion?.();
                 }}
                 disabled={isSwitchingCompanion}
-                style={{
-                  display: "inline-flex",
-                  alignItems: "center",
-                  gap: 5,
-                  padding: "4px 9px",
-                  fontSize: 11.5,
-                  fontWeight: 600,
-                  borderRadius: 6,
-                  border: "none",
-                  cursor: pageType === "thank-you" ? "pointer" : "default",
-                  background: pageType !== "thank-you" ? "var(--ps-primary, #6366f1)" : "transparent",
-                  color: pageType !== "thank-you" ? "#ffffff" : "var(--color-text-3, #94a3b8)",
-                  transition: "all 0.15s ease",
-                }}
+                className="ps-companion-btn"
+                data-active={pageType !== "thank-you"}
                 title={pageType === "thank-you" ? "Switch to editing Landing Page" : "Currently editing Landing Page"}
               >
-                📄 Landing Page
+                <FileText size={13} />
+                <span className="ps-companion-label">Landing Page</span>
               </button>
               <button
                 type="button"
@@ -343,23 +341,12 @@ export function TopNav({
                   if (pageType !== "thank-you") onSwitchCompanion?.();
                 }}
                 disabled={isSwitchingCompanion}
-                style={{
-                  display: "inline-flex",
-                  alignItems: "center",
-                  gap: 5,
-                  padding: "4px 9px",
-                  fontSize: 11.5,
-                  fontWeight: 600,
-                  borderRadius: 6,
-                  border: "none",
-                  cursor: pageType !== "thank-you" ? "pointer" : "default",
-                  background: pageType === "thank-you" ? "var(--ps-primary, #6366f1)" : "transparent",
-                  color: pageType === "thank-you" ? "#ffffff" : "var(--color-text-3, #94a3b8)",
-                  transition: "all 0.15s ease",
-                }}
+                className="ps-companion-btn"
+                data-active={pageType === "thank-you"}
                 title={pageType !== "thank-you" ? "Switch to editing Thank You Page" : "Currently editing Thank You Page"}
               >
-                ✓ Thank You Page
+                <CheckCircle2 size={13} />
+                <span className="ps-companion-label">Thank You Page</span>
               </button>
             </div>
           ) : null}
@@ -410,8 +397,8 @@ export function TopNav({
                             padding: "8px 10px",
                             borderRadius: 10,
                             border: "none",
-                            background: active ? "rgba(109, 93, 252, 0.22)" : "transparent",
-                            color: active ? "#c4bfff" : "#ffffff",
+                            background: active ? "var(--ps-primary-soft)" : "transparent",
+                            color: active ? "var(--ps-primary)" : "var(--ps-ink)",
                             cursor: "pointer",
                             textAlign: "left",
                           }}
@@ -448,7 +435,7 @@ export function TopNav({
                               {m.desc}
                             </div>
                           </div>
-                          {active ? <Check size={16} style={{ color: "#9690ff", flexShrink: 0 }} /> : null}
+                          {active ? <Check size={16} style={{ color: "var(--ps-primary)", flexShrink: 0 }} /> : null}
                         </button>
                       );
                     })}
@@ -516,14 +503,7 @@ export function TopNav({
           actions
         )}
 
-        <div
-          style={{
-            width: 1,
-            height: 20,
-            background: "var(--ps-line-strong)",
-            margin: "0 2px",
-          }}
-        />
+        <div className="ps-vdiv" />
 
         {/* Notification */}
         <button
@@ -571,7 +551,7 @@ export function TopNav({
             }}
             onMouseEnter={(e) =>
               ((e.currentTarget as HTMLButtonElement).style.background =
-                "rgba(255,255,255,0.06)")
+                "var(--ps-surface-muted)")
             }
             onMouseLeave={(e) =>
               ((e.currentTarget as HTMLButtonElement).style.background =
@@ -583,8 +563,8 @@ export function TopNav({
                 width: 30,
                 height: 30,
                 borderRadius: 9,
-                background: "linear-gradient(135deg,#111827,#4b5563)",
-                color: "#fff",
+                background: "var(--ps-primary-soft)",
+                color: "var(--ps-primary)",
                 display: "inline-flex",
                 alignItems: "center",
                 justifyContent: "center",
@@ -650,7 +630,7 @@ export function TopNav({
                 }}
                 onMouseEnter={(e) =>
                   ((e.currentTarget as HTMLButtonElement).style.background =
-                    "rgba(255,255,255,0.05)")
+                    "var(--ps-surface-muted)")
                 }
                 onMouseLeave={(e) =>
                   ((e.currentTarget as HTMLButtonElement).style.background =
@@ -663,7 +643,7 @@ export function TopNav({
                 type="button"
                 onClick={() => setProfileOpen(false)}
                 style={{ width: "100%", display: "flex", alignItems: "center", gap: 9, padding: "8px 10px", borderRadius: 8, border: "none", background: "transparent", cursor: "pointer", fontSize: 12.5, color: "var(--ps-slate)", textAlign: "left" }}
-                onMouseEnter={(e) => ((e.currentTarget as HTMLButtonElement).style.background = "rgba(255,255,255,0.05)")}
+                onMouseEnter={(e) => ((e.currentTarget as HTMLButtonElement).style.background = "var(--ps-surface-muted)")}
                 onMouseLeave={(e) => ((e.currentTarget as HTMLButtonElement).style.background = "transparent")}
               >
                 <Users size={15} /> Team & Roles
@@ -689,7 +669,7 @@ export function TopNav({
                   }}
                   onMouseEnter={(e) =>
                     ((e.currentTarget as HTMLAnchorElement).style.background =
-                      "rgba(255,255,255,0.05)")
+                      "var(--ps-surface-muted)")
                   }
                   onMouseLeave={(e) =>
                     ((e.currentTarget as HTMLAnchorElement).style.background =
@@ -718,7 +698,7 @@ export function TopNav({
                   }}
                   onMouseEnter={(e) =>
                     ((e.currentTarget as HTMLButtonElement).style.background =
-                      "rgba(255,255,255,0.05)")
+                      "var(--ps-surface-muted)")
                   }
                   onMouseLeave={(e) =>
                     ((e.currentTarget as HTMLButtonElement).style.background =
@@ -735,7 +715,7 @@ export function TopNav({
                   setProfileOpen(false);
                 }}
                 style={{ width: "100%", display: "flex", alignItems: "center", gap: 9, padding: "8px 10px", borderRadius: 8, border: "none", background: "transparent", cursor: "pointer", fontSize: 12.5, color: "var(--ps-slate)", textAlign: "left" }}
-                onMouseEnter={(e) => ((e.currentTarget as HTMLButtonElement).style.background = "rgba(255,255,255,0.05)")}
+                onMouseEnter={(e) => ((e.currentTarget as HTMLButtonElement).style.background = "var(--ps-surface-muted)")}
                 onMouseLeave={(e) => ((e.currentTarget as HTMLButtonElement).style.background = "transparent")}
               >
                 {dark ? <Sun size={15} /> : <Moon size={15} />} {dark ? "Light mode" : "Dark mode"}
@@ -786,6 +766,9 @@ export function TopNav({
     </header>
   );
 }
+
+/** See the `data-compact` rules in openpage.css. */
+const MAX_COMPACT_LEVEL = 3;
 
 export const MODULE_LABELS: Record<ModuleKey, string> = {
   builder: "Builder",

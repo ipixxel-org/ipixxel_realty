@@ -2,7 +2,7 @@
 
 import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
 import { listForms, type FormScope } from "@/lib/api";
-import { formDefFromRecord, type BackedForm } from "@/lib/openpage/forms-backend";
+import { formDefsFromRecords, type BackedForm } from "@/lib/openpage/forms-backend";
 import { saveFormLibrary } from "@/lib/openpage/forms-store";
 
 /** The forms listed under Lead Forms for the current builder session — the
@@ -25,7 +25,7 @@ export function BuilderFormScopeProvider({
       listForms(scope)
         .then((records) => {
           if (cancelled) return;
-          const defs = records.map(formDefFromRecord);
+          const defs = formDefsFromRecords(records);
           // Keep the render-path cache in sync with what the pickers show.
           saveFormLibrary(defs);
           setForms(defs);

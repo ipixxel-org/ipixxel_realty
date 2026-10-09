@@ -229,7 +229,7 @@ export function BackgroundControls({
             <button
               type="button"
               onClick={() => onChange({ overlayColor: undefined, overlayOpacity: undefined })}
-              className="text-[9px] text-text-3 hover:text-white"
+              className="text-[9px] text-text-3 hover:text-text-0"
             >
               Clear
             </button>

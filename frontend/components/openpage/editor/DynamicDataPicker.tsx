@@ -43,7 +43,7 @@ export function DynamicDataPicker({ onSelectTag }: DynamicDataPickerProps) {
       {isOpen && (
         <>
           <div className="fixed inset-0 z-40" onClick={() => setIsOpen(false)} />
-          <div className="absolute right-0 top-full mt-1 w-64 bg-[#1a1e27] border border-border-default rounded-xl shadow-2xl p-2 z-50 text-xs animate-in fade-in select-none">
+          <div className="absolute right-0 top-full mt-1 w-64 bg-bg-1 border border-border-default rounded-xl shadow-[0_12px_32px_rgba(15,23,42,0.14)] p-2 z-50 text-xs animate-in fade-in select-none">
             <div className="flex items-center gap-1.5 px-2 py-1 text-[10px] font-bold text-amber-400 uppercase tracking-wider border-b border-border-subtle mb-1">
               <Database size={11} />
               <span>Real Estate Dynamic Data</span>
@@ -71,7 +71,7 @@ export function DynamicDataPicker({ onSelectTag }: DynamicDataPickerProps) {
                           }}
                           className="w-full text-left px-2 py-1 rounded hover:bg-bg-3 flex items-center justify-between group transition-colors"
                         >
-                          <span className="text-[11px] text-text-1 group-hover:text-white">
+                          <span className="text-[11px] text-text-1 group-hover:text-text-0">
                             {item.label}
                           </span>
                           <span className="text-[10px] font-mono text-amber-400/80 max-w-[100px] truncate">
