@@ -4,7 +4,6 @@ import type { Metadata } from "next";
 // import { Switch } from "@/components/superadmin/switch";
 import { BillingExpirySettings } from "@/components/superadmin/billing-expiry-settings";
 import { GlobalBrandingSettings } from "@/components/superadmin/global-branding-settings";
-import { GoogleAuthSettings } from "@/components/superadmin/google-auth-settings";
 import { Icon } from "@/components/icons";
 
 export const metadata: Metadata = {
@@ -22,13 +21,7 @@ export default function SuperAdminSettingsPage() {
         </div>
       </div>
 
-      <h2 style={{ margin: "16px 0 6px" }}>Google Authentication &amp; Registration</h2>
-      <div className="sub muted reveal" style={{ marginBottom: 16 }}>
-        Configure Google OAuth credentials for one-click login and organisation registration without .env variables.
-      </div>
-      <GoogleAuthSettings />
-
-      <h2 style={{ margin: "24px 0 6px" }}>Global Theme &amp; Branding</h2>
+      <h2 style={{ margin: "16px 0 6px" }}>Global Theme &amp; Branding</h2>
       <div className="sub muted reveal" style={{ marginBottom: 16 }}>
         Configure the primary and secondary colors used across all platform applications, portals, and templates.
       </div>
@@ -118,7 +111,7 @@ export default function SuperAdminSettingsPage() {
                     {it.emoji}
                   </span>
                   {it.name === "SMTP Email" ? (
-                    <a href="/admin-console/email" className="btn btn-ghost btn-sm" style={{ padding: "4px 10px", fontSize: 12 }}>
+                    <a href="/admin-console/integrations/smtp" className="btn btn-ghost btn-sm" style={{ padding: "4px 10px", fontSize: 12 }}>
                       Configure →
                     </a>
                   ) : (
@@ -135,7 +128,7 @@ export default function SuperAdminSettingsPage() {
                     {it.badgeTxt}
                   </span>
                   {it.name === "SMTP Email" && (
-                    <a href="/admin-console/email" style={{ fontSize: 12, color: "var(--brand, #6366f1)", fontWeight: 600, textDecoration: "none" }}>
+                    <a href="/admin-console/integrations/smtp" style={{ fontSize: 12, color: "var(--brand, #6366f1)", fontWeight: 600, textDecoration: "none" }}>
                       Manage SMTP
                     </a>
                   )}

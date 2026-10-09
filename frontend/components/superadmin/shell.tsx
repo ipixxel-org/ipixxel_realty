@@ -8,6 +8,7 @@ import type { PermissionAction, SessionUser } from "@/lib/types";
 import { apiFetch } from "@/lib/api";
 import { Icon } from "@/components/icons";
 import { BuildingLogoIcon } from "@/components/brand-logo";
+import { INTEGRATIONS, INTEGRATIONS_HREF } from "@/lib/integrations";
 import { NotificationsBell } from "./notifications-bell";
 
 type NavItem = {
@@ -36,7 +37,7 @@ export const NAV_MODULE: Record<string, string> = {
   "/admin-console/leads": "admin_leads",
   "/admin-console/org-domains": "admin_domains",
   "/admin-console/subscriptions": "admin_subscriptions",
-  "/admin-console/email": "admin_email",
+  // "/admin-console/integrations" has no single module — see canAccessAdminNavItem.
   "/admin-console/marketing": "admin_settings",
   "/admin-console/attribution": "admin_settings",
   "/admin-console/audit-logs": "admin_audit_logs",
@@ -136,7 +137,7 @@ export const NAV_GROUPS: NavGroup[] = [
   {
     grp: "System",
     items: [
-      { href: "/admin-console/email", icon: "mail", label: "Email & SMTP", tip: "Email & SMTP Management", activeMatch: ["/admin-console/email"] },
+      { href: INTEGRATIONS_HREF, icon: "integrations", label: "Integrations", tip: "Email, social login and payment integrations", activeMatch: [INTEGRATIONS_HREF] },
       { href: "/admin-console/audit-logs", icon: "shield", label: "Audit Logs", tip: "Audit Logs", activeMatch: ["/admin-console/audit-logs"] },
       { href: "/admin-console/support", icon: "flag", label: "Support Management", tip: "Every organisation's support tickets", activeMatch: ["/admin-console/support"] },
       { href: "/admin-console/settings", icon: "settings", label: "Settings", tip: "Settings", activeMatch: ["/admin-console/settings"] },
@@ -149,22 +150,32 @@ export const NAV_GROUPS: NavGroup[] = [
  * item" — shared by the sidebar filter and by pages that must redirect away
  * when the signed-in user lacks view access (e.g. the dashboard landing page).
  */
+/** Full Super Admin / unrestricted platform users bypass per-module checks. */
+export function isUnrestrictedPlatformUser(user: AdminNavUser): boolean {
+  return Boolean(
+    user &&
+      !user.org_id &&
+      (user.platformUnrestricted ||
+        user.roleKeys?.includes("super_admin") ||
+        // Stale session before refreshPermissions: treat console Super Admin as full access.
+        (user.role === "super_admin" &&
+          (!user.permissions || Object.keys(user.permissions).length === 0))),
+  );
+}
+
 export function canAccessAdminNavItem(
   item: NavItem,
   user: AdminNavUser,
   hasPermission: (module: string, action: PermissionAction) => boolean,
 ): boolean {
   // Full Super Admin / unrestricted platform users see every item.
-  if (
-    user &&
-    !user.org_id &&
-    (user.platformUnrestricted ||
-      user.roleKeys?.includes("super_admin") ||
-      // Stale session before refreshPermissions: treat console Super Admin as full access.
-      (user.role === "super_admin" &&
-        (!user.permissions || Object.keys(user.permissions).length === 0)))
-  ) {
+  if (isUnrestrictedPlatformUser(user)) {
     return true;
+  }
+  // Integrations groups pages gated by different modules (SMTP → admin_email,
+  // Social Login → admin_settings); show it if any live integration is viewable.
+  if (item.href === INTEGRATIONS_HREF) {
+    return INTEGRATIONS.some((it) => !it.comingSoon && hasPermission(it.permission, "view"));
   }
   // Form Builder shares Templates access — never hide it when Templates is visible.
   if (item.href === "/admin-console/forms") {
@@ -204,7 +215,7 @@ const CRUMB_MAP: Record<string, string> = {
   "/org-builder": "Builder",
   "/admin-console/org-domains": "Domains",
   "/admin-console/subscriptions": "Subscriptions",
-  "/admin-console/email": "Email & SMTP",
+  "/admin-console/integrations": "Integrations",
   "/admin-console/marketing": "Marketing",
   "/admin-console/attribution": "Lead Attribution",
   "/admin-console/audit-logs": "Audit Logs",
@@ -391,7 +402,7 @@ export function SuperAdminShell({ children }: { children: ReactNode }) {
           </div>
           <div className="tb-right" style={{ position: "relative", marginLeft: "auto" }}>
             <NotificationsBell accessToken={accessToken} />
-            <Link href="/admin-console/email" className="icon-btn" title="Email & SMTP Settings">
+            <Link href="/admin-console/integrations/smtp" className="icon-btn" title="Email & SMTP Settings">
               <Icon name="mail" size={15} />
             </Link>
             <Link href="/admin-console/settings" className="icon-btn" title="Platform Settings">
@@ -452,7 +463,7 @@ export function SuperAdminShell({ children }: { children: ReactNode }) {
                   </Link>
 
                   <Link
-                    href="/admin-console/email"
+                    href="/admin-console/integrations/smtp"
                     onClick={() => setProfileOpen(false)}
                     style={{
                       display: "flex",

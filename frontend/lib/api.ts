@@ -1294,6 +1294,14 @@ export async function getEmailStats(): Promise<EmailStatsResponse> {
   return apiFetch<EmailStatsResponse>("/admin/email/stats");
 }
 
+// --- Super Admin Integrations (landing grid status; booleans only) ---
+
+export async function getIntegrationsStatus(): Promise<
+  import("./integrations").IntegrationStatus[]
+> {
+  return apiFetch("/admin/integrations/status");
+}
+
 export async function getOrgSmtpConfig(): Promise<SmtpConfig> {
   return apiFetch<SmtpConfig>("/org/email/config");
 }
