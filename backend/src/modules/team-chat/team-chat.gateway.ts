@@ -219,7 +219,7 @@ export class TeamChatGateway
         err instanceof Error ? err.message : 'Access denied',
       );
     }
-    if (!(await hasOrgPermission(this.prisma, user, 'team_chat', 'view'))) {
+    if (!(await hasOrgPermission(this.prisma, user, 'team_chat', 'view', true))) {
       throw new ChatAuthError(
         'NO_CHAT_ACCESS',
         "You don't have access to Team Chat",

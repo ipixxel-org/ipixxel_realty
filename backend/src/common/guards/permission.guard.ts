@@ -138,7 +138,8 @@ export async function assertOrgPermission(
  * Batch form of hasOrgPermission: which of `userIds` (members of `orgId`)
  * hold (module, action). Same tiers as assertOrgPermission — per-user
  * override, then org role row, then the Super Admin system row, then the
- * baked-in role default; admin/super_admin unrestricted — in three queries
+ * baked-in role default; super_admin unrestricted, admin too unless
+ * `enforceForOrgAdmin` — in three queries
  * for any number of users. Users outside the org are never returned.
  */
 export async function usersWithOrgPermission(
@@ -150,6 +151,7 @@ export async function usersWithOrgPermission(
   userIds: string[],
   module: string,
   action: PermissionAction,
+  enforceForOrgAdmin = false,
 ): Promise<Set<string>> {
   const allowed = new Set<string>();
   if (userIds.length === 0) return allowed;
@@ -186,7 +188,7 @@ export async function usersWithOrgPermission(
 
   for (const user of users) {
     const roleKeys = user.userRoles.map((ur) => ur.role.key);
-    if (isUnrestricted(roleKeys, false)) {
+    if (isUnrestricted(roleKeys, enforceForOrgAdmin)) {
       allowed.add(user.id);
       continue;
     }

@@ -493,6 +493,7 @@ export class TeamChatConversationsService {
       [dto.userId],
       'team_chat',
       'view',
+      true,
     );
     if (!canChat.has(dto.userId)) {
       throw new ForbiddenException(
@@ -587,6 +588,7 @@ export class TeamChatConversationsService {
       candidates.map((u) => u.id),
       'team_chat',
       'view',
+      true,
     );
     const users = candidates.filter((u) => canChat.has(u.id)).slice(0, 20);
     const dmByPeer = new Map(
