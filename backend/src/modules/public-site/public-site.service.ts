@@ -22,7 +22,7 @@ export class PublicSiteService {
       where: { customDomain: normalized, status: { in: ['connected', 'approved'] } },
       include: { organisation: true },
     });
-    if (domainReq?.organisation && domainReq.organisation.status === 'active') {
+    if (domainReq?.organisation && !(domainReq as any).isSuspended && domainReq.organisation.status === 'active') {
       org = domainReq.organisation;
     }
 
@@ -53,7 +53,8 @@ export class PublicSiteService {
       where: {
         customDomain: normalized,
         status: { in: ['approved', 'connected'] },
-      },
+        isSuspended: false,
+      } as any,
       include: {
         organisation: true,
         landingPage: true,
@@ -220,7 +221,7 @@ export class PublicSiteService {
       where: { customDomain: normalized, status: { in: ['approved', 'connected'] } },
       include: { organisation: true, landingPage: true },
     });
-    if (domainReq && domainReq.organisation && domainReq.organisation.status === 'active') {
+    if (domainReq && !(domainReq as any).isSuspended && domainReq.organisation && domainReq.organisation.status === 'active') {
       let page = domainReq.landingPage;
       if (!page || page.status !== 'published') {
         page = domainReq.landingPageId

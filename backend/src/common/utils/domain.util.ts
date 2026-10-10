@@ -1,4 +1,6 @@
 import { randomBytes } from 'crypto';
+import * as dns from 'dns/promises';
+import * as tls from 'tls';
 
 export function normalizeDomain(input: string): string {
   return input
@@ -371,6 +373,7 @@ export function generateCustomDomainDnsInstructions(
     cname?: string;
     ns1?: string;
     ns2?: string;
+    verificationToken?: string;
   } = {},
 ): DnsRecordSpec[] {
   const norm = normalizeDomain(domain);
@@ -386,6 +389,7 @@ export function generateCustomDomainDnsInstructions(
   const cname = opts.cname || process.env.INFRA_CNAME_TARGET || '';
   const ns1 = opts.ns1 || process.env.INFRA_NS1 || '';
   const ns2 = opts.ns2 || process.env.INFRA_NS2 || '';
+  const token = opts.verificationToken;
   const records: DnsRecordSpec[] = [];
 
   if (mode === 'ns') {
@@ -412,7 +416,7 @@ export function generateCustomDomainDnsInstructions(
         host: '@',
         value: ip,
         ttl: 'Auto',
-        purpose: 'Website origin',
+        purpose: 'Website origin (Apex)',
       });
     }
     if (ipv6) {
@@ -429,8 +433,224 @@ export function generateCustomDomainDnsInstructions(
       host: 'www',
       value: cleanDomain,
       ttl: 'Auto',
-      purpose: 'WWW redirect',
+      purpose: 'WWW canonical / redirect',
     });
   }
+
+  if (token) {
+    records.push({
+      type: 'TXT',
+      host: `_ipixxel-challenge`,
+      value: token,
+      ttl: 'Auto',
+      purpose: 'Domain ownership verification token',
+    });
+  }
+
   return records;
 }
+
+export interface DomainDnsVerificationResult {
+  allPassed: boolean;
+  ownershipVerified: boolean;
+  routingVerified: boolean;
+  detectedIps: string[];
+  detectedTxt: string[];
+  detectedCnames: string[];
+  expectedIp: string | null;
+  expectedToken: string | null;
+  errors: string[];
+  checkedAt: string;
+}
+
+export async function verifyDomainDns(
+  domain: string,
+  verificationToken?: string | null,
+  expectedIp?: string | null,
+): Promise<DomainDnsVerificationResult> {
+  const norm = normalizeDomain(domain);
+  const cleanDomain = norm.replace(/^www\./, '');
+  const errors: string[] = [];
+  let detectedIps: string[] = [];
+  let detectedTxt: string[] = [];
+  let detectedCnames: string[] = [];
+
+  // 1. Resolve A records
+  try {
+    detectedIps = await dns.resolve4(cleanDomain);
+  } catch (err: any) {
+    errors.push(`A record lookup failed: ${err.code || err.message}`);
+  }
+
+  // 2. Resolve TXT records for verification token
+  try {
+    const rawTxt = await dns.resolveTxt(`_ipixxel-challenge.${cleanDomain}`);
+    detectedTxt = rawTxt.map((parts) => parts.join(''));
+  } catch {
+    try {
+      const rootTxt = await dns.resolveTxt(cleanDomain);
+      detectedTxt.push(...rootTxt.map((parts) => parts.join('')));
+    } catch {
+      // not found yet
+    }
+  }
+
+  // 3. Resolve www
+  try {
+    const cnames = await dns.resolveCname(`www.${cleanDomain}`);
+    detectedCnames = cnames;
+  } catch {
+    try {
+      const wwwIps = await dns.resolve4(`www.${cleanDomain}`);
+      detectedIps = Array.from(new Set([...detectedIps, ...wwwIps]));
+    } catch {
+      // ignore
+    }
+  }
+
+  const tokenToMatch = verificationToken?.trim();
+  const ownershipVerified = tokenToMatch
+    ? detectedTxt.some((t) => t.includes(tokenToMatch))
+    : true;
+
+  const routingVerified = expectedIp
+    ? detectedIps.includes(expectedIp)
+    : detectedIps.length > 0;
+
+  const allPassed = ownershipVerified && routingVerified;
+
+  return {
+    allPassed,
+    ownershipVerified,
+    routingVerified,
+    detectedIps,
+    detectedTxt,
+    detectedCnames,
+    expectedIp: expectedIp || null,
+    expectedToken: tokenToMatch || null,
+    errors,
+    checkedAt: new Date().toISOString(),
+  };
+}
+
+export interface DomainSslVerificationResult {
+  sslActive: boolean;
+  status: 'active' | 'provisioning' | 'failed';
+  issuer: string | null;
+  validFrom: string | null;
+  validTo: string | null;
+  daysRemaining: number | null;
+  error: string | null;
+  checkedAt: string;
+}
+
+export async function verifyDomainSsl(
+  domain: string,
+): Promise<DomainSslVerificationResult> {
+  const clean = normalizeDomain(domain);
+  return new Promise((resolve) => {
+    let resolved = false;
+    const finish = (result: DomainSslVerificationResult) => {
+      if (!resolved) {
+        resolved = true;
+        resolve(result);
+      }
+    };
+
+    const socket = tls.connect(
+      {
+        host: clean,
+        port: 443,
+        servername: clean,
+        rejectUnauthorized: false,
+        timeout: 6000,
+      },
+      () => {
+        try {
+          const cert = socket.getPeerCertificate();
+          socket.end();
+
+          if (cert && cert.valid_to) {
+            const validTo = new Date(cert.valid_to);
+            const validFrom = new Date(cert.valid_from);
+            const now = new Date();
+            const daysRemaining = Math.max(
+              0,
+              Math.round((validTo.getTime() - now.getTime()) / (1000 * 60 * 60 * 24)),
+            );
+            const isCertValid = now >= validFrom && now <= validTo;
+
+            const rawIssuer = cert.issuer?.O || cert.issuer?.CN;
+            const issuerStr = Array.isArray(rawIssuer)
+              ? rawIssuer.join(', ')
+              : typeof rawIssuer === 'string'
+              ? rawIssuer
+              : 'Unknown Certificate Authority';
+
+            finish({
+              sslActive: isCertValid,
+              status: isCertValid ? 'active' : 'failed',
+              issuer: issuerStr,
+              validFrom: validFrom.toISOString(),
+              validTo: validTo.toISOString(),
+              daysRemaining,
+              error: isCertValid ? null : 'Certificate expired or not yet valid',
+              checkedAt: new Date().toISOString(),
+            });
+          } else {
+            finish({
+              sslActive: false,
+              status: 'provisioning',
+              issuer: null,
+              validFrom: null,
+              validTo: null,
+              daysRemaining: null,
+              error: 'TLS handshake succeeded but no valid certificate returned',
+              checkedAt: new Date().toISOString(),
+            });
+          }
+        } catch (err: any) {
+          socket.destroy();
+          finish({
+            sslActive: false,
+            status: 'failed',
+            issuer: null,
+            validFrom: null,
+            validTo: null,
+            daysRemaining: null,
+            error: err.message || 'SSL verification failed',
+            checkedAt: new Date().toISOString(),
+          });
+        }
+      },
+    );
+
+    socket.on('error', (err) => {
+      finish({
+        sslActive: false,
+        status: 'provisioning',
+        issuer: null,
+        validFrom: null,
+        validTo: null,
+        daysRemaining: null,
+        error: `Port 443 unreachable or certificate still provisioning: ${err.message}`,
+        checkedAt: new Date().toISOString(),
+      });
+    });
+
+    socket.on('timeout', () => {
+      socket.destroy();
+      finish({
+        sslActive: false,
+        status: 'provisioning',
+        issuer: null,
+        validFrom: null,
+        validTo: null,
+        daysRemaining: null,
+        error: 'Connection timeout on port 443 (certificate setup may still be propagating)',
+        checkedAt: new Date().toISOString(),
+      });
+    });
+  });
+}
+

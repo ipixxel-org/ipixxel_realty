@@ -75,6 +75,7 @@ const NAV_GROUPS: NavGroup[] = [
     grp: "Website",
     items: [
       { href: "/org/landing-pages", icon: "document", label: "Landing Pages", tip: "Landing Pages" },
+      { href: "/org/custom-domains", icon: "link", label: "Custom Domains", tip: "Custom Domains (DNS & SSL)" },
       { href: "/org/templates", icon: "puzzle", label: "Templates", tip: "Templates" },
       { href: "/org/forms", icon: "document", label: "Lead Forms", tip: "Lead Forms" },
       { href: "/org/media", icon: "document", label: "Media Library", tip: "Central Media & Assets Repository" },
@@ -111,6 +112,12 @@ export function isOrgNavItemAllowed(
   // if (href.startsWith("/org/calling")) return hasPermission("calling", "view"); // [DISABLED-CALLING]
   // if (href.startsWith("/org/whatsapp")) return hasPermission("whatsapp", "view"); // [DISABLED-WHATSAPP]
   if (href.startsWith("/org/landing-pages")) return hasPermission("landing_pages", "view");
+  if (href.startsWith("/org/custom-domains"))
+    return (
+      hasPermission("domains", "view") ||
+      hasPermission("landing_pages", "view") ||
+      hasPermission("settings", "view")
+    );
   if (href.startsWith("/org/templates")) return hasPermission("templates", "view");
   if (href.startsWith("/org/media")) return hasPermission("websites", "view");
   if (href.startsWith("/org/forms")) return hasPermission("forms", "view");
@@ -173,6 +180,7 @@ const CRUMB_MAP: Record<string, string> = {
   "/org/whatsapp/settings": "WhatsApp Settings",
   "/org/websites": "Websites",
   "/org/landing-pages": "Landing Pages",
+  "/org/custom-domains": "Custom Domains",
   "/org/forms": "Lead Forms",
   "/org/media": "Media Library",
   "/org/templates": "Templates",

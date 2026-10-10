@@ -4,10 +4,12 @@ import { useEffect, useMemo, useState } from "react";
 import { Modal } from "@/components/ui/modal";
 import { Icon } from "@/components/icons";
 import {
+  adminDeleteOrgDomainRequest,
   getOrgDomainRequests,
   getPlatformConfig,
   reviewOrgDomainRequest,
   updatePlatformConfig,
+  verifyOrgDomainRequest,
 } from "@/lib/api";
 import type {
   AdminOrgDomainRequest,
@@ -34,9 +36,11 @@ const EMPTY_CONFIG: PlatformConfig = {
 
 const STATUS_STYLES: Record<string, { label: string; cls: string; dot: string }> = {
   pending: { label: "Pending", cls: "b-amber", dot: "#f59e0b" },
-  approved: { label: "Approved", cls: "b-green", dot: "#10b981" },
-  connected: { label: "Connected", cls: "b-green", dot: "#10b981" },
+  changes_requested: { label: "Changes Requested", cls: "b-amber", dot: "#f97316" },
+  approved: { label: "Approved (DNS Req)", cls: "b-blue", dot: "#3b82f6" },
+  connected: { label: "Live", cls: "b-green", dot: "#10b981" },
   rejected: { label: "Rejected", cls: "b-rose", dot: "#f43f5e" },
+  suspended: { label: "Suspended", cls: "b-rose", dot: "#ef4444" },
 };
 
 function DnsRecordTable({ records }: { records?: DnsRecordSpec[] | null }) {
@@ -175,12 +179,46 @@ export default function SuperAdminOrgDomainsPage() {
     return () => clearTimeout(t);
   }, [msg]);
 
+  const [verifyModalData, setVerifyModalData] = useState<any | null>(null);
+  const [feedbackPrompt, setFeedbackPrompt] = useState<{
+    id: string;
+    action: "reject" | "request_changes" | "suspend";
+    domain: string;
+  } | null>(null);
+  const [feedbackInput, setFeedbackInput] = useState("");
+
   const stats = useMemo(() => {
-    const s = { total: rows.length, pending: 0, approved: 0, rejected: 0 };
+    const s = {
+      total: rows.length,
+      pending: 0,
+      approved: 0,
+      dnsPending: 0,
+      sslIssues: 0,
+      live: 0,
+      suspended: 0,
+      rejected: 0,
+    };
     for (const r of rows) {
       if (r.status === "pending") s.pending++;
-      else if (r.status === "approved" || r.status === "connected") s.approved++;
+      else if (r.status === "approved") s.approved++;
       else if (r.status === "rejected") s.rejected++;
+      else if (r.status === "connected") s.live++;
+
+      if (
+        (r.status === "approved" || r.status === "connected") &&
+        r.dnsStatus !== "verified"
+      ) {
+        s.dnsPending++;
+      }
+      if (
+        r.sslStatus === "failed" ||
+        (r.status === "connected" && r.sslStatus !== "active")
+      ) {
+        s.sslIssues++;
+      }
+      if (r.isSuspended || r.status === "suspended") {
+        s.suspended++;
+      }
     }
     return s;
   }, [rows]);
@@ -188,12 +226,23 @@ export default function SuperAdminOrgDomainsPage() {
   const visible = useMemo(
     () =>
       rows.filter((r) => {
-        const matchesStatus =
-          !filter ||
-          filter === "all" ||
-          (filter === "approved"
-            ? r.status === "approved" || r.status === "connected"
-            : r.status === filter);
+        let matchesStatus = true;
+        if (filter === "pending") matchesStatus = r.status === "pending";
+        else if (filter === "approved") matchesStatus = r.status === "approved";
+        else if (filter === "live")
+          matchesStatus = r.status === "connected" && !r.isSuspended;
+        else if (filter === "dns_pending")
+          matchesStatus =
+            (r.status === "approved" || r.status === "connected") &&
+            r.dnsStatus !== "verified";
+        else if (filter === "ssl_issues")
+          matchesStatus =
+            r.sslStatus === "failed" ||
+            (r.status === "connected" && r.sslStatus !== "active");
+        else if (filter === "suspended")
+          matchesStatus = Boolean(r.isSuspended || r.status === "suspended");
+        else if (filter === "rejected") matchesStatus = r.status === "rejected";
+
         const q = search.trim().toLowerCase();
         const matchesSearch =
           !q ||
@@ -206,22 +255,65 @@ export default function SuperAdminOrgDomainsPage() {
     [rows, filter, search],
   );
 
-  async function review(id: string, action: "approve" | "reject") {
-    if (action === "reject" && !(reason[id] ?? "").trim()) {
+  async function review(
+    id: string,
+    action: "approve" | "reject" | "request_changes" | "suspend" | "reactivate",
+    customReason?: string,
+  ) {
+    const text = (customReason ?? reason[id] ?? "").trim();
+    if (action === "reject" && !text) {
       setMsg("Enter a rejection reason first.");
+      return;
+    }
+    if (action === "request_changes" && !text) {
+      setMsg("Enter requested changes feedback first.");
       return;
     }
     try {
       await reviewOrgDomainRequest(id, {
         action,
-        reason: action === "reject" ? reason[id] : undefined,
+        reason: action === "reject" || action === "suspend" ? text : undefined,
+        feedback: action === "request_changes" ? text : undefined,
       });
       setMsg(
-        action === "approve" ? "Domain request approved." : "Domain request rejected.",
+        action === "approve"
+          ? "Domain request approved (DNS configuration required)."
+          : action === "reject"
+          ? "Domain request rejected."
+          : action === "request_changes"
+          ? "Changes requested from organisation."
+          : action === "suspend"
+          ? "Domain suspended."
+          : "Domain reactivated.",
       );
+      setFeedbackPrompt(null);
+      setFeedbackInput("");
       void fetchAll();
     } catch (e) {
-      setMsg(e instanceof Error ? e.message : "Review failed.");
+      setMsg(e instanceof Error ? e.message : "Review action failed.");
+    }
+  }
+
+  async function handleVerify(id: string) {
+    try {
+      setMsg("Running live DNS and SSL diagnostics...");
+      const res = await verifyOrgDomainRequest(id);
+      setVerifyModalData(res);
+      void fetchAll();
+    } catch (e) {
+      setMsg(e instanceof Error ? e.message : "Verification check failed.");
+    }
+  }
+
+  async function handleDelete(id: string) {
+    if (!confirm("Are you sure you want to permanently delete this domain request?"))
+      return;
+    try {
+      await adminDeleteOrgDomainRequest(id);
+      setMsg("Domain request deleted.");
+      void fetchAll();
+    } catch (e) {
+      setMsg(e instanceof Error ? e.message : "Failed to delete domain request.");
     }
   }
 
@@ -1047,106 +1139,166 @@ export default function SuperAdminOrgDomainsPage() {
                         {new Date(r.requestedAt).toLocaleDateString()}
                       </td>
                       <td style={{ padding: "14px 16px", textAlign: "right" }}>
-                        {r.status === "pending" ? (
-                          <div
-                            style={{
-                              display: "inline-flex",
-                              gap: 6,
-                              alignItems: "center",
-                            }}
-                          >
-                            <button
-                              className="btn btn-sm"
-                              type="button"
-                              onClick={() => void review(r.id, "approve")}
-                              style={{
-                                background: "#10b981",
-                                color: "#fff",
-                                border: "none",
-                                padding: "5px 12px",
-                                borderRadius: 8,
-                                fontSize: 12,
-                                fontWeight: 600,
-                                cursor: "pointer",
-                              }}
-                            >
-                              Approve
-                            </button>
-                            <input
-                              placeholder="Reason"
-                              value={reason[r.id] ?? ""}
-                              onChange={(e) =>
-                                setReason((prev) => ({
-                                  ...prev,
-                                  [r.id]: e.target.value,
-                                }))
-                              }
-                              style={{
-                                width: 90,
-                                height: 28,
-                                fontSize: 12,
-                                borderRadius: 6,
-                                border: "1px solid #e2e8f0",
-                                padding: "0 6px",
-                              }}
-                            />
-                            <button
-                              className="btn btn-sm"
-                              type="button"
-                              onClick={() => void review(r.id, "reject")}
-                              style={{
-                                background: "#f43f5e",
-                                color: "#fff",
-                                border: "none",
-                                padding: "5px 10px",
-                                borderRadius: 8,
-                                fontSize: 12,
-                                fontWeight: 600,
-                                cursor: "pointer",
-                              }}
-                            >
-                              Reject
-                            </button>
-                          </div>
-                        ) : (
-                          <div
-                            style={{
-                              display: "inline-flex",
-                              alignItems: "center",
-                              gap: 8,
-                            }}
-                          >
-                            <span
-                              style={{
-                                padding: "3px 8px",
-                                borderRadius: 6,
-                                fontSize: 12,
-                                fontWeight: 600,
-                                background: "#f8fafc",
-                                color: "#64748b",
-                                border: "1px solid #e2e8f0",
-                              }}
-                            >
-                              Reviewed
-                            </span>
-                            <div
-                              style={{
-                                width: 28,
-                                height: 28,
-                                borderRadius: 7,
-                                border: "1px solid #e2e8f0",
-                                background: "#ffffff",
-                                display: "flex",
-                                alignItems: "center",
-                                justifyContent: "center",
-                                color: "#64748b",
-                                cursor: "pointer",
-                              }}
-                            >
-                              <Icon name="dots" size={14} />
-                            </div>
-                          </div>
-                        )}
+                        <div
+                          style={{
+                            display: "inline-flex",
+                            gap: 6,
+                            alignItems: "center",
+                            justifyContent: "flex-end",
+                            flexWrap: "wrap",
+                          }}
+                        >
+                          {r.status === "pending" ? (
+                            <>
+                              <button
+                                className="btn btn-sm"
+                                type="button"
+                                onClick={() => void review(r.id, "approve")}
+                                style={{
+                                  background: "#10b981",
+                                  color: "#fff",
+                                  border: "none",
+                                  padding: "5px 12px",
+                                  borderRadius: 8,
+                                  fontSize: 12,
+                                  fontWeight: 600,
+                                  cursor: "pointer",
+                                }}
+                              >
+                                Approve
+                              </button>
+                              <button
+                                className="btn btn-sm"
+                                type="button"
+                                onClick={() => {
+                                  setFeedbackPrompt({
+                                    id: r.id,
+                                    action: "request_changes",
+                                    domain: r.customDomain || "Domain",
+                                  });
+                                  setFeedbackInput("");
+                                }}
+                                style={{
+                                  background: "#fef3c7",
+                                  color: "#b45309",
+                                  border: "1px solid #fde68a",
+                                  padding: "5px 10px",
+                                  borderRadius: 8,
+                                  fontSize: 12,
+                                  fontWeight: 600,
+                                  cursor: "pointer",
+                                }}
+                              >
+                                Request Changes
+                              </button>
+                              <button
+                                className="btn btn-sm"
+                                type="button"
+                                onClick={() => {
+                                  setFeedbackPrompt({
+                                    id: r.id,
+                                    action: "reject",
+                                    domain: r.customDomain || "Domain",
+                                  });
+                                  setFeedbackInput("");
+                                }}
+                                style={{
+                                  background: "#fff1f2",
+                                  color: "#e11d48",
+                                  border: "1px solid #fecdd3",
+                                  padding: "5px 10px",
+                                  borderRadius: 8,
+                                  fontSize: 12,
+                                  fontWeight: 600,
+                                  cursor: "pointer",
+                                }}
+                              >
+                                Reject
+                              </button>
+                            </>
+                          ) : (
+                            <>
+                              <button
+                                className="btn btn-sm"
+                                type="button"
+                                onClick={() => void handleVerify(r.id)}
+                                title="Run live DNS & SSL resolution test"
+                                style={{
+                                  background: "#f8fafc",
+                                  color: "#0f172a",
+                                  border: "1px solid #cbd5e1",
+                                  padding: "5px 10px",
+                                  borderRadius: 8,
+                                  fontSize: 12,
+                                  fontWeight: 500,
+                                  cursor: "pointer",
+                                }}
+                              >
+                                🔍 Diagnostics
+                              </button>
+                              {r.isSuspended || r.status === "suspended" ? (
+                                <button
+                                  className="btn btn-sm"
+                                  type="button"
+                                  onClick={() => void review(r.id, "reactivate")}
+                                  style={{
+                                    background: "#ecfdf5",
+                                    color: "#059669",
+                                    border: "1px solid #a7f3d0",
+                                    padding: "5px 10px",
+                                    borderRadius: 8,
+                                    fontSize: 12,
+                                    fontWeight: 600,
+                                    cursor: "pointer",
+                                  }}
+                                >
+                                  Reactivate
+                                </button>
+                              ) : (
+                                <button
+                                  className="btn btn-sm"
+                                  type="button"
+                                  onClick={() => {
+                                    setFeedbackPrompt({
+                                      id: r.id,
+                                      action: "suspend",
+                                      domain: r.customDomain || "Domain",
+                                    });
+                                    setFeedbackInput("");
+                                  }}
+                                  style={{
+                                    background: "#fff7ed",
+                                    color: "#c2410c",
+                                    border: "1px solid #ffedd5",
+                                    padding: "5px 10px",
+                                    borderRadius: 8,
+                                    fontSize: 12,
+                                    fontWeight: 600,
+                                    cursor: "pointer",
+                                  }}
+                                >
+                                  Suspend
+                                </button>
+                              )}
+                              <button
+                                className="btn btn-sm"
+                                type="button"
+                                onClick={() => void handleDelete(r.id)}
+                                title="Delete domain record"
+                                style={{
+                                  background: "transparent",
+                                  color: "#94a3b8",
+                                  border: "none",
+                                  padding: "5px 8px",
+                                  cursor: "pointer",
+                                  fontSize: 14,
+                                }}
+                              >
+                                ✕
+                              </button>
+                            </>
+                          )}
+                        </div>
                       </td>
                     </tr>
                   );
@@ -1193,15 +1345,18 @@ export default function SuperAdminOrgDomainsPage() {
           {config.dnsMode === "a" ? (
             <>
               <div className="field">
-                <label>Origin IPv4 (AWS server IP)</label>
+                <label>Origin IPv4 (VPS / server IP address)</label>
                 <input
                   className="inp inp-mono"
-                  placeholder="203.0.113.10"
+                  placeholder="e.g. 187.126.119.156"
                   value={config.infraIp ?? ""}
                   onChange={(e) =>
                     setConfig((p) => ({ ...p, infraIp: e.target.value }))
                   }
                 />
+                <div className="hint" style={{ fontSize: 11, color: "var(--muted)", marginTop: 2 }}>
+                  Must be numeric IPv4 (e.g. 187.126.119.156), not a domain name.
+                </div>
               </div>
               <div className="field">
                 <label>Origin IPv6 (optional)</label>
@@ -1306,6 +1461,217 @@ export default function SuperAdminOrgDomainsPage() {
             {configSaving ? "Saving..." : "Save settings"}
           </button>
         </div>
+      </Modal>
+
+      {/* Feedback / Reason / Suspend Modal */}
+      <Modal
+        open={Boolean(feedbackPrompt)}
+        onClose={() => {
+          setFeedbackPrompt(null);
+          setFeedbackInput("");
+        }}
+        title={
+          feedbackPrompt?.action === "reject"
+            ? `Reject Domain: ${feedbackPrompt?.domain}`
+            : feedbackPrompt?.action === "request_changes"
+            ? `Request Changes: ${feedbackPrompt?.domain}`
+            : `Suspend Custom Domain: ${feedbackPrompt?.domain}`
+        }
+        description={
+          feedbackPrompt?.action === "reject"
+            ? "Enter the mandatory rejection reason. This will be visible to the organisation so they can make required corrections."
+            : feedbackPrompt?.action === "request_changes"
+            ? "Enter specific guidance or changes required from the organisation before their custom domain can be approved."
+            : "Enter an optional suspension reason. When suspended, traffic to this domain is stopped immediately."
+        }
+        size="md"
+      >
+        <div style={{ marginTop: 12 }}>
+          <label style={{ display: "block", fontSize: 13, fontWeight: 600, color: "#1e293b", marginBottom: 6 }}>
+            {feedbackPrompt?.action === "reject"
+              ? "Rejection Reason *"
+              : feedbackPrompt?.action === "request_changes"
+              ? "Requested Changes / Guidance *"
+              : "Suspension Reason (optional)"}
+          </label>
+          <textarea
+            className="inp"
+            rows={4}
+            placeholder={
+              feedbackPrompt?.action === "reject"
+                ? "e.g. Inappropriate hostname, copyright violation, or duplicate request..."
+                : feedbackPrompt?.action === "request_changes"
+                ? "e.g. Please select the correct project landing page or verify apex hostname spelling..."
+                : "e.g. Temporary suspension due to administrative review..."
+            }
+            value={feedbackInput}
+            onChange={(e) => setFeedbackInput(e.target.value)}
+            style={{ width: "100%", padding: 10, fontSize: 13, borderRadius: 8 }}
+          />
+        </div>
+        <div
+          style={{
+            display: "flex",
+            justifyContent: "flex-end",
+            gap: 8,
+            marginTop: 20,
+            paddingTop: 14,
+            borderTop: "1px solid #e2e8f0",
+          }}
+        >
+          <button
+            className="btn btn-ghost"
+            type="button"
+            onClick={() => {
+              setFeedbackPrompt(null);
+              setFeedbackInput("");
+            }}
+          >
+            Cancel
+          </button>
+          <button
+            className="btn"
+            type="button"
+            disabled={
+              (feedbackPrompt?.action === "reject" || feedbackPrompt?.action === "request_changes") &&
+              !feedbackInput.trim()
+            }
+            onClick={() => {
+              if (feedbackPrompt) {
+                void review(feedbackPrompt.id, feedbackPrompt.action, feedbackInput);
+              }
+            }}
+            style={{
+              background:
+                feedbackPrompt?.action === "reject"
+                  ? "#e11d48"
+                  : feedbackPrompt?.action === "request_changes"
+                  ? "#d97706"
+                  : "#ea580c",
+              color: "#fff",
+              border: "none",
+              padding: "8px 16px",
+              borderRadius: 8,
+              fontWeight: 600,
+              cursor: "pointer",
+            }}
+          >
+            {feedbackPrompt?.action === "reject"
+              ? "Confirm Rejection"
+              : feedbackPrompt?.action === "request_changes"
+              ? "Send Requested Changes"
+              : "Suspend Domain"}
+          </button>
+        </div>
+      </Modal>
+
+      {/* Verify Diagnostics Modal */}
+      <Modal
+        open={Boolean(verifyModalData)}
+        onClose={() => setVerifyModalData(null)}
+        title={`DNS & SSL Diagnostics — ${verifyModalData?.customDomain || ""}`}
+        description="Live server-side DNS resolution checks, TXT ownership token verification, and SSL handshake results."
+        size="lg"
+      >
+        {verifyModalData && (
+          <div style={{ display: "flex", flexDirection: "column", gap: 16, marginTop: 12 }}>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
+              <div style={{ padding: 14, background: "#f8fafc", borderRadius: 10, border: "1px solid #e2e8f0" }}>
+                <div style={{ fontSize: 12, fontWeight: 700, color: "#475569", textTransform: "uppercase", marginBottom: 8 }}>
+                  DNS Verification
+                </div>
+                <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
+                  <span
+                    style={{
+                      width: 8,
+                      height: 8,
+                      borderRadius: "50%",
+                      background: verifyModalData.dns?.allPassed ? "#10b981" : "#f59e0b",
+                    }}
+                  />
+                  <strong style={{ fontSize: 14, color: verifyModalData.dns?.allPassed ? "#059669" : "#b45309" }}>
+                    {verifyModalData.dns?.allPassed ? "All DNS Checks Passed" : "DNS Incomplete / Pending"}
+                  </strong>
+                </div>
+                <div style={{ fontSize: 12, color: "#64748b", lineHeight: 1.6 }}>
+                  <div>
+                    <b>Expected IP:</b> {verifyModalData.expectedIp || "Not configured"}
+                  </div>
+                  <div>
+                    <b>Detected IPs:</b>{" "}
+                    {verifyModalData.dns?.detectedIps?.length > 0
+                      ? verifyModalData.dns.detectedIps.join(", ")
+                      : "None detected"}
+                  </div>
+                  <div>
+                    <b>IP Match:</b> {verifyModalData.dns?.ipMatch ? "✓ Yes" : "✗ No"}
+                  </div>
+                  <div>
+                    <b>Ownership Token Match:</b> {verifyModalData.dns?.tokenMatch ? "✓ Yes" : "✗ Pending"}
+                  </div>
+                </div>
+              </div>
+
+              <div style={{ padding: 14, background: "#f8fafc", borderRadius: 10, border: "1px solid #e2e8f0" }}>
+                <div style={{ fontSize: 12, fontWeight: 700, color: "#475569", textTransform: "uppercase", marginBottom: 8 }}>
+                  SSL / HTTPS Certificate
+                </div>
+                <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
+                  <span
+                    style={{
+                      width: 8,
+                      height: 8,
+                      borderRadius: "50%",
+                      background: verifyModalData.ssl?.valid ? "#10b981" : "#f59e0b",
+                    }}
+                  />
+                  <strong style={{ fontSize: 14, color: verifyModalData.ssl?.valid ? "#059669" : "#b45309" }}>
+                    {verifyModalData.ssl?.valid
+                      ? "Active & Valid"
+                      : verifyModalData.ssl?.status || "Pending Provisioning"}
+                  </strong>
+                </div>
+                <div style={{ fontSize: 12, color: "#64748b", lineHeight: 1.6 }}>
+                  <div>
+                    <b>Certificate Issuer:</b> {verifyModalData.ssl?.issuer || "Pending / N/A"}
+                  </div>
+                  <div>
+                    <b>Valid Until:</b>{" "}
+                    {verifyModalData.ssl?.validTo
+                      ? new Date(verifyModalData.ssl.validTo).toLocaleString()
+                      : "Pending"}
+                  </div>
+                  {verifyModalData.ssl?.error && (
+                    <div style={{ color: "#e11d48", marginTop: 4 }}>
+                      <b>Error:</b> {verifyModalData.ssl.error}
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            {verifyModalData.dns?.errors && verifyModalData.dns.errors.length > 0 && (
+              <div style={{ padding: 12, background: "#fff1f2", borderRadius: 8, border: "1px solid #fecdd3", fontSize: 12, color: "#be123c" }}>
+                <strong>Diagnostics Notes:</strong>
+                <ul style={{ margin: "6px 0 0 16px", padding: 0 }}>
+                  {verifyModalData.dns.errors.map((err: string, i: number) => (
+                    <li key={i}>{err}</li>
+                  ))}
+                </ul>
+              </div>
+            )}
+
+            <div style={{ display: "flex", justifyContent: "flex-end" }}>
+              <button
+                className="btn btn-secondary"
+                type="button"
+                onClick={() => setVerifyModalData(null)}
+              >
+                Close Diagnostics
+              </button>
+            </div>
+          </div>
+        )}
       </Modal>
     </>
   );

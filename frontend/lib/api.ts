@@ -759,6 +759,42 @@ export async function requestCustomDomain(
   );
 }
 
+export async function verifyOrgDomainDns(
+  domainRequestId: string,
+): Promise<OrgDomainInfo["requests"][number]> {
+  return apiFetch<OrgDomainInfo["requests"][number]>(
+    `/org/domain/verify-dns/${encodeURIComponent(domainRequestId)}`,
+    { method: "POST" },
+  );
+}
+
+export async function verifyOrgDomainSsl(
+  domainRequestId: string,
+): Promise<OrgDomainInfo["requests"][number]> {
+  return apiFetch<OrgDomainInfo["requests"][number]>(
+    `/org/domain/verify-ssl/${encodeURIComponent(domainRequestId)}`,
+    { method: "POST" },
+  );
+}
+
+export async function publishOrgCustomDomain(
+  domainRequestId: string,
+): Promise<OrgDomainInfo["requests"][number]> {
+  return apiFetch<OrgDomainInfo["requests"][number]>(
+    `/org/domain/publish/${encodeURIComponent(domainRequestId)}`,
+    { method: "POST" },
+  );
+}
+
+export async function unpublishOrgCustomDomain(
+  domainRequestId: string,
+): Promise<OrgDomainInfo["requests"][number]> {
+  return apiFetch<OrgDomainInfo["requests"][number]>(
+    `/org/domain/unpublish/${encodeURIComponent(domainRequestId)}`,
+    { method: "POST" },
+  );
+}
+
 export async function assignCustomDomain(
   input: AssignCustomDomainInput,
 ): Promise<OrgDomainInfo["requests"][number]> {
@@ -787,6 +823,7 @@ export async function deleteCustomDomain(
 export async function getOrgDomainRequests(params?: {
   kind?: string;
   status?: string;
+  tab?: string;
   search?: string;
   page?: number;
   limit?: number;
@@ -794,6 +831,7 @@ export async function getOrgDomainRequests(params?: {
   const q = new URLSearchParams();
   if (params?.kind) q.set("kind", params.kind);
   if (params?.status) q.set("status", params.status);
+  if (params?.tab) q.set("tab", params.tab);
   if (params?.search) q.set("search", params.search);
   if (params?.page) q.set("page", String(params.page));
   if (params?.limit) q.set("limit", String(params.limit));
@@ -819,6 +857,15 @@ export async function verifyOrgDomainRequest(
 ): Promise<DomainVerifyResult> {
   return apiFetch<DomainVerifyResult>(
     `/admin/org-domain-requests/${id}/verify`,
+  );
+}
+
+export async function adminDeleteOrgDomainRequest(
+  id: string,
+): Promise<{ success: boolean; id: string }> {
+  return apiFetch<{ success: boolean; id: string }>(
+    `/admin/org-domain-requests/${encodeURIComponent(id)}`,
+    { method: "DELETE" },
   );
 }
 

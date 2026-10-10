@@ -1271,9 +1271,11 @@ enum OrgDomainRequestKind {
 
 enum OrgDomainRequestStatus {
   pending
+  changes_requested
   approved
   rejected
   connected
+  suspended
 
   @@schema("templates")
 }
@@ -1288,26 +1290,42 @@ enum OrgDomainRequestStatus {
 //                      mapped to the org's selected landing page
 //                      (Organisation.customDomainLandingPageId).
 model OrgDomainRequest {
-  id              String                 @id @default(uuid())
-  orgId           String                 @map("org_id")
-  kind            OrgDomainRequestKind
-  subdomain       String?
-  customDomain    String?                @map("custom_domain")
+  id                  String                 @id @default(uuid())
+  orgId               String                 @map("org_id")
+  kind                OrgDomainRequestKind
+  subdomain           String?
+  customDomain        String?                @map("custom_domain")
   // For custom_domain requests: the org's chosen landing page (template) that
-  // the custom domain should serve. Optional — defaults to the org's first
-  // published page at approval time.
-  landingPageId   String?                @map("landing_page_id")
-  status          OrgDomainRequestStatus @default(pending)
-  requestedBy     String?                @map("requested_by")
-  requestedAt     DateTime               @default(now()) @map("requested_at")
-  reviewedAt      DateTime?              @map("reviewed_at")
-  reviewedBy      String?                @map("reviewed_by")
-  rejectionReason String?                @map("rejection_reason")
-  createdAt       DateTime               @default(now()) @map("created_at")
-  updatedAt       DateTime               @updatedAt @map("updated_at")
+  // the custom domain should serve.
+  landingPageId       String?                @map("landing_page_id")
+  projectId           String?                @map("project_id")
+  status              OrgDomainRequestStatus @default(pending)
+  dnsStatus           String                 @default("pending") @map("dns_status")
+  sslStatus           String                 @default("pending") @map("ssl_status")
+  verificationToken   String?                @map("verification_token")
+  verificationDetails Json?                  @map("verification_details")
+  sslDetails          Json?                  @map("ssl_details")
+  isPrimary           Boolean                @default(false) @map("is_primary")
+  redirectWww         Boolean                @default(false) @map("redirect_www")
+  preferredHostname   String?                @map("preferred_hostname")
+  domainType          String?                @map("domain_type")
+  notes               String?
+  adminFeedback       String?                @map("admin_feedback")
+  isSuspended         Boolean                @default(false) @map("is_suspended")
+  suspendedReason     String?                @map("suspended_reason")
+  suspendedAt         DateTime?              @map("suspended_at")
+  publishedAt         DateTime?              @map("published_at")
+  requestedBy         String?                @map("requested_by")
+  requestedAt         DateTime               @default(now()) @map("requested_at")
+  reviewedAt          DateTime?              @map("reviewed_at")
+  reviewedBy          String?                @map("reviewed_by")
+  rejectionReason     String?                @map("rejection_reason")
+  createdAt           DateTime               @default(now()) @map("created_at")
+  updatedAt           DateTime               @updatedAt @map("updated_at")
 
-  organisation Organisation  @relation(fields: [orgId], references: [id], onDelete: Cascade)
-  landingPage  LandingPage?  @relation(fields: [landingPageId], references: [id], onDelete: SetNull)
+  organisation Organisation @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  landingPage  LandingPage? @relation(fields: [landingPageId], references: [id], onDelete: SetNull)
+  project      Project?     @relation(fields: [projectId], references: [id], onDelete: SetNull)
 
   @@index([orgId])
   @@index([status])
@@ -1953,6 +1971,7 @@ model Project {
   teams        TeamProject[]
   metaPageConnections MetaPageConnection[]
   marketingConnections MarketingConnection[]
+  orgDomainRequests    OrgDomainRequest[]
 
   @@index([orgId])
   @@index([managerId])
