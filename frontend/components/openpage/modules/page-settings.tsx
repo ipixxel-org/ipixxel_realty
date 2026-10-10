@@ -604,6 +604,7 @@ function BrandingSection({
       <Card title="Brand palette">
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
           <ColorField label="Primary" value={t.primary} on={(v) => patchTheme({ primary: v })} />
+          <ColorField label="CTA Button" value={t.ctaButtonColor || t.primary} on={(v) => patchTheme({ ctaButtonColor: v })} />
           <ColorField label="Text" value={t.text} on={(v) => patchTheme({ text: v })} />
           <ColorField label="Background" value={t.bg} on={(v) => patchTheme({ bg: v })} />
         </div>

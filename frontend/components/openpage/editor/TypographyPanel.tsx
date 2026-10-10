@@ -45,13 +45,29 @@ const fontWeightPills = [
 ];
 
 export function TypographyPanel({ block }: { block: BlockConfig }) {
+  const [target, setTarget] = useState<'all' | 'heading' | 'subtitle' | 'body'>('all');
   const updateBlockStyle = useConfigStore((s) => s.updateBlockStyle);
-  const typography = block.style?.typography || {};
+  const setElementStyle = useConfigStore((s) => s.setElementStyle);
+  const device = useEditorStore((s) => s.viewport);
+
+  const targetElementId =
+    target === 'heading' ? `${block.type}:title` :
+    target === 'subtitle' ? `${block.type}:subtitle` :
+    target === 'body' ? `${block.type}:body` : null;
+
+  const currentElementStyle = targetElementId ? block.elementStyles?.[targetElementId]?.typography : undefined;
+  const typography = (target !== 'all' && currentElementStyle) ? currentElementStyle : (block.style?.typography || {});
 
   const setTypo = (partial: Partial<BlockTypography>) => {
-    updateBlockStyle(block.id, {
-      typography: { ...typography, ...partial },
-    });
+    if (target === 'all') {
+      updateBlockStyle(block.id, {
+        typography: { ...typography, ...partial },
+      });
+    } else if (targetElementId) {
+      setElementStyle(block.id, targetElementId, {
+        typography: { ...(currentElementStyle || {}), ...partial },
+      }, device);
+    }
   };
 
   const rawSize = typography.fontSize ? Number.parseInt(typography.fontSize, 10) : 16;
@@ -64,7 +80,7 @@ export function TypographyPanel({ block }: { block: BlockConfig }) {
     <div className="flex flex-col h-full select-none">
       {/* Header bar */}
       <div className="px-3 pt-3 pb-2.5 border-b border-border-default shrink-0 bg-bg-1">
-        <div className="flex items-center justify-between">
+        <div className="flex items-center justify-between mb-2">
           <div className="flex items-center gap-1.5">
             <div className="w-5 h-5 rounded-md bg-amber-500/15 border border-amber-500/30 flex items-center justify-center text-amber-400">
               <Type size={12} />
@@ -103,7 +119,11 @@ export function TypographyPanel({ block }: { block: BlockConfig }) {
             <button
               type="button"
               onClick={() => {
-                updateBlockStyle(block.id, { typography: undefined });
+                if (target === 'all') {
+                  updateBlockStyle(block.id, { typography: undefined });
+                } else if (targetElementId) {
+                  setElementStyle(block.id, targetElementId, { typography: undefined }, device);
+                }
                 toast.success("Typography reset");
               }}
               className="p-1.5 rounded-md border border-border-default bg-bg-2 text-text-3 hover:text-status-red hover:border-status-red/40 transition-colors"
@@ -113,7 +133,32 @@ export function TypographyPanel({ block }: { block: BlockConfig }) {
             </button>
           </div>
         </div>
+
+        {/* Target Selector */}
+        <div className="grid grid-cols-4 gap-1 p-0.5 rounded-lg border border-border-default bg-bg-2 text-center">
+          {[
+            { id: "all", label: "All" },
+            { id: "heading", label: "Heading" },
+            { id: "subtitle", label: "Subtitle" },
+            { id: "body", label: "Body" },
+          ].map((t) => (
+            <button
+              key={t.id}
+              type="button"
+              onClick={() => setTarget(t.id as 'all' | 'heading' | 'subtitle' | 'body')}
+              className={`py-1 rounded text-[10px] font-medium transition-colors ${
+                target === t.id
+                  ? "bg-green/15 text-green font-semibold shadow-sm"
+                  : "text-text-3 hover:text-text-1 hover:bg-bg-3"
+              }`}
+            >
+              {t.label}
+            </button>
+          ))}
+        </div>
       </div>
+
+
 
       {/* Controls */}
       <div className="flex-1 overflow-y-auto px-3 py-3 space-y-3 overscroll-contain">

@@ -35,6 +35,7 @@ export interface TypographySettings {
 /** Branding overrides applied on top of the template theme (Page Settings → Branding). */
 export interface ThemeOverride {
   primary?: string;
+  ctaButtonColor?: string;
   text?: string;
   bg?: string;
   radius?: number;

@@ -55,7 +55,7 @@ export const blockMetadata: BlockMeta[] = [
     label: 'Button',
     description: 'Call-to-action button',
     category: 'Core',
-    variants: ['default'],
+    variants: ['default', 'outline', 'pill', 'glass'],
     defaultProps: { label: 'Enquire Now', url: '#enquire' },
   },
   {
@@ -71,7 +71,7 @@ export const blockMetadata: BlockMeta[] = [
     label: 'Icon Box',
     description: 'Icon with title and text',
     category: 'Core',
-    variants: ['default'],
+    variants: ['default', 'horizontal', 'minimal', 'centered'],
     defaultProps: { icon: '', title: 'Icon box', description: 'Short supporting text.' },
   },
   {

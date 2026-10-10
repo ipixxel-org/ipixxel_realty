@@ -23,14 +23,13 @@ export function MediaPicker({
   const fileInputId = useId();
   const inputRef = useRef<HTMLInputElement>(null);
   const [error, setError] = useState("");
-  const [uploading, setUploading] = useState(false);
+  const [success, setSuccess] = useState("");
   const uploadImage = useBuilderImageUpload();
   const src = value.trim();
   const showImg = isMediaSrc(src);
 
-  const stopProp = (e: React.MouseEvent) => e.stopPropagation();
-
   const handleTriggerUpload = (e: React.MouseEvent) => {
+    e.preventDefault();
     e.stopPropagation();
     inputRef.current?.click();
   };
@@ -38,6 +37,12 @@ export function MediaPicker({
   const onFile = async (file: File | undefined) => {
     if (!file) return;
     setError("");
+    setSuccess("");
+
+    if (file.size > 5 * 1024 * 1024) {
+      setError("File exceeds 5 MB limit. Please select a smaller file.");
+      return;
+    }
 
     // In the builder: attempt cloud upload first
     if (uploadImage) {
@@ -45,6 +50,7 @@ export function MediaPicker({
       try {
         const url = await uploadImage(file);
         onChange(url);
+        setSuccess(`Uploaded ${file.name}`);
         return;
       } catch (err) {
         console.warn("Cloud upload failed, falling back to inline data URL:", err);
@@ -52,6 +58,7 @@ export function MediaPicker({
         const result = await readMediaFile(file);
         if (result.ok) {
           onChange(result.data);
+          setSuccess(`Uploaded ${file.name}`);
           return;
         }
         setError(err instanceof Error ? err.message : "Upload failed");
@@ -68,6 +75,7 @@ export function MediaPicker({
       return;
     }
     onChange(result.data);
+    setSuccess(`Uploaded ${file.name}`);
   };
 
   return (
@@ -80,10 +88,10 @@ export function MediaPicker({
 
       <div className={`flex gap-2.5 ${compact ? "items-center" : "items-start py-1"}`}>
         {/* Preview / Trigger thumbnail */}
-        <label
-          htmlFor={fileInputId}
+        <button
+          type="button"
           onClick={handleTriggerUpload}
-          title={kind === "icon" ? "Upload icon" : "Upload image"}
+          title={kind === "icon" ? "Upload icon file" : "Upload image file"}
           className={`shrink-0 rounded-xl border border-dashed border-border-default hover:border-green bg-bg-2/70 flex items-center justify-center overflow-hidden cursor-pointer transition-all hover:scale-105 shadow-sm ${
             compact ? "w-10 h-10" : "w-12 h-12"
           }`}
@@ -94,30 +102,35 @@ export function MediaPicker({
             // eslint-disable-next-line @next/next/no-img-element
             <img src={src} alt="" className="w-full h-full object-cover" />
           ) : (
-            <Upload size={compact ? 14 : 16} className="text-text-3 group-hover:text-green" />
+            <Upload size={compact ? 14 : 16} className="text-text-3 hover:text-green" />
           )}
-        </label>
+        </button>
 
         {/* Input & buttons container */}
         <div className="flex-1 min-w-0 space-y-1.5">
           <div className="flex items-center gap-1.5 flex-wrap">
-            <label
-              htmlFor={fileInputId}
+            <button
+              type="button"
               onClick={handleTriggerUpload}
+              disabled={uploading}
               className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg border border-border-default bg-bg-2 text-text-0 text-[11px] font-semibold hover:bg-bg-3 hover:border-border-hover transition-colors cursor-pointer select-none ${
                 uploading ? "opacity-60 pointer-events-none" : ""
               }`}
             >
               <Upload size={12} className="text-green" />
-              <span>{uploading ? "Uploading…" : "Upload"}</span>
-            </label>
+              <span>{uploading ? "Uploading…" : kind === "icon" ? "Upload Icon" : "Upload File"}</span>
+            </button>
 
             {src ? (
               <button
                 type="button"
-                onClick={() => onChange("")}
+                onClick={() => {
+                  onChange("");
+                  setSuccess("");
+                  setError("");
+                }}
                 className="inline-flex items-center gap-1 px-2 py-1 rounded-lg text-[11px] font-medium text-status-red hover:bg-status-red/10 transition-colors"
-                title="Remove image"
+                title="Remove"
               >
                 <Trash2 size={11} />
                 <span>Clear</span>
@@ -131,16 +144,21 @@ export function MediaPicker({
               value={src.startsWith("data:") ? "" : src}
               onChange={(e) => {
                 setError("");
+                setSuccess("");
                 onChange(e.target.value);
               }}
-              placeholder={kind === "icon" ? "Icon URL or name" : "Image URL (https://…)"}
+              placeholder={kind === "icon" ? "Icon URL, SVG or name" : "Image URL (https://…)"}
               className="w-full pl-7 pr-2.5 py-1 rounded-lg border border-border-default bg-bg-2/80 text-text-0 text-[11px] font-mono outline-none hover:border-border-hover focus:border-green focus:bg-bg-2 transition-all placeholder:text-text-3"
             />
           </div>
 
-          {src.startsWith("data:") ? (
+          {success ? (
             <div className="text-[9.5px] text-green font-medium flex items-center gap-1">
-              <span>✓ Image uploaded & saved</span>
+              <span>✓ {success}</span>
+            </div>
+          ) : src.startsWith("data:") ? (
+            <div className="text-[9.5px] text-green font-medium flex items-center gap-1">
+              <span>✓ File uploaded & saved</span>
             </div>
           ) : null}
         </div>

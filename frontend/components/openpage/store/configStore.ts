@@ -60,7 +60,7 @@ interface ConfigState {
   updateListItem: (blockId: string, ref: ListRef, itemId: string, patch: Record<string, unknown>) => void
   addListItem: (blockId: string, ref: ListRef, template?: Record<string, unknown>, index?: number) => string | null
   duplicateListItem: (blockId: string, ref: ListRef, itemId: string) => string | null
-  removeListItem: (blockId: string, ref: ListRef, itemId: string) => void
+  removeListItem: (blockId: string, ref: ListRef, itemId: string, itemIndex?: number) => void
   moveListItem: (blockId: string, ref: ListRef, from: number, to: number) => void
   setListItemHidden: (blockId: string, ref: ListRef, itemId: string, hidden: boolean) => void
   /** Look up the live list for a {@link ListRef} without mutating anything. */
@@ -504,7 +504,7 @@ export const useConfigStore = create<ConfigState>()((set, get) => ({
         return newId
       },
 
-      removeListItem: (blockId, ref, itemId) =>
+      removeListItem: (blockId, ref, itemId, itemIndex?: number) =>
         set((state) => ({
           ...pushUndo(state, 'Remove item'),
           config: produce(withPages(state.config), (draft) => {
@@ -515,7 +515,13 @@ export const useConfigStore = create<ConfigState>()((set, get) => ({
             if (!block) return
             const list = resolveListRef(block.props as Record<string, unknown>, ref)
             if (!list) return
-            const index = list.findIndex((entry) => entry[ITEM_ID_KEY] === itemId)
+            let index = -1
+            if (itemId) {
+              index = list.findIndex((entry) => entry[ITEM_ID_KEY] === itemId)
+            }
+            if (index === -1 && typeof itemIndex === 'number' && itemIndex >= 0 && itemIndex < list.length) {
+              index = itemIndex
+            }
             if (index === -1) return
             list.splice(index, 1)
             pruneStylesForBlock(block, ref, itemId)

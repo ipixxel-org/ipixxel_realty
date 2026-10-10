@@ -16,6 +16,7 @@ export type NavMenuItem = {
 interface NavbarProps {
   logo: string;
   logoImage?: string;
+  logoSize?: number | string;
   /** Legacy string labels or structured { label, id } menu items. */
   links?: Array<string | NavMenuItem>;
   menuItems?: NavMenuItem[];
@@ -121,15 +122,27 @@ function marketingDropdownLabels(
   return out;
 }
 
-function Brand({ logo, logoImage }: { logo: string; logoImage?: string }) {
+function Brand({ logo, logoImage, logoSize = 32 }: { logo: string; logoImage?: string; logoSize?: number | string }) {
+  const size = Number(logoSize) || 32;
   return (
     <div className="flex items-center gap-2">
       {logoImage ? (
         // eslint-disable-next-line @next/next/no-img-element
-        <img src={logoImage} alt={logo} className="h-8 w-auto object-contain" />
+        <img
+          src={logoImage}
+          alt={logo}
+          style={{ height: `${size}px` }}
+          className="w-auto object-contain max-h-[120px]"
+        />
       ) : (
-        <div className="w-8 h-8 rounded-lg bg-green/10 flex items-center justify-center">
-          <div className="w-4 h-4 rounded-full bg-green" />
+        <div
+          style={{ width: `${size}px`, height: `${size}px` }}
+          className="rounded-lg bg-green/10 flex items-center justify-center shrink-0"
+        >
+          <div
+            style={{ width: `${Math.max(4, Math.round(size * 0.5))}px`, height: `${Math.max(4, Math.round(size * 0.5))}px` }}
+            className="rounded-full bg-green"
+          />
         </div>
       )}
       <span className="font-semibold text-[15px] text-text-0 tracking-tight font-display">{logo}</span>
@@ -173,7 +186,7 @@ function NavbarDefault({ props, sticky }: { props: NavbarProps; sticky?: boolean
   return (
     <nav className={`${sticky ? "sticky top-0 z-40 backdrop-blur-md bg-bg-1/90 border-b border-border-subtle" : ""} px-6 @md:px-10 py-3.5`}>
       <div className="flex items-center justify-between gap-4">
-        <Brand logo={logo} logoImage={logoImage} />
+        <Brand logo={logo} logoImage={logoImage} logoSize={props.logoSize} />
         <div className="hidden @2xl:flex items-center gap-7">
           <NavLinks items={items} />
         </div>
@@ -211,7 +224,7 @@ function NavbarCentered({ props }: { props: NavbarProps }) {
         <div className="hidden @2xl:flex items-center gap-6 flex-1">
           <NavLinks items={items.slice(0, mid)} />
         </div>
-        <Brand logo={logo} logoImage={logoImage} />
+        <Brand logo={logo} logoImage={logoImage} logoSize={props.logoSize} />
         <div className="hidden @2xl:flex items-center gap-6 flex-1 justify-end">
           <NavLinks items={items.slice(mid)} />
           {ctaText ? <CtaButton text={ctaText} href={ctaHref} /> : null}
@@ -266,7 +279,7 @@ function NavbarDual({ props }: { props: NavbarProps }) {
       </div>
       <div className="px-6 @md:px-10 py-3">
         <div className="flex items-center justify-between gap-4">
-          <Brand logo={logo} logoImage={logoImage} />
+          <Brand logo={logo} logoImage={logoImage} logoSize={props.logoSize} />
           <div className="hidden @2xl:flex items-center gap-7">
             <NavLinks items={items} />
           </div>
@@ -301,7 +314,7 @@ function NavbarPill({ props }: { props: NavbarProps }) {
   return (
     <nav className="sticky top-4 z-40 px-4 @md:px-8">
       <div className="flex items-center justify-between gap-4 rounded-full border border-border-subtle bg-bg-2/85 backdrop-blur-md shadow-lg shadow-black/30 pl-5 pr-2 py-2 @md:px-6">
-        <Brand logo={logo} logoImage={logoImage} />
+        <Brand logo={logo} logoImage={logoImage} logoSize={props.logoSize} />
         <div className="hidden @2xl:flex items-center gap-6">
           <NavLinks items={items} />
         </div>
@@ -337,17 +350,7 @@ function NavbarGlass({ props }: { props: NavbarProps }) {
     <nav className="sticky top-0 z-40 px-4 @md:px-8 py-4">
       <div className="rounded-2xl border border-white/10 bg-white/5 backdrop-blur-xl px-5 py-3">
         <div className="flex items-center justify-between gap-4">
-          <div className="flex items-center gap-2">
-            {logoImage ? (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img src={logoImage} alt={logo} className="h-8 w-auto object-contain" />
-            ) : (
-              <div className="w-8 h-8 rounded-lg bg-green flex items-center justify-center">
-                <span className="text-[10px] font-bold text-black">H</span>
-              </div>
-            )}
-            <span className="font-semibold text-[15px] text-white tracking-tight font-display">{logo}</span>
-          </div>
+          <Brand logo={logo} logoImage={logoImage} logoSize={props.logoSize} />
           <div className="hidden @2xl:flex items-center gap-7">
             {items.map((item, i) => (
               <a
@@ -419,7 +422,7 @@ function NavbarMarketing({ props }: { props: NavbarProps }) {
   return (
     <nav className="sticky top-0 z-40 px-4 @md:px-8 py-3 @md:py-4 bg-bg-0">
       <div className="flex items-center justify-between gap-3 rounded-full border border-black/[0.06] bg-bg-1 shadow-[0_8px_30px_rgba(0,0,0,0.06)] pl-4 @md:pl-6 pr-2 @md:pr-3 py-2 @md:py-2.5 max-w-6xl mx-auto">
-        <Brand logo={logo} logoImage={logoImage} />
+        <Brand logo={logo} logoImage={logoImage} logoSize={props.logoSize} />
         <div className="hidden @2xl:flex items-center gap-5 @3xl:gap-6 flex-1 justify-center">
           <NavLinks
             items={items}
@@ -465,7 +468,7 @@ function NavbarMinimal({ props }: { props: NavbarProps }) {
   return (
     <nav className="sticky top-0 z-40 px-6 @md:px-10 py-4">
       <div className="flex items-center justify-between gap-4">
-        <Brand logo={logo} logoImage={logoImage} />
+        <Brand logo={logo} logoImage={logoImage} logoSize={props.logoSize} />
         <div className="hidden @2xl:flex items-center gap-7">
           <NavLinks items={items} />
         </div>

@@ -3,10 +3,24 @@ import { ArrowRight, Sparkles } from 'lucide-react'
 
 interface HeroProps {
   badge?: string
+  badgeColor?: string
+  badgeBg?: string
+  tagColor?: string
+  tagBg?: string
   headline: string
   subheadline: string
   primaryCta: string
   secondaryCta?: string
+}
+
+function getBadgeStyle(props: HeroProps): React.CSSProperties {
+  const color = props.badgeColor || props.tagColor;
+  const bg = props.badgeBg || props.tagBg;
+  return {
+    color: color || undefined,
+    backgroundColor: bg || undefined,
+    borderColor: color || undefined,
+  };
 }
 
 function HeroCentered({ props }: { props: HeroProps }) {
@@ -14,7 +28,10 @@ function HeroCentered({ props }: { props: HeroProps }) {
     <section className="px-6 @md:px-10 py-20 @md:py-28 text-center">
       {/* Badge */}
       {props.badge && (
-        <div className="reveal-fade-up reveal-d1 inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-green/10 border border-green/20 text-green text-[11px] font-medium mb-6">
+        <div
+          style={getBadgeStyle(props)}
+          className="reveal-fade-up reveal-d1 inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-green/10 border border-green/20 text-green text-[11px] font-medium mb-6"
+        >
           <Sparkles size={12} />
           {props.badge}
         </div>
@@ -52,7 +69,10 @@ function HeroSplit({ props }: { props: HeroProps }) {
       {/* Text side */}
       <div className="flex-1">
         {props.badge && (
-          <div className="reveal-fade-up reveal-d1 inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-green/10 border border-green/20 text-green text-[11px] font-medium mb-4">
+          <div
+            style={getBadgeStyle(props)}
+            className="reveal-fade-up reveal-d1 inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-green/10 border border-green/20 text-green text-[11px] font-medium mb-4"
+          >
             <Sparkles size={12} />
             {props.badge}
           </div>
@@ -98,7 +118,10 @@ function HeroGradient({ props }: { props: HeroProps }) {
 
       <div className="relative z-10">
         {props.badge && (
-          <div className="reveal-fade-up reveal-d1 inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-green/10 border border-green/20 text-green text-[11px] font-medium mb-6">
+          <div
+            style={getBadgeStyle(props)}
+            className="reveal-fade-up reveal-d1 inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-green/10 border border-green/20 text-green text-[11px] font-medium mb-6"
+          >
             <Sparkles size={12} />
             {props.badge}
           </div>

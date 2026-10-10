@@ -130,7 +130,14 @@ function HeroCopy({
   return (
     <div className={`${light ? "text-white" : ""} ${centered ? "text-center flex flex-col items-center" : ""}`}>
       {str(p.badge) ? (
-        <div className="inline-flex px-3 py-1 rounded-full bg-green/20 text-green text-[11px] font-semibold tracking-wide uppercase mb-4">
+        <div
+          style={{
+            color: (p.badgeColor as string) || (p.tagColor as string) || undefined,
+            backgroundColor: (p.badgeBg as string) || (p.tagBg as string) || undefined,
+            borderColor: (p.badgeColor as string) || (p.tagColor as string) || undefined,
+          }}
+          className="inline-flex px-3 py-1 rounded-full bg-green/20 text-green text-[11px] font-semibold tracking-wide uppercase mb-4"
+        >
           {str(p.badge)}
         </div>
       ) : null}
@@ -1105,6 +1112,19 @@ export function ProjectHighlightsBlock({ block }: { block: BlockConfig }) {
   );
 }
 
+interface AmenityItem {
+  _id?: string;
+  title: string;
+  description: string;
+  image: string;
+  icon: string;
+  cardColor?: string;
+  cardBg?: string;
+  iconBg?: string;
+  iconColor?: string;
+  [key: string]: unknown;
+}
+
 export function AmenitiesBlock({ block }: { block: BlockConfig }) {
   const raw = block.props.items;
   const p = block.props;
@@ -1112,16 +1132,17 @@ export function AmenitiesBlock({ block }: { block: BlockConfig }) {
   // Spread each source entry so its stable `_id` survives — rebuilding the
   // object would collapse every card onto the same element id and break
   // "Style this item", hide-item and per-device visibility.
-  const amen = Array.isArray(raw)
+  const amen: AmenityItem[] = Array.isArray(raw)
     ? raw.map((a, i) =>
         typeof a === "string"
           ? { _id: `it_${i}`, title: a, description: "", image: "", icon: "" }
           : {
-              ...(a as Record<string, unknown>),
-              title: String((a as { title?: string }).title || ""),
-              description: String((a as { description?: string }).description || ""),
-              image: String((a as { image?: string }).image || ""),
-              icon: String((a as { icon?: string }).icon || ""),
+              ...(typeof a === "object" && a !== null ? (a as Record<string, unknown>) : {}),
+              _id: (a as { _id?: string })?._id || `it_${i}`,
+              title: String((a as { title?: string })?.title || ""),
+              description: String((a as { description?: string })?.description || ""),
+              image: String((a as { image?: string })?.image || ""),
+              icon: String((a as { icon?: string })?.icon || ""),
             },
       )
     : [
@@ -1335,6 +1356,9 @@ export function AmenitiesBlock({ block }: { block: BlockConfig }) {
             key={itemPart("items", a)}
             block={block}
             id={itemPart("items", a)}
+            style={{
+              backgroundColor: (a.cardColor as string) || (a.cardBg as string) || (p.cardColor as string) || (p.cardBg as string) || undefined,
+            }}
             className="group rounded-2xl border border-border-default bg-bg-2 overflow-hidden hover:-translate-y-0.5 hover:border-border-hover transition-all"
           >
             {a.image ? (
@@ -1344,18 +1368,24 @@ export function AmenitiesBlock({ block }: { block: BlockConfig }) {
               </El>
             ) : null}
             <div className="p-5">
-              <El
-                block={block}
-                id={subElementId(itemPart("items", a), "icon")}
-                className="w-9 h-9 rounded-lg bg-green/10 text-green flex items-center justify-center mb-3 overflow-hidden"
-              >
-                {isMediaSrc(a.icon) ? (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img src={a.icon} alt="" className="w-5 h-5 object-contain" />
-                ) : (
-                  <Check size={14} />
-                )}
-              </El>
+              {!a.image ? (
+                <El
+                  block={block}
+                  id={subElementId(itemPart("items", a), "icon")}
+                  style={{
+                    backgroundColor: (a.iconBg as string) || undefined,
+                    color: (a.iconColor as string) || undefined,
+                  }}
+                  className="w-9 h-9 rounded-lg bg-green/10 text-green flex items-center justify-center mb-3 overflow-hidden"
+                >
+                  {isMediaSrc(a.icon) ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img src={a.icon} alt="" className="w-5 h-5 object-contain" />
+                  ) : (
+                    <Check size={14} />
+                  )}
+                </El>
+              ) : null}
               <El block={block} id={subElementId(itemPart("items", a), "title")} as="h3" className="font-semibold mb-1">
                 {a.title}
               </El>

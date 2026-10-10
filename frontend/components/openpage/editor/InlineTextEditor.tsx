@@ -104,43 +104,9 @@ export function InlineTextEditor({
     setShowColorPicker(false);
   }, [activeElement, block.id, block.props, propKey]);
 
-  // Handle double-click to enter inline text editing
+  // Double-clicking should not automatically add or replace text
   const handleDoubleClick = (e: React.MouseEvent) => {
-    if (!isSelected) return;
-
-    let target = e.target as HTMLElement;
-    // Don't inline edit buttons that are controls or toolbar items
-    if (target.closest("button[data-no-edit]") || target.closest(".op-control")) return;
-
-    // Check if target is a text container (heading, p, span, a, label, div)
-    const validTags = ["H1", "H2", "H3", "H4", "H5", "H6", "P", "SPAN", "A", "BUTTON", "DIV", "LI"];
-    while (target && target !== containerRef.current) {
-      if (validTags.includes(target.tagName) && target.childNodes.length > 0) {
-        const text = target.innerText || target.textContent || "";
-        const matchedKey = findPropKey(text);
-        if (matchedKey) {
-          e.preventDefault();
-          e.stopPropagation();
-
-          // Enter editing mode
-          target.contentEditable = "true";
-          target.setAttribute("data-inline-editing", "true");
-          target.focus();
-
-          const rect = target.getBoundingClientRect();
-          setToolbarPos({
-            x: Math.max(10, rect.left + rect.width / 2 - 120),
-            y: Math.max(10, rect.top - 42),
-          });
-
-          setActiveElement(target);
-          setPropKey(matchedKey);
-          return;
-        }
-      }
-      if (target.parentElement) target = target.parentElement;
-      else break;
-    }
+    e.stopPropagation();
   };
 
   // Keyboard events when editing

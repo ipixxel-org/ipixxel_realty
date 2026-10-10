@@ -258,6 +258,7 @@ export interface ThemeConfig {
   text3: string;
   accent: string;
   accentDim: string;
+  ctaButtonColor?: string;
   borderDefault: string;
   borderSubtle: string;
   borderHover: string;
