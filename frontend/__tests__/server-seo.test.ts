@@ -47,6 +47,6 @@ describe("landingMetadata", () => {
     expect(meta.keywords).toEqual(["tower", "dubai"]);
     expect(meta.alternates?.canonical).toBe("https://acme.com/");
     expect(meta.robots).toEqual({ index: false, follow: false });
-    expect(meta.twitter?.card).toBe("summary");
+    expect(meta.twitter).toMatchObject({ card: "summary" });
   });
 });
