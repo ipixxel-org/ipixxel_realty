@@ -415,10 +415,22 @@ export function OpenPageStudio({ resource = "template" }: { resource?: Resource 
     apiRef.current = {
       undo: () => useConfigStore.getState().undo(),
       redo: () => useConfigStore.getState().redo(),
-      save: () => {
+      save: async () => {
         if (!activePage) return;
-        saveInBackground(landingPageFromSite(activePage, useConfigStore.getState().config));
-        toast("Saved");
+        const next = landingPageFromSite(activePage, useConfigStore.getState().config);
+        setActivePage(next);
+        setHasUnsaved(true);
+        try {
+          const saved = await saveTemplateNow(next, resource);
+          setActivePage((cur) =>
+            cur && cur.id === saved.id ? { ...cur, status: saved.status, updated: saved.updated, updatedAt: saved.updatedAt } : cur,
+          );
+          setHasUnsaved(false);
+          toast("Changes saved successfully");
+        } catch (err) {
+          setHasUnsaved(false);
+          toast("Changes saved locally" + (err instanceof Error ? ` (${err.message})` : ""));
+        }
       },
       preview: () => openLocalPreview(activePage?.id),
       publish: () => {

@@ -76,7 +76,8 @@ function ListRow({
   const setListItemHidden = useConfigStore((s) => s.setListItemHidden);
   const selectElement = useEditorStore((s) => s.selectElement);
 
-  const itemId = String(item[ITEM_ID_KEY] ?? "");
+  const rawId = item[ITEM_ID_KEY];
+  const itemId = rawId ? String(rawId) : `idx_${index}`;
   const elementId = listElementId(list, itemId);
   const hidden = item.hidden === true;
 
@@ -157,7 +158,7 @@ function ListRow({
         <button
           type="button"
           onClick={() => {
-            removeListItem(block.id, list, itemId);
+            removeListItem(block.id, list, rawId ? String(rawId) : "", index);
             if (useEditorStore.getState().selectedElement?.elementId === elementId) {
               useEditorStore.getState().clearElementSelection();
             }
@@ -252,27 +253,31 @@ export function ElementListEditor({
 
   // Stable dnd-kit ids mapped back to item ids, so drag handling never has to
   // parse an id to recover which item moved.
-  const sortableIds = useMemo(() => items.map((i) => sortableId(list, String(i[ITEM_ID_KEY] ?? ""))), [items, list]);
+  const sortableIds = useMemo(
+    () => items.map((i, idx) => sortableId(list, String(i[ITEM_ID_KEY] ?? `idx_${idx}`))),
+    [items, list],
+  );
 
   const itemIdBySortableId = useMemo(
-    () => new Map(sortableIds.map((sid, i) => [sid, String(items[i][ITEM_ID_KEY] ?? "")])),
+    () => new Map(sortableIds.map((sid, i) => [sid, String(items[i][ITEM_ID_KEY] ?? `idx_${i}`)])),
     [sortableIds, items],
   );
 
   const handleDragEnd = (event: DragEndEvent) => {
     const { active, over } = event;
     if (!over || active.id === over.id) return;
-    const from = items.findIndex((i) => itemIdBySortableId.get(String(active.id)) === String(i[ITEM_ID_KEY] ?? ""));
-    const to = items.findIndex((i) => itemIdBySortableId.get(String(over.id)) === String(i[ITEM_ID_KEY] ?? ""));
+    const from = items.findIndex((i, idx) => itemIdBySortableId.get(String(active.id)) === String(i[ITEM_ID_KEY] ?? `idx_${idx}`));
+    const to = items.findIndex((i, idx) => itemIdBySortableId.get(String(over.id)) === String(i[ITEM_ID_KEY] ?? `idx_${idx}`));
     if (from === -1 || to === -1) return;
     moveListItem(block.id, list, from, to);
   };
 
   const rows = items.map((item, index) => {
-    const itemId = String(item[ITEM_ID_KEY] ?? "");
+    const rawId = item[ITEM_ID_KEY];
+    const itemId = rawId ? String(rawId) : `idx_${index}`;
     return (
       <ListRow
-        key={itemId}
+        key={rawId ? String(rawId) : `row_${index}`}
         block={block}
         list={list}
         item={item}

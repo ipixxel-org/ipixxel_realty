@@ -151,10 +151,11 @@ export function DesignPanel() {
           ]}
         />
         <ColorSection
-          title="Accent"
+          title="Accent & CTA"
           defaultOpen
           colors={[
             { key: 'accent', label: 'Accent' },
+            { key: 'ctaButtonColor', label: 'CTA Button' },
             { key: 'accentDim', label: 'Accent Dim' },
           ]}
         />

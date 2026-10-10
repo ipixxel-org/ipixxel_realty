@@ -1,7 +1,7 @@
 "use client";
 
 import type { BlockConfig } from "../types";
-import { ArrowRight } from "lucide-react";
+import { ArrowRight, Sparkles } from "lucide-react";
 import { useOpenPageRuntime } from "@/components/openpage/runtime/OpenPageRuntime";
 
 interface CtaProps {
@@ -9,8 +9,13 @@ interface CtaProps {
   subheadline?: string;
   buttonText: string;
   buttonUrl?: string;
+  buttonColor?: string;
+  buttonTextColor?: string;
   popupId?: string;
   image?: string;
+  bgImage?: string;
+  bgColor?: string;
+  badge?: string;
   secondaryButtonText?: string;
   secondaryButtonUrl?: string;
 }
@@ -34,22 +39,54 @@ function useCtaClick(props: CtaProps) {
   };
 }
 
+function getBtnStyle(props: CtaProps) {
+  return {
+    backgroundColor: props.buttonColor || undefined,
+    color: props.buttonTextColor || undefined,
+  };
+}
+
 function CtaSimple({ props }: { props: CtaProps }) {
   const onClick = useCtaClick(props);
+  const btnStyle = getBtnStyle(props);
+
   return (
-    <section className="px-6 @md:px-10 py-16 @md:py-20 text-center relative overflow-hidden">
-      <div className="absolute inset-0 bg-gradient-to-b from-green/6 via-green/3 to-transparent pointer-events-none" />
+    <section
+      className="px-6 @md:px-10 py-16 @md:py-20 text-center relative overflow-hidden"
+      style={{
+        backgroundImage: props.bgImage ? `url(${props.bgImage})` : undefined,
+        backgroundSize: props.bgImage ? "cover" : undefined,
+        backgroundPosition: "center",
+        backgroundColor: props.bgColor || undefined,
+      }}
+    >
+      {props.bgImage ? (
+        <div className="absolute inset-0 bg-black/55 backdrop-blur-[2px] pointer-events-none" />
+      ) : (
+        <div className="absolute inset-0 bg-gradient-to-b from-green/6 via-green/3 to-transparent pointer-events-none" />
+      )}
       <div className="relative z-10">
-        <h2 className="font-display reveal-fade-up reveal-d1 text-3xl @md:text-4xl font-semibold tracking-tight mb-3">
+        {props.badge && (
+          <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-green/15 text-green text-[11px] font-semibold tracking-wide uppercase mb-4">
+            <Sparkles size={12} />
+            {props.badge}
+          </div>
+        )}
+        <h2 className={`font-display reveal-fade-up reveal-d1 text-3xl @md:text-4xl font-semibold tracking-tight mb-3 ${props.bgImage ? "text-white" : ""}`}>
           {props.headline}
         </h2>
         {props.subheadline && (
-          <p className="reveal-fade-up reveal-d2 text-text-2 text-sm mb-6 max-w-md mx-auto">
+          <p className={`reveal-fade-up reveal-d2 text-sm mb-6 max-w-md mx-auto ${props.bgImage ? "text-white/85" : "text-text-2"}`}>
             {props.subheadline}
           </p>
         )}
         <div className="reveal-fade-up reveal-d3">
-          <button type="button" onClick={onClick} className="px-8 py-3 rounded-lg bg-green text-black text-sm font-semibold hover:bg-green-dim transition-all hover:accent-glow-xl inline-flex items-center gap-2">
+          <button
+            type="button"
+            onClick={onClick}
+            style={btnStyle}
+            className="px-8 py-3 rounded-lg bg-green text-black text-sm font-semibold hover:opacity-90 transition-all inline-flex items-center gap-2 shadow-sm"
+          >
             {props.buttonText}
             <ArrowRight size={16} />
           </button>
@@ -61,6 +98,7 @@ function CtaSimple({ props }: { props: CtaProps }) {
 
 function CtaBooking({ props }: { props: CtaProps }) {
   const onClick = useCtaClick(props);
+  const btnStyle = getBtnStyle(props);
   const onSecondary = () => {
     const url = props.secondaryButtonUrl || "#listings";
     if (url.startsWith("#")) {
@@ -88,7 +126,8 @@ function CtaBooking({ props }: { props: CtaProps }) {
             <button
               type="button"
               onClick={onClick}
-              className="px-6 py-3 rounded-full bg-green text-white text-sm font-semibold hover:bg-green-dim transition-colors shadow-sm"
+              style={btnStyle}
+              className="px-6 py-3 rounded-full bg-green text-white text-sm font-semibold hover:opacity-90 transition-colors shadow-sm"
             >
               {props.buttonText}
             </button>
@@ -110,9 +149,18 @@ function CtaBooking({ props }: { props: CtaProps }) {
 
 function CtaSplit({ props }: { props: CtaProps }) {
   const onClick = useCtaClick(props);
+  const btnStyle = getBtnStyle(props);
+
   return (
-    <section className="px-6 @md:px-10 py-12 @md:py-16">
-      <div className="reveal-scale reveal-d1 flex flex-col @lg:flex-row items-center justify-between gap-6 p-8 rounded-2xl bg-bg-2 border border-border-default relative overflow-hidden">
+    <section
+      className="px-6 @md:px-10 py-12 @md:py-16"
+      style={{
+        backgroundImage: props.bgImage ? `url(${props.bgImage})` : undefined,
+        backgroundSize: props.bgImage ? "cover" : undefined,
+        backgroundPosition: "center",
+      }}
+    >
+      <div className="reveal-scale reveal-d1 flex flex-col @lg:flex-row items-center justify-between gap-6 p-8 rounded-2xl bg-bg-2 border border-border-default relative overflow-hidden shadow-sm">
         <div className="absolute inset-0 bg-gradient-to-r from-green/5 to-transparent pointer-events-none" />
         <div className="relative z-10">
           <h2 className="font-display text-xl @md:text-2xl font-semibold tracking-tight mb-1">
@@ -122,7 +170,12 @@ function CtaSplit({ props }: { props: CtaProps }) {
             <p className="text-text-2 text-sm">{props.subheadline}</p>
           )}
         </div>
-        <button type="button" onClick={onClick} className="relative z-10 px-6 py-3 rounded-lg bg-green text-black text-sm font-semibold hover:bg-green-dim transition-all shrink-0 flex items-center gap-2">
+        <button
+          type="button"
+          onClick={onClick}
+          style={btnStyle}
+          className="relative z-10 px-6 py-3 rounded-lg bg-green text-black text-sm font-semibold hover:opacity-90 transition-all shrink-0 flex items-center gap-2"
+        >
           {props.buttonText}
           <ArrowRight size={16} />
         </button>
@@ -131,15 +184,154 @@ function CtaSplit({ props }: { props: CtaProps }) {
   );
 }
 
+function CtaBanner({ props }: { props: CtaProps }) {
+  const onClick = useCtaClick(props);
+  const btnStyle = getBtnStyle(props);
+  const onSecondary = () => {
+    const url = props.secondaryButtonUrl || "#enquire";
+    if (url.startsWith("#")) {
+      document.getElementById(url.slice(1))?.scrollIntoView({ behavior: "smooth" });
+      return;
+    }
+    window.location.href = url;
+  };
+
+  return (
+    <section
+      className="relative min-h-[340px] @md:min-h-[420px] flex items-center overflow-hidden px-6 @md:px-12 py-16"
+      style={{
+        backgroundImage: props.bgImage ? `url(${props.bgImage})` : undefined,
+        backgroundSize: "cover",
+        backgroundPosition: "center",
+        backgroundColor: props.bgColor || "#0f172a",
+      }}
+    >
+      <div className="absolute inset-0 bg-gradient-to-r from-black/85 via-black/60 to-black/35 pointer-events-none" />
+      <div className="relative z-10 max-w-2xl text-white">
+        {props.badge && (
+          <span className="inline-block px-3 py-1 rounded-full bg-white/15 border border-white/20 text-white text-xs font-semibold uppercase tracking-wider mb-4">
+            {props.badge}
+          </span>
+        )}
+        <h2 className="font-display text-3xl @md:text-5xl font-bold tracking-tight mb-4 leading-tight">
+          {props.headline}
+        </h2>
+        {props.subheadline && (
+          <p className="text-white/80 text-base @md:text-lg mb-8 leading-relaxed">
+            {props.subheadline}
+          </p>
+        )}
+        <div className="flex flex-wrap gap-4">
+          <button
+            type="button"
+            onClick={onClick}
+            style={btnStyle}
+            className="px-8 py-3.5 rounded-lg bg-green text-black text-sm font-semibold hover:opacity-90 transition-all inline-flex items-center gap-2"
+          >
+            {props.buttonText}
+            <ArrowRight size={16} />
+          </button>
+          {props.secondaryButtonText && (
+            <button
+              type="button"
+              onClick={onSecondary}
+              className="px-7 py-3.5 rounded-lg border border-white/35 bg-white/10 backdrop-blur text-white text-sm font-medium hover:bg-white/20 transition-all"
+            >
+              {props.secondaryButtonText}
+            </button>
+          )}
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function CtaStrip({ props }: { props: CtaProps }) {
+  const onClick = useCtaClick(props);
+  const btnStyle = getBtnStyle(props);
+
+  return (
+    <section
+      className="px-6 py-6 border-y border-border-default"
+      style={{
+        backgroundColor: props.bgColor || "var(--color-bg-2)",
+        backgroundImage: props.bgImage ? `url(${props.bgImage})` : undefined,
+        backgroundSize: "cover",
+      }}
+    >
+      <div className="max-w-6xl mx-auto flex flex-col @md:flex-row items-center justify-between gap-4">
+        <div>
+          <h3 className="font-semibold text-base @md:text-lg text-text-0">{props.headline}</h3>
+          {props.subheadline && <p className="text-text-2 text-xs @md:text-sm">{props.subheadline}</p>}
+        </div>
+        <button
+          type="button"
+          onClick={onClick}
+          style={btnStyle}
+          className="px-6 py-2.5 rounded-lg bg-green text-black text-xs @md:text-sm font-semibold hover:opacity-90 transition-all shrink-0 inline-flex items-center gap-1.5"
+        >
+          {props.buttonText}
+          <ArrowRight size={14} />
+        </button>
+      </div>
+    </section>
+  );
+}
+
+function CtaCard({ props }: { props: CtaProps }) {
+  const onClick = useCtaClick(props);
+  const btnStyle = getBtnStyle(props);
+
+  return (
+    <section className="px-6 @md:px-10 py-16">
+      <div
+        className="max-w-4xl mx-auto rounded-3xl border border-border-default p-8 @md:p-12 text-center relative overflow-hidden shadow-lg"
+        style={{
+          backgroundColor: props.bgColor || "var(--color-bg-2)",
+          backgroundImage: props.bgImage ? `url(${props.bgImage})` : undefined,
+          backgroundSize: "cover",
+        }}
+      >
+        <div className="absolute inset-0 bg-gradient-to-br from-green/10 via-transparent to-transparent pointer-events-none" />
+        <div className="relative z-10">
+          <h2 className="font-display text-2xl @md:text-4xl font-bold tracking-tight mb-3">
+            {props.headline}
+          </h2>
+          {props.subheadline && (
+            <p className="text-text-2 text-sm @md:text-base mb-8 max-w-lg mx-auto">
+              {props.subheadline}
+            </p>
+          )}
+          <button
+            type="button"
+            onClick={onClick}
+            style={btnStyle}
+            className="px-8 py-3.5 rounded-full bg-green text-black text-sm font-semibold hover:opacity-90 transition-all shadow-md inline-flex items-center gap-2"
+          >
+            {props.buttonText}
+            <ArrowRight size={16} />
+          </button>
+        </div>
+      </div>
+    </section>
+  );
+}
+
 export function CtaBlock({ block }: { block: BlockConfig }) {
-  const props = block.props as unknown as CtaProps
+  const props = block.props as unknown as CtaProps;
 
   switch (block.variant) {
-    case 'split':
-      return <CtaSplit props={props} />
-    case 'booking':
-      return <CtaBooking props={props} />
+    case "split":
+      return <CtaSplit props={props} />;
+    case "booking":
+      return <CtaBooking props={props} />;
+    case "banner":
+      return <CtaBanner props={props} />;
+    case "strip":
+      return <CtaStrip props={props} />;
+    case "card":
+      return <CtaCard props={props} />;
     default:
-      return <CtaSimple props={props} />
+      return <CtaSimple props={props} />;
   }
 }

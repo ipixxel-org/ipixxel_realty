@@ -95,7 +95,7 @@ const PICKER_GROUPS: { id: string; title: string; defaultOpen: boolean; types: B
     id: "re",
     title: "Real Estate",
     defaultOpen: true,
-    types: ["project-banner", "project-overview", "property-details", "unit-config", "amenities", "floor-plans", "gallery", "location", "re-pricing", "developer", "testimonials", "lead-form", "download-brochure", "site-visit", "contact", "newsletter", "cta"],
+    types: ["project-banner", "project-overview", "property-details", "unit-config", "amenities", "floor-plans", "gallery", "location", "re-pricing", "developer", "testimonials", "lead-form", "download-brochure", "site-visit", "newsletter", "cta"],
   },
   {
     id: "layout",
@@ -119,7 +119,7 @@ const PICKER_GROUPS: { id: string; title: string; defaultOpen: boolean; types: B
     id: "forms",
     title: "Lead & Forms",
     defaultOpen: true,
-    types: ["lead-form", "site-visit", "contact", "newsletter", "download-brochure", "cta", "button"],
+    types: ["lead-form", "site-visit", "newsletter", "download-brochure", "cta", "button"],
   },
   {
     id: "chrome",

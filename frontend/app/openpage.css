@@ -1,4 +1,4 @@
-﻿.ps-app {
+.ps-app {
   --ps-primary: #6d5dfc;
   --ps-primary-dark: #5448e8;
   --ps-primary-soft: rgba(109, 93, 252, 0.16);
@@ -274,41 +274,45 @@
 .op-root {
   height: 100%;
   min-height: 0;
-  background: #0f172a;
-  color: #fafafa;
+  background: var(--ps-bg, #f8fafc);
+  color: var(--ps-ink, #0f172a);
 }
 .op-root input:not([type="color"]):not([type="checkbox"]):not([type="radio"]),
 .op-root select,
 .op-root textarea {
   transition: border-color 0.15s ease, box-shadow 0.15s ease, background-color 0.15s ease;
+  background-color: #ffffff;
+  color: #0f172a;
+  border: 1px solid #cbd5e1;
 }
 .op-root input:not([type="color"]):not([type="checkbox"]):not([type="radio"]):hover,
 .op-root select:hover,
 .op-root textarea:hover {
-  border-color: rgba(255, 255, 255, 0.2);
+  border-color: #94a3b8;
 }
 .op-root input:not([type="color"]):not([type="checkbox"]):not([type="radio"]):focus-visible,
 .op-root select:focus-visible,
 .op-root textarea:focus-visible {
-  border-color: #22c55e;
-  box-shadow: 0 0 0 3px rgba(34, 197, 94, 0.12);
-  background-color: #1a2234;
+  border-color: #16a34a;
+  box-shadow: 0 0 0 3px rgba(22, 163, 74, 0.15);
+  background-color: #ffffff;
+  color: #0f172a;
   outline: none;
 }
 .op-root select,
 .op-root input[type="number"] {
   appearance: none;
   -webkit-appearance: none;
-  background-image: linear-gradient(45deg, transparent 50%, #8b8b96 50%),
-    linear-gradient(135deg, #8b8b96 50%, transparent 50%);
+  background-image: linear-gradient(45deg, transparent 50%, #64748b 50%),
+    linear-gradient(135deg, #64748b 50%, transparent 50%);
   background-position: calc(100% - 14px) 50%, calc(100% - 9px) 50%;
   background-size: 5px 5px, 5px 5px;
   background-repeat: no-repeat;
   padding-right: 24px;
 }
 .op-root select option {
-  background: #141c2c;
-  color: #fafafa;
+  background: #ffffff;
+  color: #0f172a;
 }
 .ps-studio-main:not([data-module="builder"]) {
   overflow: auto;

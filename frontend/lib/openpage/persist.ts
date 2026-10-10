@@ -329,9 +329,39 @@ export async function loadTemplates(
   return rows.map(fromApiTemplate);
 }
 
+const PAGE_BACKUP_PREFIX = "prestate.page.";
+
+export function saveLocalBackup(record: LandingPageData) {
+  if (typeof window === "undefined" || !record?.id) return;
+  try {
+    const dataToSave = {
+      ...record,
+      updatedAt: record.updatedAt || new Date().toISOString(),
+    };
+    window.localStorage.setItem(`${PAGE_BACKUP_PREFIX}${record.id}`, JSON.stringify(dataToSave));
+  } catch {
+    /* quota */
+  }
+}
+
+export function getLocalBackup(id: string): LandingPageData | null {
+  if (typeof window === "undefined" || !id) return null;
+  try {
+    const raw = window.localStorage.getItem(`${PAGE_BACKUP_PREFIX}${id}`);
+    if (!raw) return null;
+    return JSON.parse(raw) as LandingPageData;
+  } catch {
+    return null;
+  }
+}
+
 export async function loadTemplate(id: string, resource: Resource = "template"): Promise<LandingPageData | null> {
+  const localBackup = getLocalBackup(id);
   try {
     if (resource === "template" && id.startsWith("tpl-")) {
+      if (localBackup && (localBackup.designId === id || localBackup.id === id)) {
+        return localBackup;
+      }
       const { TEMPLATES, BLANK_TEMPLATE, buildTemplateSections } = await import("./data");
       const { seedConfigFor } = await import("./site-config");
       const design = TEMPLATES.find((t) => t.id === id) || BLANK_TEMPLATE;
@@ -358,16 +388,56 @@ export async function loadTemplate(id: string, resource: Resource = "template"):
     }
 
     if (resource === "landing-page") {
-      const raw = await apiFetch<ApiLandingPage>(`${LANDING_PAGES_PATH}/${encodeURIComponent(id)}`);
-      const page = fromApiLandingPage(raw);
-      applyLandingPagePropertyFromConfig(page.config);
-      return page;
+      try {
+        const raw = await apiFetch<ApiLandingPage>(`${LANDING_PAGES_PATH}/${encodeURIComponent(id)}`);
+        const serverPage = fromApiLandingPage(raw);
+        applyLandingPagePropertyFromConfig(serverPage.config);
+        if (localBackup) {
+          const localTime = localBackup.updatedAt ? new Date(localBackup.updatedAt).getTime() : 0;
+          const serverTime = serverPage.updatedAt ? new Date(serverPage.updatedAt).getTime() : 0;
+          if (localTime > serverTime && localBackup.openPageSite) {
+            return {
+              ...serverPage,
+              sections: localBackup.sections?.length ? localBackup.sections : serverPage.sections,
+              config: localBackup.config || serverPage.config,
+              openPageSite: localBackup.openPageSite || serverPage.openPageSite,
+            };
+          }
+        }
+        return serverPage;
+      } catch (err) {
+        if (localBackup) {
+          applyLandingPagePropertyFromConfig(localBackup.config);
+          return localBackup;
+        }
+        throw err;
+      }
     }
-    const raw = await apiFetch<ApiTemplate>(`${TEMPLATES_PATH}/${encodeURIComponent(id)}`);
-    applyLandingPagePropertyFromConfig(null);
-    return fromApiTemplate(raw);
+    try {
+      const raw = await apiFetch<ApiTemplate>(`${TEMPLATES_PATH}/${encodeURIComponent(id)}`);
+      applyLandingPagePropertyFromConfig(null);
+      const serverPage = fromApiTemplate(raw);
+      if (localBackup) {
+        const localTime = localBackup.updatedAt ? new Date(localBackup.updatedAt).getTime() : 0;
+        const serverTime = serverPage.updatedAt ? new Date(serverPage.updatedAt).getTime() : 0;
+        if (localTime > serverTime && localBackup.openPageSite) {
+          return {
+            ...serverPage,
+            sections: localBackup.sections?.length ? localBackup.sections : serverPage.sections,
+            config: localBackup.config || serverPage.config,
+            openPageSite: localBackup.openPageSite || serverPage.openPageSite,
+          };
+        }
+      }
+      return serverPage;
+    } catch (err) {
+      if (localBackup) {
+        return localBackup;
+      }
+      throw err;
+    }
   } catch {
-    return null;
+    return localBackup || null;
   }
 }
 
@@ -531,6 +601,7 @@ export async function ensurePresetTemplates(): Promise<LandingPageData[]> {
 }
 
 async function patchTemplate(id: string, record: LandingPageData): Promise<LandingPageData> {
+  saveLocalBackup(record);
   const raw = await apiFetch<ApiTemplate>(`${TEMPLATES_PATH}/${encodeURIComponent(id)}`, {
     method: "PATCH",
     body: JSON.stringify({
@@ -546,7 +617,9 @@ async function patchTemplate(id: string, record: LandingPageData): Promise<Landi
       content: toContentBody(record),
     }),
   });
-  return fromApiTemplate(raw);
+  const updated = fromApiTemplate(raw);
+  saveLocalBackup(updated);
+  return updated;
 }
 
 export interface TemplateCategory {
@@ -604,6 +677,7 @@ export async function deleteTemplateCategory(id: string): Promise<void> {
 // sent them. Status changes only ever happen through submit/approve/
 // reject/publish, never a plain content save.
 async function patchLandingPage(id: string, record: LandingPageData): Promise<LandingPageData> {
+  saveLocalBackup(record);
   const raw = await apiFetch<ApiLandingPage>(`${LANDING_PAGES_PATH}/${encodeURIComponent(id)}`, {
     method: "PATCH",
     body: JSON.stringify({
@@ -613,7 +687,9 @@ async function patchLandingPage(id: string, record: LandingPageData): Promise<La
       content: toContentBody(record),
     }),
   });
-  return fromApiLandingPage(raw);
+  const updated = fromApiLandingPage(raw);
+  saveLocalBackup(updated);
+  return updated;
 }
 
 const SAVE_DEBOUNCE_MS = 500;
@@ -630,6 +706,7 @@ const pendingSaves = new Map<string, PendingSave>();
  *  resource) within the debounce window collapse into one PATCH using the
  *  latest record. */
 export function saveTemplate(record: LandingPageData, resource: Resource = "template"): Promise<LandingPageData> {
+  saveLocalBackup(record);
   return new Promise((resolve, reject) => {
     const key = `${resource}:${record.id}`;
     const existing = pendingSaves.get(key);
@@ -670,6 +747,7 @@ async function flushPendingSave(key: string, resource: Resource): Promise<Landin
 
 /** Immediate save used by Publish so the live page gets the current builder JSON, not a stale draft. */
 export async function saveTemplateNow(record: LandingPageData, resource: Resource = "template"): Promise<LandingPageData> {
+  saveLocalBackup(record);
   const key = `${resource}:${record.id}`;
   const existing = pendingSaves.get(key);
   if (existing) {

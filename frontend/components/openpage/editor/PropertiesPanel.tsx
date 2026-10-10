@@ -11,6 +11,7 @@ import { MediaPicker } from "@/components/media-picker";
 import { type FormDefinition } from "@/lib/openpage/forms-store";
 import { useBuilderLeadForms } from "@/components/openpage/builder/forms-context";
 import { DynamicDataPicker } from "./DynamicDataPicker";
+import { FLOOR_PLAN_FIELDS, AMENITY_FIELDS } from "./field-helpers";
 
 interface FieldDef {
   key: string
@@ -27,6 +28,7 @@ const blockFields: Partial<Record<BlockType, { sections: { title: string; fields
         fields: [
           { key: 'logo', label: 'Logo Text', type: 'text' },
           { key: 'logoImage', label: 'Logo', type: 'image' },
+          { key: 'logoSize', label: 'Logo Size (px)', type: 'number' },
           { key: 'ctaText', label: 'CTA Button', type: 'text' },
           { key: 'ctaId', label: 'CTA section ID', type: 'text' },
           { key: 'menuItems', label: 'Menu items', type: 'nav-menu' },
@@ -46,6 +48,8 @@ const blockFields: Partial<Record<BlockType, { sections: { title: string; fields
         title: 'Content',
         fields: [
           { key: 'badge', label: 'Badge', type: 'text' },
+          { key: 'badgeColor', label: 'Tag / Badge Color', type: 'text' },
+          { key: 'badgeBg', label: 'Tag / Badge Background', type: 'text' },
           { key: 'headline', label: 'Headline', type: 'text' },
           { key: 'subheadline', label: 'Subheadline', type: 'textarea' },
           { key: 'primaryCta', label: 'Primary CTA', type: 'text' },
@@ -111,15 +115,23 @@ const blockFields: Partial<Record<BlockType, { sections: { title: string; fields
         fields: [
           { key: 'headline', label: 'Headline', type: 'text' },
           { key: 'subheadline', label: 'Subheadline', type: 'text' },
+          { key: 'badge', label: 'Badge (optional)', type: 'text' },
           { key: 'buttonText', label: 'Button Text', type: 'text' },
           { key: 'buttonUrl', label: 'Button URL', type: 'text' },
           { key: 'popupId', label: 'Popup ID', type: 'text' },
+          { key: 'secondaryButtonText', label: 'Secondary Button Text', type: 'text' },
+          { key: 'secondaryButtonUrl', label: 'Secondary Button URL', type: 'text' },
+          { key: 'bgImage', label: 'Background Image', type: 'image' },
+          { key: 'image', label: 'Featured Image (Booking variant)', type: 'image' },
         ],
       },
       {
-        title: 'Style',
+        title: 'Style & Colors',
         fields: [
-          { key: 'variant', label: 'Variant', type: 'select', options: ['simple', 'split'] },
+          { key: 'variant', label: 'Variant', type: 'select', options: ['simple', 'split', 'booking', 'banner', 'strip', 'card'] },
+          { key: 'buttonColor', label: 'Button Color', type: 'text' },
+          { key: 'buttonTextColor', label: 'Button Text Color', type: 'text' },
+          { key: 'bgColor', label: 'Background Color', type: 'text' },
         ],
       },
     ],
@@ -349,6 +361,8 @@ const blockFields: Partial<Record<BlockType, { sections: { title: string; fields
       ]},
       { title: 'Content', fields: [
         { key: 'badge', label: 'Badge', type: 'text' },
+        { key: 'badgeColor', label: 'Tag / Badge Color', type: 'text' },
+        { key: 'badgeBg', label: 'Tag / Badge Background', type: 'text' },
         { key: 'headline', label: 'Headline', type: 'text' },
         { key: 'location', label: 'Location', type: 'text' },
         { key: 'price', label: 'Price', type: 'text' },
@@ -396,6 +410,7 @@ const blockFields: Partial<Record<BlockType, { sections: { title: string; fields
   amenities: {
     sections: [{ title: 'Layout', fields: [
       { key: 'variant', label: 'Template', type: 'select', options: ['grid', 'chips', 'icon-grid', 'featured', 'mosaic'] },
+      { key: 'cardBg', label: 'Card Background Color', type: 'text' },
     ]}, { title: 'Content', fields: [
       { key: 'title', label: 'Title', type: 'text' },
       { key: 'subtitle', label: 'Subtitle', type: 'text' },
@@ -649,19 +664,6 @@ const blockFields: Partial<Record<BlockType, { sections: { title: string; fields
       { key: 'body', label: 'Text', type: 'textarea' },
     ]}],
   },
-  button: {
-    sections: [{ title: 'Content', fields: [
-      { key: 'label', label: 'Button text', type: 'text' },
-      { key: 'url', label: 'Link', type: 'text' },
-    ]}],
-  },
-  'icon-box': {
-    sections: [{ title: 'Content', fields: [
-      { key: 'icon', label: 'Icon', type: 'icon' },
-      { key: 'title', label: 'Title', type: 'text' },
-      { key: 'description', label: 'Description', type: 'textarea' },
-    ]}],
-  },
   'image-box': {
     sections: [{ title: 'Content', fields: [
       { key: 'image', label: 'Image', type: 'image' },
@@ -694,6 +696,49 @@ const blockFields: Partial<Record<BlockType, { sections: { title: string; fields
       { key: 'title', label: 'Title', type: 'text' },
       { key: 'items', label: 'Milestones', type: 'array-items' },
     ]}],
+  },
+  'icon-box': {
+    sections: [
+      {
+        title: 'Content',
+        fields: [
+          { key: 'title', label: 'Title', type: 'text' },
+          { key: 'description', label: 'Description', type: 'textarea' },
+          { key: 'icon', label: 'Icon / Icon Image', type: 'icon' },
+        ],
+      },
+      {
+        title: 'Style & Colors',
+        fields: [
+          { key: 'variant', label: 'Variant', type: 'select', options: ['card', 'horizontal', 'minimal', 'centered'] },
+          { key: 'iconColor', label: 'Icon Color', type: 'text' },
+          { key: 'iconBg', label: 'Icon Background Color', type: 'text' },
+          { key: 'cardBg', label: 'Card Color', type: 'text' },
+          { key: 'textColor', label: 'Title Color', type: 'text' },
+        ],
+      },
+    ],
+  },
+  button: {
+    sections: [
+      {
+        title: 'Content',
+        fields: [
+          { key: 'label', label: 'Button Text', type: 'text' },
+          { key: 'url', label: 'Button URL', type: 'text' },
+        ],
+      },
+      {
+        title: 'Style & Colors',
+        fields: [
+          { key: 'variant', label: 'Variant', type: 'select', options: ['solid', 'outline', 'pill', 'glass'] },
+          { key: 'align', label: 'Alignment', type: 'select', options: ['center', 'left', 'right'] },
+          { key: 'buttonColor', label: 'Button Color', type: 'text' },
+          { key: 'textColor', label: 'Text Color', type: 'text' },
+          { key: 'bgImage', label: 'Section Background Image', type: 'image' },
+        ],
+      },
+    ],
   },
 }
 
@@ -743,7 +788,9 @@ const KNOWN_VARIANTS: Record<string, string[]> = {
   'stats': ['grid', 'bar', 'counter'],
   'hero': ['centered', 'split', 'gradient', 'minimal'],
   'features': ['grid', 'list', 'alternating'],
-  'cta': ['simple', 'split'],
+  'cta': ['simple', 'split', 'booking', 'banner', 'strip', 'card'],
+  'icon-box': ['card', 'horizontal', 'minimal', 'centered'],
+  'button': ['solid', 'outline', 'pill', 'glass'],
   'footer': ['simple', 'multi-column', 'minimal', 'premium', 'contact'],
 };
 
@@ -1119,6 +1166,13 @@ function PropertyField({ field, block }: { field: FieldDef; block: BlockConfig }
         return blockTemplates[block.type]?.[field.key] || { title: '', description: '' }
       }
 
+      const customItemFields =
+        block.type === 'floor-plans' && field.key === 'items'
+          ? FLOOR_PLAN_FIELDS
+          : block.type === 'amenities' && field.key === 'items'
+            ? AMENITY_FIELDS
+            : undefined;
+
       // Delegated to the shared list editor so every dynamic list in the
       // builder gets add / duplicate / delete / hide / drag-reorder plus a
       // styling hand-off, not just append-and-remove.
@@ -1129,6 +1183,7 @@ function PropertyField({ field, block }: { field: FieldDef; block: BlockConfig }
             list={{ path: [field.key] }}
             label={field.label}
             template={createEmptyItem()}
+            fields={customItemFields}
           />
         </div>
       )

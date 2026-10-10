@@ -45,6 +45,57 @@ function kindForKey(key: string, sample: unknown): ItemFieldKind {
   return "text";
 }
 
+const FIELD_LABEL_MAP: Record<string, string> = {
+  name: "Plan Name",
+  beds: "Bedrooms",
+  bedrooms: "Bedrooms",
+  image: "Floor Plan Image",
+  price: "Price",
+  area: "Area",
+  carpetArea: "Carpet Area",
+  downloadUrl: "Download URL",
+  title: "Title",
+  description: "Description",
+  icon: "Icon",
+  iconBg: "Icon Background",
+  iconColor: "Icon Color",
+  cardBg: "Card Background",
+  cardColor: "Card Color",
+  stat: "Stat Value",
+  value: "Value",
+  label: "Label",
+  role: "Role",
+  quote: "Quote",
+  question: "Question",
+  answer: "Answer",
+};
+
+export function humanizeFieldLabel(key: string): string {
+  if (FIELD_LABEL_MAP[key]) return FIELD_LABEL_MAP[key];
+  return key
+    .replace(/([A-Z])/g, " $1")
+    .replace(/[_-]/g, " ")
+    .replace(/^./, (str) => str.toUpperCase())
+    .trim();
+}
+
+export const FLOOR_PLAN_FIELDS: ItemFieldDef[] = [
+  { key: "name", label: "Plan Name", kind: "text", placeholder: "e.g. 2 BHK Luxury" },
+  { key: "beds", label: "Bedrooms", kind: "text", placeholder: "e.g. 2 BHK" },
+  { key: "area", label: "Area", kind: "text", placeholder: "e.g. 1,250 sq.ft." },
+  { key: "price", label: "Price", kind: "text", placeholder: "e.g. ₹1.25 Cr" },
+  { key: "image", label: "Floor Plan Image", kind: "image" },
+  { key: "downloadUrl", label: "Download URL", kind: "text", placeholder: "https://... or #enquire" },
+];
+
+export const AMENITY_FIELDS: ItemFieldDef[] = [
+  { key: "title", label: "Title", kind: "text", placeholder: "e.g. Swimming Pool" },
+  { key: "description", label: "Description", kind: "textarea", placeholder: "Short description" },
+  { key: "image", label: "Image (optional)", kind: "image" },
+  { key: "icon", label: "Icon (optional if image used)", kind: "icon" },
+  { key: "cardBg", label: "Card Color (optional)", kind: "text", placeholder: "e.g. #ffffff or #f8fafc" },
+];
+
 /**
  * Infer editable fields from an existing item so legacy lists keep working
  * without an explicit schema, while the reserved `_id` stays hidden.
@@ -57,7 +108,7 @@ export function inferItemFields(
     .filter(([key]) => key !== ITEM_ID_KEY && !key.startsWith("_"))
     .map(([key, value]) => {
       const kind = kindForKey(key, value);
-      const def: ItemFieldDef = { key, kind, label: key };
+      const def: ItemFieldDef = { key, kind, label: humanizeFieldLabel(key) };
       if (kind === "textarea") def.rows = 3;
       return def;
     });

@@ -37,11 +37,41 @@ export function TextBlock({ block }: { block: BlockConfig }) {
 
 export function ButtonBlock({ block }: { block: BlockConfig }) {
   const p = block.props;
+  const variant = block.variant || "solid";
+  const align = str(p.align, "center");
+  const alignCls = align === "left" ? "justify-start" : align === "right" ? "justify-end" : "justify-center";
+
+  const btnBg = str(p.buttonColor) || str(p.bgColor) || undefined;
+  const textColor = str(p.textColor) || undefined;
+
+  let variantCls = "rounded-lg bg-green text-black font-semibold hover:opacity-90";
+  if (variant === "outline") {
+    variantCls = "rounded-lg border-2 border-green text-green hover:bg-green/10";
+  } else if (variant === "pill") {
+    variantCls = "rounded-full bg-green text-black font-semibold hover:opacity-90 shadow-md";
+  } else if (variant === "glass") {
+    variantCls = "rounded-xl bg-white/20 backdrop-blur-md border border-white/30 text-white font-medium hover:bg-white/30";
+  }
+
+  const customStyle: React.CSSProperties = {
+    backgroundColor: btnBg,
+    color: textColor,
+    borderColor: variant === "outline" ? btnBg || undefined : undefined,
+  };
+
   return (
-    <section className="px-6 py-6 flex justify-center">
+    <section
+      className={`px-6 py-6 flex ${alignCls}`}
+      style={{
+        backgroundImage: str(p.bgImage) ? `url(${str(p.bgImage)})` : undefined,
+        backgroundSize: "cover",
+        backgroundPosition: "center",
+      }}
+    >
       <a
         href={str(p.url, "#enquire")}
-        className="inline-flex items-center gap-2 px-6 py-3 rounded-lg bg-green text-black text-sm font-semibold hover:bg-green-dim"
+        style={customStyle}
+        className={`inline-flex items-center gap-2 px-7 py-3 text-sm transition-all shadow-sm ${variantCls}`}
       >
         {str(p.label, "Enquire Now")}
         <ArrowRight size={16} />
@@ -53,18 +83,106 @@ export function ButtonBlock({ block }: { block: BlockConfig }) {
 export function IconBoxBlock({ block }: { block: BlockConfig }) {
   const p = block.props;
   const icon = str(p.icon);
+  const variant = block.variant || "card";
+
+  const iconColor = str(p.iconColor);
+  const iconBg = str(p.iconBg);
+  const cardBg = str(p.cardBg) || str(p.bgColor);
+  const textColor = str(p.textColor);
+
+  if (variant === "horizontal") {
+    return (
+      <section className="px-6 @md:px-10 py-6">
+        <div
+          className="max-w-md mx-auto flex items-start gap-4 rounded-2xl border border-border-default bg-bg-2 p-5 shadow-sm"
+          style={{ backgroundColor: cardBg || undefined }}
+        >
+          <div
+            className="w-12 h-12 rounded-xl bg-green/10 flex items-center justify-center overflow-hidden shrink-0"
+            style={{ backgroundColor: iconBg || undefined, color: iconColor || undefined }}
+          >
+            {isMediaSrc(icon) ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img src={icon} alt="" className="w-7 h-7 object-contain" />
+            ) : (
+              <span className="text-xl" style={{ color: iconColor || undefined }}>{icon || "◆"}</span>
+            )}
+          </div>
+          <div>
+            <h3 className="font-semibold mb-1" style={{ color: textColor || undefined }}>{str(p.title, "Icon box")}</h3>
+            <p className="text-text-2 text-sm">{str(p.description, "Short supporting text.")}</p>
+          </div>
+        </div>
+      </section>
+    );
+  }
+
+  if (variant === "minimal") {
+    return (
+      <section className="px-6 @md:px-10 py-6 text-center">
+        <div className="max-w-sm mx-auto">
+          <div
+            className="w-12 h-12 mx-auto mb-3 flex items-center justify-center overflow-hidden"
+            style={{ color: iconColor || undefined }}
+          >
+            {isMediaSrc(icon) ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img src={icon} alt="" className="w-8 h-8 object-contain" />
+            ) : (
+              <span className="text-2xl" style={{ color: iconColor || undefined }}>{icon || "◆"}</span>
+            )}
+          </div>
+          <h3 className="font-semibold mb-1" style={{ color: textColor || undefined }}>{str(p.title, "Icon box")}</h3>
+          <p className="text-text-2 text-sm">{str(p.description, "Short supporting text.")}</p>
+        </div>
+      </section>
+    );
+  }
+
+  if (variant === "centered") {
+    return (
+      <section className="px-6 @md:px-10 py-8">
+        <div
+          className="max-w-sm mx-auto text-center rounded-3xl border border-border-default bg-bg-2 p-8 shadow-md relative overflow-hidden"
+          style={{ backgroundColor: cardBg || undefined }}
+        >
+          <div className="absolute inset-0 bg-gradient-to-b from-green/8 to-transparent pointer-events-none" />
+          <div
+            className="w-14 h-14 mx-auto mb-4 rounded-2xl bg-green/15 flex items-center justify-center overflow-hidden shadow-sm"
+            style={{ backgroundColor: iconBg || undefined, color: iconColor || undefined }}
+          >
+            {isMediaSrc(icon) ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img src={icon} alt="" className="w-8 h-8 object-contain" />
+            ) : (
+              <span className="text-2xl" style={{ color: iconColor || undefined }}>{icon || "◆"}</span>
+            )}
+          </div>
+          <h3 className="font-display font-semibold text-lg mb-2" style={{ color: textColor || undefined }}>{str(p.title, "Icon box")}</h3>
+          <p className="text-text-2 text-sm leading-relaxed">{str(p.description, "Short supporting text.")}</p>
+        </div>
+      </section>
+    );
+  }
+
   return (
     <section className="px-6 @md:px-10 py-8">
-      <div className="max-w-sm mx-auto text-center rounded-2xl border border-border-default bg-bg-2 p-6">
-        <div className="w-12 h-12 mx-auto mb-3 rounded-xl bg-green/10 flex items-center justify-center overflow-hidden">
+      <div
+        className="max-w-sm mx-auto text-center rounded-2xl border border-border-default bg-bg-2 p-6 shadow-sm"
+        style={{ backgroundColor: cardBg || undefined }}
+      >
+        <div
+          className="w-12 h-12 mx-auto mb-3 rounded-xl bg-green/10 flex items-center justify-center overflow-hidden"
+          style={{ backgroundColor: iconBg || undefined, color: iconColor || undefined }}
+        >
           {isMediaSrc(icon) ? (
             // eslint-disable-next-line @next/next/no-img-element
             <img src={icon} alt="" className="w-7 h-7 object-contain" />
           ) : (
-            <span className="text-xl">{icon || "◆"}</span>
+            <span className="text-xl" style={{ color: iconColor || undefined }}>{icon || "◆"}</span>
           )}
         </div>
-        <h3 className="font-semibold mb-1">{str(p.title, "Icon box")}</h3>
+        <h3 className="font-semibold mb-1" style={{ color: textColor || undefined }}>{str(p.title, "Icon box")}</h3>
         <p className="text-text-2 text-sm">{str(p.description, "Short supporting text.")}</p>
       </div>
     </section>
