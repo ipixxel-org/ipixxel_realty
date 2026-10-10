@@ -245,6 +245,12 @@ export class PlatformConfigService implements OnApplicationBootstrap {
         'DNS mode "A record" requires the server IP (infraIp).',
       );
     }
+    const ipv4Regex = /^(\d{1,3}\.){3}\d{1,3}$/;
+    if (dnsMode === 'a' && infraIp && !ipv4Regex.test(infraIp)) {
+      throw new BadRequestException(
+        'Origin IPv4 must be a valid numeric IP address (e.g. 187.126.119.156), not a domain name. If you want to use a domain name, switch DNS mode to CNAME.',
+      );
+    }
 
     try {
       await this.prisma.$executeRaw`

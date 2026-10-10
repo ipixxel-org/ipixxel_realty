@@ -34,9 +34,32 @@ export class OrgDomainController {
     return this.service.requestCustomDomain(
       user.orgId as string,
       user.sub as string,
-      dto.domain,
-      dto.landingPageId,
+      dto,
     );
+  }
+
+  @RequirePermission('domains', 'edit')
+  @Post('verify-dns/:id')
+  verifyDns(@CurrentUser() user: JwtPayload, @Param('id') id: string) {
+    return this.service.verifyDns(user.orgId as string, user.sub as string, id);
+  }
+
+  @RequirePermission('domains', 'edit')
+  @Post('verify-ssl/:id')
+  verifySsl(@CurrentUser() user: JwtPayload, @Param('id') id: string) {
+    return this.service.verifySsl(user.orgId as string, user.sub as string, id);
+  }
+
+  @RequirePermission('domains', 'edit')
+  @Post('publish/:id')
+  publishDomain(@CurrentUser() user: JwtPayload, @Param('id') id: string) {
+    return this.service.publishDomain(user.orgId as string, user.sub as string, id);
+  }
+
+  @RequirePermission('domains', 'edit')
+  @Post('unpublish/:id')
+  unpublishDomain(@CurrentUser() user: JwtPayload, @Param('id') id: string) {
+    return this.service.unpublishDomain(user.orgId as string, user.sub as string, id);
   }
 
   @RequirePermission('domains', 'edit')

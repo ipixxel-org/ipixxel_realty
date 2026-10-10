@@ -136,7 +136,7 @@ async function runTests() {
 
   const mockStorage: any = { createUploadUrl: async () => ({}) };
   const templatesService = new OrgTemplatesService(prisma as any);
-  const landingPagesService = new OrgLandingPagesService(prisma as any, mockStorage);
+  const landingPagesService = new OrgLandingPagesService(prisma as any, mockStorage, {} as any);
 
   try {
     // -------------------------------------------------------------------------

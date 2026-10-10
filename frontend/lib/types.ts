@@ -1830,17 +1830,40 @@ export type OrgUserDashboardResponse = SalesAgentDetailResponse;
 
 export type OrgDomainKind = "custom_domain";
 export type OrgDomainRequestStatus =
-  "pending" | "approved" | "rejected" | "connected";
+  | "pending"
+  | "changes_requested"
+  | "approved"
+  | "rejected"
+  | "connected"
+  | "suspended";
 
 export interface OrgDomainRequest {
   id: string;
   kind: OrgDomainKind;
   customDomain: string | null;
+  domainType?: string | null;
+  projectId?: string | null;
+  project?: { id: string; name: string } | null;
   landingPageId: string | null;
-  landingPage?: { id: string; name: string; slug: string } | null;
+  landingPage?: { id: string; name: string; slug: string; status?: string } | null;
   status: OrgDomainRequestStatus;
+  dnsStatus?: "pending" | "verified" | "failed";
+  sslStatus?: "pending" | "provisioning" | "active" | "failed";
+  verificationToken?: string | null;
+  verificationDetails?: any | null;
+  sslDetails?: any | null;
+  isPrimary?: boolean;
+  redirectWww?: boolean;
+  preferredHostname?: string | null;
+  notes?: string | null;
+  adminFeedback?: string | null;
+  isSuspended?: boolean;
+  suspendedReason?: string | null;
+  requestedBy?: string | null;
   requestedAt: string;
   reviewedAt: string | null;
+  reviewedBy?: string | null;
+  publishedAt?: string | null;
   rejectionReason: string | null;
   dnsInstructions?: DnsRecordSpec[] | null;
 }
@@ -1852,11 +1875,14 @@ export interface OrgDomainLandingPage {
   slug: string;
   status: string;
   pageType?: string;
+  projectId?: string | null;
   sourceTemplate?: { name: string } | null;
   assignedDomain?: {
     id: string;
     customDomain: string;
     status: string;
+    dnsStatus?: string;
+    sslStatus?: string;
   } | null;
 }
 
@@ -1864,17 +1890,29 @@ export interface ApprovedDomainOption {
   id: string;
   domain: string;
   status: string;
+  dnsStatus?: string;
+  sslStatus?: string;
   landingPageId: string | null;
   landingPageName: string | null;
+  projectId?: string | null;
+  projectName?: string | null;
 }
 
 /** GET /org/domain — the organisation's own custom-domain identity. */
 export interface OrgDomainInfo {
+  metrics?: {
+    totalDomains: number;
+    pendingApprovals: number;
+    dnsPending: number;
+    sslIssues: number;
+    liveDomains: number;
+  };
   customDomain: string | null;
   customDomainStatus: string;
   customDomainLandingPageId: string | null;
   platformOrigin?: string | null;
   dnsMode?: string;
+  projects?: Array<{ id: string; name: string; location?: string }>;
   landingPages: OrgDomainLandingPage[];
   requests: OrgDomainRequest[];
   approvedDomains?: ApprovedDomainOption[];
@@ -1882,13 +1920,20 @@ export interface OrgDomainInfo {
 
 export interface RequestCustomDomainInput {
   domain: string;
-  /** Which landing page (template) the custom domain should serve. */
+  projectId?: string;
   landingPageId?: string;
+  preferredHostname?: string;
+  domainType?: string;
+  isPrimary?: boolean;
+  redirectWww?: boolean;
+  ownershipConfirmed?: boolean;
+  notes?: string;
 }
 
 export interface AssignCustomDomainInput {
   domainRequestId: string;
   landingPageId?: string | null;
+  projectId?: string | null;
 }
 
 /** A DNS record pair shown to the Super Admin (e.g. A record or CNAME). */
@@ -1918,14 +1963,22 @@ export interface AdminOrgDomainRequestListResponse {
   page: number;
   limit: number;
   pages?: number;
+  stats?: {
+    total: number;
+    pending: number;
+    approved: number;
+    live: number;
+    suspended: number;
+  };
   baseDomain?: string;
   dnsInstructions?: DnsRecordSpec[];
   dnsMode?: string;
 }
 
 export interface ReviewOrgDomainRequestInput {
-  action: "approve" | "reject";
+  action: "approve" | "reject" | "request_changes" | "suspend" | "reactivate";
   reason?: string;
+  feedback?: string;
 }
 
 // --- Super Admin: Audit logs ---

@@ -1,4 +1,4 @@
-import { IsNotEmpty, IsOptional, IsString, MaxLength } from 'class-validator';
+import { IsBoolean, IsNotEmpty, IsOptional, IsString, MaxLength } from 'class-validator';
 
 export class RequestCustomDomainDto {
   @IsString()
@@ -6,9 +6,36 @@ export class RequestCustomDomainDto {
   @MaxLength(253)
   domain!: string;
 
-  // The org's selected landing page (template) the custom domain should serve.
-  // Optional — defaults to the org's primary published page at approval time.
+  @IsOptional()
+  @IsString()
+  projectId?: string;
+
   @IsOptional()
   @IsString()
   landingPageId?: string;
-}
+
+  @IsOptional()
+  @IsString()
+  preferredHostname?: string;
+
+  @IsOptional()
+  @IsString()
+  domainType?: string;
+
+  @IsOptional()
+  @IsBoolean()
+  isPrimary?: boolean;
+
+  @IsOptional()
+  @IsBoolean()
+  redirectWww?: boolean;
+
+  @IsOptional()
+  @IsBoolean()
+  ownershipConfirmed?: boolean;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(1000)
+  notes?: string;
+}

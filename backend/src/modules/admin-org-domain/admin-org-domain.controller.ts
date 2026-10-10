@@ -1,6 +1,7 @@
 import {
   Body,
   Controller,
+  Delete,
   Get,
   Param,
   Post,
@@ -23,6 +24,7 @@ export class AdminOrgDomainController {
   list(
     @Query('status') status?: string,
     @Query('kind') kind?: string,
+    @Query('tab') tab?: string,
     @Query('search') search?: string,
     @Query('page') page?: string,
     @Query('limit') limit?: string,
@@ -30,6 +32,7 @@ export class AdminOrgDomainController {
     return this.service.list({
       status,
       kind,
+      tab,
       search,
       page: page ? parseInt(page, 10) : undefined,
       limit: limit ? parseInt(limit, 10) : undefined,
@@ -41,15 +44,28 @@ export class AdminOrgDomainController {
     return this.service.verify(id);
   }
 
+  @Post(':id/verify')
+  verifyPost(@Param('id') id: string) {
+    return this.service.verify(id);
+  }
+
   @Post(':id/review')
   review(
     @CurrentUser() user: JwtPayload,
     @Param('id') id: string,
     @Body() dto: ReviewOrgDomainRequestDto,
   ) {
-    if (dto.action === 'approve') return this.service.approve(id, user.sub);
-    if (dto.action === 'reject')
-      return this.service.reject(id, user.sub, dto.reason);
-    throw new Error('Unsupported action');
+    return this.service.review(
+      id,
+      user.sub,
+      dto.action,
+      dto.reason,
+      dto.feedback,
+    );
+  }
+
+  @Delete(':id')
+  delete(@CurrentUser() user: JwtPayload, @Param('id') id: string) {
+    return this.service.delete(id, user.sub);
   }
 }
