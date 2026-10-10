@@ -17,7 +17,7 @@ import {
   sortableKeyboardCoordinates,
   verticalListSortingStrategy,
 } from "@dnd-kit/sortable";
-import { GripVertical, Plus } from "lucide-react";
+import { GripVertical, Plus, ChevronUp, ChevronDown, Copy, Trash2, Layers, X } from "lucide-react";
 import { toast } from "sonner";
 import { useConfigStore } from "@/components/openpage/store/configStore";
 import { useEditorStore } from "@/components/openpage/store/editorStore";
@@ -27,7 +27,7 @@ import { RenderBlock } from "@/components/openpage/blocks/registry";
 import { resolveTheme, themeToCSS } from "@/lib/openpage/theme-presets";
 import { useGoogleFonts } from "@/lib/openpage/useGoogleFonts";
 import { createBlockFromType, createBlockFromPresetId } from "@/lib/openpage/block-factory";
-import { findBlock } from "@/lib/openpage/block-tree";
+import { findBlock, allAtRoot } from "@/lib/openpage/block-tree";
 import type { BlockConfig, BlockStyle } from "@/components/openpage/blocks/types";
 import { ElementEditorContext } from "@/components/openpage/blocks/El";
 import { DeviceProvider } from "@/components/openpage/runtime/device";
@@ -124,6 +124,122 @@ function CanvasDropZone({
   );
 }
 
+/**
+ * Elementor-style selection toolbar shown while several root sections are
+ * selected together. Operates on the whole selection: move up/down keeps the
+ * group's internal order, duplicate and delete affect every selected block.
+ */
+function MultiSelectBar({
+  blocks,
+  selectedIds,
+}: {
+  blocks: BlockConfig[];
+  selectedIds: string[];
+}) {
+  const moveBlocks = useConfigStore((s) => s.moveBlocks);
+  const duplicateBlocks = useConfigStore((s) => s.duplicateBlocks);
+  const removeBlocks = useConfigStore((s) => s.removeBlocks);
+  const clearSelection = useEditorStore((s) => s.clearSelection);
+  const selectBlock = useEditorStore((s) => s.selectBlock);
+
+  const indices = selectedIds
+    .map((id) => blocks.findIndex((b) => b.id === id))
+    .filter((i) => i !== -1);
+  if (indices.length === 0) return null;
+  const firstIdx = Math.min(...indices);
+  const lastIdx = Math.max(...indices);
+
+  const moveUp = () => moveBlocks(selectedIds, Math.max(0, firstIdx - 1));
+  const moveDown = () => moveBlocks(selectedIds, Math.min(blocks.length, lastIdx + 2));
+
+  const handleDuplicate = () => {
+    duplicateBlocks(selectedIds);
+    toast.success(`${selectedIds.length} sections duplicated`);
+  };
+
+  const handleDelete = () => {
+    removeBlocks(selectedIds);
+    clearSelection();
+    toast(`${selectedIds.length} sections removed`, {
+      action: {
+        label: "Undo",
+        onClick: () => {
+          useConfigStore.getState().undo();
+          toast("Sections restored");
+        },
+      },
+      duration: 3500,
+    });
+  };
+
+  return (
+    <div
+      className="absolute top-3 left-1/2 -translate-x-1/2 z-50 flex items-center gap-1 bg-[#1e222d] border border-blue-500/40 text-white rounded-lg shadow-xl shadow-black/40 backdrop-blur-md px-2 py-1 select-none animate-in fade-in zoom-in-95"
+      onClick={(e) => e.stopPropagation()}
+      role="toolbar"
+      aria-label={`${selectedIds.length} sections selected`}
+    >
+      <span className="flex items-center gap-1.5 px-1.5 text-[11px] font-semibold text-blue-300">
+        <Layers size={12} />
+        {selectedIds.length} selected
+      </span>
+      <div className="w-[1px] h-4 bg-white/15 mx-0.5" />
+      <button
+        type="button"
+        disabled={firstIdx === 0}
+        onClick={moveUp}
+        className="p-1.5 text-text-2 hover:text-white hover:bg-white/10 rounded disabled:opacity-30 disabled:pointer-events-none transition-colors"
+        title="Move selected up"
+      >
+        <ChevronUp size={13} />
+      </button>
+      <button
+        type="button"
+        disabled={lastIdx === blocks.length - 1}
+        onClick={moveDown}
+        className="p-1.5 text-text-2 hover:text-white hover:bg-white/10 rounded disabled:opacity-30 disabled:pointer-events-none transition-colors"
+        title="Move selected down"
+      >
+        <ChevronDown size={13} />
+      </button>
+      <div className="w-[1px] h-4 bg-white/15 mx-0.5" />
+      <button
+        type="button"
+        onClick={handleDuplicate}
+        className="p-1.5 text-text-2 hover:text-white hover:bg-white/10 rounded transition-colors"
+        title="Duplicate selected"
+      >
+        <Copy size={13} />
+      </button>
+      <button
+        type="button"
+        onClick={handleDelete}
+        className="p-1.5 text-text-2 hover:text-red-400 hover:bg-red-500/20 rounded transition-colors"
+        title="Delete selected"
+      >
+        <Trash2 size={13} />
+      </button>
+      <div className="w-[1px] h-4 bg-white/15 mx-0.5" />
+      <button
+        type="button"
+        onClick={clearSelection}
+        className="p-1.5 text-text-2 hover:text-white hover:bg-white/10 rounded transition-colors"
+        title="Clear selection (Esc)"
+      >
+        <X size={13} />
+      </button>
+      <button
+        type="button"
+        onClick={() => selectBlock(selectedIds[0])}
+        className="text-[10px] font-medium px-1.5 py-0.5 rounded text-white/50 hover:text-white hover:bg-white/10 transition-colors capitalize"
+        title="Show inspector for first selected"
+      >
+        edit
+      </button>
+    </div>
+  );
+}
+
 export function Canvas() {
   const blocks = useConfigStore((s) => {
     const pages = s.config.pages;
@@ -133,9 +249,10 @@ export function Canvas() {
   });
   const theme = useConfigStore((s) => s.config.theme);
   const moveBlock = useConfigStore((s) => s.moveBlock);
+  const moveBlocks = useConfigStore((s) => s.moveBlocks);
   const moveBlockInColumn = useConfigStore((s) => s.moveBlockInColumn);
   const moveBlockTo = useConfigStore((s) => s.moveBlockTo);
-  const { selectedBlockId, selectBlock, viewport, setIsDragging, showGrid } = useEditorStore();
+  const { selectedBlockId, selectedBlockIds, selectBlock, viewport, setIsDragging, showGrid } = useEditorStore();
 
   const resolved = useMemo(() => resolveTheme(theme), [theme]);
   const cssVars = useMemo(() => themeToCSS(resolved), [resolved]);
@@ -176,6 +293,13 @@ export function Canvas() {
   const [activeId, setActiveId] = useState<string | null>(null);
   const activeBlock = useMemo(() => (activeId ? findBlock(blocks, activeId) : undefined), [blocks, activeId]);
 
+  // Root-level sections that are part of the current selection. Multi-drag
+  // only kicks in when EVERY selected block is a root section — blocks inside
+  // columns keep the regular single-item behaviour.
+  const selectedRootIds = useMemo(() => selectedBlockIds.filter((id) => blocks.some((b) => b.id === id)), [blocks, selectedBlockIds]);
+  const isGroupDrag = Boolean(activeId) && selectedRootIds.length > 1 && selectedRootIds.includes(activeId!);
+  const allSelectedAtRoot = selectedRootIds.length > 1 && allAtRoot(blocks, selectedBlockIds);
+
   const handleDragStart = useCallback((event: DragStartEvent) => {
     setActiveId(String(event.active.id));
     setIsDragging(true);
@@ -196,6 +320,14 @@ export function Canvas() {
       const cols = sectionBlock.props.columns as Array<{ width: number; blocks: BlockConfig[] }> | undefined;
       return cols?.[colIdx as number]?.blocks;
     };
+
+    // ---- Elementor-style group move: dragging any selected root section
+    //      moves the whole selection together ----
+    if (activeData?.type !== "column-block" && selectedRootIds.length > 1 && selectedRootIds.includes(String(active.id))) {
+      const overIndex = blocks.findIndex((b) => b.id === over.id);
+      if (overIndex !== -1) moveBlocks(selectedRootIds, overIndex);
+      return;
+    }
 
     // ---- Blocks that live inside a column ----
     if (activeData?.type === "column-block") {
@@ -277,7 +409,7 @@ export function Canvas() {
     if (oldIndex !== -1 && newIndex !== -1) {
       moveBlock(oldIndex, newIndex);
     }
-  }, [blocks, moveBlock, moveBlockInColumn, moveBlockTo, setIsDragging]);
+  }, [blocks, moveBlock, moveBlockInColumn, moveBlockTo, moveBlocks, setIsDragging, selectedRootIds]);
 
   if (blocks.length === 0) {
     return <CanvasEmpty />;
@@ -312,13 +444,24 @@ export function Canvas() {
           setIsDragging(false);
         }}
       >
-        <SortableContext items={blocks.map((b) => b.id)} strategy={verticalListSortingStrategy}>
+        {/* During a group drag the non-grabbed selected sections are frozen in
+            place: keep them out of the sortable context so they neither shuffle
+            nor act as drop targets. */}
+        <SortableContext
+          items={blocks
+            .map((b) => b.id)
+            .filter((id) => !(isGroupDrag && selectedRootIds.includes(id) && id !== activeId))}
+          strategy={verticalListSortingStrategy}
+        >
+          {allSelectedAtRoot && <MultiSelectBar blocks={blocks} selectedIds={selectedRootIds} />}
           <CanvasDropZone index={0} isFirst />
           {blocks.map((block, idx) => (
             <div key={block.id} className="relative">
               <SortableBlock
                 block={block}
                 isSelected={selectedBlockId === block.id}
+                isMultiSelected={selectedBlockIds.includes(block.id)}
+                frozen={isGroupDrag && selectedRootIds.includes(block.id) && block.id !== activeId}
                 onSelect={() => selectBlock(block.id)}
               >
                 <ElementEditorContext.Provider value={{ blockId: block.id, isEditing: true }}>
@@ -334,8 +477,23 @@ export function Canvas() {
             <div className="opacity-95 border-2 border-[#5b9cff] shadow-2xl rounded-xl overflow-hidden pointer-events-none bg-bg-1 scale-[0.99] max-w-4xl">
               <div className="bg-[#5b9cff] text-white text-[10px] font-semibold px-3 py-1.5 flex items-center gap-1.5 shadow-sm">
                 <GripVertical size={12} />
-                <span>Moving section: {activeBlock.type}</span>
+                <span>
+                  {isGroupDrag ? `Moving ${selectedRootIds.length} sections` : `Moving section: ${activeBlock.type}`}
+                </span>
               </div>
+              {isGroupDrag && selectedRootIds.length > 1 && (
+                <div className="bg-blue-700/90 text-white text-[10px] font-semibold px-3 py-1 flex items-center gap-1.5 border-t border-white/20">
+                  <Layers size={11} />
+                  <span>
+                    {selectedRootIds
+                      .map((id) => findBlock(blocks, id)?.type ?? id)
+                      .filter((t, i, arr) => arr.indexOf(t) === i)
+                      .slice(0, 3)
+                      .join(", ")}
+                    {selectedRootIds.length > 3 ? ` +${selectedRootIds.length - 3} more` : ""}
+                  </span>
+                </div>
+              )}
               <div className="pointer-events-none opacity-80 max-h-[260px] overflow-hidden">
                 <ElementEditorContext.Provider value={{ blockId: activeBlock.id, isEditing: false }}>
                   <RenderBlock block={activeBlock} />

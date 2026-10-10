@@ -8,7 +8,7 @@ import { findBlock, findBlockLocation } from "@/lib/openpage/block-tree";
 
 export function useOpenPageKeyboard() {
   const { toggleJsonDrawer, toggleHistory, toggleShortcutsModal, togglePreview, toggleSpotlight, selectBlock, setClipboardStyle, setRightSidebarTab } = useEditorStore();
-  const { undo, redo, removeBlock, duplicateBlock } = useConfigStore();
+  const { undo, redo, removeBlock, duplicateBlock, removeBlocks, duplicateBlocks } = useConfigStore();
 
   useEffect(() => {
     function handleKeyDown(e: KeyboardEvent) {
@@ -52,22 +52,32 @@ export function useOpenPageKeyboard() {
             return;
           case "Delete":
           case "Backspace": {
-            const selectedId = useEditorStore.getState().selectedBlockId;
-            if (selectedId) {
+            const selectedIds = useEditorStore.getState().selectedBlockIds;
+            if (selectedIds.length > 0) {
               e.preventDefault();
-              removeBlock(selectedId);
+              if (selectedIds.length > 1) {
+                removeBlocks(selectedIds);
+                toast(`${selectedIds.length} blocks deleted`);
+              } else {
+                removeBlock(selectedIds[0]);
+                toast('Block deleted');
+              }
               selectBlock(null);
-              toast('Block deleted');
             }
             return;
           }
           case "d":
           case "D": {
-            const selectedId = useEditorStore.getState().selectedBlockId;
-            if (selectedId) {
+            const selectedIds = useEditorStore.getState().selectedBlockIds;
+            if (selectedIds.length > 0) {
               e.preventDefault();
-              duplicateBlock(selectedId);
-              toast('Block duplicated');
+              if (selectedIds.length > 1) {
+                duplicateBlocks(selectedIds);
+                toast(`${selectedIds.length} blocks duplicated`);
+              } else {
+                duplicateBlock(selectedIds[0]);
+                toast('Block duplicated');
+              }
             }
             return;
           }
@@ -98,9 +108,12 @@ export function useOpenPageKeyboard() {
 
       if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "d") {
         e.preventDefault();
-        const selectedId = useEditorStore.getState().selectedBlockId;
-        if (selectedId) {
-          duplicateBlock(selectedId);
+        const selectedIds = useEditorStore.getState().selectedBlockIds;
+        if (selectedIds.length > 1) {
+          duplicateBlocks(selectedIds);
+          toast(`${selectedIds.length} blocks duplicated`);
+        } else if (selectedIds.length === 1) {
+          duplicateBlock(selectedIds[0]);
           toast("Block duplicated");
         }
         return;
@@ -181,5 +194,5 @@ export function useOpenPageKeyboard() {
 
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [toggleJsonDrawer, toggleHistory, toggleShortcutsModal, togglePreview, toggleSpotlight, selectBlock, undo, redo, removeBlock, duplicateBlock, setClipboardStyle, setRightSidebarTab]);
+  }, [toggleJsonDrawer, toggleHistory, toggleShortcutsModal, togglePreview, toggleSpotlight, selectBlock, undo, redo, removeBlock, duplicateBlock, removeBlocks, duplicateBlocks, setClipboardStyle, setRightSidebarTab]);
 }

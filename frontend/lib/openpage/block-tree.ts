@@ -186,3 +186,50 @@ export function clampIndex(index: number | null | undefined, length: number): nu
   if (index == null) return length;
   return Math.max(0, Math.min(index, length));
 }
+
+/**
+ * Pure reorder of a *group* of root-level blocks (Elementor-style multi-drag).
+ *
+ * `ids` may be in any order; the group keeps its existing relative order in
+ * the source array. `overIndex` is an index in the ORIGINAL array pointing at
+ * the block ahead of which the group should end up (pass `blocks.length` to
+ * append at the end). If `overIndex` points at one of the selected blocks
+ * the list is returned unchanged, because the group can't land on itself.
+ *
+ * Returns a new array; the input and its block objects are not mutated.
+ */
+export function moveBlockGroup(
+  blocks: BlockConfig[],
+  ids: string[],
+  overIndex: number,
+): BlockConfig[] {
+  const selected = ids
+    .map((id) => ({ id, index: blocks.findIndex((b) => b.id === id) }))
+    .filter((entry) => entry.index !== -1)
+    .sort((a, b) => a.index - b.index);
+  if (selected.length === 0) return blocks;
+
+  const selectedIds = new Set(selected.map((entry) => entry.id));
+  const target = clampIndex(overIndex, blocks.length);
+  if (target < blocks.length && selectedIds.has(blocks[target].id)) return blocks;
+
+  const group: BlockConfig[] = selected.map((entry) => blocks[entry.index]);
+  const next: BlockConfig[] = [];
+  let inserted = false;
+  for (let i = 0; i < blocks.length; i++) {
+    const block = blocks[i];
+    if (selectedIds.has(block.id)) continue;
+    if (!inserted && i >= target) {
+      next.push(...group);
+      inserted = true;
+    }
+    next.push(block);
+  }
+  if (!inserted) next.push(...group);
+  return next;
+}
+
+/** True when every id in `ids` lives at the root level of `blocks`. */
+export function allAtRoot(blocks: BlockConfig[], ids: string[]): boolean {
+  return ids.every((id) => blocks.some((b) => b.id === id));
+}

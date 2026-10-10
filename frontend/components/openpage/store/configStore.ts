@@ -12,6 +12,7 @@ import {
   insertBlock,
   extractBlock,
   clampIndex,
+  moveBlockGroup,
   type BlockInsertTarget,
 } from "@/lib/openpage/block-tree";
 import { ITEM_ID_KEY } from "@/components/openpage/blocks/types";
@@ -70,6 +71,8 @@ interface ConfigState {
   duplicateBlock: (id: string) => void
   moveBlock: (fromIndex: number, toIndex: number) => void
   moveBlockToIndex: (blockId: string, toIndex: number) => void
+  /** Elementor-style group move: relocate all root-level `ids` together in one undo entry. */
+  moveBlocks: (ids: string[], toIndex: number) => void
   addBlockToColumn: (sectionBlockId: string, colIndex: number, block: BlockConfig, index?: number) => void
   removeBlockFromColumn: (sectionBlockId: string, colIndex: number, blockId: string) => void
   moveBlockInColumn: (sectionBlockId: string, colIndex: number, fromIndex: number, toIndex: number) => void
@@ -692,6 +695,17 @@ export const useConfigStore = create<ConfigState>()((set, get) => ({
               b.splice(toIndex > fromIndex ? toIndex - 1 : toIndex, 0, moved)
               return b
             }),
+          }
+        }),
+
+      moveBlocks: (ids, toIndex) =>
+        set((state) => {
+          const source = getPageBlocks(state.config, state.activePageId)
+          const next = moveBlockGroup(source, ids, toIndex)
+          if (next === source) return state
+          return {
+            ...pushUndo(state, 'Move blocks'),
+            config: mutateActivePageBlocks(withPages(state.config), state.activePageId, () => next),
           }
         }),
 
