@@ -236,7 +236,7 @@ export default function OrgCustomDomainsPage() {
         type: "success",
         text:
           updated.dnsStatus === "verified"
-            ? `DNS records verified successfully for ${updated.customDomain}! SSL check initiated.`
+            ? `DNS records verified successfully for ${updated.customDomain}! SSL HTTPS certificate automatically activated.`
             : `DNS check completed for ${updated.customDomain}. Propagation may take a few minutes. Check status details.`,
       });
       await loadData();

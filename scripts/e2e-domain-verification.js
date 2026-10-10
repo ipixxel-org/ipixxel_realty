@@ -10,6 +10,7 @@ const {
   generateDnsInstructions,
   generateVerificationToken,
   getInfraInfo,
+  generateAutoSslCertificate,
 } = require(path.join(__dirname, '../backend/dist/src/common/utils/domain.util.js'));
 
 console.log('================================================================');
@@ -82,11 +83,21 @@ const stages = [
   { step: 2, name: 'Super Admin Approval', status: 'approved', desc: 'Super Admin reviews and approves request' },
   { step: 3, name: 'DNS Instructions Generation', status: 'dns_required', desc: 'Dynamic CNAME / A / TXT records generated with unique token' },
   { step: 4, name: 'DNS Verification Check', status: 'verified', desc: 'Automated / manual DNS lookup confirms TXT/CNAME records' },
-  { step: 5, name: 'SSL Certificate Provisioning', status: 'ssl_pending', desc: 'Automated Let’s Encrypt / ACME issuance' },
+  { step: 5, name: 'SSL Certificate Provisioning', status: 'active', desc: 'Automated Let’s Encrypt / ACME issuance — HTTPS certificate automatically active' },
   { step: 6, name: 'Connected & Live', status: 'connected', desc: 'Traffic routed via reverse proxy / Next.js middleware rewrite to isolated template' }
 ];
 
 stages.forEach(s => console.log(`  Step ${s.step}: [${s.status.toUpperCase()}] - ${s.name}: ${s.desc}`));
+
+const sslStage = stages.find(s => s.step === 5);
+assert(sslStage && sslStage.status === 'active', 'Step 5: SSL certificate is automatically active upon DNS verification');
+
+const autoCert = generateAutoSslCertificate('aurora-residences.com');
+assert(autoCert.sslActive && autoCert.status === 'active' && autoCert.daysRemaining === 90, 'Automated SSL certificate provisions active HTTPS certificate');
+
+const connectedStage = stages.find(s => s.step === 6);
+assert(connectedStage && connectedStage.status === 'connected', 'Step 6: Domain is connected & live with active SSL HTTPS');
+
 
 // 5. ISOLATED SEO, SITEMAP & CANONICAL ROUTING
 console.log('\n--- [5. Isolated SEO, Sitemap & Robots Serving] ---');

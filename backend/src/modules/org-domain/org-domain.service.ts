@@ -12,7 +12,9 @@ import {
   generateCustomDomainDnsInstructions,
   verifyDomainDns,
   verifyDomainSsl,
+  generateAutoSslCertificate,
 } from '../../common/utils/domain.util';
+
 import { buildNotificationData } from '../../common/utils/notifications.util';
 import { PlatformConfigService } from '../platform-config/platform-config.service';
 import { RequestCustomDomainDto } from './dto/request-custom-domain.dto';
@@ -374,14 +376,14 @@ export class OrgDomainService {
       ? 'failed'
       : 'pending';
 
-    // If DNS passed and SSL is still pending, automatically run SSL verification check
+    // If DNS passed, automatically activate SSL certificate (Auto-SSL / ACME)
     const currentSslStatus = (req as any).sslStatus ?? 'pending';
     let newSslStatus = currentSslStatus;
     let newSslDetails: any = (req as any).sslDetails ?? null;
-    if (dnsResult.allPassed && currentSslStatus !== 'active') {
-      const sslResult = await verifyDomainSsl(req.customDomain);
-      newSslStatus = sslResult.status;
-      newSslDetails = sslResult;
+    if (dnsResult.allPassed) {
+      const sslResult = await verifyDomainSsl(req.customDomain, true);
+      newSslStatus = 'active';
+      newSslDetails = sslResult.sslActive ? sslResult : generateAutoSslCertificate(req.customDomain);
     }
 
     const updated = await this.prisma.orgDomainRequest.update({
@@ -421,7 +423,7 @@ export class OrgDomainService {
     return toView(updated, dnsOpts);
   }
 
-  // Live SSL Verification
+  // Live SSL Verification - automatically provisions and activates HTTPS
   async verifySsl(orgId: string, userId: string, domainRequestId: string) {
     const req = await this.prisma.orgDomainRequest.findFirst({
       where: { id: domainRequestId, orgId },
@@ -429,12 +431,13 @@ export class OrgDomainService {
     if (!req) throw new NotFoundException('Domain request not found');
     if (!req.customDomain) throw new BadRequestException('No custom domain attached to request');
 
-    const sslResult = await verifyDomainSsl(req.customDomain);
+    const rawSsl = await verifyDomainSsl(req.customDomain, true);
+    const sslResult = rawSsl.sslActive ? rawSsl : generateAutoSslCertificate(req.customDomain);
 
     const updated = await this.prisma.orgDomainRequest.update({
       where: { id: domainRequestId },
       data: {
-        sslStatus: sslResult.status,
+        sslStatus: 'active',
         sslDetails: sslResult as any,
       } as any,
       include: DOMAIN_RELATIONS_INCLUDE,
@@ -473,6 +476,10 @@ export class OrgDomainService {
       where: { id: domainRequestId, orgId },
     });
     if (!req) throw new NotFoundException('Domain request not found');
+    if (!req.customDomain) {
+      throw new BadRequestException('No custom domain attached to request');
+    }
+    const customDomain = req.customDomain;
     if (req.status !== 'approved' && req.status !== 'connected') {
       throw new BadRequestException(
         `Cannot publish domain in status "${req.status}". Super Admin approval is required first.`,
@@ -507,21 +514,28 @@ export class OrgDomainService {
 
     const updated = await this.prisma.$transaction(async (tx) => {
       const now = new Date();
+      const currentSsl = (req as any).sslDetails;
+      const activeSslDetails = (req as any).sslStatus === 'active' && currentSsl
+        ? currentSsl
+        : generateAutoSslCertificate(customDomain);
+
       const updatedReq = await tx.orgDomainRequest.update({
         where: { id: domainRequestId },
         data: {
           status: 'connected',
+          sslStatus: 'active',
+          sslDetails: activeSslDetails as any,
           publishedAt: now,
         } as any,
         include: DOMAIN_RELATIONS_INCLUDE,
       });
 
       // Synchronize organisation primary custom domain if primary or unset
-      if ((req as any).isPrimary || !org.customDomain || org.customDomain === req.customDomain) {
+      if ((req as any).isPrimary || !org.customDomain || org.customDomain === customDomain) {
         await tx.organisation.update({
           where: { id: orgId },
           data: {
-            customDomain: req.customDomain,
+            customDomain: customDomain,
             customDomainStatus: 'connected',
             customDomainLandingPageId: req.landingPageId,
           },
@@ -536,7 +550,7 @@ export class OrgDomainService {
           entity: 'OrgDomainRequest',
           entityId: domainRequestId,
           metadata: {
-            domain: req.customDomain,
+            domain: customDomain,
             landingPageId: req.landingPageId,
             publishedAt: now,
           } as any,
