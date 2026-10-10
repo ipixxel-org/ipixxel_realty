@@ -65,18 +65,22 @@ const blockLabels: Record<string, string> = {
 interface Props {
   block: BlockConfig;
   isSelected: boolean;
+  /** True when the block is part of the current multi-selection. */
+  isMultiSelected?: boolean;
+  /** Freeze DnD transforms (used while dragging a multi-selection group). */
+  frozen?: boolean;
   onSelect: () => void;
   children: ReactNode;
 }
 
-export function SortableBlock({ block, isSelected, onSelect, children }: Props) {
+export function SortableBlock({ block, isSelected, isMultiSelected = false, frozen = false, onSelect, children }: Props) {
   const blocks = useConfigStore((s) => {
     const pages = s.config.pages;
     if (!pages || pages.length === 0) return s.config.blocks;
     const page = pages.find((p) => p.id === s.activePageId) ?? pages[0];
     return page.blocks;
   });
-  const { viewport } = useEditorStore();
+  const { viewport, selectedBlockId, selectMultipleBlocks, toggleBlockSelection } = useEditorStore();
   const scrollRef = useRef<HTMLDivElement>(null);
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number } | null>(null);
   const [isHovered, setIsHovered] = useState(false);
@@ -91,9 +95,9 @@ export function SortableBlock({ block, isSelected, onSelect, children }: Props) 
   } = useSortable({ id: block.id });
 
   const style = {
-    transform: CSS.Transform.toString(transform),
-    transition,
-    opacity: isSortableDragging ? 0.4 : 1,
+    transform: frozen ? undefined : CSS.Transform.toString(transform),
+    transition: frozen ? undefined : transition,
+    opacity: frozen ? 1 : isSortableDragging ? 0.4 : 1,
   };
 
   const index = blocks.findIndex((b) => b.id === block.id);
@@ -127,6 +131,21 @@ export function SortableBlock({ block, isSelected, onSelect, children }: Props) 
         style={style}
         onClick={(e) => {
           e.stopPropagation();
+          if (e.shiftKey && selectedBlockId) {
+            const anchor = blocks.findIndex((b) => b.id === selectedBlockId);
+            if (anchor !== -1) {
+              e.preventDefault();
+              const from = Math.min(anchor, index);
+              const to = Math.max(anchor, index);
+              selectMultipleBlocks(blocks.slice(from, to + 1).map((b) => b.id));
+              return;
+            }
+          }
+          if (e.ctrlKey || e.metaKey) {
+            e.preventDefault();
+            toggleBlockSelection(block.id);
+            return;
+          }
           onSelect();
         }}
         onContextMenu={handleContextMenu}
@@ -163,6 +182,21 @@ export function SortableBlock({ block, isSelected, onSelect, children }: Props) 
       style={style}
       onClick={(e) => {
         e.stopPropagation();
+        if (e.shiftKey && selectedBlockId) {
+          const anchor = blocks.findIndex((b) => b.id === selectedBlockId);
+          if (anchor !== -1) {
+            e.preventDefault();
+            const from = Math.min(anchor, index);
+            const to = Math.max(anchor, index);
+            selectMultipleBlocks(blocks.slice(from, to + 1).map((b) => b.id));
+            return;
+          }
+        }
+        if (e.ctrlKey || e.metaKey) {
+          e.preventDefault();
+          toggleBlockSelection(block.id);
+          return;
+        }
         onSelect();
       }}
       onContextMenu={handleContextMenu}
@@ -173,11 +207,13 @@ export function SortableBlock({ block, isSelected, onSelect, children }: Props) 
           ? "border-2 border-dashed border-[#5b9cff] bg-[#5b9cff]/10 z-50 rounded-lg"
           : isSelected
           ? "outline outline-2 outline-dashed outline-[#5b9cff] -outline-offset-1 z-30"
+          : isMultiSelected
+          ? "outline outline-2 outline-dashed outline-[#5b9cff]/60 -outline-offset-1 z-20"
           : "hover:outline hover:outline-1 hover:outline-dashed hover:outline-[#5b9cff]/50 hover:-outline-offset-1"
       } ${animationName ? `op-animate-${animationName}` : ""}`}
       role="button"
-      aria-label={`${block.type} block${isSelected ? ", selected" : ""}`}
-      aria-selected={isSelected}
+      aria-label={`${block.type} block${isMultiSelected ? ", selected" : ""}`}
+      aria-selected={isMultiSelected}
       tabIndex={0}
       onKeyDown={(e) => {
         if (e.key === "Enter" || e.key === " ") {

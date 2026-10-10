@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Body, Param, Header, Res } from '@nestjs/common';
+import { Controller, Get, Post, Body, Param, Query, Header, Res } from '@nestjs/common';
 import { PublicSiteService } from './public-site.service';
 import type { Response } from 'express';
 
@@ -49,12 +49,21 @@ export class PublicSiteController {
   }
 
   @Get('page/:slug')
-  resolvePage(@Param('slug') slug: string) {
-    return this.service.resolveBySlug(slug);
+  resolvePage(@Param('slug') slug: string, @Query('track') track?: string) {
+    // SSR / metadata fetches pass track=0 so crawlers and server renders don't
+    // inflate page-view analytics (the browser reports the real view).
+    return this.service.resolveBySlug(slug, track !== '0');
   }
 
   @Get('page-by-id/:id')
   resolveById(@Param('id') id: string) {
     return this.service.resolveById(id);
+  }
+
+  // Every published landing page across the platform — feeds the platform
+  // host's /sitemap.xml (one entry per public /:slug URL).
+  @Get('published-pages')
+  publishedPages() {
+    return this.service.listPublishedPages();
   }
 }

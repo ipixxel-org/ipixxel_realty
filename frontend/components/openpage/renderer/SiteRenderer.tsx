@@ -3,7 +3,7 @@
 import { useMemo } from "react";
 import type { SiteConfig, BlockConfig } from "@/components/openpage/blocks/types";
 import { RenderBlock } from "@/components/openpage/blocks/registry";
-import { resolveTheme, themeToCSS } from "@/lib/openpage/theme-presets";
+import { resolveSiteTheme, siteThemeCSS } from "@/lib/openpage/theme-presets";
 import { useGoogleFonts } from "@/lib/openpage/useGoogleFonts";
 import { DeviceProvider } from "@/components/openpage/runtime/device";
 import { OpenPageRuntimeProvider } from "@/components/openpage/runtime/OpenPageRuntime";
@@ -60,37 +60,9 @@ export function SiteRenderer({
       ? resolvedSite.pages
       : [{ id: "page-home", name: "Home", path: "/", blocks: resolvedSite.blocks }];
   const blocks: BlockConfig[] = pages[0]?.blocks ?? resolvedSite.blocks ?? [];
-  const { typography, theme: themeOverride } = resolvedSite.settings ?? {};
 
-  const resolved = useMemo(() => {
-    const base = resolveTheme(resolvedSite.theme);
-    return {
-      ...base,
-      fontSans: typography?.bodyFont || base.fontSans,
-      fontDisplay: typography?.headingFont || base.fontDisplay,
-      accent: themeOverride?.primary || base.accent,
-      ctaButtonColor: themeOverride?.ctaButtonColor || base.ctaButtonColor,
-      text0: themeOverride?.text || base.text0,
-      bg1: themeOverride?.bg ?? base.bg1,
-      radius: themeOverride?.radius ?? base.radius,
-    };
-  }, [
-    resolvedSite.theme,
-    typography?.bodyFont,
-    typography?.headingFont,
-    themeOverride?.primary,
-    themeOverride?.ctaButtonColor,
-    themeOverride?.text,
-    themeOverride?.bg,
-    themeOverride?.radius,
-  ]);
-  const cssVars = useMemo(() => {
-    const vars = themeToCSS(resolved);
-    if (resolvedSite.settings?.theme?.containerWidth) {
-      Object.assign(vars, { "--op-container": `${resolvedSite.settings.theme.containerWidth}px` });
-    }
-    return vars;
-  }, [resolved, resolvedSite.settings]);
+  const resolved = useMemo(() => resolveSiteTheme(resolvedSite), [resolvedSite]);
+  const cssVars = useMemo(() => siteThemeCSS(resolvedSite), [resolvedSite]);
   useGoogleFonts([resolved.fontSans, resolved.fontDisplay, resolved.fontMono]);
   const library = mergeFormLibraries(forms, resolvedSite.forms);
 

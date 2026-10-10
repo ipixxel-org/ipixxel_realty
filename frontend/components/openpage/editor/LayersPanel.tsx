@@ -89,13 +89,7 @@ const PICKER_GROUPS: { id: string; title: string; defaultOpen: boolean; types: B
     id: "core",
     title: "Core",
     defaultOpen: true,
-    types: ["columns", "heading", "text", "image", "video", "button", "icon", "icon-box", "divider", "spacer", "location", "html-code"],
-  },
-  {
-    id: "re",
-    title: "Real Estate",
-    defaultOpen: true,
-    types: ["project-banner", "project-overview", "property-details", "unit-config", "amenities", "floor-plans", "gallery", "location", "re-pricing", "developer", "testimonials", "lead-form", "download-brochure", "site-visit", "newsletter", "cta"],
+    types: ["heading", "text", "button", "columns", "image", "video", "icon", "icon-box", "divider", "spacer", "location", "html-code"],
   },
   {
     id: "layout",
@@ -114,6 +108,12 @@ const PICKER_GROUPS: { id: string; title: string; defaultOpen: boolean; types: B
     title: "Media",
     defaultOpen: false,
     types: ["image", "video", "gallery", "image-box"],
+  },
+  {
+    id: "re",
+    title: "Real Estate",
+    defaultOpen: true,
+    types: ["project-banner", "project-overview", "property-details", "unit-config", "amenities", "floor-plans", "gallery", "location", "re-pricing", "developer", "testimonials", "lead-form", "download-brochure", "site-visit", "newsletter", "cta"],
   },
   {
     id: "forms",
@@ -577,10 +577,10 @@ function GlobalWidgetsPanel() {
 type Tab = 'layers' | 'components' | 'templates' | 'globals' | 'forms'
 
 const TAB_DEFS: { id: Tab; label: string; hint: string; icon: typeof Layout; color: string }[] = [
-  { id: 'templates', label: 'Templates', hint: 'Ready-made sections', icon: LayoutTemplate, color: "#f59e0b" },
   { id: 'components', label: 'Blocks', hint: 'Drag widgets onto the canvas', icon: Blocks, color: "#38bdf8" },
-  { id: 'globals', label: 'Globals', hint: 'Reusable saved widgets', icon: Globe, color: "#a78bfa" },
+  { id: 'templates', label: 'Templates', hint: 'Ready-made sections', icon: LayoutTemplate, color: "#f59e0b" },
   { id: 'layers', label: 'Layers', hint: 'Page structure & reorder', icon: Layers, color: "#34d399" },
+  { id: 'globals', label: 'Globals', hint: 'Reusable saved widgets', icon: Globe, color: "#a78bfa" },
   { id: 'forms', label: 'Forms', hint: 'Build the forms used on this page', icon: ClipboardList, color: "#fb7185" },
 ]
 
@@ -596,7 +596,7 @@ export function LayersPanel() {
   const [showPopover, setShowPopover] = useState(false)
   const tab = useEditorStore((s) => s.leftTab)
   const setTab = useEditorStore((s) => s.setLeftTab)
-  const activeDef = TAB_DEFS.find((t) => t.id === tab) ?? TAB_DEFS[1]
+  const activeDef = TAB_DEFS.find((t) => t.id === tab) ?? TAB_DEFS.find((t) => t.id === 'components')!
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),

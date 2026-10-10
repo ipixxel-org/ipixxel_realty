@@ -1,7 +1,9 @@
 "use client";
 
 import { useState } from "react";
-import { ChevronDown, ChevronRight, X, Pipette } from "lucide-react";
+import { ChevronDown, X, Pipette } from "lucide-react";
+import { useConfigStore } from "@/components/openpage/store/configStore";
+import { resolveSiteTheme } from "@/lib/openpage/theme-presets";
 
 export function Section({
   title,
@@ -69,13 +71,33 @@ export function ColorInput({
   value,
   onChange,
   showPresets = true,
+  showThemeColors = true,
 }: {
   label?: string;
   value?: string;
   onChange: (v: string) => void;
   showPresets?: boolean;
+  showThemeColors?: boolean;
 }) {
-  const isTransparent = !value || value === "transparent" || value === "";
+  const site = useConfigStore((s) => s.config);
+  const theme = resolveSiteTheme(site);
+  const themeSwatches = [
+    { label: "Accent", cssVar: "var(--color-cta)", color: theme.ctaButtonColor || theme.accent },
+    { label: "Text", cssVar: "var(--color-text-0)", color: theme.text0 },
+    { label: "Muted", cssVar: "var(--color-text-2)", color: theme.text2 },
+    { label: "Background", cssVar: "var(--color-bg-1)", color: theme.bg1 },
+    { label: "Surface", cssVar: "var(--color-bg-2)", color: theme.bg2 },
+    { label: "Border", cssVar: "var(--color-border-default)", color: theme.borderDefault },
+  ];
+  const resolveVar = (v: string): string => {
+    const match = /^var\((--[^)]+)\)$/.exec(v.trim());
+    if (!match) return v;
+    const swatch = themeSwatches.find((s) => s.cssVar === match[1]);
+    return swatch?.color ?? "#18181b";
+  };
+
+  const isTransparent = !value || value === "transparent" || value === "" || value === "var(--color-bg-transparent)";
+  const displayColor = isTransparent ? "#18181b" : resolveVar(value);
   const hexValue = value && value.startsWith("#") && (value.length === 7 || value.length === 9)
     ? value.slice(0, 7)
     : "#000000";
@@ -123,7 +145,7 @@ export function ColorInput({
                 : undefined,
               backgroundSize: isTransparent ? "8px 8px" : undefined,
               backgroundPosition: isTransparent ? "0 0, 0 4px, 4px -4px, -4px 0px" : undefined,
-              backgroundColor: isTransparent ? "#18181b" : value,
+              backgroundColor: displayColor,
             }}
           >
             {isTransparent ? (
@@ -140,11 +162,38 @@ export function ColorInput({
             type="text"
             value={value || ""}
             onChange={(e) => onChange(e.target.value)}
-            placeholder="transparent / #ffffff"
+            placeholder="transparent / #ffffff / var(--color-cta)"
             className="w-full px-2.5 py-1.5 rounded-lg border border-border-default bg-bg-2/80 text-text-0 text-[11px] font-mono outline-none transition-all hover:border-border-hover focus:border-green focus:bg-bg-2 focus:shadow-[0_0_0_3px_rgba(34,197,94,0.12)]"
           />
         </div>
       </div>
+
+      {/* Theme-color swatches: writes var() so the color follows the site's
+          branding and updates live when Page Settings changes. */}
+      {showThemeColors && (
+        <div className="space-y-1">
+          <span className="block text-[9px] font-semibold uppercase tracking-wider text-text-3/80">Theme</span>
+          <div className="flex items-center gap-1 overflow-x-auto pb-0.5 scrollbar-none">
+            {themeSwatches.map((s) => {
+              const isSelected = value === s.cssVar;
+              return (
+                <button
+                  key={s.cssVar}
+                  type="button"
+                  onClick={() => onChange(s.cssVar)}
+                  title={`${s.label} (${s.cssVar})`}
+                  className={`w-4 h-4 rounded-full shrink-0 border transition-all ${
+                    isSelected
+                      ? "border-green scale-110 shadow-[0_0_6px_rgba(34,197,94,0.5)] ring-1 ring-green"
+                      : "border-border-default hover:scale-110 hover:border-white/60"
+                  }`}
+                  style={{ backgroundColor: s.color }}
+                />
+              );
+            })}
+          </div>
+        </div>
+      )}
 
       {/* Quick Color Swatches */}
       {showPresets && (

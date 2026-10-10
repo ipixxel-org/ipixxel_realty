@@ -38,6 +38,7 @@ const blockFields: Partial<Record<BlockType, { sections: { title: string; fields
         title: 'Style',
         fields: [
           { key: 'variant', label: 'Variant', type: 'select', options: ['default', 'centered', 'static'] },
+          { key: 'sticky', label: 'Sticky header', type: 'toggle' },
         ],
       },
     ],

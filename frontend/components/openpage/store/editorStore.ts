@@ -115,9 +115,10 @@ export const useEditorStore = create<EditorState>()((set) => ({
     const ids = s.selectedBlockIds.includes(id)
       ? s.selectedBlockIds.filter((i) => i !== id)
       : [...s.selectedBlockIds, id]
-    return { selectedBlockIds: ids, selectedBlockId: ids.length === 1 ? ids[0] : ids.length === 0 ? null : s.selectedBlockId }
+    const keep = ids.includes(s.selectedBlockId ?? "") ? s.selectedBlockId : ids[0] ?? null
+    return { selectedBlockIds: ids, selectedBlockId: ids.length === 1 ? ids[0] : keep }
   }),
-  selectMultipleBlocks: (ids) => set({ selectedBlockIds: ids, selectedBlockId: ids.length === 1 ? ids[0] : null, selectedElement: null }),
+  selectMultipleBlocks: (ids) => set((s) => ({ selectedBlockIds: ids, selectedBlockId: ids.includes(s.selectedBlockId ?? "") ? s.selectedBlockId : ids[0] ?? null, selectedElement: null })),
   clearSelection: () => set({ selectedBlockId: null, selectedBlockIds: [], selectedElement: null }),
   setViewport: (vp) => set({ viewport: vp }),
   toggleJsonDrawer: () => set((s) => ({ jsonDrawerOpen: !s.jsonDrawerOpen })),

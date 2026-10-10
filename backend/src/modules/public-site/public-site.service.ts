@@ -248,16 +248,43 @@ export class PublicSiteService {
 
   async sitemapForDomain(domain: string): Promise<string> {
     const site = await this.resolveByDomain(domain);
-    const cfg: any = site.landingPage.content;
     const base = `https://${site.domain}`;
-    // Includes only published pages for that website - currently single page + children (thank-you) excluded if not published
-    const pages = await this.prisma.landingPage.findMany({ where: { orgId: site.landingPage.orgId, status: 'published' } });
-    const urls = pages
-      .filter((p) => p.id === site.landingPage.id || p.parentId === site.landingPage.id)
-      .map((p) => `${base}/${p.slug === site.landingPage.slug ? '' : p.slug}`.replace(/\/$/, '/'));
-    const unique = [...new Set(urls)];
-    if (unique.length === 0) unique.push(`${base}/`);
-    return `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n${unique.map((u) => `  <url><loc>${u}</loc><changefreq>weekly</changefreq><priority>0.8</priority></url>`).join('\n')}\n</urlset>`;
+    // Includes only published pages for that website — the primary landing page
+    // plus its published children (thank-you companions).
+    const pages = await this.prisma.landingPage.findMany({
+      where: { orgId: site.landingPage.orgId, status: 'published' },
+      orderBy: { updatedAt: 'desc' },
+    });
+    const scoped = pages.filter((p) => p.id === site.landingPage.id || p.parentId === site.landingPage.id);
+    const entries = scoped.map((p) => ({
+      loc: p.id === site.landingPage.id ? `${base}/` : `${base}/${p.slug}`,
+      lastmod: p.updatedAt ? p.updatedAt.toISOString() : undefined,
+    }));
+    if (entries.length === 0) entries.push({ loc: `${base}/`, lastmod: undefined });
+    const body = entries
+      .map(
+        (e) =>
+          `  <url><loc>${e.loc}</loc>${e.lastmod ? `<lastmod>${e.lastmod}</lastmod>` : ''}<changefreq>weekly</changefreq><priority>0.8</priority></url>`,
+      )
+      .join('\n');
+    return `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n${body}\n</urlset>`;
+  }
+
+  // Every published landing page on the platform, for the platform sitemap.
+  async listPublishedPages() {
+    const pages = await this.prisma.landingPage.findMany({
+      where: { status: 'published', slug: { not: '' } },
+      select: { id: true, slug: true, name: true, pageType: true, updatedAt: true },
+      orderBy: { updatedAt: 'desc' },
+      take: 50000,
+    });
+    return pages.map((p) => ({
+      id: p.id,
+      slug: p.slug,
+      name: p.name,
+      pageType: p.pageType,
+      updatedAt: p.updatedAt ? p.updatedAt.toISOString() : null,
+    }));
   }
 
   async robotsForDomain(domain: string): Promise<string> {
@@ -304,7 +331,7 @@ export class PublicSiteService {
     return null;
   }
 
-  async resolveBySlug(slug: string) {
+  async resolveBySlug(slug: string, track = true) {
     const raw = (slug ?? '').trim().toLowerCase();
     const hyphenated = raw.replace(/\s+/g, '-').replace(/\/thank-you$/, '-thank-you');
     const isThankYou = raw.endsWith('/thank-you') || raw.endsWith('-thank-you');
@@ -371,13 +398,15 @@ export class PublicSiteService {
       throw new NotFoundException('Landing page not found or not published');
     }
 
-    this.prisma.trackingEvent.create({
-      data: {
-        orgId: page.orgId,
-        landingPageId: page.id,
-        eventType: 'page_view',
-      },
-    }).catch(() => {});
+    if (track) {
+      this.prisma.trackingEvent.create({
+        data: {
+          orgId: page.orgId,
+          landingPageId: page.id,
+          eventType: 'page_view',
+        },
+      }).catch(() => {});
+    }
 
     return page;
   }

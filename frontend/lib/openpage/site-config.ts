@@ -35,7 +35,9 @@ export function defaultSiteConfig(input: {
       metaTitle: title.slice(0, 60),
       metaDescription: `Explore ${input.name}. Book a site visit and get pricing, floor plans and offers.`,
       keywords: "real estate, apartments, site visit",
-      canonical: host ? `https://${host}` : `https://localhost${input.slug ? `/p/${input.slug}` : ""}`,
+      // Empty when no domain is assigned: renderers fall back to the real
+      // page URL rather than emitting a placeholder localhost canonical.
+      canonical: host ? `https://${host}` : "",
       index: true,
       sitemap: true,
       ogTitle: input.name,
