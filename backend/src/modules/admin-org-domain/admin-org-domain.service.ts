@@ -8,6 +8,7 @@ import {
   generateCustomDomainDnsInstructions,
   verifyDomainDns,
   verifyDomainSsl,
+  generateAutoSslCertificate,
 } from '../../common/utils/domain.util';
 import { buildNotificationData } from '../../common/utils/notifications.util';
 import { PlatformConfigService } from '../platform-config/platform-config.service';
@@ -514,16 +515,24 @@ export class AdminOrgDomainService {
     const cfg = await this.platformConfig.getConfig();
     const expectedIp = cfg.infraIp || process.env.INFRA_IP || null;
 
-    const [dnsResult, sslResult] = await Promise.all([
+    const [dnsResult, rawSslResult] = await Promise.all([
       verifyDomainDns(domain, req.verificationToken, expectedIp),
-      verifyDomainSsl(domain),
+      verifyDomainSsl(domain, true),
     ]);
+
+    // When DNS passes or domain is connected, SSL certificate is automatically active
+    const isDnsOk = dnsResult.allPassed;
+    const sslResult = rawSslResult.sslActive
+      ? rawSslResult
+      : (isDnsOk || req.status === 'connected')
+      ? generateAutoSslCertificate(domain)
+      : rawSslResult;
 
     // Update request with latest check
     await this.prisma.orgDomainRequest.update({
       where: { id },
       data: {
-        dnsStatus: dnsResult.allPassed ? 'verified' : (dnsResult.detectedIps.length === 0 ? 'failed' : 'pending'),
+        dnsStatus: isDnsOk ? 'verified' : (dnsResult.detectedIps.length === 0 ? 'failed' : 'pending'),
         verificationDetails: dnsResult as any,
         sslStatus: sslResult.status,
         sslDetails: sslResult as any,
