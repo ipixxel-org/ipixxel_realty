@@ -24,6 +24,7 @@ export function MediaPicker({
   const inputRef = useRef<HTMLInputElement>(null);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
+  const [uploading, setUploading] = useState(false);
   const uploadImage = useBuilderImageUpload();
   const src = value.trim();
   const showImg = isMediaSrc(src);
