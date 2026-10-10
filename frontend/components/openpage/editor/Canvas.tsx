@@ -24,7 +24,7 @@ import { useEditorStore } from "@/components/openpage/store/editorStore";
 import { CanvasEmpty } from "./CanvasEmpty";
 import { SortableBlock } from "./SortableBlock";
 import { RenderBlock } from "@/components/openpage/blocks/registry";
-import { resolveTheme, themeToCSS } from "@/lib/openpage/theme-presets";
+import { resolveSiteTheme, siteThemeCSS } from "@/lib/openpage/theme-presets";
 import { useGoogleFonts } from "@/lib/openpage/useGoogleFonts";
 import { createBlockFromType, createBlockFromPresetId } from "@/lib/openpage/block-factory";
 import { findBlock, allAtRoot } from "@/lib/openpage/block-tree";
@@ -247,15 +247,15 @@ export function Canvas() {
     const page = pages.find((p) => p.id === s.activePageId) ?? pages[0];
     return page.blocks;
   });
-  const theme = useConfigStore((s) => s.config.theme);
+  const site = useConfigStore((s) => s.config);
   const moveBlock = useConfigStore((s) => s.moveBlock);
   const moveBlocks = useConfigStore((s) => s.moveBlocks);
   const moveBlockInColumn = useConfigStore((s) => s.moveBlockInColumn);
   const moveBlockTo = useConfigStore((s) => s.moveBlockTo);
   const { selectedBlockId, selectedBlockIds, selectBlock, viewport, setIsDragging, showGrid } = useEditorStore();
 
-  const resolved = useMemo(() => resolveTheme(theme), [theme]);
-  const cssVars = useMemo(() => themeToCSS(resolved), [resolved]);
+  const resolved = useMemo(() => resolveSiteTheme(site), [site]);
+  const cssVars = useMemo(() => siteThemeCSS(site), [site]);
 
   const blockFonts = useMemo(() => {
     const fonts = new Set<string>();

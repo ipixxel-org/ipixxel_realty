@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import {
   Type,
   Copy,
@@ -20,7 +20,7 @@ import { toast } from "sonner";
 import type { BlockConfig, BlockTypography } from "@/components/openpage/blocks/types";
 import { useConfigStore } from "@/components/openpage/store/configStore";
 import { useEditorStore } from "@/components/openpage/store/editorStore";
-import { googleFontOptions } from "@/lib/openpage/theme-presets";
+import { googleFontOptions, resolveSiteTheme } from "@/lib/openpage/theme-presets";
 import { Section, ColorInput } from "./shared-components";
 
 const quickSizes = [
@@ -46,6 +46,11 @@ const fontWeightPills = [
 
 export function TypographyPanel({ block }: { block: BlockConfig }) {
   const [target, setTarget] = useState<'all' | 'heading' | 'subtitle' | 'body'>('all');
+  const site = useConfigStore((s) => s.config);
+  const siteTheme = useMemo(() => resolveSiteTheme(site), [site]);
+  const themeFontFamilies = [siteTheme.fontSans, siteTheme.fontDisplay].filter(
+    (f, i, arr) => arr.indexOf(f) === i,
+  );
   const updateBlockStyle = useConfigStore((s) => s.updateBlockStyle);
   const setElementStyle = useConfigStore((s) => s.setElementStyle);
   const device = useEditorStore((s) => s.viewport);
@@ -171,26 +176,39 @@ export function TypographyPanel({ block }: { block: BlockConfig }) {
               className="w-full px-2.5 py-1.5 rounded-lg border border-border-default bg-bg-2 text-text-0 text-[11.5px] outline-none hover:border-border-hover focus:border-green cursor-pointer font-medium"
             >
               <option value="">Inherit from theme</option>
-              {googleFontOptions.map((f) => (
-                <option key={f} value={f}>
-                  {f}
-                </option>
-              ))}
+              {themeFontFamilies.length > 0 && (
+                <optgroup label="Theme fonts">
+                  {themeFontFamilies.map((f) => (
+                    <option key={f} value={f}>
+                      {f}
+                    </option>
+                  ))}
+                </optgroup>
+              )}
+              <optgroup label="Google Fonts">
+                {googleFontOptions.map((f) => (
+                  <option key={f} value={f}>
+                    {f}
+                  </option>
+                ))}
+              </optgroup>
             </select>
 
             {/* Live preview banner */}
             <div
               className="p-2.5 rounded-lg border border-border-subtle bg-bg-2/50 text-center overflow-hidden"
               style={{
-                fontFamily: typography.fontFamily ? `"${typography.fontFamily}", sans-serif` : undefined,
+                fontFamily: typography.fontFamily
+                  ? `"${typography.fontFamily}", sans-serif`
+                  : `var(--font-sans, "${siteTheme.fontSans}", sans-serif)`,
                 fontWeight: typography.fontWeight as React.CSSProperties["fontWeight"],
-                color: typography.color || "#ffffff",
+                color: typography.color || siteTheme.text0,
                 letterSpacing: typography.letterSpacing,
                 textTransform: typography.textTransform as React.CSSProperties["textTransform"],
               }}
             >
               <p className="text-[14px] leading-snug font-semibold truncate">
-                {typography.fontFamily || "Sample Heading"}
+                {typography.fontFamily || siteTheme.fontSans}
               </p>
               <p className="text-[11px] opacity-70 truncate mt-0.5">
                 Modern Real Estate Architecture & Design

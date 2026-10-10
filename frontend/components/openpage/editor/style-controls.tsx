@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import {
   AlignCenter,
   AlignJustify,
@@ -19,7 +19,8 @@ import {
   Underline,
 } from "lucide-react";
 import type { BlockInteractionState, BlockTypography } from "@/components/openpage/blocks/types";
-import { googleFontOptions } from "@/lib/openpage/theme-presets";
+import { googleFontOptions, resolveSiteTheme } from "@/lib/openpage/theme-presets";
+import { useConfigStore } from "@/components/openpage/store/configStore";
 import { ColorInput, Section } from "./shared-components";
 
 const INPUT_CLS =
@@ -416,6 +417,12 @@ export function TypographyControls({
   previewText?: string;
   showFontSize?: boolean;
 }) {
+  const site = useConfigStore((s) => s.config);
+  const siteTheme = useMemo(() => resolveSiteTheme(site), [site]);
+  const themeFontFamilies = [siteTheme.fontSans, siteTheme.fontDisplay].filter(
+    (f, i, arr) => arr.indexOf(f) === i,
+  );
+  const previewFontFamily = value.fontFamily ? `"${value.fontFamily}", sans-serif` : `var(--font-sans, "${siteTheme.fontSans}", sans-serif)`;
   const sliderSize = numeric(value.fontSize, 16, 8, 72);
   const sliderLineHeight = numeric(value.lineHeight, 1.5, 0.8, 3);
 
@@ -430,25 +437,36 @@ export function TypographyControls({
           className="w-full px-2.5 py-1.5 rounded-lg border border-border-default bg-bg-2 text-text-0 text-[11.5px] outline-none hover:border-border-hover focus:border-green cursor-pointer font-medium"
         >
           <option value="">Inherit from theme</option>
-          {googleFontOptions.map((f) => (
-            <option key={f} value={f}>
-              {f}
-            </option>
-          ))}
+          {themeFontFamilies.length > 0 && (
+            <optgroup label="Theme fonts">
+              {themeFontFamilies.map((f) => (
+                <option key={f} value={f}>
+                  {f}
+                </option>
+              ))}
+            </optgroup>
+          )}
+          <optgroup label="Google Fonts">
+            {googleFontOptions.map((f) => (
+              <option key={f} value={f}>
+                {f}
+              </option>
+            ))}
+          </optgroup>
         </select>
         <div
           className="p-2.5 rounded-lg border border-border-subtle bg-bg-2/50 text-center overflow-hidden"
           style={{
-            fontFamily: value.fontFamily ? `"${value.fontFamily}", sans-serif` : undefined,
+            fontFamily: previewFontFamily,
             fontWeight: value.fontWeight as React.CSSProperties["fontWeight"],
             fontStyle: value.fontStyle as React.CSSProperties["fontStyle"],
-            color: value.color || "#ffffff",
+            color: value.color || siteTheme.text0,
             letterSpacing: value.letterSpacing,
             textTransform: value.textTransform as React.CSSProperties["textTransform"],
           }}
         >
           <p className="text-[14px] leading-snug font-semibold truncate">
-            {value.fontFamily || "Sample Heading"}
+            {value.fontFamily || siteTheme.fontSans}
           </p>
           <p className="text-[11px] opacity-70 truncate mt-0.5">{previewText}</p>
         </div>

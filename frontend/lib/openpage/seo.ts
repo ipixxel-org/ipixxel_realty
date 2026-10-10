@@ -34,11 +34,25 @@ export function jsonLdValid(data: Record<string, unknown>): boolean {
 
 const MANAGED = "data-openpage-seo";
 
+// Reuse the server-rendered tag (Next.js `generateMetadata`) when present so
+// these routes don't end up with duplicate description / robots / canonical /
+// OpenGraph / Twitter tags. `adopted` tracks a tag we took over from the SSR
+// head: leaving one of those alone (rather than removing it) keeps the
+// server-rendered value when the client has nothing better to say.
 function upsertMeta(attr: "name" | "property", key: string, content: string) {
   if (typeof document === "undefined") return;
   let el = document.head.querySelector(`meta[${attr}="${key}"][${MANAGED}]`) as HTMLMetaElement | null;
+  let adopted = false;
+  if (!el) {
+    const existing = document.head.querySelector(`meta[${attr}="${key}"]`) as HTMLMetaElement | null;
+    if (existing) {
+      existing.setAttribute(MANAGED, "true");
+      el = existing;
+      adopted = true;
+    }
+  }
   if (!content) {
-    el?.remove();
+    if (el && !adopted) el.remove();
     return;
   }
   if (!el) {
@@ -53,8 +67,17 @@ function upsertMeta(attr: "name" | "property", key: string, content: string) {
 function upsertLink(rel: string, href: string) {
   if (typeof document === "undefined") return;
   let el = document.head.querySelector(`link[rel="${rel}"][${MANAGED}]`) as HTMLLinkElement | null;
+  let adopted = false;
+  if (!el) {
+    const existing = document.head.querySelector(`link[rel="${rel}"]`) as HTMLLinkElement | null;
+    if (existing) {
+      existing.setAttribute(MANAGED, "true");
+      el = existing;
+      adopted = true;
+    }
+  }
   if (!href) {
-    el?.remove();
+    if (el && !adopted) el.remove();
     return;
   }
   if (!el) {

@@ -1,4 +1,5 @@
 import type { ThemeConfig } from "@/components/openpage/blocks/types";
+import type { ThemeOverride, TypographySettings } from "@/lib/openpage/types";
 
 export const defaultTheme: ThemeConfig = {
   bg0: '#ffffff',
@@ -533,6 +534,49 @@ export function themeToCSS(theme: ThemeConfig): Record<string, string> {
     '--radius-default': `${theme.radius}px`,
     '--radius-lg': `${theme.radiusLg}px`,
   }
+}
+
+/** The pieces of a site document that feed the effective theme. */
+export interface SiteThemeSource {
+  theme?: Partial<ThemeConfig>;
+  settings?: {
+    theme?: ThemeOverride;
+    typography?: Partial<TypographySettings>;
+  };
+}
+
+/**
+ * The effective theme for a site document: the template theme with Page
+ * Settings branding (colors, container width) and typography (fonts) merged
+ * on top. This is the single source of truth for both the live renderer and
+ * the builder canvas so a branding change is dynamic everywhere at once.
+ */
+export function resolveSiteTheme(site: SiteThemeSource): ThemeConfig {
+  const base = resolveTheme(site.theme);
+  const themeOverride = site.settings?.theme ?? {};
+  const typography = site.settings?.typography ?? {};
+  return {
+    ...base,
+    fontSans: typography.bodyFont || base.fontSans,
+    fontDisplay: typography.headingFont || base.fontDisplay,
+    accent: themeOverride.primary || base.accent,
+    // Primary drives the CTA/accent colour too — the Branding panel only
+    // stores `primary` unless the user explicitly overrides the CTA shade.
+    ctaButtonColor: themeOverride.ctaButtonColor || themeOverride.primary || base.ctaButtonColor,
+    text0: themeOverride.text ?? base.text0,
+    bg1: themeOverride.bg ?? base.bg1,
+    radius: themeOverride.radius ?? base.radius,
+  };
+}
+
+/** CSS variables for the effective theme, including the container width. */
+export function siteThemeCSS(site: SiteThemeSource): Record<string, string> {
+  const vars = themeToCSS(resolveSiteTheme(site));
+  const containerWidth = site.settings?.theme?.containerWidth;
+  if (containerWidth) {
+    Object.assign(vars, { "--op-container": `${containerWidth}px` });
+  }
+  return vars;
 }
 
 export const googleFontOptions = [

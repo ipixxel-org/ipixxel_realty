@@ -1,6 +1,5 @@
 import type { LandingPageData, SectionInstance, SiteConfig } from "./types";
-
-const BACKEND_URL = process.env.BACKEND_URL ?? "http://127.0.0.1:3000";
+import { backendBaseUrl } from "../backend-url";
 
 export interface ResolvedOrgLandingPage {
   id: string;
@@ -30,7 +29,7 @@ export async function resolveOrgSiteHost(host: string): Promise<{ page: LandingP
   const normalized = host.trim().toLowerCase().replace(/:/g, "").replace(/\/.*$/, "").replace(/\.$/, "");
   if (!normalized) return { page: null, resolved: null };
   try {
-    const res = await fetch(`${BACKEND_URL}/public/site/resolve-org/${encodeURIComponent(normalized)}`, {
+    const res = await fetch(`${backendBaseUrl()}/public/site/resolve-org/${encodeURIComponent(normalized)}`, {
       cache: "no-store",
       headers: { Accept: "application/json" },
     });

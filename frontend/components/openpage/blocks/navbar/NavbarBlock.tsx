@@ -26,6 +26,8 @@ interface NavbarProps {
   phone?: string;
   email?: string;
   badge?: string;
+  /** Whether the header stays fixed to the top on scroll (default true). */
+  sticky?: boolean;
 }
 
 function slugify(label: string): string {
@@ -211,7 +213,7 @@ function NavbarDefault({ props, sticky }: { props: NavbarProps; sticky?: boolean
   );
 }
 
-function NavbarCentered({ props }: { props: NavbarProps }) {
+function NavbarCentered({ props, sticky }: { props: NavbarProps; sticky?: boolean }) {
   const { logo, logoImage, ctaText } = props;
   const items = normalizeNavLinks(props.links, props.menuItems);
   const ctaHref = resolveCtaHref(props);
@@ -219,7 +221,7 @@ function NavbarCentered({ props }: { props: NavbarProps }) {
   const [open, setOpen] = useState(false);
 
   return (
-    <nav className="sticky top-0 z-40 backdrop-blur-md bg-bg-1/90 border-b border-border-subtle px-6 @md:px-10 py-3.5">
+    <nav className={`${sticky ? "sticky top-0 z-40" : ""} backdrop-blur-md bg-bg-1/90 border-b border-border-subtle px-6 @md:px-10 py-3.5`}>
       <div className="flex items-center justify-between">
         <div className="hidden @2xl:flex items-center gap-6 flex-1">
           <NavLinks items={items.slice(0, mid)} />
@@ -248,14 +250,14 @@ function NavbarCentered({ props }: { props: NavbarProps }) {
   );
 }
 
-function NavbarDual({ props }: { props: NavbarProps }) {
+function NavbarDual({ props, sticky }: { props: NavbarProps; sticky?: boolean }) {
   const { logo, logoImage, ctaText, phone, email, badge } = props;
   const items = normalizeNavLinks(props.links, props.menuItems);
   const ctaHref = resolveCtaHref(props);
   const [open, setOpen] = useState(false);
 
   return (
-    <nav className="sticky top-0 z-40 bg-bg-1/95 backdrop-blur-md border-b border-border-subtle">
+    <nav className={`${sticky ? "sticky top-0 z-40" : ""} bg-bg-1/95 backdrop-blur-md border-b border-border-subtle`}>
       <div className="hidden @2xl:flex items-center justify-between gap-6 px-6 @md:px-10 py-2 border-b border-border-subtle text-[11px] text-text-3">
         <div className="flex items-center gap-5 min-w-0">
           {phone ? (
@@ -305,14 +307,14 @@ function NavbarDual({ props }: { props: NavbarProps }) {
   );
 }
 
-function NavbarPill({ props }: { props: NavbarProps }) {
+function NavbarPill({ props, sticky }: { props: NavbarProps; sticky?: boolean }) {
   const { logo, logoImage, ctaText } = props;
   const items = normalizeNavLinks(props.links, props.menuItems);
   const ctaHref = resolveCtaHref(props);
   const [open, setOpen] = useState(false);
 
   return (
-    <nav className="sticky top-4 z-40 px-4 @md:px-8">
+    <nav className={`${sticky ? "sticky top-4 z-40" : ""} px-4 @md:px-8`}>
       <div className="flex items-center justify-between gap-4 rounded-full border border-border-subtle bg-bg-2/85 backdrop-blur-md shadow-lg shadow-black/30 pl-5 pr-2 py-2 @md:px-6">
         <Brand logo={logo} logoImage={logoImage} logoSize={props.logoSize} />
         <div className="hidden @2xl:flex items-center gap-6">
@@ -340,14 +342,14 @@ function NavbarPill({ props }: { props: NavbarProps }) {
   );
 }
 
-function NavbarGlass({ props }: { props: NavbarProps }) {
+function NavbarGlass({ props, sticky }: { props: NavbarProps; sticky?: boolean }) {
   const { logo, logoImage, ctaText } = props;
   const items = normalizeNavLinks(props.links, props.menuItems);
   const ctaHref = resolveCtaHref(props);
   const [open, setOpen] = useState(false);
 
   return (
-    <nav className="sticky top-0 z-40 px-4 @md:px-8 py-4">
+    <nav className={`${sticky ? "sticky top-0 z-40" : ""} px-4 @md:px-8 py-4`}>
       <div className="rounded-2xl border border-white/10 bg-white/5 backdrop-blur-xl px-5 py-3">
         <div className="flex items-center justify-between gap-4">
           <Brand logo={logo} logoImage={logoImage} logoSize={props.logoSize} />
@@ -412,7 +414,7 @@ function NavbarGlass({ props }: { props: NavbarProps }) {
 }
 
 /** PDF 1 — Marketplace pill header on light canvas, dark Contact CTA */
-function NavbarMarketing({ props }: { props: NavbarProps }) {
+function NavbarMarketing({ props, sticky }: { props: NavbarProps; sticky?: boolean }) {
   const { logo, logoImage, ctaText } = props;
   const items = normalizeNavLinks(props.links, props.menuItems);
   const dropdownKeys = marketingDropdownLabels(props.links, props.menuItems);
@@ -420,7 +422,7 @@ function NavbarMarketing({ props }: { props: NavbarProps }) {
   const [open, setOpen] = useState(false);
 
   return (
-    <nav className="sticky top-0 z-40 px-4 @md:px-8 py-3 @md:py-4 bg-bg-0">
+    <nav className={`${sticky ? "sticky top-0 z-40" : ""} px-4 @md:px-8 py-3 @md:py-4 bg-bg-0`}>
       <div className="flex items-center justify-between gap-3 rounded-full border border-black/[0.06] bg-bg-1 shadow-[0_8px_30px_rgba(0,0,0,0.06)] pl-4 @md:pl-6 pr-2 @md:pr-3 py-2 @md:py-2.5 max-w-6xl mx-auto">
         <Brand logo={logo} logoImage={logoImage} logoSize={props.logoSize} />
         <div className="hidden @2xl:flex items-center gap-5 @3xl:gap-6 flex-1 justify-center">
@@ -459,14 +461,14 @@ function NavbarMarketing({ props }: { props: NavbarProps }) {
   );
 }
 
-function NavbarMinimal({ props }: { props: NavbarProps }) {
+function NavbarMinimal({ props, sticky }: { props: NavbarProps; sticky?: boolean }) {
   const { logo, logoImage, ctaText } = props;
   const items = normalizeNavLinks(props.links, props.menuItems);
   const ctaHref = resolveCtaHref(props);
   const [open, setOpen] = useState(false);
 
   return (
-    <nav className="sticky top-0 z-40 px-6 @md:px-10 py-4">
+    <nav className={`${sticky ? "sticky top-0 z-40" : ""} px-6 @md:px-10 py-4`}>
       <div className="flex items-center justify-between gap-4">
         <Brand logo={logo} logoImage={logoImage} logoSize={props.logoSize} />
         <div className="hidden @2xl:flex items-center gap-7">
@@ -503,20 +505,21 @@ function NavbarMinimal({ props }: { props: NavbarProps }) {
 
 export function NavbarBlock({ block }: { block: BlockConfig }) {
   const props = block.props as unknown as NavbarProps;
+  const sticky = block.variant === "static" ? false : props.sticky !== false;
   switch (block.variant) {
     case "centered":
-      return <NavbarCentered props={props} />;
+      return <NavbarCentered props={props} sticky={sticky} />;
     case "dual":
-      return <NavbarDual props={props} />;
+      return <NavbarDual props={props} sticky={sticky} />;
     case "pill":
-      return <NavbarPill props={props} />;
+      return <NavbarPill props={props} sticky={sticky} />;
     case "glass":
-      return <NavbarGlass props={props} />;
+      return <NavbarGlass props={props} sticky={sticky} />;
     case "minimal":
-      return <NavbarMinimal props={props} />;
+      return <NavbarMinimal props={props} sticky={sticky} />;
     case "marketing":
-      return <NavbarMarketing props={props} />;
+      return <NavbarMarketing props={props} sticky={sticky} />;
     default:
-      return <NavbarDefault props={props} sticky={block.variant !== "static"} />;
+      return <NavbarDefault props={props} sticky={sticky} />;
   }
 }
