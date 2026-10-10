@@ -817,11 +817,24 @@ const BUILDER_IMAGE_MIMES = [
   "image/svg+xml",
 ];
 
+function resolveImageMime(file: File): string {
+  const t = file.type?.toLowerCase().trim();
+  if (t && BUILDER_IMAGE_MIMES.includes(t)) return t;
+  const ext = file.name.split(".").pop()?.toLowerCase();
+  if (ext === "svg") return "image/svg+xml";
+  if (ext === "png") return "image/png";
+  if (ext === "jpg" || ext === "jpeg") return "image/jpeg";
+  if (ext === "webp") return "image/webp";
+  if (ext === "gif") return "image/gif";
+  return t || "image/jpeg";
+}
+
 export async function uploadBuilderImage(
   file: File,
   opts: { id: string; resource: Resource },
 ): Promise<string> {
-  if (file.type && !BUILDER_IMAGE_MIMES.includes(file.type)) {
+  const mime = resolveImageMime(file);
+  if (!BUILDER_IMAGE_MIMES.includes(mime)) {
     throw new Error("Choose a PNG, JPG, WebP, GIF or SVG image");
   }
   if (file.size > BUILDER_IMAGE_MAX_BYTES) {
@@ -836,7 +849,7 @@ export async function uploadBuilderImage(
     method: "POST",
     body: JSON.stringify({
       filename: file.name,
-      contentType: file.type,
+      contentType: mime,
       size: file.size,
     }),
   });
@@ -847,7 +860,7 @@ export async function uploadBuilderImage(
     put = await fetch(uploadUrl, {
       method: "PUT",
       body: file,
-      headers: { "Content-Type": file.type },
+      headers: { "Content-Type": mime },
       signal: controller.signal,
     });
   } catch (err) {
