@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useCallback, type ChangeEvent, type CSSProperties } from "react";
+import { useEffect, useState, useCallback, useMemo, type ChangeEvent, type CSSProperties } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/lib/auth-context";
 import { apiFetch, cancelPackageChangeRequest, changePlan, addCommonProjectTypes, createOrgCatalogOption, createOrgProjectType, deleteOrgCatalogOption, deleteOrgProjectType, getInvoices, getOrgCatalogOptions, getOrgProjectTypes, updateOrgProjectType, getOrgDomainInfo, getOrgLeadStageDisplays, getOrgPackageChangeRequest, getPlans, renewSubscription, requestCustomDomain, assignCustomDomain, deleteCustomDomain, submitPackageChangeRequest, updateOrgLeadStageDisplay } from "@/lib/api";
@@ -398,6 +398,14 @@ function DomainSection({ canRequest }: { canRequest: boolean }) {
   const [copiedText, setCopiedText] = useState<string | null>(null);
   const [deleteTargetId, setDeleteTargetId] = useState<string | null>(null);
 
+  const assignableLandingPages = useMemo(
+    () =>
+      (info?.landingPages ?? []).filter(
+        (p) => p.pageType !== "thank_you" && !p.slug.endsWith("-thank-you"),
+      ),
+    [info?.landingPages],
+  );
+
   function copyDns(val: string) {
     if (typeof navigator !== "undefined" && navigator.clipboard) {
       navigator.clipboard.writeText(val);
@@ -411,7 +419,10 @@ function DomainSection({ canRequest }: { canRequest: boolean }) {
     try {
       const data = await getOrgDomainInfo();
       setInfo(data);
-      setLandingPageId((prev) => prev || data.landingPages?.[0]?.id || "");
+      const eligible = (data.landingPages ?? []).filter(
+        (p) => p.pageType !== "thank_you" && !p.slug.endsWith("-thank-you"),
+      );
+      setLandingPageId((prev) => prev || eligible[0]?.id || "");
       // Prepopulate assign selection map with current assignments
       const map: Record<string, string> = {};
       for (const r of data.requests ?? []) {
@@ -649,7 +660,7 @@ function DomainSection({ canRequest }: { canRequest: boolean }) {
                                   }
                                 >
                                   <option value="">-- No Landing Page (Unassigned) --</option>
-                                  {info.landingPages.map((p) => (
+                                  {assignableLandingPages.map((p) => (
                                     <option key={p.id} value={p.id}>
                                       {p.name} (/{p.slug}) {p.status === "published" ? "✓ Published" : `— ${p.status}`}
                                     </option>
@@ -678,25 +689,27 @@ function DomainSection({ canRequest }: { canRequest: boolean }) {
 
                           {/* DNS Instructions Panel */}
                           {showDnsId === req.id && (() => {
-                            const platformOrigin = info.platformOrigin || "3.108.68.137";
+                            const platformOrigin = info.platformOrigin || "";
                             const dnsRecords = req.dnsInstructions && req.dnsInstructions.length > 0
                               ? req.dnsInstructions
-                              : [
-                                {
-                                  type: "A",
-                                  host: "@",
-                                  value: platformOrigin,
-                                  ttl: "Auto",
-                                  purpose: "Website origin (IPv4)",
-                                },
-                                {
-                                  type: "CNAME",
-                                  host: "www",
-                                  value: req.customDomain ?? "@",
-                                  ttl: "Auto",
-                                  purpose: "WWW alias redirect",
-                                },
-                              ];
+                              : platformOrigin
+                                ? [
+                                  {
+                                    type: "A",
+                                    host: "@",
+                                    value: platformOrigin,
+                                    ttl: "Auto",
+                                    purpose: "Website origin (IPv4)",
+                                  },
+                                  {
+                                    type: "CNAME",
+                                    host: "www",
+                                    value: req.customDomain ?? "@",
+                                    ttl: "Auto",
+                                    purpose: "WWW alias redirect",
+                                  },
+                                ]
+                                : [];
 
                             return (
                               <div
@@ -720,9 +733,11 @@ function DomainSection({ canRequest }: { canRequest: boolean }) {
                                       Add the following records at your domain registrar (GoDaddy, Namecheap, Cloudflare, Route 53, etc.):
                                     </div>
                                   </div>
-                                  <div style={{ fontSize: 11, background: "#dcfce7", color: "#15803d", padding: "3px 8px", borderRadius: 6, fontWeight: 600 }}>
-                                    Server IP: {platformOrigin}
-                                  </div>
+                                  {platformOrigin && (
+                                    <div style={{ fontSize: 11, background: "#dcfce7", color: "#15803d", padding: "3px 8px", borderRadius: 6, fontWeight: 600 }}>
+                                      Server IP: {platformOrigin}
+                                    </div>
+                                  )}
                                 </div>
 
                                 <div style={{ overflowX: "auto" }}>
@@ -786,7 +801,11 @@ function DomainSection({ canRequest }: { canRequest: boolean }) {
                                 >
                                   💡 <b>Next Steps:</b>
                                   <ol style={{ margin: "4px 0 0 16px", padding: 0 }}>
-                                    <li>Add the <b>A record</b> (Host: <code>@</code>, Value: <code>{platformOrigin}</code>) at your domain registrar.</li>
+                                    {platformOrigin ? (
+                                      <li>Add the <b>A record</b> (Host: <code>@</code>, Value: <code>{platformOrigin}</code>) at your domain registrar.</li>
+                                    ) : (
+                                      <li>Add the records shown in the DNS Configuration table above at your domain registrar.</li>
+                                    )}
                                     <li>Add the <b>CNAME record</b> (Host: <code>www</code>, Value: <code>{req.customDomain}</code>) so www redirects properly.</li>
                                     <li>DNS propagation typically takes <b>5 to 60 minutes</b> (up to 24 hours depending on TTL).</li>
                                     <li>Ensure the landing page above is in <b>Published</b> status so visitors can view it immediately.</li>
@@ -916,7 +935,7 @@ function DomainSection({ canRequest }: { canRequest: boolean }) {
                           onChange={(e) => setLandingPageId(e.target.value)}
                         >
                           <option value="">-- Assign later (after approval) --</option>
-                          {info.landingPages.map((p) => (
+                          {assignableLandingPages.map((p) => (
                             <option key={p.id} value={p.id}>
                               {p.name} (/{p.slug}) {p.status === "published" ? "✓" : `— ${p.status}`}
                             </option>
