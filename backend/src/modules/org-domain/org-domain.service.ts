@@ -52,7 +52,11 @@ export class OrgDomainService {
         include: { landingPage: { select: { id: true, name: true, slug: true } } },
       }),
       this.prisma.landingPage.findMany({
-        where: { orgId },
+        where: {
+          orgId,
+          pageType: { not: 'thank_you' },
+          parentId: null,
+        },
         orderBy: { updatedAt: 'desc' },
         select: {
           id: true,
@@ -134,10 +138,15 @@ export class OrgDomainService {
     if (targetPageId) {
       const page = await this.prisma.landingPage.findFirst({
         where: { id: targetPageId, orgId },
-        select: { id: true, name: true },
+        select: { id: true, name: true, pageType: true, parentId: true },
       });
       if (!page) {
         throw new BadRequestException('Landing page not found for this organisation');
+      }
+      if (page.pageType === 'thank_you' || page.parentId) {
+        throw new BadRequestException(
+          'Thank you pages cannot be assigned an independent custom domain. Assign the primary landing page instead.',
+        );
       }
 
       // Check if this landing page already has an unreviewed pending request
@@ -202,7 +211,16 @@ export class OrgDomainService {
       return row;
     });
 
-    return toView(created);
+    const cfg = await this.platformConfig.getConfig();
+    const dnsOpts = {
+      mode: cfg.dnsMode,
+      ip: cfg.infraIp ?? undefined,
+      ipv6: cfg.infraIpv6 ?? null,
+      cname: cfg.infraCname ?? undefined,
+      ns1: cfg.infraNs1 ?? undefined,
+      ns2: cfg.infraNs2 ?? undefined,
+    };
+    return toView(created, dnsOpts);
   }
 
   // Assign or reassign an approved custom domain to a specific landing page (or unassign by passing null).
@@ -240,10 +258,15 @@ export class OrgDomainService {
     if (targetPageId) {
       const page = await this.prisma.landingPage.findFirst({
         where: { id: targetPageId, orgId },
-        select: { id: true, name: true },
+        select: { id: true, name: true, pageType: true, parentId: true },
       });
       if (!page) {
         throw new NotFoundException('Landing page not found for this organisation');
+      }
+      if (page.pageType === 'thank_you' || page.parentId) {
+        throw new BadRequestException(
+          'Thank you pages cannot be assigned an independent custom domain. Assign the primary landing page instead.',
+        );
       }
     }
 
@@ -311,7 +334,16 @@ export class OrgDomainService {
       return updatedReq;
     });
 
-    return toView(updated);
+    const cfg = await this.platformConfig.getConfig();
+    const dnsOpts = {
+      mode: cfg.dnsMode,
+      ip: cfg.infraIp ?? undefined,
+      ipv6: cfg.infraIpv6 ?? null,
+      cname: cfg.infraCname ?? undefined,
+      ns1: cfg.infraNs1 ?? undefined,
+      ns2: cfg.infraNs2 ?? undefined,
+    };
+    return toView(updated, dnsOpts);
   }
 
   // Delete / cancel a domain request

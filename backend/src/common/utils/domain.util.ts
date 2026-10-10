@@ -144,12 +144,23 @@ export function generateSubdomainSuggestions(base: string, max = 4): string[] {
   return out;
 }
 
-export function generateDnsInstructions(domain: string, token: string) {
-  const infraIp = process.env.INFRA_IP || '76.76.21.21';
-  const infraCname = process.env.INFRA_CNAME_TARGET || 'cname.bigestate.io';
-  const infraNs1 = process.env.INFRA_NS1 || 'ns1.bigestate.io';
-  const infraNs2 = process.env.INFRA_NS2 || 'ns2.bigestate.io';
-  const infraMode = process.env.DNS_MODE || 'cname'; // cname | a | ns
+export function generateDnsInstructions(
+  domain: string,
+  token: string,
+  opts: {
+    ip?: string;
+    cname?: string;
+    ns1?: string;
+    ns2?: string;
+    mode?: string;
+    ipv6?: string | null;
+  } = {},
+) {
+  const infraIp = opts.ip || process.env.INFRA_IP || '';
+  const infraCname = opts.cname || process.env.INFRA_CNAME_TARGET || '';
+  const infraNs1 = opts.ns1 || process.env.INFRA_NS1 || '';
+  const infraNs2 = opts.ns2 || process.env.INFRA_NS2 || '';
+  const infraMode = opts.mode || process.env.DNS_MODE || 'a'; // a | cname | ns
   const records: Array<{
     type: string;
     host: string;
@@ -158,39 +169,71 @@ export function generateDnsInstructions(domain: string, token: string) {
     purpose: string;
   }> = [];
   if (infraMode === 'ns') {
+    if (infraNs1) {
+      records.push({
+        type: 'NS',
+        host: '@',
+        value: infraNs1,
+        ttl: 'Auto',
+        purpose: 'Primary nameserver',
+      });
+    }
+    if (infraNs2) {
+      records.push({
+        type: 'NS',
+        host: '@',
+        value: infraNs2,
+        ttl: 'Auto',
+        purpose: 'Secondary nameserver',
+      });
+    }
+  } else if (infraMode === 'cname') {
+    if (infraCname) {
+      records.push({
+        type: 'CNAME',
+        host: 'www',
+        value: infraCname,
+        ttl: 'Auto',
+        purpose: 'Website',
+      });
+    }
     records.push({
-      type: 'NS',
+      type: 'TXT',
       host: '@',
-      value: infraNs1,
+      value: `ipixxel-verify=${token}`,
       ttl: 'Auto',
-      purpose: 'Primary nameserver',
-    });
-    records.push({
-      type: 'NS',
-      host: '@',
-      value: infraNs2,
-      ttl: 'Auto',
-      purpose: 'Secondary nameserver',
-    });
-  } else if (infraMode === 'a') {
-    records.push({
-      type: 'A',
-      host: '@',
-      value: infraIp,
-      ttl: 'Auto',
-      purpose: 'Website',
-    });
-    records.push({
-      type: 'AAAA',
-      host: '@',
-      value: process.env.INFRA_IPV6 || '::',
-      ttl: 'Auto',
-      purpose: 'Website IPv6',
+      purpose: 'Verification',
     });
     records.push({
       type: 'TXT',
-      host: '_bigestate-verify',
-      value: `bigestate-verify=${token}`,
+      host: '_ipixxel-verify',
+      value: `ipixxel-verify=${token}`,
+      ttl: 'Auto',
+      purpose: 'Verification',
+    });
+  } else {
+    if (infraIp) {
+      records.push({
+        type: 'A',
+        host: '@',
+        value: infraIp,
+        ttl: 'Auto',
+        purpose: 'Website',
+      });
+    }
+    if (opts.ipv6 || process.env.INFRA_IPV6) {
+      records.push({
+        type: 'AAAA',
+        host: '@',
+        value: opts.ipv6 || process.env.INFRA_IPV6 || '::',
+        ttl: 'Auto',
+        purpose: 'Website IPv6',
+      });
+    }
+    records.push({
+      type: 'TXT',
+      host: '_ipixxel-verify',
+      value: `ipixxel-verify=${token}`,
       ttl: 'Auto',
       purpose: 'Verification',
     });
@@ -200,28 +243,6 @@ export function generateDnsInstructions(domain: string, token: string) {
       value: domain,
       ttl: 'Auto',
       purpose: 'WWW redirect',
-    });
-  } else {
-    records.push({
-      type: 'CNAME',
-      host: 'www',
-      value: infraCname,
-      ttl: 'Auto',
-      purpose: 'Website',
-    });
-    records.push({
-      type: 'TXT',
-      host: '@',
-      value: `bigestate-verify=${token}`,
-      ttl: 'Auto',
-      purpose: 'Verification',
-    });
-    records.push({
-      type: 'TXT',
-      host: '_bigestate-verify',
-      value: `bigestate-verify=${token}`,
-      ttl: 'Auto',
-      purpose: 'Verification',
     });
   }
   return {
@@ -233,14 +254,23 @@ export function generateDnsInstructions(domain: string, token: string) {
   };
 }
 
-export function getInfraInfo() {
+export function getInfraInfo(
+  opts?: {
+    ip?: string;
+    cname?: string;
+    ns1?: string;
+    ns2?: string;
+    mode?: string;
+    ipv6?: string | null;
+  },
+) {
   return {
-    ip: process.env.INFRA_IP || '76.76.21.21',
-    ipv6: process.env.INFRA_IPV6 || null,
-    cname: process.env.INFRA_CNAME_TARGET || 'cname.bigestate.io',
-    ns1: process.env.INFRA_NS1 || 'ns1.bigestate.io',
-    ns2: process.env.INFRA_NS2 || 'ns2.bigestate.io',
-    mode: process.env.DNS_MODE || 'cname',
+    ip: opts?.ip || process.env.INFRA_IP || '',
+    ipv6: opts?.ipv6 !== undefined ? opts.ipv6 : (process.env.INFRA_IPV6 || null),
+    cname: opts?.cname || process.env.INFRA_CNAME_TARGET || '',
+    ns1: opts?.ns1 || process.env.INFRA_NS1 || '',
+    ns2: opts?.ns2 || process.env.INFRA_NS2 || '',
+    mode: opts?.mode || process.env.DNS_MODE || 'a',
   };
 }
 
@@ -268,52 +298,39 @@ export function generateSubdomainDnsInstructions(
     ns2?: string;
   } = {},
 ): { mode: string; records: DnsRecordSpec[] } {
-  const mode = opts.mode ?? process.env.DNS_MODE ?? 'cname';
-  const ip = opts.ip ?? process.env.INFRA_IP ?? '';
+  const mode = opts.mode || process.env.DNS_MODE || 'a';
+  const ip = opts.ip || process.env.INFRA_IP || '';
   const ipv6 =
-    opts.ipv6 !== undefined ? opts.ipv6 : (process.env.INFRA_IPV6 ?? null);
-  const cname =
-    opts.cname ?? process.env.INFRA_CNAME_TARGET ?? 'cname.bigestate.io';
-  const ns1 = opts.ns1 ?? process.env.INFRA_NS1 ?? 'ns1.bigestate.io';
-  const ns2 = opts.ns2 ?? process.env.INFRA_NS2 ?? 'ns2.bigestate.io';
+    opts.ipv6 !== undefined ? opts.ipv6 : (process.env.INFRA_IPV6 || null);
+  const cname = opts.cname || process.env.INFRA_CNAME_TARGET || '';
+  const ns1 = opts.ns1 || process.env.INFRA_NS1 || '';
+  const ns2 = opts.ns2 || process.env.INFRA_NS2 || '';
   const label = host === '*' ? '*' : normalizeSubdomain(host);
   const records: DnsRecordSpec[] = [];
   if (mode === 'ns') {
-    records.push({
-      type: 'NS',
-      host: '@',
-      value: ns1,
-      ttl: 'Auto',
-      purpose: 'Primary nameserver',
-    });
-    records.push({
-      type: 'NS',
-      host: '@',
-      value: ns2,
-      ttl: 'Auto',
-      purpose: 'Secondary nameserver',
-    });
+    if (ns1) records.push({ type: 'NS', host: '@', value: ns1, ttl: 'Auto', purpose: 'Primary nameserver' });
+    if (ns2) records.push({ type: 'NS', host: '@', value: ns2, ttl: 'Auto', purpose: 'Secondary nameserver' });
   } else if (mode === 'cname') {
-    records.push({
-      type: 'CNAME',
-      host: label,
-      value: cname,
-      ttl: 'Auto',
-      purpose: 'Subdomain website',
-    });
+    if (cname) {
+      records.push({
+        type: 'CNAME',
+        host: label,
+        value: cname,
+        ttl: 'Auto',
+        purpose: 'Subdomain website',
+      });
+    }
   } else {
-    if (!ip)
-      throw new Error(
-        'DNS mode "a" requires an origin IP (configure platform subdomain settings)',
-      );
-    records.push({
-      type: 'A',
-      host: label,
-      value: ip,
-      ttl: 'Auto',
-      purpose: 'Subdomain website',
-    });
-    if (ipv6)
+    if (ip) {
+      records.push({
+        type: 'A',
+        host: label,
+        value: ip,
+        ttl: 'Auto',
+        purpose: 'Subdomain website',
+      });
+    }
+    if (ipv6) {
       records.push({
         type: 'AAAA',
         host: label,
@@ -321,6 +338,7 @@ export function generateSubdomainDnsInstructions(
         ttl: 'Auto',
         purpose: 'Subdomain website (IPv6)',
       });
+    }
   }
   return { mode, records };
 }
@@ -355,45 +373,48 @@ export function generateCustomDomainDnsInstructions(
     ns2?: string;
   } = {},
 ): DnsRecordSpec[] {
-  const mode = opts.mode ?? process.env.DNS_MODE ?? 'a';
-  const ip = opts.ip ?? process.env.INFRA_IP ?? '';
-  const ipv6 = opts.ipv6 !== undefined ? opts.ipv6 : (process.env.INFRA_IPV6 ?? null);
-  const cname = opts.cname ?? process.env.INFRA_CNAME_TARGET ?? 'cname.bigestate.io';
-  const ns1 = opts.ns1 ?? process.env.INFRA_NS1 ?? 'ns1.bigestate.io';
-  const ns2 = opts.ns2 ?? process.env.INFRA_NS2 ?? 'ns2.bigestate.io';
+  const norm = normalizeDomain(domain);
+  const cleanDomain = norm.replace(/^www\./, '');
+  const parts = cleanDomain.split('.');
+  // Two-level ccTLD check (e.g., domain.co.in, domain.co.uk)
+  const isMultiPartTld = ['co.uk', 'co.in', 'org.in', 'net.in', 'com.au', 'co.za'].includes(parts.slice(-2).join('.'));
+  const isSubdomain = isMultiPartTld ? parts.length > 3 : parts.length > 2;
+
+  const mode = opts.mode || process.env.DNS_MODE || 'a';
+  const ip = opts.ip || process.env.INFRA_IP || '';
+  const ipv6 = opts.ipv6 !== undefined ? opts.ipv6 : (process.env.INFRA_IPV6 || null);
+  const cname = opts.cname || process.env.INFRA_CNAME_TARGET || '';
+  const ns1 = opts.ns1 || process.env.INFRA_NS1 || '';
+  const ns2 = opts.ns2 || process.env.INFRA_NS2 || '';
   const records: DnsRecordSpec[] = [];
 
   if (mode === 'ns') {
+    if (ns1) records.push({ type: 'NS', host: '@', value: ns1, ttl: 'Auto', purpose: 'Primary nameserver' });
+    if (ns2) records.push({ type: 'NS', host: '@', value: ns2, ttl: 'Auto', purpose: 'Secondary nameserver' });
+  } else if (isSubdomain) {
+    // For custom subdomains (e.g. promo.example.com), CNAME is valid:
+    const subLabel = isMultiPartTld
+      ? parts.slice(0, parts.length - 3).join('.')
+      : parts.slice(0, parts.length - 2).join('.');
     records.push({
-      type: 'NS',
-      host: '@',
-      value: ns1,
+      type: mode === 'a' ? 'A' : 'CNAME',
+      host: subLabel,
+      value: mode === 'a' ? ip : (cname || ip),
       ttl: 'Auto',
-      purpose: 'Primary nameserver',
-    });
-    records.push({
-      type: 'NS',
-      host: '@',
-      value: ns2,
-      ttl: 'Auto',
-      purpose: 'Secondary nameserver',
-    });
-  } else if (mode === 'cname') {
-    records.push({
-      type: 'CNAME',
-      host: domain.startsWith('www.') ? 'www' : '@',
-      value: cname,
-      ttl: 'Auto',
-      purpose: 'Website origin',
+      purpose: 'Subdomain origin',
     });
   } else {
-    records.push({
-      type: 'A',
-      host: '@',
-      value: ip || '76.76.21.21',
-      ttl: 'Auto',
-      purpose: 'Website origin (IPv4)',
-    });
+    // Apex / Root domain (e.g. ipixxelrealty.com):
+    // RFC 1034 prohibits CNAME at zone apex (@). Root MUST use an A record!
+    if (ip) {
+      records.push({
+        type: 'A',
+        host: '@',
+        value: ip,
+        ttl: 'Auto',
+        purpose: 'Website origin',
+      });
+    }
     if (ipv6) {
       records.push({
         type: 'AAAA',
@@ -403,13 +424,12 @@ export function generateCustomDomainDnsInstructions(
         purpose: 'Website origin (IPv6)',
       });
     }
-    const root = domain.replace(/^www\./, '');
     records.push({
       type: 'CNAME',
       host: 'www',
-      value: root,
+      value: cleanDomain,
       ttl: 'Auto',
-      purpose: 'WWW alias',
+      purpose: 'WWW redirect',
     });
   }
   return records;

@@ -803,7 +803,7 @@ export class OrgLandingPagesService {
     const pages = await this.prisma.landingPage.findMany({ where: { orgId, status: 'published' }, select: { slug: true, updatedAt: true } });
     // Build sitemap using the org's connected custom domain for the canonical base
     const domainReq = await this.prisma.organisation.findFirst({ where: { id: orgId, customDomainStatus: 'connected' }, select: { customDomain: true } });
-    const base = domainReq?.customDomain ? `https://${domainReq.customDomain}` : `https://app.bigestate.io/org/${orgId}`;
+    const base = domainReq?.customDomain ? `https://${domainReq.customDomain}` : `https://app.ipixxelos.com/org/${orgId}`;
     let xml = `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n`;
     for (const p of pages) xml += `  <url><loc>${base}/${p.slug}</loc><lastmod>${p.updatedAt.toISOString().split('T')[0]}</lastmod></url>\n`;
     xml += `</urlset>`;
@@ -811,7 +811,7 @@ export class OrgLandingPagesService {
   }
 
   async robots(orgId: string) {
-    const sitemapUrl = `https://app.bigestate.io/org/${orgId}/sitemap.xml`;
+    const sitemapUrl = `https://app.ipixxelos.com/org/${orgId}/sitemap.xml`;
     const domainReq = await this.prisma.organisation.findFirst({ where: { id: orgId, customDomainStatus: 'connected' }, select: { customDomain: true } });
     const sitemap = domainReq?.customDomain ? `https://${domainReq.customDomain}/sitemap.xml` : sitemapUrl;
     // respect SEO index settings per page? For robots we allow all published
