@@ -445,7 +445,7 @@ export default function OrgCustomDomainsPage() {
               maxWidth: 640,
             }}
           >
-            Request and map multiple custom domains for your project landing pages.
+            Request and map multiple custom domains for your landing pages.
             Configure DNS records, verify SSL certificates, and publish with complete
             tenant isolation.
           </p>
@@ -876,7 +876,7 @@ export default function OrgCustomDomainsPage() {
             <thead>
               <tr style={{ background: "rgba(0, 0, 0, 0.02)", fontSize: 12 }}>
                 <th style={{ padding: "12px 16px" }}>Domain Name</th>
-                <th>Target Project & Page</th>
+                <th>Target Landing Page</th>
                 <th>Workflow Status</th>
                 <th>DNS Routing</th>
                 <th>SSL Certificate</th>
@@ -1026,7 +1026,7 @@ export default function OrgCustomDomainsPage() {
                         )}
                       </td>
 
-                      {/* Project & Landing Page */}
+                      {/* Landing Page */}
                       <td style={{ verticalAlign: "middle" }}>
                         {req.landingPage ? (
                           <div>
@@ -1049,11 +1049,9 @@ export default function OrgCustomDomainsPage() {
                                 marginTop: 2,
                               }}
                             >
-                              {req.project?.name ? (
-                                <span>Project: {req.project.name}</span>
-                              ) : (
-                                <span>No project bound</span>
-                              )}
+                              <span style={{ fontFamily: "monospace", color: "var(--muted)" }}>
+                                /{req.landingPage.slug}
+                              </span>
                               <span>•</span>
                               <span
                                 style={{
@@ -1406,28 +1404,6 @@ export default function OrgCustomDomainsPage() {
               </div>
             </div>
 
-            {/* Project Selection */}
-            <div>
-              <label style={{ fontSize: 12.5, fontWeight: 600, display: "block", marginBottom: 6 }}>
-                Project (Optional)
-              </label>
-              <select
-                className="inp"
-                value={newProjectId}
-                onChange={(e) => {
-                  setNewProjectId(e.target.value);
-                  setNewLandingPageId("");
-                }}
-                style={{ width: "100%", fontSize: 13 }}
-              >
-                <option value="">-- Select Project (or map page directly) --</option>
-                {projects.map((proj) => (
-                  <option key={proj.id} value={proj.id}>
-                    {proj.name} {proj.location ? `(${proj.location})` : ""}
-                  </option>
-                ))}
-              </select>
-            </div>
 
             {/* Landing Page Selection */}
             <div>
@@ -1766,31 +1742,8 @@ export default function OrgCustomDomainsPage() {
         >
           <form onSubmit={handleSaveMapping} style={{ display: "flex", flexDirection: "column", gap: 16 }}>
             <p style={{ fontSize: 13, color: "var(--muted)", margin: 0 }}>
-              Connect <strong>{mapModalReq.customDomain}</strong> to an existing project and published landing page.
+              Connect <strong>{mapModalReq.customDomain}</strong> to a published landing page.
             </p>
-
-            {/* Project Filter */}
-            <div>
-              <label style={{ fontSize: 12.5, fontWeight: 600, display: "block", marginBottom: 6 }}>
-                Project
-              </label>
-              <select
-                className="inp"
-                value={selectedMapProjectId}
-                onChange={(e) => {
-                  setSelectedMapProjectId(e.target.value);
-                  setSelectedMapPageId("");
-                }}
-                style={{ width: "100%", fontSize: 13 }}
-              >
-                <option value="">-- All Projects --</option>
-                {projects.map((proj) => (
-                  <option key={proj.id} value={proj.id}>
-                    {proj.name} {proj.location ? `(${proj.location})` : ""}
-                  </option>
-                ))}
-              </select>
-            </div>
 
             {/* Landing Page Selection */}
             <div>
