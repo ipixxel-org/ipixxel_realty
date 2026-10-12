@@ -131,8 +131,9 @@ changing them; the API logs `Razorpay enabled (test mode)`.
    pick an org → Checkout opens for ₹1.00. The button is disabled (and the
    API returns 403) unless the key is `rzp_test_…`.
 2. Pay with a test method:
-   - Card `4111 1111 1111 1111`, any future expiry, any CVV, OTP from the test page
-     (Indian card; or `5267 3181 8797 5449` Mastercard).
+   - Domestic test card, e.g. Mastercard `5267 3181 8797 5449` or Visa
+     `4386 2894 0766 0153`, any future expiry, any CVV; pick Success on the mock
+     OTP page. Razorpay's "Test Card Details" docs page has the current list.
    - UPI ID `success@razorpay` (succeeds) or `failure@razorpay` (fails).
    - Netbanking: pick any bank, choose Success/Failure on the mock page.
 3. Expect: the success notice, the row `captured` in Admin → Payments and in
