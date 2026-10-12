@@ -50,6 +50,14 @@ Production may differ from this list in either direction, because of the boot-ti
 - The migration's unique index is named `marketing_connections_org_id_platform_key_external_account_id_k`; Prisma now expects `marketing_connections_org_id_platform_key_external_account__key` (63-character truncation).
 - **Impact:** none functionally. The diff wants a rename; a one-line guarded `ALTER INDEX ... RENAME`.
 
+### 7. `org_domain_requests` columns and enum values missing from migrations
+
+_Found 2026-10-12 while generating the Razorpay payments migration (fresh DB from all migrations up to `20261008120000`)._
+
+- `templates.org_domain_requests`: the schema has `admin_feedback`, `dns_status`, `domain_type`, `is_primary`, `is_suspended`, `notes`, `preferred_hostname`, `project_id` (+ FK to `projects.projects`, ON DELETE SET NULL), `published_at`, `redirect_www`, `ssl_details`, `ssl_status`, `suspended_at`, `suspended_reason`, `verification_details`, `verification_token`. No migration adds them.
+- `templates."OrgDomainRequestStatus"` is missing the values `changes_requested` and `suspended`.
+- **Impact:** a migrations-only database can't serve the domain features. Fix direction: guarded `ADD COLUMN IF NOT EXISTS` plus `ALTER TYPE … ADD VALUE IF NOT EXISTS`. Additive.
+
 ## Suggested next step
 
 One reviewed "schema drift catch-up" migration, written in the same guarded and idempotent style as the chat migration:

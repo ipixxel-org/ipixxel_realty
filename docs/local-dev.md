@@ -91,3 +91,61 @@ card. Manager-facing overview: `docs/social-media-connection.md`.
 9. Honest limits for demos: Instagram/WhatsApp share Meta OAuth but leads are
    still attributed as Facebook/Meta today; Google Ads connect stores tokens
    only (no lead or spend sync yet).
+
+## Razorpay payments (test mode)
+
+The payments module (`backend/src/modules/payments`) is a generic Razorpay
+Orders + Checkout integration. It isn't wired to plans yet: features call
+`PaymentsService.createOrder()` and subscribe to `PaymentEventsService`
+(`payment.captured` / `payment.failed` / `payment.refunded`). Amounts are
+integer paise.
+
+### Keys
+
+Add to `backend/.env` (all three or none; see `backend/env.example`):
+
+```
+RAZORPAY_KEY_ID="rzp_test_..."        # Dashboard (Test Mode) > Account & Settings > API Keys
+RAZORPAY_KEY_SECRET="..."
+RAZORPAY_WEBHOOK_SECRET="..."          # the secret you type when creating the webhook
+```
+
+Without keys the API boots and payment endpoints return 503. A partial set or
+a malformed key id stops the API at boot. Restart `npm run start:dev` after
+changing them; the API logs `Razorpay enabled (test mode)`.
+
+### Webhook through a tunnel
+
+1. Expose the API: `ngrok http 4000` (or `cloudflared tunnel --url http://localhost:4000`).
+2. Razorpay Dashboard (Test Mode) > Account & Settings > Webhooks > Add:
+   - URL: `https://<tunnel>/webhooks/razorpay`
+   - Secret: same as `RAZORPAY_WEBHOOK_SECRET`
+   - Events: `payment.captured`, `order.paid`, `payment.failed`, `refund.processed`
+3. Make sure payment capture is automatic (Account & Settings > Payment
+   capture). With manual capture, `/verify` leaves the payment `pending` until
+   you capture it in the dashboard and the `payment.captured` webhook arrives.
+
+### End-to-end check
+
+1. Log in to the admin console as Super Admin → **Payments** → **Test payment**,
+   pick an org → Checkout opens for ₹1.00. The button is disabled (and the
+   API returns 403) unless the key is `rzp_test_…`.
+2. Pay with a test method:
+   - Card `4111 1111 1111 1111`, any future expiry, any CVV, OTP from the test page
+     (Indian card; or `5267 3181 8797 5449` Mastercard).
+   - UPI ID `success@razorpay` (succeeds) or `failure@razorpay` (fails).
+   - Netbanking: pick any bank, choose Success/Failure on the mock page.
+3. Expect: the success notice, the row `captured` in Admin → Payments and in
+   the org's Settings → Billing → Payment History, and a row in
+   `billing.webhook_events` with `processed_at` set (or `error` explaining why
+   not). Re-sending the webhook from the dashboard does not reprocess it.
+4. Failure path: use `failure@razorpay`, close Checkout → "payment failed"
+   notice; the `payment.failed` webhook marks the row `failed` with the reason.
+5. Refund: refund the payment in the dashboard → `refund.processed` marks it
+   `refunded` (full refunds only for now).
+
+Applying the migration on a DB whose history has drifted (see
+`schema-drift-notes.md`): the payments migration is guarded and idempotent, so
+`npx prisma db execute --schema prisma/schema.prisma --file prisma/migrations/20261012054949_add_razorpay_payments/migration.sql`
+is safe, then `npx prisma generate` (stop the dev server first on Windows;
+`docker exec realestate-api npx prisma generate` when the API runs in Docker).
