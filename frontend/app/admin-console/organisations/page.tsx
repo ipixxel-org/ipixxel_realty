@@ -133,7 +133,8 @@ function StatTile({
 const STATUS_PILLS: { value: string; label: string }[] = [
   { value: "all", label: "All" },
   { value: "active", label: "Active" },
-  { value: "pending", label: "Pending" },
+  // Hidden for now — pending orgs still show under "All". Uncomment to restore.
+  // { value: "pending", label: "Pending" },
   { value: "disabled", label: "Rejected / Disabled" },
 ];
 
@@ -509,6 +510,7 @@ export default function SuperAdminOrganisationsPage() {
           accent="#10b981"
           sub={<span style={{ color: "#10b981", fontWeight: 600 }}>↑ 10% from last month</span>}
         />
+        {/* Pending Approval tile hidden for now (not required).
         <StatTile
           icon="clock"
           iconBg="#fef3c7"
@@ -518,6 +520,7 @@ export default function SuperAdminOrganisationsPage() {
           accent={summary && (summary.pending ?? 0) > 0 ? "#f59e0b" : "#0f172a"}
           sub="Awaiting review"
         />
+        */}
         <StatTile
           icon="shield"
           iconBg="#ffe4e6"
@@ -531,10 +534,11 @@ export default function SuperAdminOrganisationsPage() {
           icon="document"
           iconBg="#ede9fe"
           iconColor="#7c3aed"
-          label="Draft Signups"
-          value={summary ? <CountUp value={summary.draft ?? 0} /> : "—"}
+          // Same count as the "Pending Signups" filter pill below.
+          label="Pending Signups"
+          value={summary ? <CountUp value={summary.pendingSignups ?? 0} /> : "—"}
           accent="#8b5cf6"
-          sub="Abandoned mid-signup"
+          sub="Signed up, onboarding incomplete"
         />
 
       </div>
