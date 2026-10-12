@@ -102,17 +102,26 @@ integer paise.
 
 ### Keys
 
-Add to `backend/.env` (all three or none; see `backend/env.example`):
+Preferred: Super Admin → **Integrations → Razorpay**. Enter the Key ID and
+Key Secret (Dashboard (Test Mode) > Account & Settings > API Keys) and the
+Webhook Secret (the separate secret you type when creating the webhook), click
+**Test connection**, then **Save**. Saved keys apply immediately (no restart),
+are stored in `billing.razorpay_settings`, and are never returned by the API
+(masked). Only `super_admin` can change them; `admin_subscriptions` can view.
+
+Optional fallback in `backend/.env` (all three or none), used when nothing is
+saved in the console:
 
 ```
-RAZORPAY_KEY_ID="rzp_test_..."        # Dashboard (Test Mode) > Account & Settings > API Keys
+RAZORPAY_KEY_ID="rzp_test_..."
 RAZORPAY_KEY_SECRET="..."
-RAZORPAY_WEBHOOK_SECRET="..."          # the secret you type when creating the webhook
+RAZORPAY_WEBHOOK_SECRET="..."          # its own value — NOT the key id / key secret
 ```
 
-Without keys the API boots and payment endpoints return 503. A partial set or
-a malformed key id stops the API at boot. Restart `npm run start:dev` after
-changing them; the API logs `Razorpay enabled (test mode)`.
+Without any keys the API boots and payment endpoints return 503. A partial env
+set or a malformed key id stops the API at boot. An env webhook secret equal to
+the key id or key secret is ignored (logged as an error), because the key id is
+public and anyone could then forge webhooks.
 
 ### Webhook through a tunnel
 
