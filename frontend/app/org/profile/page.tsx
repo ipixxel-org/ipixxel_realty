@@ -34,6 +34,8 @@ import {
 const NAME_MAX = 100;
 const PASSWORD_MIN = 6;
 const FALLBACK_COUNTRY = "India";
+// Where both the header back arrow and the Cancel button take the user.
+const BACK_HREF = "/org";
 
 // A <fieldset disabled> greys out every control for a view-only member.
 const READ_ONLY_FIELDSET: CSSProperties = { border: 0, padding: 0, margin: 0, minWidth: 0 };
@@ -137,14 +139,6 @@ export default function MyProfilePage() {
     setNotice(null);
   }
 
-  function discard() {
-    if (!profile) return;
-    setForm(toForm(profile));
-    setErrors({});
-    setFormError(null);
-    setNotice(null);
-  }
-
   async function handleSave(e: React.FormEvent) {
     e.preventDefault();
     if (!form || saving || !canEdit) return;
@@ -202,7 +196,7 @@ export default function MyProfilePage() {
       eyebrow="Account"
       title="My profile"
       subtitle={canEdit ? "Update your name, mobile number or password." : "Your basic account details."}
-      backHref="/org"
+      backHref={BACK_HREF}
       backLabel="Back to Dashboard"
     >
       {loadError ? <FormAlert message={loadError} /> : null}
@@ -295,7 +289,7 @@ export default function MyProfilePage() {
 
           {canEdit ? (
             <FormActions
-              onCancel={discard}
+              cancelHref={BACK_HREF}
               busy={saving}
               busyLabel="Saving…"
               submitLabel="Save changes"
