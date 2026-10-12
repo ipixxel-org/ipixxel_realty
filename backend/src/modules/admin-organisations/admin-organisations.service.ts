@@ -612,6 +612,10 @@ export class AdminOrganisationsService {
       state: organisation.state,
       postalCode: organisation.postalCode,
       country: organisation.country,
+      // Same profile fields the Org Admin edits in Settings → General.
+      industry: organisation.industry,
+      supportEmail: organisation.supportEmail,
+      supportPhone: organisation.supportPhone,
       admin: admin
         ? {
             firstName: admin.firstName,

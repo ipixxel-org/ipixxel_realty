@@ -382,6 +382,9 @@ export interface OrganisationDetail {
   state: string | null;
   postalCode: string | null;
   country: string | null;
+  industry?: OrgIndustry | null;
+  supportEmail?: string | null;
+  supportPhone?: string | null;
   admin: {
     firstName: string | null;
     lastName: string | null;
