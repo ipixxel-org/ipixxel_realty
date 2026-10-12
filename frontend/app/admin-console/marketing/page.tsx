@@ -1136,7 +1136,8 @@ export default function SuperAdminMarketingPage() {
               {/* Platform dropdown filter */}
               <select
                 className="inp"
-                style={{ padding: "6px 10px", fontSize: 12.5 }}
+                // Global .inp is width:100%; size to content so the filters + Refresh sit on one row.
+                style={{ padding: "6px 10px", fontSize: 12.5, width: "auto", minWidth: 150 }}
                 value={logPlatformFilter}
                 onChange={(e) => {
                   setLogPlatformFilter(e.target.value);
@@ -1153,7 +1154,8 @@ export default function SuperAdminMarketingPage() {
               {/* Status dropdown filter */}
               <select
                 className="inp"
-                style={{ padding: "6px 10px", fontSize: 12.5 }}
+                // Global .inp is width:100%; size to content so the filters + Refresh sit on one row.
+                style={{ padding: "6px 10px", fontSize: 12.5, width: "auto", minWidth: 150 }}
                 value={logStatusFilter}
                 onChange={(e) => {
                   setLogStatusFilter(e.target.value);
