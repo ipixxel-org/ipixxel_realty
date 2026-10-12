@@ -21,6 +21,7 @@ import { formatPaise } from "@/lib/razorpay";
 import { COUNTRY_META, COUNTRIES, CURRENCY_OPTIONS, TIMEZONE_OPTIONS } from "@/lib/countries";
 import { ORG_THEME_CHANGE_EVENT } from "@/components/global-theme-provider";
 import { INDUSTRY_OPTIONS, ORG_COLOR_PRESETS } from "@/lib/org-profile";
+import { IndustryHistory } from "@/components/org/industry-history";
 
 const LANGUAGES = [
   { value: "en-IN", label: "English (India)" },
@@ -2256,6 +2257,13 @@ export default function OrgSettingsPage() {
               */}
                 </div>
               </Card>
+
+              {/* Industry change history — refetches after each save (org updates). */}
+              <IndustryHistory
+                endpoint="/org/settings/industry-history"
+                reloadKey={org}
+                currentIndustry={org.industry}
+              />
             </div>
 
             {/* LOCALIZATION */}

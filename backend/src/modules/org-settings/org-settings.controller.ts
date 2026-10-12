@@ -32,7 +32,17 @@ export class OrgSettingsController {
     @CurrentUser() actor: JwtPayload,
     @Body() dto: UpdateOrganisationDto,
   ) {
-    return this.orgSettingsService.updateSettings(actor.orgId as string, dto);
+    return this.orgSettingsService.updateSettings(
+      actor.orgId as string,
+      dto,
+      actor.sub,
+    );
+  }
+
+  @RequirePermission('settings', 'view', ENFORCE)
+  @Get('industry-history')
+  industryHistory(@CurrentUser() actor: JwtPayload) {
+    return this.orgSettingsService.industryHistory(actor.orgId as string);
   }
 
   @RequirePermission('settings', SETTINGS_ACTIONS.editProfile, ENFORCE)

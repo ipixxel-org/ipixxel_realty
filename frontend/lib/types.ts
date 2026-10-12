@@ -288,6 +288,7 @@ export interface OrganisationListRow {
   name: string;
   slug: string;
   city: string;
+  industry?: OrgIndustry | null;
   subdomain: string | null;
   subdomainHost: string | null;
   subdomainStatus: string;

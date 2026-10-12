@@ -95,8 +95,17 @@ export class AdminOrganisationsController {
   }
 
   @Patch(':id')
-  update(@Param('id') id: string, @Body() dto: UpdateOrganisationDto) {
-    return this.adminOrganisationsService.update(id, dto);
+  update(
+    @Param('id') id: string,
+    @Body() dto: UpdateOrganisationDto,
+    @CurrentUser() actor: JwtPayload,
+  ) {
+    return this.adminOrganisationsService.update(id, dto, actor);
+  }
+
+  @Get(':id/industry-history')
+  industryHistory(@Param('id') id: string) {
+    return this.adminOrganisationsService.industryHistory(id);
   }
 
   @Post(':id/logo-upload-url')

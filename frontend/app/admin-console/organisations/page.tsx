@@ -11,9 +11,11 @@ import type {
   OrganisationListResponse,
   OrganisationListRow,
   OrganisationSummary,
+  OrgIndustry,
   PendingSignupListResponse,
   PendingSignupRow,
 } from "@/lib/types";
+import { INDUSTRY_OPTIONS, industryShortLabel } from "@/lib/org-profile";
 import { Icon, type IconName } from "@/components/icons";
 import { Modal } from "@/components/ui/modal";
 import { ConfirmModal } from "@/components/ui/confirm-modal";
@@ -161,6 +163,9 @@ export default function SuperAdminOrganisationsPage() {
   const canDeleteOrganisations = hasPermission("admin_organisations", "delete");
 
   const [statusFilter, setStatusFilter] = useState("all");
+  // Organisation.industry ("role") filter — "" = all roles.
+  const [industryFilter, setIndustryFilter] = useState<OrgIndustry | "">("");
+  const [roleMenuOpen, setRoleMenuOpen] = useState(false);
   const [searchInput, setSearchInput] = useState("");
   const [search, setSearch] = useState("");
   const [page, setPage] = useState(1);
@@ -227,10 +232,11 @@ export default function SuperAdminOrganisationsPage() {
       status: statusFilter,
     });
     if (search) params.set("search", search);
+    if (industryFilter) params.set("industry", industryFilter);
     apiFetch<OrganisationListResponse>(`/admin/organisations?${params.toString()}`, {
       headers: { Authorization: `Bearer ${accessToken}` },
     }).then(setResult).catch((err) => setError(err instanceof Error ? err.message : "Failed to load organisations.")).finally(() => setLoading(false));
-  }, [accessToken, statusFilter, search, page]);
+  }, [accessToken, statusFilter, search, page, industryFilter]);
 
   const fetchPendingSignups = useCallback(() => {
     if (!accessToken || statusFilter !== PENDING_SIGNUPS_FILTER) return;
@@ -642,31 +648,95 @@ export default function SuperAdminOrganisationsPage() {
             </span>
           </div>
 
-          <button
-            type="button"
-            style={{
-              height: 38,
-              padding: "0 12px",
-              borderRadius: 10,
-              border: "1px solid #e2e8f0",
-              background: "#ffffff",
-              color: "#64748b",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              cursor: "pointer",
-            }}
-            title="List View"
-          >
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <line x1="8" y1="6" x2="21" y2="6"></line>
-              <line x1="8" y1="12" x2="21" y2="12"></line>
-              <line x1="8" y1="18" x2="21" y2="18"></line>
-              <line x1="3" y1="6" x2="3.01" y2="6"></line>
-              <line x1="3" y1="12" x2="3.01" y2="12"></line>
-              <line x1="3" y1="18" x2="3.01" y2="18"></line>
-            </svg>
-          </button>
+          {/* Role (Organisation.industry) filter — organisations list only. */}
+          {!isPendingSignupsView ? (
+            <div style={{ position: "relative" }}>
+              <button
+                type="button"
+                onClick={() => setRoleMenuOpen((v) => !v)}
+                aria-haspopup="menu"
+                aria-expanded={roleMenuOpen}
+                style={{
+                  height: 38,
+                  padding: "0 12px",
+                  borderRadius: 10,
+                  border: industryFilter ? "1px solid #2563eb" : "1px solid #e2e8f0",
+                  background: industryFilter ? "#eff6ff" : "#ffffff",
+                  color: industryFilter ? "#2563eb" : "#64748b",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  gap: 6,
+                  cursor: "pointer",
+                  fontSize: 13,
+                  fontWeight: 600,
+                }}
+                title="Filter by role"
+              >
+                <Icon name="filter" size={16} />
+                {industryFilter ? <span>{industryShortLabel(industryFilter)}</span> : null}
+              </button>
+              {roleMenuOpen ? (
+                <>
+                  {/* Click-away backdrop */}
+                  <div style={{ position: "fixed", inset: 0, zIndex: 40 }} onClick={() => setRoleMenuOpen(false)} />
+                  <div
+                    role="menu"
+                    style={{
+                      position: "absolute",
+                      right: 0,
+                      top: 44,
+                      zIndex: 41,
+                      minWidth: 200,
+                      background: "#ffffff",
+                      border: "1px solid #e2e8f0",
+                      borderRadius: 12,
+                      boxShadow: "0 12px 28px -12px rgba(15, 23, 42, 0.25)",
+                      padding: 6,
+                    }}
+                  >
+                    <div style={{ padding: "6px 10px", fontSize: 11, fontWeight: 700, color: "#94a3b8", letterSpacing: "0.04em" }}>
+                      FILTER BY ROLE
+                    </div>
+                    {[{ value: "" as const, short: "All roles" }, ...INDUSTRY_OPTIONS].map((opt) => {
+                      const selected = industryFilter === opt.value;
+                      return (
+                        <button
+                          key={opt.value || "all"}
+                          type="button"
+                          role="menuitemradio"
+                          aria-checked={selected}
+                          onClick={() => {
+                            setIndustryFilter(opt.value);
+                            setPage(1);
+                            setRoleMenuOpen(false);
+                          }}
+                          style={{
+                            display: "flex",
+                            alignItems: "center",
+                            justifyContent: "space-between",
+                            width: "100%",
+                            padding: "8px 10px",
+                            border: 0,
+                            borderRadius: 8,
+                            background: selected ? "#eff6ff" : "transparent",
+                            color: selected ? "#2563eb" : "#334155",
+                            fontSize: 13,
+                            fontWeight: selected ? 700 : 500,
+                            cursor: "pointer",
+                            textAlign: "left",
+                          }}
+                        >
+                          {opt.short}
+                          {selected ? <Icon name="check" size={14} /> : null}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </>
+              ) : null}
+            </div>
+          ) : null}
         </div>
       </div>
 
@@ -799,6 +869,7 @@ export default function SuperAdminOrganisationsPage() {
                     <th>ORGANISATION</th>
                     <th>DOMAIN</th>
                     <th>ADMIN</th>
+                    <th>ROLE</th>
                     <th>PLAN</th>
                     <th>USERS</th>
                     <th>TEMPLATES</th>
@@ -811,13 +882,13 @@ export default function SuperAdminOrganisationsPage() {
                 <tbody>
                   {error ? (
                     <tr>
-                      <td colSpan={11} className="muted">
+                      <td colSpan={12} className="muted">
                         {error}
                       </td>
                     </tr>
                   ) : !loading && rows.length === 0 ? (
                     <tr>
-                      <td colSpan={11} className="muted">
+                      <td colSpan={12} className="muted">
                         No organisations match this filter.
                       </td>
                     </tr>
@@ -904,6 +975,14 @@ export default function SuperAdminOrganisationsPage() {
                               <span style={{ fontSize: 12, color: "#64748b" }}>{o.adminEmail ?? "—"}</span>
                               {o.adminPhone ? <span style={{ fontSize: 11.5, color: "#94a3b8" }}>{o.adminPhone}</span> : null}
                             </div>
+                          </td>
+                          {/* Organisation.industry — chosen at signup, editable in Settings / Edit. */}
+                          <td style={{ whiteSpace: "nowrap" }}>
+                            {o.industry ? (
+                              <span className="chip" style={{ fontSize: 12 }}>{industryShortLabel(o.industry)}</span>
+                            ) : (
+                              <span style={{ fontSize: 12.5, color: "#94a3b8" }}>—</span>
+                            )}
                           </td>
                           <td>
                             <span

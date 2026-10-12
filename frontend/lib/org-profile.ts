@@ -7,16 +7,23 @@ import type { OrgIndustry } from "./types";
 // Matches the registration wizard's ORG_TYPES exactly (Organisation.industry
 // enum) — the wizard's "What describes you best?" step and these dropdowns
 // edit the same field, so the option set has to stay in sync.
-export const INDUSTRY_OPTIONS: { value: OrgIndustry; label: string }[] = [
-  { value: "developer", label: "Real Estate — Developer" },
-  { value: "broker", label: "Real Estate — Broker / Agency" },
-  { value: "channel", label: "Channel Partner" },
-  { value: "mixed", label: "Mixed" },
+// `short` matches the signup cards and is used for list columns, filters and
+// change history. "mixed" is shown as "Others" — the stored value is unchanged.
+export const INDUSTRY_OPTIONS: { value: OrgIndustry; label: string; short: string }[] = [
+  { value: "developer", label: "Real Estate — Developer", short: "Developer" },
+  { value: "broker", label: "Real Estate — Broker / Agency", short: "Broker / Agency" },
+  { value: "channel", label: "Channel Partner", short: "Channel Partner" },
+  { value: "mixed", label: "Others", short: "Others" },
 ];
 
 export function industryLabel(value: string | null | undefined): string | null {
   if (!value) return null;
   return INDUSTRY_OPTIONS.find((o) => o.value === value)?.label ?? value;
+}
+
+export function industryShortLabel(value: string | null | undefined): string | null {
+  if (!value) return null;
+  return INDUSTRY_OPTIONS.find((o) => o.value === value)?.short ?? value;
 }
 
 export const ORG_COLOR_PRESETS = [
