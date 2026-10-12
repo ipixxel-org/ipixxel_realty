@@ -52,6 +52,7 @@ import { AttributionLabelsModule } from './modules/attribution-labels/attributio
 import { MetaLeadsModule } from './modules/meta-leads/meta-leads.module';
 import { MarketingModule } from './modules/marketing/marketing.module';
 import { IntegrationsModule } from './modules/integrations/integrations.module';
+import { PaymentsModule } from './modules/payments/payments.module';
 
 @Module({
   imports: [
@@ -104,6 +105,7 @@ import { IntegrationsModule } from './modules/integrations/integrations.module';
     MetaLeadsModule,
     MarketingModule,
     IntegrationsModule,
+    PaymentsModule,
   ],
   controllers: [AppController],
   providers: [AppService],
