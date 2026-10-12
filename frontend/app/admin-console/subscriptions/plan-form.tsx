@@ -13,9 +13,9 @@ import {
   FormGrid,
   FormPage,
   FormSection,
-  MiniButton,
+  // MiniButton, // used by the hidden capabilities section
   PhoneInput,
-  TagList,
+  // TagList, // used by the hidden feature highlights section
   TextArea,
   TextInput,
   formPageStyles,
@@ -52,7 +52,7 @@ export function PlanForm({ plan }: { plan?: Plan }) {
   const router = useRouter();
   const isEdit = plan !== undefined;
   const [planForm, setPlanForm] = useState<PlanFormState>(() => initialForm(plan));
-  const [featureInput, setFeatureInput] = useState("");
+  // const [featureInput, setFeatureInput] = useState(""); // hidden feature highlights section
   const [capabilities, setCapabilities] = useState<PlanCapability[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
@@ -83,26 +83,27 @@ export function PlanForm({ plan }: { plan?: Plan }) {
     }));
   };
 
-  const toggleCapability = (key: string, on: boolean) => {
-    setPlanForm((p) => ({ ...p, capabilities: { ...(p.capabilities ?? {}), [key]: on } }));
-  };
-
-  const setAllCapabilities = (enable: boolean) => {
-    const updated: Record<string, boolean> = {};
-    for (const cap of capabilities) updated[cap.key] = enable;
-    setPlanForm((p) => ({ ...p, capabilities: updated }));
-  };
-
-  const addFeature = () => {
-    const text = featureInput.trim();
-    if (!text) return;
-    setPlanForm((p) => ({ ...p, features: [...(p.features || []), text] }));
-    setFeatureInput("");
-  };
-
-  const removeFeature = (index: number) => {
-    setPlanForm((p) => ({ ...p, features: (p.features || []).filter((_, i) => i !== index) }));
-  };
+  // Helpers for the hidden feature highlights / capabilities sections.
+  // const toggleCapability = (key: string, on: boolean) => {
+  //   setPlanForm((p) => ({ ...p, capabilities: { ...(p.capabilities ?? {}), [key]: on } }));
+  // };
+  //
+  // const setAllCapabilities = (enable: boolean) => {
+  //   const updated: Record<string, boolean> = {};
+  //   for (const cap of capabilities) updated[cap.key] = enable;
+  //   setPlanForm((p) => ({ ...p, capabilities: updated }));
+  // };
+  //
+  // const addFeature = () => {
+  //   const text = featureInput.trim();
+  //   if (!text) return;
+  //   setPlanForm((p) => ({ ...p, features: [...(p.features || []), text] }));
+  //   setFeatureInput("");
+  // };
+  //
+  // const removeFeature = (index: number) => {
+  //   setPlanForm((p) => ({ ...p, features: (p.features || []).filter((_, i) => i !== index) }));
+  // };
 
   async function savePlan(e: React.FormEvent) {
     e.preventDefault();
@@ -170,7 +171,7 @@ export function PlanForm({ plan }: { plan?: Plan }) {
     }
   }
 
-  const activeCaps = Object.values(planForm.capabilities || {}).filter(Boolean).length;
+  // const activeCaps = Object.values(planForm.capabilities || {}).filter(Boolean).length;
 
   return (
     <FormPage
@@ -292,6 +293,11 @@ export function PlanForm({ plan }: { plan?: Plan }) {
           })}
         </CardGrid>
 
+        {/*
+          Plan feature highlights & module capabilities are hidden for now (not needed
+          in the UI yet). State, the capability catalog fetch and the save payload are
+          kept as-is, so existing plans retain their features/capabilities on edit.
+
         <FormSection title={`Plan feature highlights (${planForm.features?.length || 0})`} />
         <div className={formPageStyles.inlineRow}>
           <TextInput
@@ -342,6 +348,7 @@ export function PlanForm({ plan }: { plan?: Plan }) {
             ))}
           </CardGrid>
         )}
+        */}
 
         <FormActions
           cancelHref={SUBS_PATH}
