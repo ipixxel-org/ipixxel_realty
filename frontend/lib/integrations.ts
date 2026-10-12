@@ -68,13 +68,12 @@ export const INTEGRATIONS: IntegrationDef[] = [
     key: "razorpay",
     name: "Razorpay",
     crumb: "Razorpay",
-    description: "Payment gateway for organisation subscriptions.",
+    description: "Payment gateway for online payments (Razorpay Checkout).",
     icon: "billing",
     tone: "ic-violet",
     href: `${INTEGRATIONS_HREF}/razorpay`,
-    // Placeholder until the gateway is built; revisit (likely admin_subscriptions).
-    permission: "admin_settings",
-    statusSource: null,
-    comingSoon: true,
+    // Same module as /admin/payments. Saving keys is additionally super_admin-only.
+    permission: "admin_subscriptions",
+    statusSource: "api",
   },
 ];

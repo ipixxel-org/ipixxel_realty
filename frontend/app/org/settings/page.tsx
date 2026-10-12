@@ -3,8 +3,8 @@
 import { useEffect, useState, useCallback, useMemo, type ChangeEvent, type CSSProperties } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/lib/auth-context";
-import { apiFetch, cancelPackageChangeRequest, changePlan, addCommonProjectTypes, createOrgCatalogOption, createOrgProjectType, deleteOrgCatalogOption, deleteOrgProjectType, getInvoices, getOrgCatalogOptions, getOrgProjectTypes, updateOrgProjectType, getOrgDomainInfo, getOrgLeadStageDisplays, getOrgPackageChangeRequest, getPlans, renewSubscription, requestCustomDomain, assignCustomDomain, deleteCustomDomain, submitPackageChangeRequest, updateOrgLeadStageDisplay } from "@/lib/api";
-import type { BillingRenewResult, ChangePlanResult, CrmLeadStatus, InvoiceRow, OrgBillingSummary, OrgCatalogCategory, OrgCatalogOption, OrgDomainInfo, OrgIndustry, OrgProjectType, PackageChangeRequestRow, Plan, SafeOrganisation, UpdateOrganisationSettingsInput } from "@/lib/types";
+import { apiFetch, cancelPackageChangeRequest, changePlan, addCommonProjectTypes, createOrgCatalogOption, createOrgProjectType, deleteOrgCatalogOption, deleteOrgProjectType, getInvoices, getOrgCatalogOptions, getOrgProjectTypes, updateOrgProjectType, getOrgDomainInfo, getOrgLeadStageDisplays, getOrgPackageChangeRequest, getOrgPayments, getPlans, renewSubscription, requestCustomDomain, assignCustomDomain, deleteCustomDomain, submitPackageChangeRequest, updateOrgLeadStageDisplay } from "@/lib/api";
+import type { BillingRenewResult, ChangePlanResult, CrmLeadStatus, InvoiceRow, OrgBillingSummary, OrgCatalogCategory, OrgCatalogOption, OrgDomainInfo, OrgIndustry, OrgProjectType, PackageChangeRequestRow, PaymentRow, PaymentStatus, Plan, SafeOrganisation, UpdateOrganisationSettingsInput } from "@/lib/types";
 import { DEFAULT_LEAD_STAGES, LEAD_STAGE_ORDER, useLeadStages } from "@/lib/lead-stages";
 import type { IconName } from "@/components/icons";
 import { Icon } from "@/components/icons";
@@ -15,6 +15,8 @@ import { FieldRolesPanel, TypedFieldEditor } from "@/components/org/typed-field-
 import { FIELD_ROLES, fieldsToRows, groupNoun, roleBaselineOf, rowsToFields, templateTraits, validateFieldRows, type FieldRole, type FieldRow } from "@/lib/field-template";
 import { FormActions, FormAlert, FormModal, FormSection } from "@/components/forms/form-page";
 import { ConfirmModal } from "@/components/ui/confirm-modal";
+import { LIST_PAGE_SIZE, ListPager } from "@/components/ui/list-pager";
+import { formatPaise } from "@/lib/razorpay";
 
 import { COUNTRY_META, COUNTRIES, CURRENCY_OPTIONS, TIMEZONE_OPTIONS } from "@/lib/countries";
 import { ORG_THEME_CHANGE_EVENT } from "@/components/global-theme-provider";
@@ -56,6 +58,9 @@ const SUBSCRIPTION_STATUS_LABEL: Record<string, string> = {
 };
 const INVOICE_STATUS_BADGE: Record<string, string> = { paid: "b-green", pending: "b-amber" };
 const INVOICE_STATUS_LABEL: Record<string, string> = { paid: "Paid", pending: "Pending" };
+const PAYMENT_STATUS_BADGE: Record<PaymentStatus, string> = { created: "b-gray", pending: "b-amber", captured: "b-green", failed: "b-rose", refunded: "b-sky" };
+const PAYMENT_STATUS_LABEL: Record<PaymentStatus, string> = { created: "Not paid", pending: "Processing", captured: "Paid", failed: "Failed", refunded: "Refunded" };
+const PAYMENT_PURPOSE_LABEL: Record<string, string> = { test: "Test payment" };
 
 const PLAN_LIMIT_ROWS: { key: "templates" | "projects" | "users" | "landingPages" | "landingPagesCreate"; label: string }[] = [
   { key: "templates", label: "Templates" },
@@ -1601,6 +1606,10 @@ export default function OrgSettingsPage() {
   const [plansLoading, setPlansLoading] = useState(true);
   const [invoices, setInvoices] = useState<InvoiceRow[]>([]);
   const [invoicesLoading, setInvoicesLoading] = useState(true);
+  const [payments, setPayments] = useState<PaymentRow[]>([]);
+  const [paymentsTotal, setPaymentsTotal] = useState(0);
+  const [paymentsPage, setPaymentsPage] = useState(1);
+  const [paymentsLoading, setPaymentsLoading] = useState(true);
   const [plansCycle, setPlansCycle] = useState<"monthly" | "yearly">("monthly");
   const [changeLoading, setChangeLoading] = useState(false);
   const [changeError, setChangeError] = useState<string | null>(null);
@@ -1704,6 +1713,17 @@ export default function OrgSettingsPage() {
       .finally(() => { setPlansLoading(false); setInvoicesLoading(false); });
     /* eslint-enable react-hooks/set-state-in-effect */
   }, [accessToken, canViewBilling]);
+
+  useEffect(() => {
+    /* eslint-disable react-hooks/set-state-in-effect */
+    if (!accessToken || !canViewBilling) return;
+    setPaymentsLoading(true);
+    getOrgPayments(paymentsPage, LIST_PAGE_SIZE)
+      .then((res) => { setPayments(res.data); setPaymentsTotal(res.total); })
+      .catch(() => { setPayments([]); setPaymentsTotal(0); })
+      .finally(() => setPaymentsLoading(false));
+    /* eslint-enable react-hooks/set-state-in-effect */
+  }, [accessToken, canViewBilling, paymentsPage]);
 
   useEffect(() => {
     /* eslint-disable react-hooks/set-state-in-effect */
@@ -2970,6 +2990,28 @@ export default function OrgSettingsPage() {
                     </div>
                   ))}
                 </div>
+              )}
+            </Card>
+
+            {/* Payment History Card */}
+            <Card icon="billing" title="Payment History" sub="Online payments made by your organisation">
+              {paymentsLoading ? <p className="muted">Loading payments…</p> : payments.length === 0 ? <p className="muted" style={{ marginTop: 0 }}>No payments yet.</p> : (
+                <>
+                  <div className="inv-table">
+                    <div className="inv-row inv-head"><span>Payment</span><span>Date</span><span>For</span><span>Amount</span><span>Status</span><span /></div>
+                    {payments.map((p) => (
+                      <div className="inv-row" key={p.id}>
+                        <span className="mono" title={p.razorpayOrderId}>{p.razorpayPaymentId ?? p.razorpayOrderId}</span>
+                        <span>{formatDate(p.createdAt)}</span>
+                        <span>{PAYMENT_PURPOSE_LABEL[p.purpose] ?? p.purpose}</span>
+                        <span>{formatPaise(p.amount, p.currency)}</span>
+                        <span><span className={`badge ${PAYMENT_STATUS_BADGE[p.status] ?? "b-gray"}`} title={p.failureReason ?? undefined}>{PAYMENT_STATUS_LABEL[p.status] ?? p.status}</span></span>
+                        <span />
+                      </div>
+                    ))}
+                  </div>
+                  <ListPager page={paymentsPage} total={paymentsTotal} onPageChange={setPaymentsPage} loading={paymentsLoading} noun="payments" />
+                </>
               )}
             </Card>
           </div>

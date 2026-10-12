@@ -205,6 +205,7 @@ model Organisation {
   metaPageConnections   MetaPageConnection[]
   marketingConnections  MarketingConnection[]
   marketingOrgAccess    MarketingOrgPlatformAccess[]
+  payments              Payment[]
 
   @@map("organisations")
   @@schema("identity")
@@ -289,6 +290,7 @@ model User {
   teamChatPresence     TeamChatPresence?
   packageChangeRequests PackageChangeRequest[] @relation("PackageChangeRequestedBy")
   packageChangeReviews  PackageChangeRequest[] @relation("PackageChangeReviewedBy")
+  paymentsCreated       Payment[]              @relation("PaymentCreatedBy")
 
   @@map("users")
   @@schema("identity")
@@ -1117,6 +1119,93 @@ model PackageChangeRequest {
   @@index([orgId])
   @@index([status])
   @@map("package_change_requests")
+  @@schema("billing")
+}
+
+// ---------------------------------------------------------------------------
+// payments — generic Razorpay one-time payments (Orders + Checkout). Not tied
+// to plans/subscriptions: a feature calls PaymentsService.createOrder() with
+// its own purpose + referenceType/referenceId and subscribes to the internal
+// payment events. Amounts are integer paise.
+// ---------------------------------------------------------------------------
+
+enum PaymentStatus {
+  created
+  pending
+  captured
+  failed
+  refunded
+
+  @@schema("billing")
+}
+
+enum PaymentPurpose {
+  // Super Admin ₹1 test-mode payment (verifies the integration end-to-end).
+  test
+
+  @@schema("billing")
+}
+
+model Payment {
+  id                String         @id @default(uuid())
+  organisationId    String         @map("organisation_id")
+  amount            Int // paise
+  currency          String         @default("INR")
+  status            PaymentStatus  @default(created)
+  purpose           PaymentPurpose
+  referenceType     String?        @map("reference_type")
+  referenceId       String?        @map("reference_id")
+  notes             Json?
+  razorpayOrderId   String         @unique @map("razorpay_order_id")
+  razorpayPaymentId String?        @map("razorpay_payment_id")
+  razorpaySignature String?        @map("razorpay_signature")
+  failureReason     String?        @map("failure_reason")
+  // Set exactly once, by fulfilPayment(); the idempotency marker.
+  capturedAt        DateTime?      @map("captured_at")
+  createdById       String         @map("created_by_id")
+  createdAt         DateTime       @default(now()) @map("created_at")
+  updatedAt         DateTime       @updatedAt @map("updated_at")
+
+  organisation Organisation @relation(fields: [organisationId], references: [id], onDelete: Cascade)
+  createdBy    User         @relation("PaymentCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+
+  @@index([organisationId])
+  @@index([status])
+  @@index([referenceType, referenceId])
+  @@map("payments")
+  @@schema("billing")
+}
+
+// Razorpay credentials saved from Super Admin → Integrations → Razorpay.
+// Single row (id = 'default'). When keyId is set it takes precedence over the
+// RAZORPAY_* env vars, which remain a fallback. Secrets are never returned by
+// the API (masked + has* flags), mirroring the SMTP password handling.
+model RazorpaySettings {
+  id            String   @id @default("default")
+  keyId         String?  @map("key_id")
+  keySecret     String?  @map("key_secret")
+  webhookSecret String?  @map("webhook_secret")
+  isActive      Boolean  @default(true) @map("is_active")
+  updatedById   String?  @map("updated_by_id")
+  updatedAt     DateTime @updatedAt @map("updated_at")
+
+  @@map("razorpay_settings")
+  @@schema("billing")
+}
+
+// Raw provider webhook deliveries, keyed by the provider's event id so a
+// redelivered event is stored and processed once.
+model WebhookEvent {
+  id          String    @id @default(uuid())
+  provider    String    @default("razorpay")
+  eventId     String    @unique @map("event_id")
+  type        String
+  payload     Json
+  receivedAt  DateTime  @default(now()) @map("received_at")
+  processedAt DateTime? @map("processed_at")
+  error       String?
+
+  @@map("webhook_events")
   @@schema("billing")
 }
 

@@ -22,6 +22,11 @@ services:
       network: host
     container_name: realestate-api
     restart: unless-stopped
+    # App secrets come from ./backend/.env on the server only (Razorpay keys
+    # are normally set in Super Admin > Integrations; RAZORPAY_* here is an
+    # optional fallback).
+    # Do not add them under `environment:` — an entry there overrides
+    # env_file, and `${VAR}` would resolve to "" in the deploy shell.
     env_file:
       - ./backend/.env
     environment:

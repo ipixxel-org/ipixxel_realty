@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { EmailService } from '../email/email.service';
 import { MarketingService } from '../marketing/marketing.service';
 import { AdminRolesService } from '../admin-roles/admin-roles.service';
+import { RazorpaySettingsService } from '../payments/razorpay-settings.service';
 import type { JwtPayload } from '../../common/types/jwt-payload.interface';
 
 export type IntegrationStatus = {
@@ -14,11 +15,13 @@ export type IntegrationStatus = {
  * Which platform permission module each integration's settings live under.
  * Integrations deliberately has no permission key of its own: each card stays
  * gated by the module whose endpoints it calls (/admin/email → admin_email;
- * the Google OAuth form → admin_settings, the module the Settings page used).
+ * the Google OAuth form → admin_settings, the module the Settings page used;
+ * Razorpay → admin_subscriptions, the module of /admin/payments).
  */
 const INTEGRATION_MODULES: Record<string, string> = {
   smtp: 'admin_email',
   'social-login': 'admin_settings',
+  razorpay: 'admin_subscriptions',
 };
 
 @Injectable()
@@ -27,6 +30,7 @@ export class IntegrationsService {
     private readonly email: EmailService,
     private readonly marketing: MarketingService,
     private readonly adminRoles: AdminRolesService,
+    private readonly razorpay: RazorpaySettingsService,
   ) {}
 
   /**
@@ -48,6 +52,15 @@ export class IntegrationsService {
       const creds = await this.marketing.getMarketingCredentials();
       const configured = creds.googleAuthConfigured;
       out.push({ key: 'social-login', configured, active: configured });
+    }
+
+    if (canView(INTEGRATION_MODULES.razorpay)) {
+      const rzp = await this.razorpay.getForAdmin();
+      out.push({
+        key: 'razorpay',
+        configured: rzp.configured,
+        active: rzp.ready,
+      });
     }
 
     return out;

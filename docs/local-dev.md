@@ -91,3 +91,71 @@ card. Manager-facing overview: `docs/social-media-connection.md`.
 9. Honest limits for demos: Instagram/WhatsApp share Meta OAuth but leads are
    still attributed as Facebook/Meta today; Google Ads connect stores tokens
    only (no lead or spend sync yet).
+
+## Razorpay payments (test mode)
+
+The payments module (`backend/src/modules/payments`) is a generic Razorpay
+Orders + Checkout integration. It isn't wired to plans yet: features call
+`PaymentsService.createOrder()` and subscribe to `PaymentEventsService`
+(`payment.captured` / `payment.failed` / `payment.refunded`). Amounts are
+integer paise.
+
+### Keys
+
+Preferred: Super Admin → **Integrations → Razorpay**. Enter the Key ID and
+Key Secret (Dashboard (Test Mode) > Account & Settings > API Keys) and the
+Webhook Secret (the separate secret you type when creating the webhook), click
+**Test connection**, then **Save**. Saved keys apply immediately (no restart),
+are stored in `billing.razorpay_settings`, and are never returned by the API
+(masked). Only `super_admin` can change them; `admin_subscriptions` can view.
+
+Optional fallback in `backend/.env` (all three or none), used when nothing is
+saved in the console:
+
+```
+RAZORPAY_KEY_ID="rzp_test_..."
+RAZORPAY_KEY_SECRET="..."
+RAZORPAY_WEBHOOK_SECRET="..."          # its own value — NOT the key id / key secret
+```
+
+Without any keys the API boots and payment endpoints return 503. A partial env
+set or a malformed key id stops the API at boot. An env webhook secret equal to
+the key id or key secret is ignored (logged as an error), because the key id is
+public and anyone could then forge webhooks.
+
+### Webhook through a tunnel
+
+1. Expose the API: `ngrok http 4000` (or `cloudflared tunnel --url http://localhost:4000`).
+2. Razorpay Dashboard (Test Mode) > Account & Settings > Webhooks > Add:
+   - URL: `https://<tunnel>/webhooks/razorpay`
+   - Secret: same as `RAZORPAY_WEBHOOK_SECRET`
+   - Events: `payment.captured`, `order.paid`, `payment.failed`, `refund.processed`
+3. Make sure payment capture is automatic (Account & Settings > Payment
+   capture). With manual capture, `/verify` leaves the payment `pending` until
+   you capture it in the dashboard and the `payment.captured` webhook arrives.
+
+### End-to-end check
+
+1. Log in to the admin console as Super Admin → **Payments** → **Test payment**,
+   pick an org → Checkout opens for ₹1.00. The button is disabled (and the
+   API returns 403) unless the key is `rzp_test_…`.
+2. Pay with a test method:
+   - Domestic test card, e.g. Mastercard `5267 3181 8797 5449` or Visa
+     `4386 2894 0766 0153`, any future expiry, any CVV; pick Success on the mock
+     OTP page. Razorpay's "Test Card Details" docs page has the current list.
+   - UPI ID `success@razorpay` (succeeds) or `failure@razorpay` (fails).
+   - Netbanking: pick any bank, choose Success/Failure on the mock page.
+3. Expect: the success notice, the row `captured` in Admin → Payments and in
+   the org's Settings → Billing → Payment History, and a row in
+   `billing.webhook_events` with `processed_at` set (or `error` explaining why
+   not). Re-sending the webhook from the dashboard does not reprocess it.
+4. Failure path: use `failure@razorpay`, close Checkout → "payment failed"
+   notice; the `payment.failed` webhook marks the row `failed` with the reason.
+5. Refund: refund the payment in the dashboard → `refund.processed` marks it
+   `refunded` (full refunds only for now).
+
+Applying the migration on a DB whose history has drifted (see
+`schema-drift-notes.md`): the payments migration is guarded and idempotent, so
+`npx prisma db execute --schema prisma/schema.prisma --file prisma/migrations/20261012054949_add_razorpay_payments/migration.sql`
+is safe, then `npx prisma generate` (stop the dev server first on Windows;
+`docker exec realestate-api npx prisma generate` when the API runs in Docker).
