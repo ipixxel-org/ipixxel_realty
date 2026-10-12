@@ -92,6 +92,8 @@ function formatRelativeTime(dateString: string): string {
   }
 }
 
+const LOGS_PAGE_SIZE = 10;
+
 export default function SuperAdminMarketingPage() {
   const { user, accessToken, isLoading: authLoading } = useAuth();
   const [tab, setTab] = useState<Tab>("platforms");
@@ -129,6 +131,7 @@ export default function SuperAdminMarketingPage() {
   const [viewMode, setViewMode] = useState<"grid" | "table">("grid");
   const [logPlatformFilter, setLogPlatformFilter] = useState("all");
   const [logStatusFilter, setLogStatusFilter] = useState("all");
+  const [logsPage, setLogsPage] = useState(1);
 
   // Modals
   const [showAdd, setShowAdd] = useState(false);
@@ -211,6 +214,7 @@ export default function SuperAdminMarketingPage() {
         status: logStatusFilter !== "all" ? logStatusFilter : undefined,
       });
       setLogs(s);
+      setLogsPage(1);
     } catch (err) {
       setFeedback(err instanceof Error ? err.message : "Failed to reload logs");
     } finally {
@@ -260,6 +264,14 @@ export default function SuperAdminMarketingPage() {
       return true;
     });
   }, [logs, logPlatformFilter, logStatusFilter]);
+
+  const logsTotalPages = Math.max(1, Math.ceil(filteredLogs.length / LOGS_PAGE_SIZE));
+  // Clamp so the view never lands on an empty page if the list shrinks.
+  const currentLogsPage = Math.min(Math.max(1, logsPage), logsTotalPages);
+  const pagedLogs = useMemo(
+    () => filteredLogs.slice((currentLogsPage - 1) * LOGS_PAGE_SIZE, currentLogsPage * LOGS_PAGE_SIZE),
+    [filteredLogs, currentLogsPage],
+  );
 
   async function togglePlatform(row: MarketingPlatformAdmin) {
     setSavingId(row.id);
@@ -1124,9 +1136,13 @@ export default function SuperAdminMarketingPage() {
               {/* Platform dropdown filter */}
               <select
                 className="inp"
-                style={{ padding: "6px 10px", fontSize: 12.5 }}
+                // Global .inp is width:100%; size to content so the filters + Refresh sit on one row.
+                style={{ padding: "6px 10px", fontSize: 12.5, width: "auto", minWidth: 150 }}
                 value={logPlatformFilter}
-                onChange={(e) => setLogPlatformFilter(e.target.value)}
+                onChange={(e) => {
+                  setLogPlatformFilter(e.target.value);
+                  setLogsPage(1);
+                }}
               >
                 <option value="all">All Channels</option>
                 <option value="meta">Facebook / Meta</option>
@@ -1138,9 +1154,13 @@ export default function SuperAdminMarketingPage() {
               {/* Status dropdown filter */}
               <select
                 className="inp"
-                style={{ padding: "6px 10px", fontSize: 12.5 }}
+                // Global .inp is width:100%; size to content so the filters + Refresh sit on one row.
+                style={{ padding: "6px 10px", fontSize: 12.5, width: "auto", minWidth: 150 }}
                 value={logStatusFilter}
-                onChange={(e) => setLogStatusFilter(e.target.value)}
+                onChange={(e) => {
+                  setLogStatusFilter(e.target.value);
+                  setLogsPage(1);
+                }}
               >
                 <option value="all">All Statuses</option>
                 <option value="success">Success</option>
@@ -1170,7 +1190,7 @@ export default function SuperAdminMarketingPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {filteredLogs.map((log) => (
+                  {pagedLogs.map((log) => (
                     <tr key={log.id}>
                       <td style={{ fontSize: 12.5, whiteSpace: "nowrap" }}>
                         <span title={new Date(log.createdAt).toLocaleString()}>
@@ -1211,6 +1231,75 @@ export default function SuperAdminMarketingPage() {
                 </tbody>
               </table>
             </div>
+
+            {/* Pagination Footer — only when there is more than one page */}
+            {logsTotalPages > 1 ? (
+              <div
+                style={{
+                  padding: "14px 20px",
+                  background: "#f8fafc",
+                  borderTop: "1px solid #e2e8f0",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "space-between",
+                  flexWrap: "wrap",
+                  gap: 10,
+                }}
+              >
+                <div style={{ fontSize: 12.5, color: "#64748b", fontWeight: 600 }}>
+                  Showing {(currentLogsPage - 1) * LOGS_PAGE_SIZE + 1}–
+                  {Math.min(currentLogsPage * LOGS_PAGE_SIZE, filteredLogs.length)} of {filteredLogs.length} events
+                </div>
+
+                <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                  <button
+                    type="button"
+                    disabled={currentLogsPage <= 1 || logsLoading}
+                    onClick={() => setLogsPage(Math.max(1, currentLogsPage - 1))}
+                    style={{
+                      display: "inline-flex",
+                      alignItems: "center",
+                      gap: 4,
+                      padding: "6px 14px",
+                      borderRadius: 8,
+                      border: "1px solid #cbd5e1",
+                      background: currentLogsPage <= 1 ? "#f1f5f9" : "#fff",
+                      color: currentLogsPage <= 1 ? "#94a3b8" : "#334155",
+                      fontSize: 12.5,
+                      fontWeight: 600,
+                      cursor: currentLogsPage <= 1 ? "not-allowed" : "pointer",
+                    }}
+                  >
+                    <Icon name="chevron-left" size={14} /> Previous
+                  </button>
+
+                  <span style={{ fontSize: 12.5, fontWeight: 700, color: "#0f172a", padding: "0 8px" }}>
+                    Page {currentLogsPage} of {logsTotalPages}
+                  </span>
+
+                  <button
+                    type="button"
+                    disabled={currentLogsPage >= logsTotalPages || logsLoading}
+                    onClick={() => setLogsPage(Math.min(logsTotalPages, currentLogsPage + 1))}
+                    style={{
+                      display: "inline-flex",
+                      alignItems: "center",
+                      gap: 4,
+                      padding: "6px 14px",
+                      borderRadius: 8,
+                      border: "1px solid #cbd5e1",
+                      background: currentLogsPage >= logsTotalPages ? "#f1f5f9" : "#fff",
+                      color: currentLogsPage >= logsTotalPages ? "#94a3b8" : "#334155",
+                      fontSize: 12.5,
+                      fontWeight: 600,
+                      cursor: currentLogsPage >= logsTotalPages ? "not-allowed" : "pointer",
+                    }}
+                  >
+                    Next <Icon name="chevron-right" size={14} />
+                  </button>
+                </div>
+              </div>
+            ) : null}
           </div>
         </div>
       ) : null}

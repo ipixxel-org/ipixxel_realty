@@ -13,6 +13,13 @@ export const ORG_LIST_STATUS_VALUES = [
 ] as const;
 export type OrgListStatus = (typeof ORG_LIST_STATUS_VALUES)[number];
 
+export const ORG_LIST_INDUSTRY_VALUES = [
+  'developer',
+  'broker',
+  'channel',
+  'mixed',
+] as const;
+
 export class ListOrganisationsQueryDto {
   @IsOptional()
   @Type(() => Number)
@@ -34,4 +41,9 @@ export class ListOrganisationsQueryDto {
   @IsOptional()
   @IsIn(ORG_LIST_STATUS_VALUES)
   status?: OrgListStatus = 'all';
+
+  // Organisation.industry ("role" chosen at signup). Omitted = all.
+  @IsOptional()
+  @IsIn(ORG_LIST_INDUSTRY_VALUES)
+  industry?: (typeof ORG_LIST_INDUSTRY_VALUES)[number];
 }

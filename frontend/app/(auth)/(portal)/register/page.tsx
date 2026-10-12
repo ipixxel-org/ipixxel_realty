@@ -108,7 +108,8 @@ const ORG_TYPES: { v: string; ic: IconName; b: string; s: string }[] = [
   { v: "developer", ic: "building", b: "Developer", s: "Build & sell own projects" },
   { v: "broker", ic: "users", b: "Broker / Agency", s: "Sell others' inventory" },
   { v: "channel", ic: "link", b: "Channel Partner", s: "Refer & close deals" },
-  { v: "mixed", ic: "building", b: "Mixed", s: "A bit of everything" },
+  // Stored value stays "mixed" (Organisation.industry enum) — only the label changed.
+  { v: "mixed", ic: "building", b: "Others", s: "A bit of everything" },
 ];
 
 export default function RegisterPage() {

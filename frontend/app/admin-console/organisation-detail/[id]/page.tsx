@@ -19,9 +19,13 @@ import type {
   OrganisationDetail,
   OrgUser,
   OrgUserAssignableRole,
+  OrgIndustry,
   OrgUsersListResponse,
   Plan,
 } from "@/lib/types";
+import { COUNTRY_META, COUNTRIES } from "@/lib/countries";
+import { INDUSTRY_OPTIONS, ORG_COLOR_PRESETS, industryLabel } from "@/lib/org-profile";
+import { IndustryHistory } from "@/components/org/industry-history";
 
 const TABS = ["Overview", "Subscription", "Templates", "Domains", "Activity"] as const;
 type Tab = (typeof TABS)[number];
@@ -86,9 +90,15 @@ interface EditForm {
   logoUrl: string;
   faviconUrl: string;
   brandColour: string;
+  industry: OrgIndustry | "";
+  supportEmail: string;
+  supportPhone: string;
 }
 
 const EMPTY_EDIT_FORM: EditForm = {
+  industry: "",
+  supportEmail: "",
+  supportPhone: "",
   name: "",
   city: "",
   timezone: "",
@@ -606,6 +616,9 @@ export default function SuperAdminOrganisationDetailPage() {
       logoUrl: org.logoUrl ?? "",
       faviconUrl: org.faviconUrl ?? "",
       brandColour: org.brandColour ?? "",
+      industry: org.industry ?? "",
+      supportEmail: org.supportEmail ?? "",
+      supportPhone: org.supportPhone ?? "",
     });
     setEditError(null);
     setEditing(true);
@@ -639,6 +652,15 @@ export default function SuperAdminOrganisationDetailPage() {
     }
   }
 
+  // Same behaviour as Settings → General: picking a known country also sets
+  // the org's currency and timezone.
+  function handleEditCountryChange(country: string) {
+    const meta = COUNTRY_META[country];
+    setEditForm((f) =>
+      meta ? { ...f, country, currency: meta.currency, timezone: meta.timezone } : { ...f, country },
+    );
+  }
+
   async function handleEditSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!org || !accessToken) return;
@@ -646,16 +668,33 @@ export default function SuperAdminOrganisationDetailPage() {
     setEditSubmitting(true);
     // brandColour is validated server-side as a strict hex — only send it
     // when it's a real value, so editing an org that never set one doesn't 400.
-    const { brandColour, ...rest } = editForm;
+    // industry / supportEmail / supportPhone follow Settings → General: blank
+    // values are omitted (the server rejects "" for the enum and email), so
+    // the stored value is kept rather than the request failing.
+    const { brandColour, industry, supportEmail, supportPhone, ...rest } = editForm;
     const payload: Partial<EditForm> = { ...rest };
     if (/^#[0-9a-fA-F]{6}$/.test(brandColour)) payload.brandColour = brandColour;
+    if (industry) payload.industry = industry;
+    if (supportEmail.trim()) payload.supportEmail = supportEmail.trim();
+    if (supportPhone.trim()) payload.supportPhone = supportPhone.trim();
     try {
       await apiFetch(`/admin/organisations/${org.id}`, {
         method: "PATCH",
         headers: { Authorization: `Bearer ${accessToken}` },
         body: JSON.stringify(payload),
       });
-      setOrg((prev) => (prev ? { ...prev, ...editForm } : prev));
+      setOrg((prev) =>
+        prev
+          ? {
+              ...prev,
+              ...rest,
+              brandColour: payload.brandColour ?? prev.brandColour,
+              industry: industry || prev.industry,
+              supportEmail: payload.supportEmail ?? prev.supportEmail,
+              supportPhone: payload.supportPhone ?? prev.supportPhone,
+            }
+          : prev,
+      );
       setEditing(false);
     } catch (err) {
       setEditError(err instanceof Error ? err.message : "Failed to save changes.");
@@ -995,78 +1034,82 @@ export default function SuperAdminOrganisationDetailPage() {
                 <div>
                   {editing ? (
                     <form onSubmit={handleEditSubmit} className={formPageStyles.page}>
+                      {/* Same fields as the Org Admin's Settings → General section. */}
+                      <div className="field">
+                        <label>Organisation name <span style={{ color: "#e11d48" }}>*</span></label>
+                        <input
+                          className="inp"
+                          required
+                          value={editForm.name}
+                          onChange={(e) => setEditForm((f) => ({ ...f, name: e.target.value }))}
+                          placeholder="Miraclecare"
+                        />
+                      </div>
+                      <div className="field">
+                        <label>Industry <span style={{ color: "#e11d48" }}>*</span></label>
+                        <select
+                          className="inp"
+                          value={editForm.industry}
+                          onChange={(e) => setEditForm((f) => ({ ...f, industry: e.target.value as OrgIndustry | "" }))}
+                        >
+                          <option value="">Select industry…</option>
+                          {INDUSTRY_OPTIONS.map((o) => (
+                            <option key={o.value} value={o.value}>{o.label}</option>
+                          ))}
+                        </select>
+                      </div>
                       <div className="row2">
                         <div className="field">
-                          <label>Organisation name</label>
+                          <label>Support email <span style={{ color: "#e11d48" }}>*</span></label>
                           <input
                             className="inp"
-                            required
-                            value={editForm.name}
-                            onChange={(e) => setEditForm((f) => ({ ...f, name: e.target.value }))}
+                            type="email"
+                            value={editForm.supportEmail}
+                            onChange={(e) => setEditForm((f) => ({ ...f, supportEmail: e.target.value }))}
+                            placeholder="care@skylinedev.in"
                           />
                         </div>
                         <div className="field">
-                          <label>City</label>
+                          <label>Support phone</label>
+                          <input
+                            className="inp"
+                            value={editForm.supportPhone}
+                            onChange={(e) => setEditForm((f) => ({ ...f, supportPhone: e.target.value }))}
+                            placeholder="+91 79000 12345"
+                          />
+                        </div>
+                      </div>
+                      <div className="row2">
+                        <div className="field">
+                          <label>Country <span style={{ color: "#e11d48" }}>*</span></label>
+                          <select
+                            className="inp"
+                            value={editForm.country}
+                            onChange={(e) => handleEditCountryChange(e.target.value)}
+                          >
+                            <option value="">Select country…</option>
+                            {/* Keep a legacy free-text country selectable so saving doesn't drop it. */}
+                            {editForm.country && !COUNTRIES.includes(editForm.country) ? (
+                              <option value={editForm.country}>{editForm.country}</option>
+                            ) : null}
+                            {COUNTRIES.map((c) => (
+                              <option key={c} value={c}>{c}</option>
+                            ))}
+                          </select>
+                          {editForm.country && COUNTRY_META[editForm.country] ? (
+                            <div className="muted" style={{ fontSize: 12, marginTop: 6 }}>
+                              Auto-set from {editForm.country}: Currency <b>{COUNTRY_META[editForm.country].currency}</b> · Timezone <b>{COUNTRY_META[editForm.country].timezone}</b>
+                            </div>
+                          ) : null}
+                        </div>
+                        <div className="field">
+                          <label>City <span style={{ color: "#e11d48" }}>*</span></label>
                           <input
                             className="inp"
                             required
                             value={editForm.city}
                             onChange={(e) => setEditForm((f) => ({ ...f, city: e.target.value }))}
-                          />
-                        </div>
-                      </div>
-                      <div className="row2">
-                        <div className="field">
-                          <label>Timezone</label>
-                          <input
-                            className="inp"
-                            value={editForm.timezone}
-                            onChange={(e) => setEditForm((f) => ({ ...f, timezone: e.target.value }))}
-                          />
-                        </div>
-                        <div className="field">
-                          <label>Currency</label>
-                          <input
-                            className="inp"
-                            value={editForm.currency}
-                            onChange={(e) => setEditForm((f) => ({ ...f, currency: e.target.value }))}
-                          />
-                        </div>
-                      </div>
-                      <div className="row2">
-                        <div className="field">
-                          <label>Default language</label>
-                          <input
-                            className="inp"
-                            value={editForm.defaultLanguage}
-                            onChange={(e) => setEditForm((f) => ({ ...f, defaultLanguage: e.target.value }))}
-                          />
-                        </div>
-                        <div className="field">
-                          <label>Website</label>
-                          <input
-                            className="inp"
-                            placeholder="https://…"
-                            value={editForm.website}
-                            onChange={(e) => setEditForm((f) => ({ ...f, website: e.target.value }))}
-                          />
-                        </div>
-                      </div>
-                      <div className="row2">
-                        <div className="field">
-                          <label>Address line 1</label>
-                          <input
-                            className="inp"
-                            value={editForm.addressLine1}
-                            onChange={(e) => setEditForm((f) => ({ ...f, addressLine1: e.target.value }))}
-                          />
-                        </div>
-                        <div className="field">
-                          <label>Address line 2</label>
-                          <input
-                            className="inp"
-                            value={editForm.addressLine2}
-                            onChange={(e) => setEditForm((f) => ({ ...f, addressLine2: e.target.value }))}
+                            placeholder="Bengaluru"
                           />
                         </div>
                       </div>
@@ -1077,6 +1120,7 @@ export default function SuperAdminOrganisationDetailPage() {
                             className="inp"
                             value={editForm.state}
                             onChange={(e) => setEditForm((f) => ({ ...f, state: e.target.value }))}
+                            placeholder="Karnataka"
                           />
                         </div>
                         <div className="field">
@@ -1085,31 +1129,28 @@ export default function SuperAdminOrganisationDetailPage() {
                             className="inp"
                             value={editForm.postalCode}
                             onChange={(e) => setEditForm((f) => ({ ...f, postalCode: e.target.value }))}
+                            placeholder="560001"
                           />
                         </div>
                       </div>
-                      <div className="row2">
-                        <div className="field">
-                          <label>Country</label>
-                          <input
-                            className="inp"
-                            value={editForm.country}
-                            onChange={(e) => setEditForm((f) => ({ ...f, country: e.target.value }))}
-                          />
-                        </div>
-                        <div className="field">
-                          <label>Brand colour</label>
-                          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                            <input
-                              type="color"
-                              className="colorpick"
-                              value={/^#[0-9a-f]{6}$/i.test(editForm.brandColour) ? editForm.brandColour : "#0f1424"}
-                              onChange={(e) => setEditForm((f) => ({ ...f, brandColour: e.target.value }))}
-                              aria-label="Pick a brand colour"
-                            />
-                            <span className="mono">{(editForm.brandColour || "#0f1424").toUpperCase()}</span>
-                          </div>
-                        </div>
+                      <div className="field">
+                        <label>Registered address</label>
+                        <textarea
+                          className="inp"
+                          rows={2}
+                          value={editForm.addressLine1}
+                          onChange={(e) => setEditForm((f) => ({ ...f, addressLine1: e.target.value }))}
+                          placeholder="123, Prestige Tech Park, Outer Ring Road, Bengaluru, Karnataka – 560001, India"
+                        />
+                      </div>
+                      <div className="field">
+                        <label>Address line 2</label>
+                        <input
+                          className="inp"
+                          value={editForm.addressLine2}
+                          onChange={(e) => setEditForm((f) => ({ ...f, addressLine2: e.target.value }))}
+                          placeholder="Optional"
+                        />
                       </div>
                       <div className="row2">
                         <div className="field">
@@ -1135,6 +1176,52 @@ export default function SuperAdminOrganisationDetailPage() {
                           />
                         </div>
                       </div>
+                      <div className="field">
+                        <label>Brand colour</label>
+                        <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+                          <input
+                            type="color"
+                            className="colorpick"
+                            value={/^#[0-9a-f]{6}$/i.test(editForm.brandColour) ? editForm.brandColour : "#0f1424"}
+                            onChange={(e) => setEditForm((f) => ({ ...f, brandColour: e.target.value }))}
+                            aria-label="Pick a brand colour"
+                          />
+                          <input
+                            type="text"
+                            className="inp"
+                            style={{ width: 110, fontFamily: "monospace", textTransform: "uppercase", padding: "6px 10px" }}
+                            value={editForm.brandColour}
+                            onChange={(e) => setEditForm((f) => ({ ...f, brandColour: e.target.value }))}
+                            placeholder="#0F1424"
+                            aria-label="Brand colour hex"
+                          />
+                          <div style={{ display: "flex", gap: 6, alignItems: "center", flexWrap: "wrap", marginLeft: 4 }}>
+                            {ORG_COLOR_PRESETS.map((p) => {
+                              const isSel = editForm.brandColour.toLowerCase() === p.hex.toLowerCase();
+                              return (
+                                <button
+                                  key={p.hex}
+                                  type="button"
+                                  onClick={() => setEditForm((f) => ({ ...f, brandColour: p.hex }))}
+                                  style={{
+                                    width: 24,
+                                    height: 24,
+                                    borderRadius: "50%",
+                                    background: p.hex,
+                                    border: isSel ? "2px solid #fff" : "1px solid rgba(0,0,0,0.15)",
+                                    outline: isSel ? `2px solid ${p.hex}` : "none",
+                                    cursor: "pointer",
+                                    padding: 0,
+                                    boxShadow: isSel ? "0 2px 8px rgba(0,0,0,0.25)" : "none",
+                                  }}
+                                  title={p.label}
+                                  aria-label={p.label}
+                                />
+                              );
+                            })}
+                          </div>
+                        </div>
+                      </div>
                       <FormAlert message={editError} />
                       <FormActions
                         onCancel={() => setEditing(false)}
@@ -1152,6 +1239,7 @@ export default function SuperAdminOrganisationDetailPage() {
                         gap: "24px 28px",
                       }}
                     >
+                      {/* Mirrors the Org Admin's Settings → General fields, plus slug/admin for context. */}
                       <DetailRowItem
                         icon="building"
                         iconBg="#e0f2fe"
@@ -1160,7 +1248,7 @@ export default function SuperAdminOrganisationDetailPage() {
                         value={org.name}
                       />
                       <DetailRowItem
-                        icon="tag"
+                        icon="link"
                         iconBg="#ede9fe"
                         iconColor="#6366f1"
                         label="Organisation slug"
@@ -1173,63 +1261,124 @@ export default function SuperAdminOrganisationDetailPage() {
                         iconColor="#2563eb"
                         label="Admin"
                         value={adminName}
-                        sub={org.admin?.email ?? "—"}
+                        sub={[org.admin?.email, org.admin?.phoneNumber].filter(Boolean).join(" · ") || "—"}
+                      />
+                      <DetailRowItem
+                        icon="tag"
+                        iconBg="#ede9fe"
+                        iconColor="#6366f1"
+                        label="Industry"
+                        value={industryLabel(org.industry) ?? "Not set"}
+                      />
+                      <DetailRowItem
+                        icon="mail"
+                        iconBg="#eff6ff"
+                        iconColor="#2563eb"
+                        label="Support email"
+                        value={org.supportEmail || "Not added"}
+                        copyable={org.supportEmail || undefined}
                       />
                       <DetailRowItem
                         icon="phone"
                         iconBg="#e0f2fe"
                         iconColor="#0284c7"
-                        label="Phone"
-                        value={org.admin?.phoneNumber || "+91 98250 11020"}
+                        label="Support phone"
+                        value={org.supportPhone || "Not added"}
+                      />
+                      <DetailRowItem
+                        icon="globe"
+                        iconBg="#e0f2fe"
+                        iconColor="#0284c7"
+                        label="Country"
+                        value={org.country || "Not set"}
+                        sub={[org.currency && `Currency ${org.currency}`, org.timezone && `Timezone ${org.timezone}`].filter(Boolean).join(" · ") || undefined}
                       />
                       <DetailRowItem
                         icon="pin"
                         iconBg="#eff6ff"
                         iconColor="#2563eb"
                         label="City"
-                        value={org.city}
+                        value={org.city || "Not set"}
                       />
                       <DetailRowItem
-                        icon="link"
+                        icon="building"
+                        iconBg="#eff6ff"
+                        iconColor="#2563eb"
+                        label="State"
+                        value={org.state || "Not added"}
+                      />
+                      <DetailRowItem
+                        icon="mail"
                         iconBg="#ede9fe"
                         iconColor="#6366f1"
-                        label="Organisation slug"
-                        value={org.slug}
-                        copyable={org.slug}
+                        label="Postal code"
+                        value={org.postalCode || "Not added"}
                       />
                       <DetailRowItem
-                        icon="calendar"
-                        iconBg="#eff6ff"
-                        iconColor="#2563eb"
-                        label="Timezone"
-                        value={org.timezone || "Asia/Kolkata"}
-                      />
-                      <DetailRowItem
-                        icon="billing"
-                        iconBg="#eff6ff"
-                        iconColor="#2563eb"
-                        label="Currency"
-                        value={org.currency || "INR"}
-                      />
-                      <DetailRowItem
-                        icon="globe"
+                        icon="pin"
                         iconBg="#e0f2fe"
                         iconColor="#0284c7"
-                        label="Default language"
-                        value={org.defaultLanguage || "en-IN"}
+                        label="Registered address"
+                        value={org.addressLine1 || "Not added"}
+                        sub={org.addressLine2 || undefined}
                       />
                       <DetailRowItem
-                        icon="globe"
+                        icon="sparkles"
+                        iconBg="#ede9fe"
+                        iconColor="#6366f1"
+                        label="Brand colour"
+                        value={
+                          org.brandColour ? (
+                            <span style={{ display: "inline-flex", alignItems: "center", gap: 8 }}>
+                              <span
+                                aria-hidden
+                                style={{ width: 16, height: 16, borderRadius: 4, background: org.brandColour, border: "1px solid rgba(0,0,0,0.15)" }}
+                              />
+                              <span className="mono">{org.brandColour.toUpperCase()}</span>
+                            </span>
+                          ) : (
+                            "Not set"
+                          )
+                        }
+                      />
+                      <DetailRowItem
+                        icon="camera"
+                        iconBg="#eff6ff"
+                        iconColor="#2563eb"
+                        label="Logo"
+                        value={
+                          org.logoUrl ? (
+                            // eslint-disable-next-line @next/next/no-img-element
+                            <img src={org.logoUrl} alt="Organisation logo" style={{ maxWidth: 120, maxHeight: 40, objectFit: "contain", display: "block" }} />
+                          ) : (
+                            "Not uploaded"
+                          )
+                        }
+                      />
+                      <DetailRowItem
+                        icon="camera"
                         iconBg="#e0f2fe"
                         iconColor="#0284c7"
-                        label="Website"
-                        value={org.website || "Not added"}
-                        external={org.website || undefined}
+                        label="Favicon"
+                        value={
+                          org.faviconUrl ? (
+                            // eslint-disable-next-line @next/next/no-img-element
+                            <img src={org.faviconUrl} alt="Organisation favicon" style={{ width: 24, height: 24, objectFit: "contain", display: "block" }} />
+                          ) : (
+                            "Not uploaded"
+                          )
+                        }
                       />
                     </div>
                   )}
                 </div>
               </div>
+              {/* Industry change history — refetches after each save (org updates). */}
+              <IndustryHistory
+                endpoint={`/admin/organisations/${org.id}/industry-history`}
+                reloadKey={org}
+                currentIndustry={org.industry}
+              />
             </Reveal>
           ) : null}
 

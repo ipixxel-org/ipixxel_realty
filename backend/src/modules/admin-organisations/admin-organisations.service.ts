@@ -40,6 +40,10 @@ import { CreateOrgUserDto } from '../org-users/dto/create-org-user.dto';
 import { UpdateOrgUserStatusDto } from '../org-users/dto/update-org-user-status.dto';
 import { ListOrgUsersQueryDto } from '../org-users/dto/list-org-users-query.dto';
 import { buildNotificationData } from '../../common/utils/notifications.util';
+import {
+  listIndustryHistory,
+  updateOrganisationProfile,
+} from '../../common/utils/org-industry.util';
 import type { Prisma } from '@prisma/client';
 import { EmailService } from '../email/email.service';
 
@@ -357,6 +361,10 @@ export class AdminOrganisationsService {
       where.status = query.status as any;
     }
 
+    if (query.industry) {
+      where.industry = query.industry;
+    }
+
     if (query.search) {
       const search = query.search;
       where.AND = [
@@ -417,6 +425,7 @@ export class AdminOrganisationsService {
           name: org.name,
           slug: org.slug,
           city: org.city,
+          industry: org.industry,
           subdomain: null,
           subdomainHost: null,
           subdomainStatus: 'none',
@@ -612,6 +621,10 @@ export class AdminOrganisationsService {
       state: organisation.state,
       postalCode: organisation.postalCode,
       country: organisation.country,
+      // Same profile fields the Org Admin edits in Settings → General.
+      industry: organisation.industry,
+      supportEmail: organisation.supportEmail,
+      supportPhone: organisation.supportPhone,
       admin: admin
         ? {
             firstName: admin.firstName,
@@ -666,15 +679,24 @@ export class AdminOrganisationsService {
     }));
   }
 
-  async update(id: string, dto: UpdateOrganisationDto) {
+  async update(id: string, dto: UpdateOrganisationDto, actor: JwtPayload) {
     await this.getRealOrganisation(id);
 
-    const updated = await this.prisma.organisation.update({
-      where: { id },
-      data: buildOrganisationUpdateData(dto),
-    });
+    const updated = await updateOrganisationProfile(
+      this.prisma,
+      id,
+      dto,
+      actor.sub,
+      'super_admin',
+    );
 
     return toSafeOrganisation(updated);
+  }
+
+  // Industry ("role") change history — shown under the org Overview.
+  async industryHistory(id: string) {
+    await this.getRealOrganisation(id);
+    return listIndustryHistory(this.prisma, id);
   }
 
   // Presigned PUT URL for the target org's logo or favicon, used by the
