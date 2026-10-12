@@ -341,6 +341,10 @@ export default function SuperAdminAttributionPage() {
                 placeholder="Search labels..."
               />
             </div>
+            {/*
+              "Add Label" is hidden for now (not required). The add-label form below
+              is only opened by this button, so it stays dormant until re-enabled.
+
             <button
               type="button"
               className="btn btn-primary btn-sm"
@@ -352,6 +356,7 @@ export default function SuperAdminAttributionPage() {
             >
               <Icon name="plus" size={14} /> Add Label
             </button>
+            */}
           </div>
         </div>
 
