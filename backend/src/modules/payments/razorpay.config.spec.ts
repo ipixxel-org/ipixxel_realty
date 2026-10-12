@@ -1,4 +1,4 @@
-import { loadRazorpayConfig } from './razorpay.config';
+import { loadRazorpayConfig, webhookSecretProblem } from './razorpay.config';
 
 describe('loadRazorpayConfig', () => {
   const full = {
@@ -37,5 +37,15 @@ describe('loadRazorpayConfig', () => {
     expect(() =>
       loadRazorpayConfig({ ...full, RAZORPAY_KEY_ID: 'pk_test_123' }),
     ).toThrow(/malformed/);
+  });
+});
+
+describe('webhookSecretProblem', () => {
+  it('rejects a webhook secret equal to the public key id or the key secret', () => {
+    expect(webhookSecretProblem('rzp_test_A', 's', 'rzp_test_A')).toMatch(
+      /Key ID/,
+    );
+    expect(webhookSecretProblem('rzp_test_A', 's', 's')).toMatch(/Key Secret/);
+    expect(webhookSecretProblem('rzp_test_A', 's', 'whsec')).toBeNull();
   });
 });

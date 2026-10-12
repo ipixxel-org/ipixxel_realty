@@ -217,7 +217,7 @@ describe('PaymentsService', () => {
   let fake: ReturnType<typeof createFakePrisma>;
   let gateway: {
     config: jest.Mock;
-    enabled: boolean;
+    tryConfig: jest.Mock;
     createOrder: jest.Mock;
     fetchPayment: jest.Mock;
   };
@@ -228,10 +228,10 @@ describe('PaymentsService', () => {
 
   function build(cfg: RazorpayConfig | null = TEST_CFG) {
     fake = createFakePrisma();
-    const real = new RazorpayGateway(cfg);
+    const real = new RazorpayGateway({ current: () => Promise.resolve(cfg) });
     gateway = {
       config: jest.fn(() => real.config()),
-      enabled: real.enabled,
+      tryConfig: jest.fn(() => real.tryConfig()),
       createOrder: jest.fn((input) =>
         Promise.resolve({
           id: `order_T${++orderSeq}`,

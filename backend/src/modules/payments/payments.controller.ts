@@ -1,11 +1,13 @@
 import {
   Body,
   Controller,
+  Delete,
   ForbiddenException,
   Get,
   Headers,
   HttpCode,
   Post,
+  Put,
   Query,
   Req,
   Res,
@@ -20,6 +22,11 @@ import { RequirePermission } from '../../common/decorators/require-permission.de
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import type { JwtPayload } from '../../common/types/jwt-payload.interface';
 import { PaymentsService } from './payments.service';
+import { RazorpaySettingsService } from './razorpay-settings.service';
+import {
+  TestRazorpaySettingsDto,
+  UpdateRazorpaySettingsDto,
+} from './dto/razorpay-settings.dto';
 import {
   AdminListPaymentsQueryDto,
   CreateTestOrderDto,
@@ -55,11 +62,50 @@ export class OrgPaymentsController {
 // --- Super Admin Endpoints ---
 // /admin/payments is mapped to admin_subscriptions in PLATFORM_ROUTE_MODULES,
 // so platform-team roles need that module's view/add permission. The test
-// order flow is additionally restricted to the super_admin role.
+// order flow and changing the gateway credentials are additionally
+// restricted to the super_admin role.
 @UseGuards(JwtAuthGuard, SuperAdminGuard)
 @Controller('admin/payments')
 export class AdminPaymentsController {
-  constructor(private readonly service: PaymentsService) {}
+  constructor(
+    private readonly service: PaymentsService,
+    private readonly settings: RazorpaySettingsService,
+  ) {}
+
+  // --- Integrations → Razorpay ---
+  // Secrets are never returned: masks + has* flags only.
+
+  @Get('settings')
+  getSettings() {
+    return this.settings.getForAdmin();
+  }
+
+  // Changing keys redirects where money goes, so only super_admin may do it
+  // (platform-team roles with admin_subscriptions can still view).
+  @Put('settings')
+  updateSettings(
+    @CurrentUser() user: JwtPayload,
+    @Body() dto: UpdateRazorpaySettingsDto,
+  ) {
+    assertSuperAdmin(user);
+    return this.settings.update(dto, user.sub);
+  }
+
+  @Delete('settings')
+  clearSettings(@CurrentUser() user: JwtPayload) {
+    assertSuperAdmin(user);
+    return this.settings.clear(user.sub);
+  }
+
+  @Post('settings/test')
+  @HttpCode(200)
+  testSettings(
+    @CurrentUser() user: JwtPayload,
+    @Body() dto: TestRazorpaySettingsDto,
+  ) {
+    assertSuperAdmin(user);
+    return this.settings.testCredentials(dto);
+  }
 
   @Get()
   list(@Query() query: AdminListPaymentsQueryDto) {

@@ -106,7 +106,7 @@ export class PaymentsService {
    * together from either side.
    */
   async createOrder(input: CreateOrderInput): Promise<CheckoutOrder> {
-    const cfg = this.gateway.config();
+    const cfg = await this.gateway.config();
 
     const amount = input.amountPaise;
     if (!Number.isSafeInteger(amount) || amount < MIN_AMOUNT_PAISE) {
@@ -181,7 +181,7 @@ export class PaymentsService {
 
   /** Super Admin ₹1 test order. Only in Razorpay test mode. */
   async createTestOrder(organisationId: string, createdById: string) {
-    this.assertTestMode();
+    await this.assertTestMode();
     return this.createOrder({
       organisationId,
       amountPaise: TEST_PAYMENT_AMOUNT_PAISE,
@@ -191,8 +191,8 @@ export class PaymentsService {
     });
   }
 
-  assertTestMode(): void {
-    if (this.gateway.config().mode !== 'test') {
+  async assertTestMode(): Promise<void> {
+    if ((await this.gateway.config()).mode !== 'test') {
       throw new ForbiddenException(
         'Test payments are only available with a Razorpay test key (rzp_test_…).',
       );
@@ -212,7 +212,7 @@ export class PaymentsService {
    * payment.captured webhook finishes it.
    */
   async verifyCheckout(dto: VerifyPaymentDto, organisationId: string | null) {
-    const cfg = this.gateway.config();
+    const cfg = await this.gateway.config();
 
     const payment = await this.prisma.payment.findFirst({
       where: {
@@ -399,7 +399,7 @@ export class PaymentsService {
     signature: string | undefined,
     eventIdHeader: string | undefined,
   ): Promise<{ webhookEventId: string | null; duplicate: boolean }> {
-    const cfg = this.gateway.config();
+    const cfg = await this.gateway.config();
     if (!isValidWebhookSignature(rawBody, signature, cfg.webhookSecret)) {
       throw new BadRequestException('Invalid webhook signature');
     }
@@ -571,7 +571,7 @@ export class PaymentsService {
       total,
       page,
       limit,
-      mode: this.gateway.enabled ? this.gateway.config().mode : null,
+      mode: (await this.gateway.tryConfig())?.mode ?? null,
     };
   }
 

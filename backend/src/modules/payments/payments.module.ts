@@ -4,7 +4,12 @@ import { AuthModule } from '../auth/auth.module';
 import { PaymentsService } from './payments.service';
 import { PaymentEventsService } from './payment-events';
 import { RazorpayGateway } from './razorpay.gateway';
-import { RAZORPAY_CONFIG, loadRazorpayConfig } from './razorpay.config';
+import { RazorpaySettingsService } from './razorpay-settings.service';
+import {
+  RAZORPAY_CONFIG,
+  loadRazorpayConfig,
+  webhookSecretProblem,
+} from './razorpay.config';
 import {
   AdminPaymentsController,
   OrgPaymentsController,
@@ -29,18 +34,27 @@ import {
       useFactory: () => {
         const cfg = loadRazorpayConfig();
         const logger = new Logger('Razorpay');
-        if (cfg) logger.log(`Razorpay enabled (${cfg.mode} mode)`);
+        const problem =
+          cfg &&
+          webhookSecretProblem(cfg.keyId, cfg.keySecret, cfg.webhookSecret);
+        if (problem) {
+          // Unsafe, not partial: don't block the boot, just don't use it.
+          logger.error(`RAZORPAY_* env keys ignored: ${problem}`);
+          return null;
+        }
+        if (cfg) logger.log(`Razorpay env fallback loaded (${cfg.mode} mode)`);
         else
           logger.warn(
-            'Razorpay keys not set — payment endpoints will return 503.',
+            'No RAZORPAY_* env keys — using keys from Integrations → Razorpay if saved there.',
           );
         return cfg;
       },
     },
+    RazorpaySettingsService,
     RazorpayGateway,
     PaymentEventsService,
     PaymentsService,
   ],
-  exports: [PaymentsService, PaymentEventsService],
+  exports: [PaymentsService, PaymentEventsService, RazorpaySettingsService],
 })
 export class PaymentsModule {}
