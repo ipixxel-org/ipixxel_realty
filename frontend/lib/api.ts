@@ -2363,3 +2363,31 @@ export async function authenticateWithGoogle(
   });
 }
 
+
+// --- Payments (Razorpay) ---
+
+export async function getOrgPayments(page = 1, limit = 10): Promise<import("./types").PaymentsPage> {
+  return apiFetch<import("./types").PaymentsPage>(`/org/payments?page=${page}&limit=${limit}`);
+}
+
+export async function getAdminPayments(params: {
+  page?: number;
+  limit?: number;
+  status?: string;
+  organisationId?: string;
+}): Promise<import("./types").AdminPaymentsPage> {
+  const q = new URLSearchParams();
+  if (params.page) q.set("page", String(params.page));
+  if (params.limit) q.set("limit", String(params.limit));
+  if (params.status) q.set("status", params.status);
+  if (params.organisationId) q.set("organisationId", params.organisationId);
+  const s = q.toString();
+  return apiFetch<import("./types").AdminPaymentsPage>(`/admin/payments${s ? `?${s}` : ""}`);
+}
+
+export async function createAdminTestPaymentOrder(organisationId: string): Promise<import("./types").CheckoutOrder> {
+  return apiFetch<import("./types").CheckoutOrder>("/admin/payments/test-order", {
+    method: "POST",
+    body: JSON.stringify({ organisationId }),
+  });
+}

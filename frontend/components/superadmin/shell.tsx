@@ -37,6 +37,7 @@ export const NAV_MODULE: Record<string, string> = {
   "/admin-console/leads": "admin_leads",
   "/admin-console/org-domains": "admin_domains",
   "/admin-console/subscriptions": "admin_subscriptions",
+  "/admin-console/payments": "admin_subscriptions",
   // "/admin-console/integrations" has no single module — see canAccessAdminNavItem.
   "/admin-console/marketing": "admin_settings",
   "/admin-console/attribution": "admin_settings",
@@ -99,6 +100,7 @@ export const NAV_GROUPS: NavGroup[] = [
         activeMatch: ["/admin-console/leads"],
       },
       { href: "/admin-console/subscriptions", icon: "billing", label: "Subscriptions", tip: "Plans and subscriptions", activeMatch: ["/admin-console/subscriptions"] },
+      { href: "/admin-console/payments", icon: "billing", label: "Payments", tip: "Razorpay payments", activeMatch: ["/admin-console/payments"] },
       {
         href: "/admin-console/media",
         icon: "document",
@@ -215,6 +217,7 @@ const CRUMB_MAP: Record<string, string> = {
   "/org-builder": "Builder",
   "/admin-console/org-domains": "Domains",
   "/admin-console/subscriptions": "Subscriptions",
+  "/admin-console/payments": "Payments",
   "/admin-console/integrations": "Integrations",
   "/admin-console/marketing": "Marketing",
   "/admin-console/attribution": "Lead Attribution",

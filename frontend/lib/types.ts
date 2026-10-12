@@ -3073,3 +3073,55 @@ export type GoogleAuthResponse =
       googleToken?: string;
     };
 
+
+// --- Payments (Razorpay) ---------------------------------------------------
+// Amounts are integer paise.
+
+export type PaymentStatus = "created" | "pending" | "captured" | "failed" | "refunded";
+export type PaymentPurpose = "test";
+
+export interface PaymentRow {
+  id: string;
+  organisationId: string;
+  amount: number;
+  currency: string;
+  status: PaymentStatus;
+  purpose: PaymentPurpose;
+  referenceType: string | null;
+  referenceId: string | null;
+  razorpayOrderId: string;
+  razorpayPaymentId: string | null;
+  failureReason: string | null;
+  capturedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface AdminPaymentRow extends PaymentRow {
+  organisation: { id: string; name: string; slug: string };
+  createdBy: { id: string; firstName: string | null; lastName: string | null; email: string };
+}
+
+export interface PaymentsPage<T = PaymentRow> {
+  data: T[];
+  total: number;
+  page: number;
+  limit: number;
+}
+
+export interface AdminPaymentsPage extends PaymentsPage<AdminPaymentRow> {
+  /** Razorpay key mode, or null when payments are not configured. */
+  mode: "test" | "live" | null;
+}
+
+/** POST /admin/payments/test-order — everything Checkout needs. */
+export interface CheckoutOrder {
+  paymentId: string;
+  orderId: string;
+  amount: number;
+  currency: string;
+  keyId: string;
+  name: string;
+  description: string;
+  prefill: { name?: string; email?: string; contact?: string };
+}
