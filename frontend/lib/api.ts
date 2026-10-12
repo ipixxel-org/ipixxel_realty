@@ -2391,3 +2391,32 @@ export async function createAdminTestPaymentOrder(organisationId: string): Promi
     body: JSON.stringify({ organisationId }),
   });
 }
+
+export async function getRazorpaySettings(): Promise<import("./types").RazorpaySettingsView> {
+  return apiFetch<import("./types").RazorpaySettingsView>("/admin/payments/settings");
+}
+
+export async function updateRazorpaySettings(
+  input: import("./types").UpdateRazorpaySettingsInput,
+): Promise<import("./types").RazorpaySettingsView> {
+  return apiFetch<import("./types").RazorpaySettingsView>("/admin/payments/settings", {
+    method: "PUT",
+    body: JSON.stringify(input),
+  });
+}
+
+export async function clearRazorpaySettings(): Promise<import("./types").RazorpaySettingsView> {
+  return apiFetch<import("./types").RazorpaySettingsView>("/admin/payments/settings", {
+    method: "DELETE",
+  });
+}
+
+export async function testRazorpaySettings(input: {
+  keyId?: string;
+  keySecret?: string;
+}): Promise<{ ok: boolean; mode: "test" | "live" | null }> {
+  return apiFetch<{ ok: boolean; mode: "test" | "live" | null }>("/admin/payments/settings/test", {
+    method: "POST",
+    body: JSON.stringify(input),
+  });
+}

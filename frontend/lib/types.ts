@@ -3125,3 +3125,29 @@ export interface CheckoutOrder {
   description: string;
   prefill: { name?: string; email?: string; contact?: string };
 }
+
+/** GET/PUT /admin/payments/settings — secrets come back masked, never in clear. */
+export interface RazorpaySettingsView {
+  /** Where the active keys come from: saved in the console, env fallback, or none. */
+  source: "database" | "env" | null;
+  isActive: boolean;
+  configured: boolean;
+  /** Configured, complete and switched on — payments will work. */
+  ready: boolean;
+  mode: "test" | "live" | null;
+  keyId: string;
+  keySecret: string;
+  hasKeySecret: boolean;
+  webhookSecret: string;
+  hasWebhookSecret: boolean;
+  envFallbackAvailable: boolean;
+  webhookUrl: string;
+  updatedAt: string | null;
+}
+
+export interface UpdateRazorpaySettingsInput {
+  keyId?: string;
+  keySecret?: string;
+  webhookSecret?: string;
+  isActive?: boolean;
+}
