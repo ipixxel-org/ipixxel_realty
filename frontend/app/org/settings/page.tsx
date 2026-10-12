@@ -20,17 +20,7 @@ import { formatPaise } from "@/lib/razorpay";
 
 import { COUNTRY_META, COUNTRIES, CURRENCY_OPTIONS, TIMEZONE_OPTIONS } from "@/lib/countries";
 import { ORG_THEME_CHANGE_EVENT } from "@/components/global-theme-provider";
-
-const ORG_COLOR_PRESETS = [
-  { hex: "#0f1424", label: "Sapphire Navy" },
-  { hex: "#2563eb", label: "Royal Blue" },
-  { hex: "#059669", label: "Emerald Green" },
-  { hex: "#0d9488", label: "Modern Teal" },
-  { hex: "#4f46e5", label: "Indigo" },
-  { hex: "#7c3aed", label: "Royal Purple" },
-  { hex: "#e11d48", label: "Crimson Rose" },
-  { hex: "#d97706", label: "Amber Gold" },
-];
+import { INDUSTRY_OPTIONS, ORG_COLOR_PRESETS } from "@/lib/org-profile";
 
 const LANGUAGES = [
   { value: "en-IN", label: "English (India)" },
@@ -39,15 +29,6 @@ const LANGUAGES = [
   { value: "ar", label: "Arabic" },
 ];
 
-// Matches the registration wizard's ORG_TYPES exactly (Organisation.industry
-// enum) — the wizard's "What describes you best?" step and this dropdown
-// edit the same field, so the option set has to stay in sync.
-const INDUSTRY_OPTIONS: { value: OrgIndustry; label: string }[] = [
-  { value: "developer", label: "Real Estate — Developer" },
-  { value: "broker", label: "Real Estate — Broker / Agency" },
-  { value: "channel", label: "Channel Partner" },
-  { value: "mixed", label: "Mixed" },
-];
 
 
 const SUBSCRIPTION_STATUS_BADGE: Record<string, string> = {
@@ -78,7 +59,8 @@ const NAV_GROUPS = [
   {
     grp: "ORGANISATION", items: [
       { s: "general", icon: "building" as IconName, t: "General" },
-      { s: "branding", icon: "sparkles" as IconName, t: "Branding" },
+      // Branding (logo, favicon, brand colour) now lives in the General section.
+      // { s: "branding", icon: "sparkles" as IconName, t: "Branding" },
       // Hidden for now — uncomment to bring Localization back.
       // { s: "localization", icon: "globe" as IconName, t: "Localization" },
       { s: "domain", icon: "globe" as IconName, t: "Domain" },
@@ -114,11 +96,11 @@ const NAV_GROUPS = [
 
 // Sections whose nav items are commented out above — a direct
 // `?section=` link to one falls back to the first visible section.
-const HIDDEN_SECTIONS: ReadonlySet<string> = new Set(["localization", "whatsapp", "comms", "team-prefs"]);
+const HIDDEN_SECTIONS: ReadonlySet<string> = new Set(["branding", "localization", "whatsapp", "comms", "team-prefs"]);
 
 const SECTION_META: Record<string, { icon: IconName; title: string; sub: string }> = {
   general: { icon: "building", title: "General Information", sub: "Update your organisation's basic details and contact information." },
-  branding: { icon: "sparkles", title: "Logo & identity", sub: "Shown across the app, landing pages & emails" },
+  // branding: merged into General (see the "Logo & identity" block there).
   // localization: { icon: "globe", title: "Formats & language", sub: "Regional preferences for your workspace" },
   domain: { icon: "globe", title: "Landing Page Domains", sub: "Configure custom domains for each landing page" },
   crm: { icon: "crm", title: "CRM & leads", sub: "How leads are captured and handled" },
@@ -2010,19 +1992,23 @@ export default function OrgSettingsPage() {
                 action={saveButton}
               >
                 <div className="set-form-grid">
-                  <div className="set-row-2">
-                    <div className="set-field">
-                      <label>Organisation name <span className="set-req">*</span></label>
-                      <div className="set-input-box">
-                        <span className="set-field-ic"><Icon name="building" size={16} /></span>
-                        <input
-                          className="inp"
-                          value={form.name}
-                          onChange={(e) => updateForm({ name: e.target.value })}
-                          placeholder="Miraclecare"
-                        />
-                      </div>
+                  <div className="set-field">
+                    <label>Organisation name <span className="set-req">*</span></label>
+                    <div className="set-input-box">
+                      <span className="set-field-ic"><Icon name="building" size={16} /></span>
+                      <input
+                        className="inp"
+                        value={form.name}
+                        onChange={(e) => updateForm({ name: e.target.value })}
+                        placeholder="Miraclecare"
+                      />
                     </div>
+                  </div>
+
+                  {/*
+                    Legal / registered name is hidden for now. form.legalName is still loaded
+                    from the org and sent unchanged on save, so existing values are preserved.
+
                     <div className="set-field">
                       <label>Legal / registered name</label>
                       <div className="set-input-box">
@@ -2035,7 +2021,7 @@ export default function OrgSettingsPage() {
                         />
                       </div>
                     </div>
-                  </div>
+                  */}
 
                   <div className="set-field">
                     <label>Industry <span className="set-req">*</span></label>
@@ -2172,13 +2158,16 @@ export default function OrgSettingsPage() {
                     </div>
                   </div>
                 </div>
-              </Card>
-            </div>
 
-            {/* BRANDING */}
-            <div className={`os-section${activeSection === "branding" ? " on" : ""}`}>
-              <SectionHead section="branding" />
-              <Card icon="sparkles" title="Logo & identity" sub="Shown across the app, landing pages & emails">
+                {/* Logo & identity — moved here from the former Branding section.
+                    Same form state, save and theme-preview behaviour as before. */}
+                <div style={{ marginTop: 24, paddingTop: 20, borderTop: "1px solid var(--line, #e2e8f0)" }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4, fontWeight: 600, fontSize: 15 }}>
+                    <Icon name="sparkles" size={16} /> Logo &amp; identity
+                  </div>
+                  <p className="muted" style={{ margin: "0 0 16px", fontSize: 13 }}>
+                    Shown across the app, landing pages &amp; emails
+                  </p>
                 <div className="row2">
                   <div className="field">
                     <label>Logo</label>
@@ -2265,6 +2254,7 @@ export default function OrgSettingsPage() {
                 <input className="inp" value="" disabled placeholder="Coming soon — part of the Email module" />
               </div>
               */}
+                </div>
               </Card>
             </div>
 
