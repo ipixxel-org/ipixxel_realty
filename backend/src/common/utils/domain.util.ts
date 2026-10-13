@@ -159,10 +159,6 @@ export function generateDnsInstructions(
   } = {},
 ) {
   const infraIp = opts.ip || process.env.INFRA_IP || '';
-  const infraCname = opts.cname || process.env.INFRA_CNAME_TARGET || '';
-  const infraNs1 = opts.ns1 || process.env.INFRA_NS1 || '';
-  const infraNs2 = opts.ns2 || process.env.INFRA_NS2 || '';
-  const infraMode = opts.mode || process.env.DNS_MODE || 'a'; // a | cname | ns
   const records: Array<{
     type: string;
     host: string;
@@ -170,88 +166,41 @@ export function generateDnsInstructions(
     ttl: string;
     purpose: string;
   }> = [];
-  if (infraMode === 'ns') {
-    if (infraNs1) {
-      records.push({
-        type: 'NS',
-        host: '@',
-        value: infraNs1,
-        ttl: 'Auto',
-        purpose: 'Primary nameserver',
-      });
-    }
-    if (infraNs2) {
-      records.push({
-        type: 'NS',
-        host: '@',
-        value: infraNs2,
-        ttl: 'Auto',
-        purpose: 'Secondary nameserver',
-      });
-    }
-  } else if (infraMode === 'cname') {
-    if (infraCname) {
-      records.push({
-        type: 'CNAME',
-        host: 'www',
-        value: infraCname,
-        ttl: 'Auto',
-        purpose: 'Website',
-      });
-    }
+  if (infraIp) {
     records.push({
-      type: 'TXT',
+      type: 'A',
       host: '@',
-      value: `ipixxel-verify=${token}`,
+      value: infraIp,
       ttl: 'Auto',
-      purpose: 'Verification',
+      purpose: 'Website',
     });
     records.push({
-      type: 'TXT',
-      host: '_ipixxel-verify',
-      value: `ipixxel-verify=${token}`,
-      ttl: 'Auto',
-      purpose: 'Verification',
-    });
-  } else {
-    if (infraIp) {
-      records.push({
-        type: 'A',
-        host: '@',
-        value: infraIp,
-        ttl: 'Auto',
-        purpose: 'Website',
-      });
-    }
-    if (opts.ipv6 || process.env.INFRA_IPV6) {
-      records.push({
-        type: 'AAAA',
-        host: '@',
-        value: opts.ipv6 || process.env.INFRA_IPV6 || '::',
-        ttl: 'Auto',
-        purpose: 'Website IPv6',
-      });
-    }
-    records.push({
-      type: 'TXT',
-      host: '_ipixxel-verify',
-      value: `ipixxel-verify=${token}`,
-      ttl: 'Auto',
-      purpose: 'Verification',
-    });
-    records.push({
-      type: 'CNAME',
+      type: 'A',
       host: 'www',
-      value: domain,
+      value: infraIp,
       ttl: 'Auto',
-      purpose: 'WWW redirect',
+      purpose: 'Website',
     });
   }
+  records.push({
+    type: 'TXT',
+    host: '@',
+    value: `ipixxel-verify=${token}`,
+    ttl: 'Auto',
+    purpose: 'Verification',
+  });
+  records.push({
+    type: 'TXT',
+    host: '_ipixxel-verify',
+    value: `ipixxel-verify=${token}`,
+    ttl: 'Auto',
+    purpose: 'Verification',
+  });
   return {
     domain: normalizeDomain(domain),
     token,
-    mode: infraMode,
-    infra: { ip: infraIp, cname: infraCname, ns1: infraNs1, ns2: infraNs2 },
+    mode: 'a',
+    infra: { ip: infraIp },
     records,
   };
 }
@@ -383,33 +332,24 @@ export function generateCustomDomainDnsInstructions(
   const isMultiPartTld = ['co.uk', 'co.in', 'org.in', 'net.in', 'com.au', 'co.za'].includes(parts.slice(-2).join('.'));
   const isSubdomain = isMultiPartTld ? parts.length > 3 : parts.length > 2;
 
-  const mode = opts.mode || process.env.DNS_MODE || 'a';
   const ip = opts.ip || process.env.INFRA_IP || '';
-  const ipv6 = opts.ipv6 !== undefined ? opts.ipv6 : (process.env.INFRA_IPV6 || null);
-  const cname = opts.cname || process.env.INFRA_CNAME_TARGET || '';
-  const ns1 = opts.ns1 || process.env.INFRA_NS1 || '';
-  const ns2 = opts.ns2 || process.env.INFRA_NS2 || '';
   const token = opts.verificationToken;
   const records: DnsRecordSpec[] = [];
 
-  if (mode === 'ns') {
-    if (ns1) records.push({ type: 'NS', host: '@', value: ns1, ttl: 'Auto', purpose: 'Primary nameserver' });
-    if (ns2) records.push({ type: 'NS', host: '@', value: ns2, ttl: 'Auto', purpose: 'Secondary nameserver' });
-  } else if (isSubdomain) {
-    // For custom subdomains (e.g. promo.example.com), CNAME is valid:
+  if (isSubdomain) {
     const subLabel = isMultiPartTld
       ? parts.slice(0, parts.length - 3).join('.')
       : parts.slice(0, parts.length - 2).join('.');
-    records.push({
-      type: mode === 'a' ? 'A' : 'CNAME',
-      host: subLabel,
-      value: mode === 'a' ? ip : (cname || ip),
-      ttl: 'Auto',
-      purpose: 'Subdomain origin',
-    });
+    if (ip) {
+      records.push({
+        type: 'A',
+        host: subLabel,
+        value: ip,
+        ttl: 'Auto',
+        purpose: 'Subdomain origin',
+      });
+    }
   } else {
-    // Apex / Root domain (e.g. ipixxelrealty.com):
-    // RFC 1034 prohibits CNAME at zone apex (@). Root MUST use an A record!
     if (ip) {
       records.push({
         type: 'A',
@@ -418,23 +358,14 @@ export function generateCustomDomainDnsInstructions(
         ttl: 'Auto',
         purpose: 'Website origin (Apex)',
       });
-    }
-    if (ipv6) {
       records.push({
-        type: 'AAAA',
-        host: '@',
-        value: ipv6,
+        type: 'A',
+        host: 'www',
+        value: ip,
         ttl: 'Auto',
-        purpose: 'Website origin (IPv6)',
+        purpose: 'WWW website origin',
       });
     }
-    records.push({
-      type: 'CNAME',
-      host: 'www',
-      value: cleanDomain,
-      ttl: 'Auto',
-      purpose: 'WWW canonical / redirect',
-    });
   }
 
   if (token) {
@@ -686,5 +617,4 @@ export async function verifyDomainSsl(
     });
   });
 }
-
 

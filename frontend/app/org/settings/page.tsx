@@ -689,13 +689,6 @@ function DomainSection({ canRequest }: { canRequest: boolean }) {
                                     ttl: "Auto",
                                     purpose: "Website origin (IPv4)",
                                   },
-                                  {
-                                    type: "CNAME",
-                                    host: "www",
-                                    value: req.customDomain ?? "@",
-                                    ttl: "Auto",
-                                    purpose: "WWW alias redirect",
-                                  },
                                 ]
                                 : [];
 
@@ -789,12 +782,7 @@ function DomainSection({ canRequest }: { canRequest: boolean }) {
                                 >
                                   💡 <b>Next Steps:</b>
                                   <ol style={{ margin: "4px 0 0 16px", padding: 0 }}>
-                                    {platformOrigin ? (
-                                      <li>Add the <b>A record</b> (Host: <code>@</code>, Value: <code>{platformOrigin}</code>) at your domain registrar.</li>
-                                    ) : (
-                                      <li>Add the records shown in the DNS Configuration table above at your domain registrar.</li>
-                                    )}
-                                    <li>Add the <b>CNAME record</b> (Host: <code>www</code>, Value: <code>{req.customDomain}</code>) so www redirects properly.</li>
+                                    <li>Add the A records shown in the DNS Configuration table above at your domain registrar.</li>
                                     <li>DNS propagation typically takes <b>5 to 60 minutes</b> (up to 24 hours depending on TTL).</li>
                                     <li>Ensure the landing page above is in <b>Published</b> status so visitors can view it immediately.</li>
                                   </ol>

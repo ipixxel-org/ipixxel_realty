@@ -179,16 +179,13 @@ export class AdminOrgDomainService {
     };
   }
 
-  // Super Admin reviews domain request: approve, reject, request_changes, suspend, reactivate
-  async review(id: string, adminId: string, action: string, reason?: string, feedback?: string) {
+  // Super Admin reviews domain request: approve, reject, suspend, reactivate
+  async review(id: string, adminId: string, action: string, reason?: string) {
     if (action === 'approve') {
       return this.approve(id, adminId);
     }
     if (action === 'reject') {
       return this.reject(id, adminId, reason);
-    }
-    if (action === 'request_changes') {
-      return this.requestChanges(id, adminId, feedback || reason);
     }
     if (action === 'suspend') {
       return this.suspend(id, adminId, reason);
@@ -345,53 +342,6 @@ export class AdminOrgDomainService {
           type: 'custom_domain_request',
           title: `Custom domain rejected: ${req.customDomain}`,
           body: `Your domain request for ${req.customDomain} was rejected. Reason: ${reason}`,
-          entity: 'OrgDomainRequest',
-          entityId: id,
-        }),
-      });
-
-      return reqRow;
-    });
-
-    const dnsOpts = await this.dnsOptions();
-    return toView(updated, dnsOpts);
-  }
-
-  // Request Changes with notes / feedback
-  async requestChanges(id: string, adminId: string, feedback?: string) {
-    if (!feedback?.trim()) throw new BadRequestException('Feedback / requested changes description is mandatory');
-    const req = await this.prisma.orgDomainRequest.findUnique({ where: { id } });
-    if (!req) throw new NotFoundException('Domain request not found');
-
-    const updated = await this.prisma.$transaction(async (tx) => {
-      const reqRow = await tx.orgDomainRequest.update({
-        where: { id },
-        data: {
-          status: 'changes_requested',
-          adminFeedback: feedback.trim(),
-          reviewedAt: new Date(),
-          reviewedBy: adminId,
-        } as any,
-        include: ADMIN_DOMAIN_RELATIONS_INCLUDE,
-      });
-
-      await tx.auditLog.create({
-        data: {
-          orgId: req.orgId,
-          actorId: adminId,
-          action: 'org_domain_changes_requested',
-          entity: 'OrgDomainRequest',
-          entityId: id,
-          metadata: { domain: req.customDomain, feedback } as any,
-        },
-      });
-
-      await tx.notification.create({
-        data: buildNotificationData({
-          orgId: req.orgId,
-          type: 'custom_domain_request',
-          title: `Changes requested on custom domain: ${req.customDomain}`,
-          body: `Super Admin requested updates for ${req.customDomain}: ${feedback}`,
           entity: 'OrgDomainRequest',
           entityId: id,
         }),

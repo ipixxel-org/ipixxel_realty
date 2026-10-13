@@ -1980,9 +1980,8 @@ export interface AdminOrgDomainRequestListResponse {
 }
 
 export interface ReviewOrgDomainRequestInput {
-  action: "approve" | "reject" | "request_changes" | "suspend" | "reactivate";
+  action: "approve" | "reject" | "suspend" | "reactivate";
   reason?: string;
-  feedback?: string;
 }
 
 // --- Super Admin: Audit logs ---
@@ -2113,7 +2112,7 @@ export interface PlatformConfig {
   id: string | null;
   subdomainMode: string; // localhost | production
   subdomainBase: string | null; // e.g. "ipixxel.ae"
-  dnsMode: string; // a | cname | ns
+  dnsMode: "a";
   infraIp: string | null; // AWS origin IPv4 (for the wildcard A record)
   infraIpv6: string | null;
   infraCname: string | null;
@@ -2133,7 +2132,7 @@ export interface PlatformConfig {
 export interface UpdatePlatformConfigInput {
   subdomainMode?: "localhost" | "production";
   subdomainBase?: string;
-  dnsMode?: "a" | "cname" | "ns";
+  dnsMode?: "a";
   infraIp?: string;
   infraIpv6?: string;
   infraCname?: string;

@@ -155,6 +155,7 @@ export default function SuperAdminOrgDomainsPage() {
       setConfig({
         ...EMPTY_CONFIG,
         ...cfg,
+        dnsMode: "a",
         subdomainBase: cfg.subdomainBase ?? "",
         infraIp: cfg.infraIp ?? "",
         infraIpv6: cfg.infraIpv6 ?? "",
@@ -182,7 +183,7 @@ export default function SuperAdminOrgDomainsPage() {
   const [verifyModalData, setVerifyModalData] = useState<any | null>(null);
   const [feedbackPrompt, setFeedbackPrompt] = useState<{
     id: string;
-    action: "reject" | "request_changes" | "suspend";
+    action: "reject" | "suspend";
     domain: string;
   } | null>(null);
   const [feedbackInput, setFeedbackInput] = useState("");
@@ -257,7 +258,7 @@ export default function SuperAdminOrgDomainsPage() {
 
   async function review(
     id: string,
-    action: "approve" | "reject" | "request_changes" | "suspend" | "reactivate",
+    action: "approve" | "reject" | "suspend" | "reactivate",
     customReason?: string,
   ) {
     const text = (customReason ?? reason[id] ?? "").trim();
@@ -265,23 +266,16 @@ export default function SuperAdminOrgDomainsPage() {
       setMsg("Enter a rejection reason first.");
       return;
     }
-    if (action === "request_changes" && !text) {
-      setMsg("Enter requested changes feedback first.");
-      return;
-    }
     try {
       await reviewOrgDomainRequest(id, {
         action,
         reason: action === "reject" || action === "suspend" ? text : undefined,
-        feedback: action === "request_changes" ? text : undefined,
       });
       setMsg(
         action === "approve"
           ? "Domain request approved (DNS configuration required)."
           : action === "reject"
           ? "Domain request rejected."
-          : action === "request_changes"
-          ? "Changes requested from organisation."
           : action === "suspend"
           ? "Domain suspended."
           : "Domain reactivated.",
@@ -324,12 +318,9 @@ export default function SuperAdminOrgDomainsPage() {
       const saved = await updatePlatformConfig({
         subdomainMode: config.subdomainMode as "localhost" | "production",
         subdomainBase: config.subdomainBase || undefined,
-        dnsMode: config.dnsMode as "a" | "cname" | "ns",
+        dnsMode: "a",
         infraIp: config.infraIp || undefined,
         infraIpv6: config.infraIpv6 || undefined,
-        infraCname: config.infraCname || undefined,
-        infraNs1: config.infraNs1 || undefined,
-        infraNs2: config.infraNs2 || undefined,
       });
       setConfig((prev) => {
         const next = { ...prev, ...saved };
@@ -338,9 +329,7 @@ export default function SuperAdminOrgDomainsPage() {
           subdomainBase: next.subdomainBase ?? "",
           infraIp: next.infraIp ?? "",
           infraIpv6: next.infraIpv6 ?? "",
-          infraCname: next.infraCname ?? "",
-          infraNs1: next.infraNs1 ?? "",
-          infraNs2: next.infraNs2 ?? "",
+          dnsMode: "a",
         };
       });
       setConfigOpen(false);
@@ -560,7 +549,7 @@ export default function SuperAdminOrgDomainsPage() {
               whiteSpace: "nowrap",
             }}
           >
-            {config.infraIp || config.infraCname || "Not configured"}
+            {config.infraIp || "Not configured"}
           </div>
           <div style={{ fontSize: 11.5, color: "#64748b", fontWeight: 500 }}>
             DNS mode: {dnsMode ? dnsMode.toUpperCase() : "A"} record
@@ -1173,30 +1162,6 @@ export default function SuperAdminOrgDomainsPage() {
                                 onClick={() => {
                                   setFeedbackPrompt({
                                     id: r.id,
-                                    action: "request_changes",
-                                    domain: r.customDomain || "Domain",
-                                  });
-                                  setFeedbackInput("");
-                                }}
-                                style={{
-                                  background: "#fef3c7",
-                                  color: "#b45309",
-                                  border: "1px solid #fde68a",
-                                  padding: "5px 10px",
-                                  borderRadius: 8,
-                                  fontSize: 12,
-                                  fontWeight: 600,
-                                  cursor: "pointer",
-                                }}
-                              >
-                                Request Changes
-                              </button>
-                              <button
-                                className="btn btn-sm"
-                                type="button"
-                                onClick={() => {
-                                  setFeedbackPrompt({
-                                    id: r.id,
                                     action: "reject",
                                     domain: r.customDomain || "Domain",
                                   });
@@ -1314,98 +1279,38 @@ export default function SuperAdminOrgDomainsPage() {
         open={configOpen}
         onClose={() => setConfigOpen(false)}
         title="Configure platform DNS & origin"
-        description="Configure your server IP address or CNAME target so organisation custom domains can be verified and routed correctly."
+        description="Configure the server IP address used by organisation custom domains."
         size="lg"
       >
         <div className="row2">
           <div className="field">
             <label>DNS mode for custom domains</label>
-            <select
-              className="inp"
-              value={config.dnsMode}
-              onChange={(e) =>
-                setConfig((p) => ({ ...p, dnsMode: e.target.value }))
-              }
-            >
-              <option value="a">A record → server IP (AWS EC2 / VPS)</option>
-              <option value="cname">CNAME → target host</option>
-              <option value="ns">Nameservers</option>
-            </select>
+            <input className="inp" value="A record → server IP (AWS EC2 / VPS)" readOnly />
           </div>
           <div className="field" style={{ alignSelf: "flex-end" }}>
             <div className="hint" style={{ marginBottom: 0 }}>
               Live server target:{" "}
               <b style={{ fontFamily: "monospace" }}>
-                {config.infraIp || config.infraCname || "not set"}
+                {config.infraIp || "not set"}
               </b>
             </div>
           </div>
         </div>
         <div className="row2">
-          {config.dnsMode === "a" ? (
-            <>
-              <div className="field">
-                <label>Origin IPv4 (VPS / server IP address)</label>
-                <input
-                  className="inp inp-mono"
-                  placeholder="e.g. 187.126.119.156"
-                  value={config.infraIp ?? ""}
-                  onChange={(e) =>
-                    setConfig((p) => ({ ...p, infraIp: e.target.value }))
-                  }
-                />
-                <div className="hint" style={{ fontSize: 11, color: "var(--muted)", marginTop: 2 }}>
-                  Must be numeric IPv4 (e.g. 187.126.119.156), not a domain name.
-                </div>
-              </div>
-              <div className="field">
-                <label>Origin IPv6 (optional)</label>
-                <input
-                  className="inp inp-mono"
-                  placeholder="::"
-                  value={config.infraIpv6 ?? ""}
-                  onChange={(e) =>
-                    setConfig((p) => ({ ...p, infraIpv6: e.target.value }))
-                  }
-                />
-              </div>
-            </>
-          ) : config.dnsMode === "cname" ? (
-            <div className="field">
-              <label>CNAME target</label>
-              <input
-                className="inp inp-mono"
-                placeholder="cname.example.com"
-                value={config.infraCname ?? ""}
-                onChange={(e) =>
-                  setConfig((p) => ({ ...p, infraCname: e.target.value }))
-                }
-              />
+          <div className="field">
+            <label>Origin IPv4 (VPS / server IP address)</label>
+            <input
+              className="inp inp-mono"
+              placeholder="e.g. 187.126.119.156"
+              value={config.infraIp ?? ""}
+              onChange={(e) =>
+                setConfig((p) => ({ ...p, infraIp: e.target.value }))
+              }
+            />
+            <div className="hint" style={{ fontSize: 11, color: "var(--muted)", marginTop: 2 }}>
+              Must be numeric IPv4 (e.g. 187.126.119.156), not a domain name.
             </div>
-          ) : (
-            <>
-              <div className="field">
-                <label>Primary nameserver</label>
-                <input
-                  className="inp inp-mono"
-                  value={config.infraNs1 ?? ""}
-                  onChange={(e) =>
-                    setConfig((p) => ({ ...p, infraNs1: e.target.value }))
-                  }
-                />
-              </div>
-              <div className="field">
-                <label>Secondary nameserver</label>
-                <input
-                  className="inp inp-mono"
-                  value={config.infraNs2 ?? ""}
-                  onChange={(e) =>
-                    setConfig((p) => ({ ...p, infraNs2: e.target.value }))
-                  }
-                />
-              </div>
-            </>
-          )}
+          </div>
         </div>
 
         <div
@@ -1429,7 +1334,7 @@ export default function SuperAdminOrgDomainsPage() {
             </>
           ) : (
             <div className="hint" style={{ marginTop: 8 }}>
-              {config.dnsMode === "a" && !config.infraIp
+              {!config.infraIp
                 ? "Enter the server IPv4 above to see the exact DNS records organisations will need to configure."
                 : "Save settings to see the exact DNS instructions."}
             </div>
@@ -1473,15 +1378,11 @@ export default function SuperAdminOrgDomainsPage() {
         title={
           feedbackPrompt?.action === "reject"
             ? `Reject Domain: ${feedbackPrompt?.domain}`
-            : feedbackPrompt?.action === "request_changes"
-            ? `Request Changes: ${feedbackPrompt?.domain}`
             : `Suspend Custom Domain: ${feedbackPrompt?.domain}`
         }
         description={
           feedbackPrompt?.action === "reject"
             ? "Enter the mandatory rejection reason. This will be visible to the organisation so they can make required corrections."
-            : feedbackPrompt?.action === "request_changes"
-            ? "Enter specific guidance or changes required from the organisation before their custom domain can be approved."
             : "Enter an optional suspension reason. When suspended, traffic to this domain is stopped immediately."
         }
         size="md"
@@ -1490,8 +1391,6 @@ export default function SuperAdminOrgDomainsPage() {
           <label style={{ display: "block", fontSize: 13, fontWeight: 600, color: "#1e293b", marginBottom: 6 }}>
             {feedbackPrompt?.action === "reject"
               ? "Rejection Reason *"
-              : feedbackPrompt?.action === "request_changes"
-              ? "Requested Changes / Guidance *"
               : "Suspension Reason (optional)"}
           </label>
           <textarea
@@ -1500,8 +1399,6 @@ export default function SuperAdminOrgDomainsPage() {
             placeholder={
               feedbackPrompt?.action === "reject"
                 ? "e.g. Inappropriate hostname, copyright violation, or duplicate request..."
-                : feedbackPrompt?.action === "request_changes"
-                ? "e.g. Please select the correct project landing page or verify apex hostname spelling..."
                 : "e.g. Temporary suspension due to administrative review..."
             }
             value={feedbackInput}
@@ -1532,22 +1429,14 @@ export default function SuperAdminOrgDomainsPage() {
           <button
             className="btn"
             type="button"
-            disabled={
-              (feedbackPrompt?.action === "reject" || feedbackPrompt?.action === "request_changes") &&
-              !feedbackInput.trim()
-            }
+            disabled={feedbackPrompt?.action === "reject" && !feedbackInput.trim()}
             onClick={() => {
               if (feedbackPrompt) {
                 void review(feedbackPrompt.id, feedbackPrompt.action, feedbackInput);
               }
             }}
             style={{
-              background:
-                feedbackPrompt?.action === "reject"
-                  ? "#e11d48"
-                  : feedbackPrompt?.action === "request_changes"
-                  ? "#d97706"
-                  : "#ea580c",
+              background: feedbackPrompt?.action === "reject" ? "#e11d48" : "#ea580c",
               color: "#fff",
               border: "none",
               padding: "8px 16px",
@@ -1558,8 +1447,6 @@ export default function SuperAdminOrgDomainsPage() {
           >
             {feedbackPrompt?.action === "reject"
               ? "Confirm Rejection"
-              : feedbackPrompt?.action === "request_changes"
-              ? "Send Requested Changes"
               : "Suspend Domain"}
           </button>
         </div>

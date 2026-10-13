@@ -60,7 +60,6 @@ export class AdminOrgDomainController {
       user.sub,
       dto.action,
       dto.reason,
-      dto.feedback,
     );
   }
 
