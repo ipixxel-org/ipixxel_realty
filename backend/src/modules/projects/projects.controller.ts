@@ -113,6 +113,14 @@ export class ProjectsController {
     return this.service.update(user.orgId as string, id, dto, user);
   }
 
+  // Copies the project's details only — units, leads, landing pages etc.
+  // stay with the source. A new project, so it needs the add permission.
+  @Post(':id/duplicate')
+  @RequirePermission('projects', 'add', ENFORCE)
+  duplicate(@CurrentUser() user: JwtPayload, @Param('id') id: string) {
+    return this.service.duplicate(user.orgId as string, id, user);
+  }
+
   @Delete(':id')
   @RequirePermission('projects', 'delete', ENFORCE)
   remove(@CurrentUser() user: JwtPayload, @Param('id') id: string) {
