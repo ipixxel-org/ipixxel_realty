@@ -18,10 +18,7 @@ export function createBlockFromType(type: BlockType): BlockConfig | null {
 
   // Special container defaults
   if (type === "columns" && (!props.columns || !props.columns.length)) {
-    props.columns = [
-      { width: 50, blocks: [] },
-      { width: 50, blocks: [] },
-    ];
+    props.columns = [{ width: 100, blocks: [] }];
   }
 
   return {

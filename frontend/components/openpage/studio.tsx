@@ -124,6 +124,9 @@ export function OpenPageStudio({ resource = "template" }: { resource?: Resource 
   const toastId = useRef(0);
 
   const [hasUnsaved, setHasUnsaved] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
+  const saveRevision = useRef(0);
   const [pageReady, setPageReady] = useState(false);
   useEffect(() => {
     const handler = (e: BeforeUnloadEvent) => {
@@ -185,17 +188,17 @@ export function OpenPageStudio({ resource = "template" }: { resource?: Resource 
     return () => {
       cancelled = true;
     };
-  }, [searchParams, resource]);
+  }, [searchParams, resource, returnUrl]);
 
   // Scoped to the page currently open in the builder — not the whole org's
   // feed, which would mix in every other page's history (including old
   // entries unrelated to what you're looking at right now). Fetches on
   // each open rather than once, so the feed is fresh.
+  const activePageId = activePage?.id;
   useEffect(() => {
-    if (!activityOpen || resource !== "landing-page" || !activePage) return;
+    if (!activityOpen || resource !== "landing-page" || !activePageId) return;
     let cancelled = false;
-    setOrgActivityLoading(true);
-    apiFetch<OrgActivityEntry[]>(`/org/activity?entityId=${encodeURIComponent(activePage.id)}`)
+    apiFetch<OrgActivityEntry[]>(`/org/activity?entityId=${encodeURIComponent(activePageId)}`)
       .then((rows) => {
         if (!cancelled) setOrgActivity(rows);
       })
@@ -208,7 +211,7 @@ export function OpenPageStudio({ resource = "template" }: { resource?: Resource 
     return () => {
       cancelled = true;
     };
-  }, [activityOpen, resource, activePage?.id]);
+  }, [activityOpen, resource, activePageId]);
 
   const toast = useCallback((text: string) => {
     const id = ++toastId.current;
@@ -225,15 +228,30 @@ export function OpenPageStudio({ resource = "template" }: { resource?: Resource 
   // whatever it actually decided, not guess ahead of it.
   const saveInBackground = useCallback(
     (next: LandingPageData) => {
+      const revision = ++saveRevision.current;
       setHasUnsaved(true);
+      setIsSaving(true);
+      setSaveError(null);
       void saveTemplate(next, resource)
         .then((saved) => {
           setActivePage((cur) =>
             cur && cur.id === saved.id ? { ...cur, status: saved.status, updated: saved.updated, updatedAt: saved.updatedAt } : cur,
           );
-          setHasUnsaved(false);
+          if (saveRevision.current === revision) {
+            setHasUnsaved(false);
+            setIsSaving(false);
+            setSaveError(null);
+          }
         })
-        .catch(() => { setHasUnsaved(false); toast("Couldn't save — check your connection"); });
+        .catch((err) => {
+          if (saveRevision.current === revision) {
+            setIsSaving(false);
+            setHasUnsaved(true);
+            const message = err instanceof Error ? err.message : "Check your connection";
+            setSaveError(message);
+            toast(`Auto-save failed: ${message}`);
+          }
+        });
     },
     [toast, resource],
   );
@@ -357,7 +375,7 @@ export function OpenPageStudio({ resource = "template" }: { resource?: Resource 
         targetId = activePage.thankYouPage?.id || null;
         if (!targetId && resource === "landing-page") {
           try {
-            const companion = await apiFetch<any>(`/org/landing-pages/${encodeURIComponent(activePage.id)}/thank-you`);
+            const companion = await apiFetch<{ id?: string }>(`/org/landing-pages/${encodeURIComponent(activePage.id)}/thank-you`);
             if (companion && companion.id) {
               targetId = companion.id;
             }
@@ -370,7 +388,7 @@ export function OpenPageStudio({ resource = "template" }: { resource?: Resource 
       if (targetId) {
         toast(`Switching to ${activePage.pageType === "thank-you" ? "Landing Page" : "Thank You Page"}…`);
         const scopeParam = resource === "template" ? "&scope=template" : "";
-        window.location.href = `/org-builder?id=${encodeURIComponent(targetId)}${scopeParam}`;
+        router.push(`/org-builder?id=${encodeURIComponent(targetId)}${scopeParam}`);
       } else {
         toast("Companion page not found");
         setIsSwitchingCompanion(false);
@@ -379,7 +397,7 @@ export function OpenPageStudio({ resource = "template" }: { resource?: Resource 
       toast("Couldn't switch page — please try again");
       setIsSwitchingCompanion(false);
     }
-  }, [activePage, isSwitchingCompanion, resource, toast]);
+  }, [activePage, isSwitchingCompanion, resource, router, toast]);
 
   const [inAppPreviewOpen, setInAppPreviewOpen] = useState(false);
 
@@ -417,19 +435,30 @@ export function OpenPageStudio({ resource = "template" }: { resource?: Resource 
       redo: () => useConfigStore.getState().redo(),
       save: async () => {
         if (!activePage) return;
+        const revision = ++saveRevision.current;
         const next = landingPageFromSite(activePage, useConfigStore.getState().config);
         setActivePage(next);
         setHasUnsaved(true);
+        setIsSaving(true);
+        setSaveError(null);
         try {
           const saved = await saveTemplateNow(next, resource);
           setActivePage((cur) =>
             cur && cur.id === saved.id ? { ...cur, status: saved.status, updated: saved.updated, updatedAt: saved.updatedAt } : cur,
           );
-          setHasUnsaved(false);
+          if (saveRevision.current === revision) setHasUnsaved(false);
+          if (saveRevision.current === revision) {
+            setIsSaving(false);
+            setSaveError(null);
+          }
           toast("Changes saved successfully");
         } catch (err) {
-          setHasUnsaved(false);
-          toast("Changes saved locally" + (err instanceof Error ? ` (${err.message})` : ""));
+          setHasUnsaved(true);
+          if (saveRevision.current === revision) {
+            setIsSaving(false);
+            setSaveError(err instanceof Error ? err.message : "Check your connection");
+          }
+          toast("Couldn't save changes to the server. Your latest edits remain in this browser." + (err instanceof Error ? ` (${err.message})` : ""));
         }
       },
       preview: () => openLocalPreview(activePage?.id),
@@ -534,8 +563,8 @@ export function OpenPageStudio({ resource = "template" }: { resource?: Resource 
                   background: "var(--color-bg-3)",
                   boxShadow: "0 2px 12px rgba(0,0,0,.12)",
                   fontSize: 11,
-                  color: "var(--color-text-2)",
-                  border: "1px solid var(--color-border-default)",
+                  color: saveError ? "#b91c1c" : "var(--color-text-2)",
+                  border: `1px solid ${saveError ? "#ef4444" : "var(--color-border-default)"}`,
                   display: "flex",
                   alignItems: "center",
                   gap: 6,
@@ -546,10 +575,10 @@ export function OpenPageStudio({ resource = "template" }: { resource?: Resource 
                     width: 6,
                     height: 6,
                     borderRadius: "50%",
-                    background: "var(--color-green, #22c55e)",
+                    background: saveError ? "#ef4444" : "var(--color-green, #22c55e)",
                   }}
                 />
-                Auto-saving…
+                {saveError ? "Save failed — changes kept locally" : isSaving ? "Saving…" : "Unsaved changes"}
               </div>
             )}
             <EditorLayout pageId={activePage.id} captureLeads resource={resource} />
@@ -599,13 +628,17 @@ export function OpenPageStudio({ resource = "template" }: { resource?: Resource 
         canPublish={canPublishPage}
         canUnpublish={canUnpublishPage}
         onNotify={() => setNotifOpen(true)}
-        onActivity={() => setActivityOpen(true)}
+        onActivity={() => {
+          setOrgActivityLoading(true);
+          setActivityOpen(true);
+        }}
         onHelp={() => setHelpOpen(true)}
         user={topNavUser}
         onSignOut={handleSignOut}
         settingsHref={SETTINGS_PATH[resource]}
         homeHref={returnUrl || HOME_PATH[resource]}
         unsaved={hasUnsaved}
+        saving={isSaving}
         pageType={activePage?.pageType === "thank-you" ? "thank-you" : "landing"}
         companionPage={
           activePage?.pageType === "thank-you"

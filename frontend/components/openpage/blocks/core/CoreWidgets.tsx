@@ -4,6 +4,8 @@ import type { BlockConfig } from "../types";
 import { isMediaSrc } from "@/lib/media";
 import { ArrowRight, Calculator, Filter, Search } from "lucide-react";
 import { useMemo, useState } from "react";
+import { El } from "../El";
+import { listElementId, subElementId } from "@/lib/openpage/element-style";
 
 function str(v: unknown, fallback = "") {
   return typeof v === "string" ? v : fallback;
@@ -43,6 +45,16 @@ export function ButtonBlock({ block }: { block: BlockConfig }) {
 
   const btnBg = str(p.buttonColor) || str(p.bgColor) || undefined;
   const textColor = str(p.textColor) || undefined;
+  const borderColor = str(p.borderColor) || btnBg;
+  const hoverColor = str(p.hoverColor);
+  const hoverTextColor = str(p.hoverTextColor);
+  const radius = Number(p.radius);
+  const style = {
+    backgroundColor: btnBg,
+    color: textColor,
+    borderColor: variant === "outline" ? borderColor || undefined : undefined,
+    borderRadius: Number.isFinite(radius) && radius >= 0 ? `${radius}px` : undefined,
+  } as React.CSSProperties;
 
   let variantCls = "rounded-lg bg-green text-black font-semibold hover:opacity-90";
   if (variant === "outline") {
@@ -54,9 +66,7 @@ export function ButtonBlock({ block }: { block: BlockConfig }) {
   }
 
   const customStyle: React.CSSProperties = {
-    backgroundColor: btnBg,
-    color: textColor,
-    borderColor: variant === "outline" ? btnBg || undefined : undefined,
+    ...style,
   };
 
   return (
@@ -70,6 +80,16 @@ export function ButtonBlock({ block }: { block: BlockConfig }) {
     >
       <a
         href={str(p.url, "#enquire")}
+        target={str(p.target, "_self")}
+        rel={str(p.target) === "_blank" ? "noopener noreferrer" : undefined}
+        onMouseEnter={(e) => {
+          if (hoverColor) e.currentTarget.style.backgroundColor = hoverColor;
+          if (hoverTextColor) e.currentTarget.style.color = hoverTextColor;
+        }}
+        onMouseLeave={(e) => {
+          e.currentTarget.style.backgroundColor = btnBg || "";
+          e.currentTarget.style.color = textColor || "";
+        }}
         style={customStyle}
         className={`inline-flex items-center gap-2 px-7 py-3 text-sm transition-all shadow-sm ${variantCls}`}
       >
@@ -82,108 +102,76 @@ export function ButtonBlock({ block }: { block: BlockConfig }) {
 
 export function IconBoxBlock({ block }: { block: BlockConfig }) {
   const p = block.props;
-  const icon = str(p.icon);
   const variant = block.variant || "card";
-
-  const iconColor = str(p.iconColor);
-  const iconBg = str(p.iconBg);
-  const cardBg = str(p.cardBg) || str(p.bgColor);
-  const textColor = str(p.textColor);
-
-  if (variant === "horizontal") {
-    return (
-      <section className="px-6 @md:px-10 py-6">
-        <div
-          className="max-w-md mx-auto flex items-start gap-4 rounded-2xl border border-border-default bg-bg-2 p-5 shadow-sm"
-          style={{ backgroundColor: cardBg || undefined }}
-        >
-          <div
-            className="w-12 h-12 rounded-xl bg-green/10 flex items-center justify-center overflow-hidden shrink-0"
-            style={{ backgroundColor: iconBg || undefined, color: iconColor || undefined }}
-          >
-            {isMediaSrc(icon) ? (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img src={icon} alt="" className="w-7 h-7 object-contain" />
-            ) : (
-              <span className="text-xl" style={{ color: iconColor || undefined }}>{icon || "◆"}</span>
-            )}
-          </div>
-          <div>
-            <h3 className="font-semibold mb-1" style={{ color: textColor || undefined }}>{str(p.title, "Icon box")}</h3>
-            <p className="text-text-2 text-sm">{str(p.description, "Short supporting text.")}</p>
-          </div>
-        </div>
-      </section>
-    );
-  }
-
-  if (variant === "minimal") {
-    return (
-      <section className="px-6 @md:px-10 py-6 text-center">
-        <div className="max-w-sm mx-auto">
-          <div
-            className="w-12 h-12 mx-auto mb-3 flex items-center justify-center overflow-hidden"
-            style={{ color: iconColor || undefined }}
-          >
-            {isMediaSrc(icon) ? (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img src={icon} alt="" className="w-8 h-8 object-contain" />
-            ) : (
-              <span className="text-2xl" style={{ color: iconColor || undefined }}>{icon || "◆"}</span>
-            )}
-          </div>
-          <h3 className="font-semibold mb-1" style={{ color: textColor || undefined }}>{str(p.title, "Icon box")}</h3>
-          <p className="text-text-2 text-sm">{str(p.description, "Short supporting text.")}</p>
-        </div>
-      </section>
-    );
-  }
-
-  if (variant === "centered") {
-    return (
-      <section className="px-6 @md:px-10 py-8">
-        <div
-          className="max-w-sm mx-auto text-center rounded-3xl border border-border-default bg-bg-2 p-8 shadow-md relative overflow-hidden"
-          style={{ backgroundColor: cardBg || undefined }}
-        >
-          <div className="absolute inset-0 bg-gradient-to-b from-green/8 to-transparent pointer-events-none" />
-          <div
-            className="w-14 h-14 mx-auto mb-4 rounded-2xl bg-green/15 flex items-center justify-center overflow-hidden shadow-sm"
-            style={{ backgroundColor: iconBg || undefined, color: iconColor || undefined }}
-          >
-            {isMediaSrc(icon) ? (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img src={icon} alt="" className="w-8 h-8 object-contain" />
-            ) : (
-              <span className="text-2xl" style={{ color: iconColor || undefined }}>{icon || "◆"}</span>
-            )}
-          </div>
-          <h3 className="font-display font-semibold text-lg mb-2" style={{ color: textColor || undefined }}>{str(p.title, "Icon box")}</h3>
-          <p className="text-text-2 text-sm leading-relaxed">{str(p.description, "Short supporting text.")}</p>
-        </div>
-      </section>
-    );
-  }
+  const rawItems = p.items;
+  const boxes = Array.isArray(rawItems)
+    ? rawItems as Array<Record<string, unknown>>
+    : [p as Record<string, unknown>];
 
   return (
     <section className="px-6 @md:px-10 py-8">
-      <div
-        className="max-w-sm mx-auto text-center rounded-2xl border border-border-default bg-bg-2 p-6 shadow-sm"
-        style={{ backgroundColor: cardBg || undefined }}
-      >
-        <div
-          className="w-12 h-12 mx-auto mb-3 rounded-xl bg-green/10 flex items-center justify-center overflow-hidden"
-          style={{ backgroundColor: iconBg || undefined, color: iconColor || undefined }}
-        >
-          {isMediaSrc(icon) ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img src={icon} alt="" className="w-7 h-7 object-contain" />
-          ) : (
-            <span className="text-xl" style={{ color: iconColor || undefined }}>{icon || "◆"}</span>
-          )}
-        </div>
-        <h3 className="font-semibold mb-1" style={{ color: textColor || undefined }}>{str(p.title, "Icon box")}</h3>
-        <p className="text-text-2 text-sm">{str(p.description, "Short supporting text.")}</p>
+      <div className={`mx-auto grid grid-cols-1 @md:grid-cols-2 @xl:grid-cols-3 gap-4 ${variant === "horizontal" ? "max-w-4xl" : "max-w-6xl"}`}>
+        {boxes.map((box, index) => {
+          const id = listElementId(
+            { path: ["items"] },
+            typeof box._id === "string" ? box._id : `legacy_${index}`,
+          );
+          const icon = str(box.icon);
+          const iconColor = str(box.iconColor) || str(p.iconColor);
+          const iconBg = str(box.iconBg) || str(p.iconBg);
+          const cardBg = str(box.cardBg) || str(p.cardBg) || str(p.bgColor);
+          const textColor = str(box.textColor) || str(p.textColor);
+          const horizontal = variant === "horizontal";
+          const minimal = variant === "minimal";
+          const centered = variant === "centered";
+          const card = (
+            <El
+              block={block}
+              id={id}
+              className={`relative overflow-hidden ${
+                horizontal
+                  ? "flex items-start gap-4 rounded-2xl border border-border-default bg-bg-2 p-5 shadow-sm"
+                  : minimal
+                    ? "text-center p-5"
+                    : centered
+                      ? "rounded-3xl border border-border-default bg-bg-2 p-8 text-center shadow-md"
+                      : "rounded-2xl border border-border-default bg-bg-2 p-6 text-center shadow-sm"
+              }`}
+              style={{ backgroundColor: minimal ? undefined : cardBg || undefined }}
+            >
+              {centered ? <div className="absolute inset-0 bg-gradient-to-b from-green/8 to-transparent pointer-events-none" /> : null}
+              <El
+                block={block}
+                id={subElementId(id, "icon")}
+                className={`${horizontal ? "w-12 h-12" : centered ? "w-14 h-14" : "w-12 h-12"} ${
+                  horizontal ? "" : "mx-auto"
+                } mb-3 rounded-xl bg-green/10 flex items-center justify-center overflow-hidden shrink-0`}
+                style={{ backgroundColor: iconBg || undefined, color: iconColor || undefined }}
+              >
+                {isMediaSrc(icon) ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img src={icon} alt="" className="w-7 h-7 object-contain" />
+                ) : (
+                  <span className="text-xl">{icon || "◆"}</span>
+                )}
+              </El>
+              <div className="relative">
+                <El block={block} id={subElementId(id, "title")} as="h3" className="font-semibold mb-1" style={{ color: textColor || undefined }}>
+                  {str(box.title, "Icon box")}
+                </El>
+                <El block={block} id={subElementId(id, "description")} as="p" className="text-text-2 text-sm">
+                  {str(box.description, "Short supporting text.")}
+                </El>
+              </div>
+            </El>
+          );
+          const href = str(box.link);
+          return href ? (
+            <a key={id} href={href} target={str(box.target, "_self")} rel={str(box.target) === "_blank" ? "noopener noreferrer" : undefined} className="block">
+              {card}
+            </a>
+          ) : <div key={id}>{card}</div>;
+        })}
       </div>
     </section>
   );

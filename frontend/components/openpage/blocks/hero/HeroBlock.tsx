@@ -10,7 +10,70 @@ interface HeroProps {
   headline: string
   subheadline: string
   primaryCta: string
+  primaryCtaUrl?: string
+  primaryCtaTarget?: "_self" | "_blank"
+  primaryCtaColor?: string
+  primaryCtaTextColor?: string
+  primaryCtaHoverColor?: string
+  primaryCtaHoverTextColor?: string
+  primaryCtaBorderColor?: string
+  primaryCtaRadius?: number | string
   secondaryCta?: string
+  secondaryCtaUrl?: string
+  secondaryCtaTarget?: "_self" | "_blank"
+  secondaryCtaColor?: string
+  secondaryCtaTextColor?: string
+  secondaryCtaHoverColor?: string
+  secondaryCtaHoverTextColor?: string
+  secondaryCtaBorderColor?: string
+  secondaryCtaRadius?: number | string
+}
+
+function HeroButton({ props, secondary = false }: { props: HeroProps; secondary?: boolean }) {
+  const prefix = secondary ? "secondaryCta" : "primaryCta";
+  const label = secondary ? props.secondaryCta : props.primaryCta;
+  if (!label) return null;
+
+  const color = secondary ? props.secondaryCtaColor : props.primaryCtaColor;
+  const textColor = secondary ? props.secondaryCtaTextColor : props.primaryCtaTextColor;
+  const hoverColor = secondary ? props.secondaryCtaHoverColor : props.primaryCtaHoverColor;
+  const hoverTextColor = secondary ? props.secondaryCtaHoverTextColor : props.primaryCtaHoverTextColor;
+  const borderColor = secondary ? props.secondaryCtaBorderColor : props.primaryCtaBorderColor;
+  const radius = Number(secondary ? props.secondaryCtaRadius : props.primaryCtaRadius);
+  const target = secondary ? props.secondaryCtaTarget : props.primaryCtaTarget;
+  const href = (secondary ? props.secondaryCtaUrl : props.primaryCtaUrl) || "#enquire";
+  const style: React.CSSProperties = {
+    backgroundColor: color || undefined,
+    color: textColor || undefined,
+    borderColor: borderColor || undefined,
+    borderRadius: Number.isFinite(radius) && radius >= 0 ? `${radius}px` : undefined,
+  };
+
+  return (
+    <a
+      href={href}
+      target={target || "_self"}
+      rel={target === "_blank" ? "noopener noreferrer" : undefined}
+      style={style}
+      onMouseEnter={(e) => {
+        if (hoverColor) e.currentTarget.style.backgroundColor = hoverColor;
+        if (hoverTextColor) e.currentTarget.style.color = hoverTextColor;
+      }}
+      onMouseLeave={(e) => {
+        e.currentTarget.style.backgroundColor = color || "";
+        e.currentTarget.style.color = textColor || "";
+      }}
+      className={`inline-flex items-center gap-2 px-6 py-3 rounded-lg text-sm transition-all ${
+        secondary
+          ? "bg-bg-3 text-text-0 font-medium border border-border-default hover:bg-bg-4 hover:border-border-hover"
+          : "border border-transparent bg-green text-black font-semibold hover:bg-green-dim hover:accent-glow-xl"
+      }`}
+      data-hero-cta={prefix}
+    >
+      {label}
+      {!secondary ? <ArrowRight size={16} /> : null}
+    </a>
+  );
 }
 
 function getBadgeStyle(props: HeroProps): React.CSSProperties {
@@ -49,15 +112,8 @@ function HeroCentered({ props }: { props: HeroProps }) {
 
       {/* CTAs */}
       <div className="reveal-fade-up reveal-d4 flex flex-wrap items-center justify-center gap-3">
-        <button className="px-6 py-3 rounded-lg bg-green text-black text-sm font-semibold hover:bg-green-dim transition-all hover:accent-glow-xl flex items-center gap-2">
-          {props.primaryCta}
-          <ArrowRight size={16} />
-        </button>
-        {props.secondaryCta && (
-          <button className="px-6 py-3 rounded-lg bg-bg-3 text-text-0 text-sm font-medium border border-border-default hover:bg-bg-4 hover:border-border-hover transition-all">
-            {props.secondaryCta}
-          </button>
-        )}
+        <HeroButton props={props} />
+        <HeroButton props={props} secondary />
       </div>
     </section>
   )
@@ -84,15 +140,8 @@ function HeroSplit({ props }: { props: HeroProps }) {
           {props.subheadline}
         </p>
         <div className="reveal-fade-up reveal-d4 flex flex-wrap items-center gap-3">
-          <button className="px-6 py-3 rounded-lg bg-green text-black text-sm font-semibold hover:bg-green-dim transition-all flex items-center gap-2">
-            {props.primaryCta}
-            <ArrowRight size={16} />
-          </button>
-          {props.secondaryCta && (
-            <button className="px-6 py-3 rounded-lg bg-bg-3 text-text-0 text-sm font-medium border border-border-default hover:bg-bg-4 transition-all">
-              {props.secondaryCta}
-            </button>
-          )}
+          <HeroButton props={props} />
+          <HeroButton props={props} secondary />
         </div>
       </div>
 
@@ -136,15 +185,8 @@ function HeroGradient({ props }: { props: HeroProps }) {
         </p>
 
         <div className="reveal-fade-up reveal-d4 flex flex-wrap items-center justify-center gap-3">
-          <button className="px-6 py-3 rounded-lg bg-green text-black text-sm font-semibold hover:bg-green-dim transition-all hover:accent-glow-xl flex items-center gap-2">
-            {props.primaryCta}
-            <ArrowRight size={16} />
-          </button>
-          {props.secondaryCta && (
-            <button className="px-6 py-3 rounded-lg bg-bg-3 text-text-0 text-sm font-medium border border-border-default hover:bg-bg-4 transition-all">
-              {props.secondaryCta}
-            </button>
-          )}
+          <HeroButton props={props} />
+          <HeroButton props={props} secondary />
         </div>
       </div>
     </section>
@@ -161,10 +203,8 @@ function HeroMinimal({ props }: { props: HeroProps }) {
         {props.subheadline}
       </p>
       <div className="reveal-fade-up reveal-d3">
-        <button className="px-8 py-4 rounded-lg bg-green text-black text-sm font-semibold hover:bg-green-dim transition-all hover:accent-glow-xl flex items-center gap-2 mx-auto">
-          {props.primaryCta}
-          <ArrowRight size={16} />
-        </button>
+        <HeroButton props={props} />
+        <HeroButton props={props} secondary />
       </div>
     </section>
   )

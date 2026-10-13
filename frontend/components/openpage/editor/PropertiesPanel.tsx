@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Code, Plus, Trash2, Check, AlertCircle } from "lucide-react";
+import { Code, Plus, Check, AlertCircle } from "lucide-react";
 import { toast } from "sonner";
 import type { BlockConfig, BlockType } from "@/components/openpage/blocks/types";
 import { useConfigStore } from "@/components/openpage/store/configStore";
@@ -11,12 +11,12 @@ import { MediaPicker } from "@/components/media-picker";
 import { type FormDefinition } from "@/lib/openpage/forms-store";
 import { useBuilderLeadForms } from "@/components/openpage/builder/forms-context";
 import { DynamicDataPicker } from "./DynamicDataPicker";
-import { FLOOR_PLAN_FIELDS, AMENITY_FIELDS } from "./field-helpers";
+import { FLOOR_PLAN_FIELDS, AMENITY_FIELDS, ICON_BOX_FIELDS, PRICING_TIER_FIELDS } from "./field-helpers";
 
 interface FieldDef {
   key: string
   label: string
-  type: 'text' | 'textarea' | 'select' | 'array-strings' | 'array-items' | 'image' | 'icon' | 'form-select' | 'toggle' | 'nav-menu' | 'number'
+  type: 'text' | 'textarea' | 'select' | 'array-strings' | 'array-items' | 'image' | 'icon' | 'form-select' | 'toggle' | 'nav-menu' | 'number' | 'color'
   options?: string[]
 }
 
@@ -28,9 +28,13 @@ const blockFields: Partial<Record<BlockType, { sections: { title: string; fields
         fields: [
           { key: 'logo', label: 'Logo Text', type: 'text' },
           { key: 'logoImage', label: 'Logo', type: 'image' },
-          { key: 'logoSize', label: 'Logo Size (px)', type: 'number' },
+          { key: 'logoWidth', label: 'Logo Width (px)', type: 'number' },
+          { key: 'logoHeight', label: 'Logo Height (px)', type: 'number' },
           { key: 'ctaText', label: 'CTA Button', type: 'text' },
           { key: 'ctaId', label: 'CTA section ID', type: 'text' },
+          { key: 'ctaHref', label: 'CTA URL', type: 'text' },
+          { key: 'ctaTarget', label: 'CTA link target', type: 'select', options: ['_self', '_blank'] },
+          { key: 'ctaBorderColor', label: 'CTA Border Color', type: 'color' },
           { key: 'menuItems', label: 'Menu items', type: 'nav-menu' },
         ],
       },
@@ -39,6 +43,11 @@ const blockFields: Partial<Record<BlockType, { sections: { title: string; fields
         fields: [
           { key: 'variant', label: 'Variant', type: 'select', options: ['default', 'centered', 'static'] },
           { key: 'sticky', label: 'Sticky header', type: 'toggle' },
+          { key: 'ctaButtonColor', label: 'CTA Button Color', type: 'color' },
+          { key: 'ctaTextColor', label: 'CTA Text Color', type: 'color' },
+          { key: 'ctaHoverColor', label: 'CTA Hover Color', type: 'color' },
+          { key: 'ctaHoverTextColor', label: 'CTA Hover Text Color', type: 'color' },
+          { key: 'ctaRadius', label: 'CTA Corner Radius (px)', type: 'number' },
         ],
       },
     ],
@@ -49,14 +58,28 @@ const blockFields: Partial<Record<BlockType, { sections: { title: string; fields
         title: 'Content',
         fields: [
           { key: 'badge', label: 'Badge', type: 'text' },
-          { key: 'badgeColor', label: 'Tag / Badge Color', type: 'text' },
-          { key: 'badgeBg', label: 'Tag / Badge Background', type: 'text' },
+          { key: 'badgeColor', label: 'Tag / Badge Color', type: 'color' },
+          { key: 'badgeBg', label: 'Tag / Badge Background', type: 'color' },
           { key: 'headline', label: 'Headline', type: 'text' },
           { key: 'subheadline', label: 'Subheadline', type: 'textarea' },
           { key: 'primaryCta', label: 'Primary CTA', type: 'text' },
           { key: 'primaryCtaUrl', label: 'Primary CTA URL', type: 'text' },
+          { key: 'primaryCtaTarget', label: 'Primary CTA link target', type: 'select', options: ['_self', '_blank'] },
+          { key: 'primaryCtaColor', label: 'Primary CTA background', type: 'color' },
+          { key: 'primaryCtaTextColor', label: 'Primary CTA text color', type: 'color' },
+          { key: 'primaryCtaHoverColor', label: 'Primary CTA hover background', type: 'color' },
+          { key: 'primaryCtaHoverTextColor', label: 'Primary CTA hover text', type: 'color' },
+          { key: 'primaryCtaBorderColor', label: 'Primary CTA border', type: 'color' },
+          { key: 'primaryCtaRadius', label: 'Primary CTA radius (px)', type: 'number' },
           { key: 'secondaryCta', label: 'Secondary CTA', type: 'text' },
           { key: 'secondaryCtaUrl', label: 'Secondary CTA URL', type: 'text' },
+          { key: 'secondaryCtaTarget', label: 'Secondary CTA link target', type: 'select', options: ['_self', '_blank'] },
+          { key: 'secondaryCtaColor', label: 'Secondary CTA background', type: 'color' },
+          { key: 'secondaryCtaTextColor', label: 'Secondary CTA text color', type: 'color' },
+          { key: 'secondaryCtaHoverColor', label: 'Secondary CTA hover background', type: 'color' },
+          { key: 'secondaryCtaHoverTextColor', label: 'Secondary CTA hover text', type: 'color' },
+          { key: 'secondaryCtaBorderColor', label: 'Secondary CTA border', type: 'color' },
+          { key: 'secondaryCtaRadius', label: 'Secondary CTA radius (px)', type: 'number' },
           { key: 'heroImage', label: 'Hero image', type: 'image' },
         ],
       },
@@ -99,12 +122,14 @@ const blockFields: Partial<Record<BlockType, { sections: { title: string; fields
         fields: [
           { key: 'title', label: 'Title', type: 'text' },
           { key: 'subtitle', label: 'Subtitle', type: 'text' },
+          { key: 'tiers', label: 'Pricing tiers', type: 'array-items' },
         ],
       },
       {
         title: 'Style',
         fields: [
           { key: 'variant', label: 'Variant', type: 'select', options: ['simple', 'comparison'] },
+          { key: 'priceColor', label: 'Price Color', type: 'color' },
         ],
       },
     ],
@@ -119,6 +144,7 @@ const blockFields: Partial<Record<BlockType, { sections: { title: string; fields
           { key: 'badge', label: 'Badge (optional)', type: 'text' },
           { key: 'buttonText', label: 'Button Text', type: 'text' },
           { key: 'buttonUrl', label: 'Button URL', type: 'text' },
+          { key: 'buttonTarget', label: 'Button link target', type: 'select', options: ['_self', '_blank'] },
           { key: 'popupId', label: 'Popup ID', type: 'text' },
           { key: 'secondaryButtonText', label: 'Secondary Button Text', type: 'text' },
           { key: 'secondaryButtonUrl', label: 'Secondary Button URL', type: 'text' },
@@ -130,9 +156,12 @@ const blockFields: Partial<Record<BlockType, { sections: { title: string; fields
         title: 'Style & Colors',
         fields: [
           { key: 'variant', label: 'Variant', type: 'select', options: ['simple', 'split', 'booking', 'banner', 'strip', 'card'] },
-          { key: 'buttonColor', label: 'Button Color', type: 'text' },
-          { key: 'buttonTextColor', label: 'Button Text Color', type: 'text' },
-          { key: 'bgColor', label: 'Background Color', type: 'text' },
+          { key: 'buttonColor', label: 'Button Color', type: 'color' },
+          { key: 'buttonTextColor', label: 'Button Text Color', type: 'color' },
+          { key: 'buttonHoverColor', label: 'Button Hover Color', type: 'color' },
+          { key: 'buttonHoverTextColor', label: 'Button Hover Text Color', type: 'color' },
+          { key: 'buttonRadius', label: 'Button Radius (px)', type: 'number' },
+          { key: 'bgColor', label: 'Background Color', type: 'color' },
         ],
       },
     ],
@@ -362,8 +391,8 @@ const blockFields: Partial<Record<BlockType, { sections: { title: string; fields
       ]},
       { title: 'Content', fields: [
         { key: 'badge', label: 'Badge', type: 'text' },
-        { key: 'badgeColor', label: 'Tag / Badge Color', type: 'text' },
-        { key: 'badgeBg', label: 'Tag / Badge Background', type: 'text' },
+        { key: 'badgeColor', label: 'Tag / Badge Color', type: 'color' },
+        { key: 'badgeBg', label: 'Tag / Badge Background', type: 'color' },
         { key: 'headline', label: 'Headline', type: 'text' },
         { key: 'location', label: 'Location', type: 'text' },
         { key: 'price', label: 'Price', type: 'text' },
@@ -411,7 +440,7 @@ const blockFields: Partial<Record<BlockType, { sections: { title: string; fields
   amenities: {
     sections: [{ title: 'Layout', fields: [
       { key: 'variant', label: 'Template', type: 'select', options: ['grid', 'chips', 'icon-grid', 'featured', 'mosaic'] },
-      { key: 'cardBg', label: 'Card Background Color', type: 'text' },
+      { key: 'cardBg', label: 'Card Background Color', type: 'color' },
     ]}, { title: 'Content', fields: [
       { key: 'title', label: 'Title', type: 'text' },
       { key: 'subtitle', label: 'Subtitle', type: 'text' },
@@ -452,6 +481,7 @@ const blockFields: Partial<Record<BlockType, { sections: { title: string; fields
     ]}, { title: 'Content', fields: [
       { key: 'title', label: 'Title', type: 'text' },
       { key: 'startingPrice', label: 'Starting price', type: 'text' },
+      { key: 'priceColor', label: 'Price color', type: 'color' },
       { key: 'subtitle', label: 'Subtitle', type: 'text' },
       { key: 'items', label: 'Price cards', type: 'array-items' },
       { key: 'disclaimer', label: 'Disclaimer', type: 'text' },
@@ -600,10 +630,14 @@ const blockFields: Partial<Record<BlockType, { sections: { title: string; fields
         { key: 'icon', label: 'Icon', type: 'icon' },
         { key: 'label', label: 'Label', type: 'text' },
         { key: 'link', label: 'Link URL', type: 'text' },
+        { key: 'target', label: 'Link target', type: 'select', options: ['_self', '_blank'] },
       ]},
       { title: 'Style', fields: [
-        { key: 'size', label: 'Size', type: 'text' },
-        { key: 'color', label: 'Color', type: 'text' },
+        { key: 'width', label: 'Width (px)', type: 'number' },
+        { key: 'height', label: 'Height (px)', type: 'number' },
+        { key: 'color', label: 'Icon Color', type: 'color' },
+        { key: 'backgroundColor', label: 'Background Color', type: 'color' },
+        { key: 'align', label: 'Alignment', type: 'select', options: ['left', 'center', 'right'] },
       ]},
     ],
   },
@@ -611,7 +645,7 @@ const blockFields: Partial<Record<BlockType, { sections: { title: string; fields
     sections: [
       { title: 'Settings', fields: [
         { key: 'height', label: 'Height', type: 'text' },
-        { key: 'backgroundColor', label: 'Background Color', type: 'text' },
+        { key: 'backgroundColor', label: 'Background Color', type: 'color' },
       ]},
     ],
   },
@@ -703,6 +737,7 @@ const blockFields: Partial<Record<BlockType, { sections: { title: string; fields
       {
         title: 'Content',
         fields: [
+          { key: 'items', label: 'Icon Boxes', type: 'array-items' },
           { key: 'title', label: 'Title', type: 'text' },
           { key: 'description', label: 'Description', type: 'textarea' },
           { key: 'icon', label: 'Icon / Icon Image', type: 'icon' },
@@ -712,10 +747,10 @@ const blockFields: Partial<Record<BlockType, { sections: { title: string; fields
         title: 'Style & Colors',
         fields: [
           { key: 'variant', label: 'Variant', type: 'select', options: ['card', 'horizontal', 'minimal', 'centered'] },
-          { key: 'iconColor', label: 'Icon Color', type: 'text' },
-          { key: 'iconBg', label: 'Icon Background Color', type: 'text' },
-          { key: 'cardBg', label: 'Card Color', type: 'text' },
-          { key: 'textColor', label: 'Title Color', type: 'text' },
+          { key: 'iconColor', label: 'Icon Color', type: 'color' },
+          { key: 'iconBg', label: 'Icon Background Color', type: 'color' },
+          { key: 'cardBg', label: 'Card Color', type: 'color' },
+          { key: 'textColor', label: 'Title Color', type: 'color' },
         ],
       },
     ],
@@ -734,8 +769,13 @@ const blockFields: Partial<Record<BlockType, { sections: { title: string; fields
         fields: [
           { key: 'variant', label: 'Variant', type: 'select', options: ['solid', 'outline', 'pill', 'glass'] },
           { key: 'align', label: 'Alignment', type: 'select', options: ['center', 'left', 'right'] },
-          { key: 'buttonColor', label: 'Button Color', type: 'text' },
-          { key: 'textColor', label: 'Text Color', type: 'text' },
+          { key: 'buttonColor', label: 'Button Color', type: 'color' },
+          { key: 'textColor', label: 'Text Color', type: 'color' },
+          { key: 'borderColor', label: 'Border Color', type: 'color' },
+          { key: 'hoverColor', label: 'Hover Background', type: 'color' },
+          { key: 'hoverTextColor', label: 'Hover Text Color', type: 'color' },
+          { key: 'radius', label: 'Corner Radius (px)', type: 'number' },
+          { key: 'target', label: 'Link target', type: 'select', options: ['_self', '_blank'] },
           { key: 'bgImage', label: 'Section Background Image', type: 'image' },
         ],
       },
@@ -1035,6 +1075,38 @@ function PropertyField({ field, block }: { field: FieldDef; block: BlockConfig }
         </div>
       )
 
+    case 'color': {
+      const colorValue = typeof value === 'string' ? value : ''
+      const pickerValue = /^#[0-9a-f]{6}$/i.test(colorValue) ? colorValue : '#000000'
+      return (
+        <div className="mb-2.5">
+          <label className="block text-[11.5px] text-text-2 mb-1 font-medium">{field.label}</label>
+          <div className="flex items-center gap-2">
+            <input
+              type="color"
+              value={pickerValue}
+              onChange={(e) => onChange(e.target.value)}
+              aria-label={`${field.label} picker`}
+              className="h-8 w-9 rounded border border-border-default bg-bg-2 p-1 cursor-pointer"
+            />
+            <input
+              type="text"
+              value={colorValue}
+              onChange={(e) => onChange(e.target.value)}
+              placeholder="#ffffff"
+              aria-label={`${field.label} value`}
+              className="min-w-0 flex-1 px-2 py-1.5 rounded border border-border-default bg-bg-2 text-text-0 text-xs outline-none focus:border-green"
+            />
+            {colorValue ? (
+              <button type="button" onClick={() => onChange('')} className="px-1.5 text-text-3 hover:text-status-red text-xs" aria-label={`Clear ${field.label}`}>
+                Clear
+              </button>
+            ) : null}
+          </div>
+        </div>
+      )
+    }
+
     case 'text':
       return (
         <div className="mb-2.5">
@@ -1133,20 +1205,20 @@ function PropertyField({ field, block }: { field: FieldDef; block: BlockConfig }
     }
 
     case 'array-items': {
-      const items = (Array.isArray(value) ? value : []) as Array<Record<string, string>>
+      const items = (Array.isArray(value) ? value : []) as Array<Record<string, unknown>>
 
       // Infer new item shape from existing items, or use sensible defaults per field key
-      function createEmptyItem(): Record<string, string> {
+      function createEmptyItem(): Record<string, unknown> {
         if (items.length > 0) {
-          const template: Record<string, string> = {}
-          for (const key of Object.keys(items[0])) {
-            if (key === '_id') continue
-            template[key] = ''
-          }
+          const template: Record<string, unknown> = Object.fromEntries(
+            Object.entries(items[0])
+              .filter(([key]) => key !== '_id')
+              .map(([key, current]) => [key, Array.isArray(current) ? [] : typeof current === 'boolean' ? false : '']),
+          )
           return template
         }
         // Fallback templates by block type + field key
-        const blockTemplates: Partial<Record<string, Record<string, Record<string, string>>>> = {
+        const blockTemplates: Partial<Record<string, Record<string, Record<string, unknown>>>> = {
           testimonials: { items: { name: '', role: '', quote: '' } },
           stats: { items: { value: '', label: '' } },
           developer: { stats: { value: '', label: '' } },
@@ -1160,6 +1232,18 @@ function PropertyField({ field, block }: { field: FieldDef; block: BlockConfig }
           features: { items: { icon: '', title: '', description: '' } },
           'unit-config': { items: { type: '', config: '', area: '', price: '', image: '' } },
           're-pricing': { items: { name: '', price: '', meta: '', cta: '' } },
+          pricing: { tiers: { name: '', price: '', period: '', description: '', features: [], cta: '', featured: false } },
+          'icon-box': { items: {
+            title: String(block.props.title ?? ''),
+            description: String(block.props.description ?? ''),
+            icon: String(block.props.icon ?? ''),
+            iconColor: String(block.props.iconColor ?? ''),
+            iconBg: String(block.props.iconBg ?? ''),
+            cardBg: String(block.props.cardBg ?? ''),
+            textColor: String(block.props.textColor ?? ''),
+            link: '',
+            target: '_self',
+          } },
           image: { images: { src: '', alt: '' } },
           gallery: { images: { src: '', alt: '', caption: '', meta: '', category: '' } },
           'floor-plans': { items: { name: '', beds: '', area: '', price: '', image: '', downloadUrl: '' } },
@@ -1172,7 +1256,11 @@ function PropertyField({ field, block }: { field: FieldDef; block: BlockConfig }
           ? FLOOR_PLAN_FIELDS
           : block.type === 'amenities' && field.key === 'items'
             ? AMENITY_FIELDS
-            : undefined;
+            : block.type === 'icon-box' && field.key === 'items'
+              ? ICON_BOX_FIELDS
+              : block.type === 'pricing' && field.key === 'tiers'
+                ? PRICING_TIER_FIELDS
+                : undefined;
 
       // Delegated to the shared list editor so every dynamic list in the
       // builder gets add / duplicate / delete / hide / drag-reorder plus a
@@ -1342,7 +1430,7 @@ export function PropertiesPanel({ block }: { block: BlockConfig }) {
             />
             <select
               value={newPropType}
-              onChange={(e) => setNewPropType(e.target.value as any)}
+              onChange={(e) => setNewPropType(e.target.value as typeof newPropType)}
               className="px-2 py-1.5 text-xs rounded border border-border-default bg-white text-text-0 focus:outline-none focus:border-green"
             >
               <option value="text">Text</option>
