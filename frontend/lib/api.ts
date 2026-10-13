@@ -2385,6 +2385,10 @@ export async function getAdminPayments(params: {
   return apiFetch<import("./types").AdminPaymentsPage>(`/admin/payments${s ? `?${s}` : ""}`);
 }
 
+export async function getAdminPaymentOrganisations(): Promise<{ id: string; name: string; status: string }[]> {
+  return apiFetch<{ id: string; name: string; status: string }[]>("/admin/payments/organisations");
+}
+
 export async function createAdminTestPaymentOrder(organisationId: string): Promise<import("./types").CheckoutOrder> {
   return apiFetch<import("./types").CheckoutOrder>("/admin/payments/test-order", {
     method: "POST",

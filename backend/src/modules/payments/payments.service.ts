@@ -575,6 +575,14 @@ export class PaymentsService {
     };
   }
 
+  /** All organisations (any status), name-sorted, for admin pickers. */
+  async adminListOrganisations() {
+    return this.prisma.organisation.findMany({
+      orderBy: { name: 'asc' },
+      select: { id: true, name: true, status: true },
+    });
+  }
+
   private async emit(name: PaymentEventName, p: Payment): Promise<void> {
     const event: PaymentEvent = {
       paymentId: p.id,

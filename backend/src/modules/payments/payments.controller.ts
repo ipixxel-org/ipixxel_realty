@@ -112,6 +112,12 @@ export class AdminPaymentsController {
     return this.service.adminListPayments(query);
   }
 
+  /** Every organisation, for the Payments page's filter and test-payment pickers. */
+  @Get('organisations')
+  listOrganisations() {
+    return this.service.adminListOrganisations();
+  }
+
   @Post('test-order')
   createTestOrder(
     @CurrentUser() user: JwtPayload,

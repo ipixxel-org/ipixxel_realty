@@ -5,7 +5,7 @@ import { Icon } from "@/components/icons";
 import { Modal, ModalActions } from "@/components/ui/modal";
 import { LIST_PAGE_SIZE, ListPager } from "@/components/ui/list-pager";
 import { useAuth } from "@/lib/auth-context";
-import { createAdminTestPaymentOrder, getAdminOrganisationsList, getAdminPayments } from "@/lib/api";
+import { createAdminTestPaymentOrder, getAdminPaymentOrganisations, getAdminPayments } from "@/lib/api";
 import { formatPaise, openCheckout, paymentStatusStyle } from "@/lib/razorpay";
 import type { AdminPaymentRow, PaymentStatus } from "@/lib/types";
 
@@ -40,7 +40,7 @@ export default function AdminPaymentsPage() {
   const [page, setPage] = useState(1);
   const [status, setStatus] = useState<"" | PaymentStatus>("");
   const [orgFilter, setOrgFilter] = useState("");
-  const [orgs, setOrgs] = useState<{ id: string; name: string }[]>([]);
+  const [orgs, setOrgs] = useState<{ id: string; name: string; status: string }[]>([]);
   const [mode, setMode] = useState<"test" | "live" | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -81,7 +81,7 @@ export default function AdminPaymentsPage() {
 
   useEffect(() => {
     if (!canView) return;
-    getAdminOrganisationsList().then(setOrgs).catch(() => setOrgs([]));
+    getAdminPaymentOrganisations().then(setOrgs).catch(() => setOrgs([]));
   }, [canView]);
 
   async function startTestPayment() {
@@ -226,7 +226,7 @@ export default function AdminPaymentsPage() {
           <option value="">All organisations</option>
           {orgs.map((o) => (
             <option key={o.id} value={o.id}>
-              {o.name}
+              {o.status === "active" ? o.name : `${o.name} (${o.status})`}
             </option>
           ))}
         </select>
@@ -337,7 +337,7 @@ export default function AdminPaymentsPage() {
           <option value="">Select an organisation…</option>
           {orgs.map((o) => (
             <option key={o.id} value={o.id}>
-              {o.name}
+              {o.status === "active" ? o.name : `${o.name} (${o.status})`}
             </option>
           ))}
         </select>
