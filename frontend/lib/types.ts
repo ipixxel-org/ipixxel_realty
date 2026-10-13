@@ -563,6 +563,7 @@ export interface OrganisationActivityRow {
   entity: string | null;
   entityId: string | null;
   createdAt: string;
+  actor?: { name: string | null; email: string } | null;
 }
 
 // GET /org/templates row — the free-template library card list. No `content`;

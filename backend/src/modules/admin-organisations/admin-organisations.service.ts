@@ -41,9 +41,9 @@ import { UpdateOrgUserStatusDto } from '../org-users/dto/update-org-user-status.
 import { ListOrgUsersQueryDto } from '../org-users/dto/list-org-users-query.dto';
 import { buildNotificationData } from '../../common/utils/notifications.util';
 import {
-  listIndustryHistory,
+  listProfileHistory,
   updateOrganisationProfile,
-} from '../../common/utils/org-industry.util';
+} from '../../common/utils/org-profile-audit.util';
 import type { Prisma } from '@prisma/client';
 import { EmailService } from '../email/email.service';
 
@@ -668,6 +668,9 @@ export class AdminOrganisationsService {
     const logs = await this.prisma.auditLog.findMany({
       where: { orgId: id },
       orderBy: { createdAt: 'desc' },
+      include: {
+        actor: { select: { firstName: true, lastName: true, email: true } },
+      },
     });
 
     return logs.map((log) => ({
@@ -676,6 +679,16 @@ export class AdminOrganisationsService {
       entity: log.entity,
       entityId: log.entityId,
       createdAt: log.createdAt,
+      // Who did it (null for system actions) — shown in the Activity feed.
+      actor: log.actor
+        ? {
+            name:
+              [log.actor.firstName, log.actor.lastName]
+                .filter(Boolean)
+                .join(' ') || null,
+            email: log.actor.email,
+          }
+        : null,
     }));
   }
 
@@ -693,10 +706,10 @@ export class AdminOrganisationsService {
     return toSafeOrganisation(updated);
   }
 
-  // Industry ("role") change history — shown under the org Overview.
-  async industryHistory(id: string) {
+  // Profile audit log (every field change) — shown under the org Overview.
+  async profileHistory(id: string) {
     await this.getRealOrganisation(id);
-    return listIndustryHistory(this.prisma, id);
+    return listProfileHistory(this.prisma, id);
   }
 
   // Presigned PUT URL for the target org's logo or favicon, used by the

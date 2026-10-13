@@ -81,7 +81,7 @@ export function toSafeOrganisation(organisation: Organisation) {
   };
 }
 
-const ORGANISATION_EDITABLE_FIELDS = [
+export const ORGANISATION_EDITABLE_FIELDS = [
   'name',
   'city',
   'timezone',

@@ -105,7 +105,34 @@ export const PERMISSION_MODULES: ModuleDefinition[] = [
   // Historical key: once covered landing pages and templates too, which now
   // have their own modules above. Only the Media Library remains under it.
   { key: 'websites', label: 'Media Library', description: 'Central media & assets library', actions: ['view'] },
-  { key: 'domains', label: 'Domains', description: 'Subdomain & custom-domain management' },
+  // Custom Domains page — one pill per button. Like Landing Pages, Publish /
+  // Unpublish reuse the activate / deactivate columns; Verify uses approve.
+  // NOTE: org-domain.controller still gates Verify / Map / Publish /
+  // Unpublish on 'edit' — switch those guards (and backfill existing roles'
+  // approve/activate/deactivate from edit) when enforcing these pills.
+  {
+    key: 'domains',
+    label: 'Custom Domains',
+    description: 'Request, verify, map and publish custom domains',
+    actions: [
+      'view',
+      'add',
+      'edit',
+      'approve',
+      'activate',
+      'deactivate',
+      'delete',
+    ],
+    actionLabels: {
+      view: 'View / DNS records',
+      add: 'Add Domain',
+      edit: 'Map Page',
+      approve: 'Verify DNS & SSL',
+      activate: 'Publish Live',
+      deactivate: 'Unpublish',
+      delete: 'Delete Domain',
+    },
+  },
   // Hidden from Roles & Permissions while these pages are switched off.
   // Stored grant rows stay in the DB; uncomment to restore.
   // { key: 'calling', label: 'Calling', description: 'Calls, queues, numbers and automation' }, // [DISABLED-CALLING]

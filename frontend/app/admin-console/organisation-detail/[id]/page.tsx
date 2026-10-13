@@ -24,8 +24,9 @@ import type {
   Plan,
 } from "@/lib/types";
 import { COUNTRY_META, COUNTRIES } from "@/lib/countries";
-import { INDUSTRY_OPTIONS, ORG_COLOR_PRESETS, industryLabel } from "@/lib/org-profile";
-import { IndustryHistory } from "@/components/org/industry-history";
+import { INDUSTRY_OPTIONS, ORG_ASSET_RULES, industryLabel, orgAssetTooLarge } from "@/lib/org-profile";
+import { ProfileAuditLog } from "@/components/org/profile-audit-log";
+import { OrgActivityFeed } from "@/components/superadmin/org-activity-feed";
 
 const TABS = ["Overview", "Subscription", "Templates", "Domains", "Activity"] as const;
 type Tab = (typeof TABS)[number];
@@ -130,23 +131,6 @@ function formatDate(iso: string): string {
     month: "short",
     year: "numeric",
   });
-}
-
-function formatDateTime(iso: string): string {
-  return new Date(iso).toLocaleString("en-GB", {
-    day: "2-digit",
-    month: "short",
-    year: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
-}
-
-function formatActionLabel(action: string): string {
-  return action
-    .split("_")
-    .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
-    .join(" ");
 }
 
 function StatTile({
@@ -632,6 +616,11 @@ export default function SuperAdminOrganisationDetailPage() {
     const setBusy = kind === "logo" ? setLogoUploading : setFaviconUploading;
     const formKey: "logoUrl" | "faviconUrl" = kind === "logo" ? "logoUrl" : "faviconUrl";
     setEditError(null);
+    const tooLarge = orgAssetTooLarge(kind, file);
+    if (tooLarge) {
+      setEditError(tooLarge);
+      return;
+    }
     setBusy(true);
     try {
       const { uploadUrl, publicUrl } = await apiFetch<{ uploadUrl: string; publicUrl: string }>(
@@ -1158,24 +1147,32 @@ export default function SuperAdminOrganisationDetailPage() {
                           <AssetUploadField
                             value={editForm.logoUrl}
                             uploading={logoUploading}
-                            accept="image/png,image/jpeg,image/webp,image/gif,image/svg+xml"
+                            accept={ORG_ASSET_RULES.logo.accept}
                             uploadedLabel="Logo uploaded"
                             onPick={(file) => void handleAssetUpload("logo", file)}
                             onRemove={() => setEditForm((f) => ({ ...f, logoUrl: "" }))}
                           />
+                          <p className="muted" style={{ margin: "6px 0 0", fontSize: 12 }}>
+                            {ORG_ASSET_RULES.logo.hint}. Shown in the org portal sidebar.
+                          </p>
                         </div>
                         <div className="field">
                           <label>Favicon</label>
                           <AssetUploadField
                             value={editForm.faviconUrl}
                             uploading={faviconUploading}
-                            accept="image/png,image/svg+xml,image/x-icon,image/vnd.microsoft.icon,.ico"
+                            accept={ORG_ASSET_RULES.favicon.accept}
                             uploadedLabel="Favicon uploaded"
                             onPick={(file) => void handleAssetUpload("favicon", file)}
                             onRemove={() => setEditForm((f) => ({ ...f, faviconUrl: "" }))}
                           />
+                          <p className="muted" style={{ margin: "6px 0 0", fontSize: 12 }}>
+                            {ORG_ASSET_RULES.favicon.hint}. Shown in the org portal browser tab.
+                          </p>
                         </div>
                       </div>
+                      {/* Brand colour hidden for now (not required). The stored value is kept:
+                          handleEditSubmit still sends it back unchanged.
                       <div className="field">
                         <label>Brand colour</label>
                         <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
@@ -1222,6 +1219,7 @@ export default function SuperAdminOrganisationDetailPage() {
                           </div>
                         </div>
                       </div>
+                      */}
                       <FormAlert message={editError} />
                       <FormActions
                         onCancel={() => setEditing(false)}
@@ -1322,6 +1320,7 @@ export default function SuperAdminOrganisationDetailPage() {
                         value={org.addressLine1 || "Not added"}
                         sub={org.addressLine2 || undefined}
                       />
+                      {/* Brand colour hidden for now (not required).
                       <DetailRowItem
                         icon="sparkles"
                         iconBg="#ede9fe"
@@ -1341,6 +1340,7 @@ export default function SuperAdminOrganisationDetailPage() {
                           )
                         }
                       />
+                      */}
                       <DetailRowItem
                         icon="camera"
                         iconBg="#eff6ff"
@@ -1373,11 +1373,10 @@ export default function SuperAdminOrganisationDetailPage() {
                   )}
                 </div>
               </div>
-              {/* Industry change history — refetches after each save (org updates). */}
-              <IndustryHistory
-                endpoint={`/admin/organisations/${org.id}/industry-history`}
+              {/* Audit logs of every profile field change — refetches after each save (org updates). */}
+              <ProfileAuditLog
+                endpoint={`/admin/organisations/${org.id}/profile-history`}
                 reloadKey={org}
-                currentIndustry={org.industry}
               />
             </Reveal>
           ) : null}
@@ -1646,28 +1645,7 @@ export default function SuperAdminOrganisationDetailPage() {
 
           {tab === "Activity" ? (
             <Reveal delay={2}>
-              <div className="card">
-                <div className="card-h">
-                  <span className="t">All activity</span>
-                </div>
-                <div className="card-b">
-                  {!activity || activity.length === 0 ? (
-                    <p className="muted">No activity yet.</p>
-                  ) : (
-                    <ul className="timeline">
-                      {activity.map((entry) => (
-                        <li key={entry.id}>
-                          <span className="td" />
-                          <b style={{ fontSize: 13 }}>{formatActionLabel(entry.action)}</b>
-                          <div className="tt">
-                            {entry.entity ?? "—"} · {formatDateTime(entry.createdAt)}
-                          </div>
-                        </li>
-                      ))}
-                    </ul>
-                  )}
-                </div>
-              </div>
+              <OrgActivityFeed activity={activity} />
             </Reveal>
           ) : null}
         </div>

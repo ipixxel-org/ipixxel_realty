@@ -405,9 +405,12 @@ export function SuperAdminShell({ children }: { children: ReactNode }) {
           </div>
           <div className="tb-right" style={{ position: "relative", marginLeft: "auto" }}>
             <NotificationsBell accessToken={accessToken} />
+            {/* Email & SMTP header shortcut hidden — still reachable from the
+                profile menu and Integrations in the sidebar.
             <Link href="/admin-console/integrations/smtp" className="icon-btn" title="Email & SMTP Settings">
               <Icon name="mail" size={15} />
             </Link>
+            */}
             <Link href="/admin-console/settings" className="icon-btn" title="Platform Settings">
               <Icon name="settings" size={15} />
             </Link>

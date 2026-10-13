@@ -12,9 +12,11 @@ import {
   getOrgBilling,
   getOrgNotifications,
   getOrgUnreadNotifications,
+  getProfile,
   markAllOrgNotificationsRead,
   markOrgNotificationRead,
 } from "@/lib/api";
+import { ORG_BRANDING_CHANGE_EVENT, type OrgBrandingChangeDetail } from "@/lib/org-profile";
 import type { OrgBillingSummary, OrgNotification, PermissionAction } from "@/lib/types";
 import { useToast } from "@/components/ui/toast";
 import { SETTINGS_ACTIONS } from "@/lib/permissions";
@@ -352,6 +354,58 @@ export function OrgAdminShell({ children }: { children: ReactNode }) {
     };
   }, [user?.organisation?.brand_colour]);
 
+  // Org logo (sidebar) + favicon (browser tab). Fetched fresh from /auth/me —
+  // which every org user can read, unlike /org/settings — so a change made by
+  // a Super Admin shows on next load; Settings broadcasts saves so they show
+  // immediately. null = use the default iPixxel logo / favicon.
+  const [orgBranding, setOrgBranding] = useState<OrgBrandingChangeDetail | null>(null);
+
+  useEffect(() => {
+    if (!accessToken) return;
+    let cancelled = false;
+    getProfile()
+      .then((p) => {
+        if (cancelled) return;
+        setOrgBranding({
+          logoUrl: p.organisation?.logo_url || null,
+          faviconUrl: p.organisation?.favicon_url || null,
+        });
+      })
+      .catch(() => {
+        // Non-critical — keep the default branding.
+      });
+    const onChange = (e: Event) => {
+      const detail = (e as CustomEvent<OrgBrandingChangeDetail>).detail;
+      if (detail) setOrgBranding({ logoUrl: detail.logoUrl || null, faviconUrl: detail.faviconUrl || null });
+    };
+    window.addEventListener(ORG_BRANDING_CHANGE_EVENT, onChange);
+    return () => {
+      cancelled = true;
+      window.removeEventListener(ORG_BRANDING_CHANGE_EVENT, onChange);
+    };
+  }, [accessToken]);
+
+  // Browser-tab icon: add our own <link rel="icon"> after the default one
+  // (the last declared icon wins) and remove it when there's no custom
+  // favicon or on leaving the org portal, so the default comes back.
+  const orgFaviconUrl = orgBranding?.faviconUrl ?? null;
+  useEffect(() => {
+    if (!orgFaviconUrl) return;
+    const link = document.createElement("link");
+    link.rel = "icon";
+    link.href = orgFaviconUrl;
+    link.setAttribute("data-org-favicon", "");
+    document.head.appendChild(link);
+    return () => {
+      link.remove();
+    };
+  }, [orgFaviconUrl]);
+
+  // A broken image URL falls back to the default logo instead of a broken icon.
+  const orgLogoUrl = orgBranding?.logoUrl ?? null;
+  const [failedLogoUrl, setFailedLogoUrl] = useState<string | null>(null);
+  const showOrgLogo = !!orgLogoUrl && failedLogoUrl !== orgLogoUrl;
+
   async function handleSignOut() {
     setIsSigningOut(true);
     try {
@@ -541,9 +595,20 @@ export function OrgAdminShell({ children }: { children: ReactNode }) {
     <div className={appClass}>
       <aside className="sidebar">
         <div className="s-top">
-          <div className="s-logo-wrap" aria-hidden>
-            <BuildingLogoIcon size={34} />
-          </div>
+          {showOrgLogo ? (
+            <div className="s-logo-wrap s-logo-wrap--org">
+              {/* eslint-disable-next-line @next/next/no-img-element -- remote, user-uploaded URL */}
+              <img
+                src={orgLogoUrl as string}
+                alt="Organisation logo"
+                onError={() => setFailedLogoUrl(orgLogoUrl)}
+              />
+            </div>
+          ) : (
+            <div className="s-logo-wrap" aria-hidden>
+              <BuildingLogoIcon size={34} />
+            </div>
+          )}
           <div className="s-name">
             iPixxel Realty<small>{user.roleLabel || "Organisation Admin"}</small>
           </div>

@@ -40,9 +40,9 @@ export class OrgSettingsController {
   }
 
   @RequirePermission('settings', 'view', ENFORCE)
-  @Get('industry-history')
-  industryHistory(@CurrentUser() actor: JwtPayload) {
-    return this.orgSettingsService.industryHistory(actor.orgId as string);
+  @Get('profile-history')
+  profileHistory(@CurrentUser() actor: JwtPayload) {
+    return this.orgSettingsService.profileHistory(actor.orgId as string);
   }
 
   @RequirePermission('settings', SETTINGS_ACTIONS.editProfile, ENFORCE)

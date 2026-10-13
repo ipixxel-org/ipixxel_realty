@@ -20,8 +20,14 @@ import { formatPaise } from "@/lib/razorpay";
 
 import { COUNTRY_META, COUNTRIES, CURRENCY_OPTIONS, TIMEZONE_OPTIONS } from "@/lib/countries";
 import { ORG_THEME_CHANGE_EVENT } from "@/components/global-theme-provider";
-import { INDUSTRY_OPTIONS, ORG_COLOR_PRESETS } from "@/lib/org-profile";
-import { IndustryHistory } from "@/components/org/industry-history";
+import {
+  INDUSTRY_OPTIONS,
+  ORG_ASSET_RULES,
+  ORG_BRANDING_CHANGE_EVENT,
+  orgAssetTooLarge,
+  type OrgBrandingChangeDetail,
+} from "@/lib/org-profile";
+import { ProfileAuditLog } from "@/components/org/profile-audit-log";
 
 const LANGUAGES = [
   { value: "en-IN", label: "English (India)" },
@@ -64,7 +70,8 @@ const NAV_GROUPS = [
       // { s: "branding", icon: "sparkles" as IconName, t: "Branding" },
       // Hidden for now — uncomment to bring Localization back.
       // { s: "localization", icon: "globe" as IconName, t: "Localization" },
-      { s: "domain", icon: "globe" as IconName, t: "Domain" },
+      // Hidden for now — custom domains live in the Custom Domain module.
+      // { s: "domain", icon: "globe" as IconName, t: "Domain" },
     ]
   },
   {
@@ -97,7 +104,7 @@ const NAV_GROUPS = [
 
 // Sections whose nav items are commented out above — a direct
 // `?section=` link to one falls back to the first visible section.
-const HIDDEN_SECTIONS: ReadonlySet<string> = new Set(["branding", "localization", "whatsapp", "comms", "team-prefs"]);
+const HIDDEN_SECTIONS: ReadonlySet<string> = new Set(["branding", "domain", "localization", "whatsapp", "comms", "team-prefs"]);
 
 const SECTION_META: Record<string, { icon: IconName; title: string; sub: string }> = {
   general: { icon: "building", title: "General Information", sub: "Update your organisation's basic details and contact information." },
@@ -368,6 +375,8 @@ const DOMAIN_STATUS_LABEL: Record<string, string> = {
   none: "Not set", pending: "Pending approval", approved: "Approved", active: "Active", rejected: "Rejected", connected: "Connected",
 };
 
+// Kept for when the Domain section is re-enabled (its render is commented out).
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 function DomainSection({ canRequest }: { canRequest: boolean }) {
   const [info, setInfo] = useState<OrgDomainInfo | null>(null);
   const [loading, setLoading] = useState(true);
@@ -1540,7 +1549,8 @@ export default function OrgSettingsPage() {
   const canEditEmail = hasPermission("settings", SETTINGS_ACTIONS.editEmail);
   const canEditPipeline = hasPermission("settings", SETTINGS_ACTIONS.editPipeline);
   const canViewDomain = hasPermission("domains", "view");
-  const canRequestDomain = hasPermission("domains", "add");
+  // Used by the hidden Domain section — uncomment together with it.
+  // const canRequestDomain = hasPermission("domains", "add");
   const canViewBilling = hasPermission("billing", "view");
   const canEditBilling = hasPermission("billing", "edit");
   const canViewProjects = hasPermission("projects", "view");
@@ -1718,6 +1728,11 @@ export default function OrgSettingsPage() {
     const setBusy = kind === "logo" ? setLogoUploading : setFaviconUploading;
     const key: "logoUrl" | "faviconUrl" = kind === "logo" ? "logoUrl" : "faviconUrl";
     setSaveError(null);
+    const tooLarge = orgAssetTooLarge(kind, file);
+    if (tooLarge) {
+      setSaveError(tooLarge);
+      return;
+    }
     setBusy(true);
     try {
       const { uploadUrl, publicUrl } = await apiFetch<{ uploadUrl: string; publicUrl: string }>(
@@ -1768,6 +1783,12 @@ export default function OrgSettingsPage() {
       });
       setOrg(updated); setForm(formToOrg(updated)); setSaved(true); setDirty(false);
       updateOrganisation(updated);
+      // Update the sidebar logo + browser-tab icon right away.
+      window.dispatchEvent(
+        new CustomEvent<OrgBrandingChangeDetail>(ORG_BRANDING_CHANGE_EVENT, {
+          detail: { logoUrl: updated.logo_url || null, faviconUrl: updated.favicon_url || null },
+        }),
+      );
       window.dispatchEvent(new CustomEvent(ORG_THEME_CHANGE_EVENT, { detail: { brandColour: updated.brand_colour } }));
     } catch (err) {
       setSaveError(err instanceof Error ? err.message : "Failed to save changes.");
@@ -2163,24 +2184,32 @@ export default function OrgSettingsPage() {
                     <AssetField
                       value={form.logoUrl}
                       uploading={logoUploading}
-                      accept="image/png,image/jpeg,image/webp,image/gif,image/svg+xml"
+                      accept={ORG_ASSET_RULES.logo.accept}
                       uploadedLabel="Logo uploaded"
                       onPick={(file) => void handleAssetUpload("logo", file)}
                       onRemove={() => updateForm({ logoUrl: "" })}
                     />
+                    <p className="muted" style={{ margin: "6px 0 0", fontSize: 12 }}>
+                      {ORG_ASSET_RULES.logo.hint}. Shown in the sidebar.
+                    </p>
                   </div>
                   <div className="field">
                     <label>Favicon</label>
                     <AssetField
                       value={form.faviconUrl}
                       uploading={faviconUploading}
-                      accept="image/png,image/svg+xml,image/x-icon,image/vnd.microsoft.icon,.ico"
+                      accept={ORG_ASSET_RULES.favicon.accept}
                       uploadedLabel="Favicon uploaded"
                       onPick={(file) => void handleAssetUpload("favicon", file)}
                       onRemove={() => updateForm({ faviconUrl: "" })}
                     />
+                    <p className="muted" style={{ margin: "6px 0 0", fontSize: 12 }}>
+                      {ORG_ASSET_RULES.favicon.hint}. Shown in the browser tab.
+                    </p>
                   </div>
                 </div>
+                {/* Brand colour hidden for now (not required). The stored value is still
+                    loaded and sent unchanged on save, so the org theme keeps working.
                 <div className="field"><label>Brand colour</label>
                   <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
                     <input
@@ -2237,6 +2266,7 @@ export default function OrgSettingsPage() {
                     </div>
                   </div>
                 </div>
+                */}
                 {/* TODO: Email sender name — disabled "coming soon" input.
               <div className="field" style={{ marginBottom: 0 }}>
                 <label>Email sender name</label>
@@ -2245,13 +2275,6 @@ export default function OrgSettingsPage() {
               */}
                 </div>
               </Card>
-
-              {/* Industry change history — refetches after each save (org updates). */}
-              <IndustryHistory
-                endpoint="/org/settings/industry-history"
-                reloadKey={org}
-                currentIndustry={org.industry}
-              />
             </div>
 
             {/* LOCALIZATION */}
@@ -2278,11 +2301,20 @@ export default function OrgSettingsPage() {
 
           </fieldset>
 
-          {/* DOMAIN */}
+          {/* General → Audit logs. Outside the read-only fieldset so view-only
+              users can still page through it; refetches after each save. */}
+          {activeSection === "general" ? (
+            <ProfileAuditLog endpoint="/org/settings/profile-history" reloadKey={org} />
+          ) : null}
+
+          {/* DOMAIN — hidden for now: custom domains are managed in the org
+              portal's own Custom Domain module. Commented out (not just hidden)
+              so it doesn't fetch domain info on every Settings visit.
           <div className={`os-section${activeSection === "domain" ? " on" : ""}`}>
             <SectionHead section="domain" />
             {canViewDomain ? <DomainSection canRequest={canRequestDomain} /> : null}
           </div>
+          */}
 
           {/* CRM */}
           <div className={`os-section${activeSection === "crm" ? " on" : ""}`}>
