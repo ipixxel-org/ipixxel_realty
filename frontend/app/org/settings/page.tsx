@@ -20,7 +20,7 @@ import { formatPaise } from "@/lib/razorpay";
 
 import { COUNTRY_META, COUNTRIES, CURRENCY_OPTIONS, TIMEZONE_OPTIONS } from "@/lib/countries";
 import { ORG_THEME_CHANGE_EVENT } from "@/components/global-theme-provider";
-import { INDUSTRY_OPTIONS, ORG_COLOR_PRESETS } from "@/lib/org-profile";
+import { INDUSTRY_OPTIONS } from "@/lib/org-profile";
 import { IndustryHistory } from "@/components/org/industry-history";
 
 const LANGUAGES = [
@@ -2181,6 +2181,8 @@ export default function OrgSettingsPage() {
                     />
                   </div>
                 </div>
+                {/* Brand colour hidden for now (not required). The stored value is still
+                    loaded and sent unchanged on save, so the org theme keeps working.
                 <div className="field"><label>Brand colour</label>
                   <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
                     <input
@@ -2237,6 +2239,7 @@ export default function OrgSettingsPage() {
                     </div>
                   </div>
                 </div>
+                */}
                 {/* TODO: Email sender name — disabled "coming soon" input.
               <div className="field" style={{ marginBottom: 0 }}>
                 <label>Email sender name</label>

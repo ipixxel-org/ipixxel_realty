@@ -24,7 +24,7 @@ import type {
   Plan,
 } from "@/lib/types";
 import { COUNTRY_META, COUNTRIES } from "@/lib/countries";
-import { INDUSTRY_OPTIONS, ORG_COLOR_PRESETS, industryLabel } from "@/lib/org-profile";
+import { INDUSTRY_OPTIONS, industryLabel } from "@/lib/org-profile";
 import { IndustryHistory } from "@/components/org/industry-history";
 
 const TABS = ["Overview", "Subscription", "Templates", "Domains", "Activity"] as const;
@@ -1176,6 +1176,8 @@ export default function SuperAdminOrganisationDetailPage() {
                           />
                         </div>
                       </div>
+                      {/* Brand colour hidden for now (not required). The stored value is kept:
+                          handleEditSubmit still sends it back unchanged.
                       <div className="field">
                         <label>Brand colour</label>
                         <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
@@ -1222,6 +1224,7 @@ export default function SuperAdminOrganisationDetailPage() {
                           </div>
                         </div>
                       </div>
+                      */}
                       <FormAlert message={editError} />
                       <FormActions
                         onCancel={() => setEditing(false)}
@@ -1322,6 +1325,7 @@ export default function SuperAdminOrganisationDetailPage() {
                         value={org.addressLine1 || "Not added"}
                         sub={org.addressLine2 || undefined}
                       />
+                      {/* Brand colour hidden for now (not required).
                       <DetailRowItem
                         icon="sparkles"
                         iconBg="#ede9fe"
@@ -1341,6 +1345,7 @@ export default function SuperAdminOrganisationDetailPage() {
                           )
                         }
                       />
+                      */}
                       <DetailRowItem
                         icon="camera"
                         iconBg="#eff6ff"
