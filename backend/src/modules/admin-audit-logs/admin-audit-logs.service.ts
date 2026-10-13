@@ -45,6 +45,7 @@ const ACTION_LABELS: Record<string, string> = {
   project_created: 'Project created',
   project_updated: 'Project updated',
   project_deleted: 'Project deleted',
+  project_duplicated: 'Project duplicated',
   project_sales_agents_set: 'Project sales agents set',
   unit_type_created: 'Unit type created',
   unit_type_updated: 'Unit type updated',

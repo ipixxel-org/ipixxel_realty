@@ -145,7 +145,7 @@ export class StorageService {
         sig,
       });
       const uploadUrl = `${baseUrl}/uploads/local-put?${qs.toString()}`;
-      const publicUrl = `${baseUrl}/uploads/${key}`;
+      const publicUrl = `${baseUrl}/uploads/${encodeKey(key)}`;
 
       return {
         uploadUrl,
@@ -169,7 +169,7 @@ export class StorageService {
 
     return {
       uploadUrl,
-      publicUrl: `${publicUrl}/${key}`,
+      publicUrl: `${publicUrl}/${encodeKey(key)}`,
       key,
       expiresIn: PRESIGN_TTL_SECONDS,
     };
@@ -421,8 +421,12 @@ export class StorageService {
   // orgId segment is the caller's own (from the JWT) so no org can ever get
   // a URL that writes into another org's prefix.
   private buildKey(input: CreateUploadUrlInput): string {
-    const safeName = sanitizeFilename(input.filename);
-    const unique = `${randomUUID()}-${safeName}`;
+    // The uploader's own file name is the LAST key segment, under a random
+    // folder that keeps same-named files apart. Public files are served
+    // straight from the bucket with no Content-Disposition, so browsers name
+    // a download after the URL's last segment — this keeps it the original
+    // name rather than "<uuid>-cleaned-name".
+    const unique = `${randomUUID()}/${originalFilename(input.filename)}`;
     const now = new Date();
     const year = now.getFullYear().toString();
     const month = String(now.getMonth() + 1).padStart(2, '0');
@@ -495,6 +499,33 @@ function contentDisposition(
   const ascii = (fileName || 'file').replace(/[^\x20-\x7e]|["\\]/g, '_');
   const utf8 = encodeURIComponent(fileName || 'file');
   return `${kind}; filename="${ascii}"; filename*=UTF-8''${utf8}`;
+}
+
+/**
+ * The uploader's file name kept as close to the original as a key allows:
+ * spaces, brackets and non-English letters survive. Only path separators,
+ * control characters and the characters Windows refuses in a file name
+ * (local dev writes keys to disk) are dropped.
+ */
+function originalFilename(name: string): string {
+  const base = (name || '').split(/[\\/]/).pop() || '';
+  const cleaned = base
+    .normalize('NFC')
+    .replace(/[\u0000-\u001f\u007f<>:"|?*]+/g, '')
+    .replace(/\s+/g, ' ')
+    // Windows also rejects names ending in a space or dot.
+    .replace(/^[\s.]+|[\s.]+$/g, '');
+  if (!cleaned) return 'file';
+  if (cleaned.length <= 150) return cleaned;
+  // Too long: trim the stem, keep the extension.
+  const dot = cleaned.lastIndexOf('.');
+  const ext = dot > 0 && cleaned.length - dot <= 10 ? cleaned.slice(dot) : '';
+  return cleaned.slice(0, 150 - ext.length).trimEnd() + ext;
+}
+
+/** A key as a URL path: each segment percent-encoded, slashes kept. */
+function encodeKey(key: string): string {
+  return key.split('/').map(encodeURIComponent).join('/');
 }
 
 function sanitizeFilename(name: string): string {

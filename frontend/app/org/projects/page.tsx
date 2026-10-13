@@ -1,16 +1,18 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type MouseEvent } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useAuth } from "@/lib/auth-context";
 import { apiFetch } from "@/lib/api";
 import { useProjectTypes } from "@/lib/use-project-types";
 import { formatMoney, formatMoneyRange } from "@/lib/money";
 import { Reveal } from "@/components/superadmin/reveal";
 import { CountUp } from "@/components/superadmin/count-up";
+import { ConfirmModal } from "@/components/ui/confirm-modal";
 import { Icon } from "@/components/icons";
 import "@/app/org/org.css";
-import type { OrgBillingSummary, ProjectsListResponse, ProjectStatus } from "@/lib/types";
+import type { OrgBillingSummary, Project, ProjectDetail, ProjectsListResponse, ProjectStatus } from "@/lib/types";
 
 const LIMIT = 10;
 
@@ -50,6 +52,13 @@ export default function OrgProjectsPage() {
   // Projects > New project — enforced for the org admin too.
   const canCreate = hasPermission("projects", "add");
   const projectTypes = useProjectTypes(!!accessToken);
+  const router = useRouter();
+
+  // Duplicate copies the project's details only (no units, leads or landing
+  // pages) into a new inactive project, then opens it for editing.
+  const [duplicateTarget, setDuplicateTarget] = useState<Project | null>(null);
+  const [duplicating, setDuplicating] = useState(false);
+  const [duplicateError, setDuplicateError] = useState<string | null>(null);
 
   const [searchInput, setSearchInput] = useState("");
   const [search, setSearch] = useState("");
@@ -135,6 +144,44 @@ export default function OrgProjectsPage() {
     projectQuota != null &&
     projectQuota.limit != null &&
     projectQuota.used >= projectQuota.limit;
+
+  const openDuplicate = (e: MouseEvent, p: Project) => {
+    // The grid card is itself a link — keep the click from opening the project.
+    e.preventDefault();
+    e.stopPropagation();
+    setDuplicateError(null);
+    setDuplicateTarget(p);
+  };
+
+  const duplicate = async () => {
+    if (!duplicateTarget || !accessToken) return;
+    setDuplicating(true);
+    setDuplicateError(null);
+    try {
+      const copy = await apiFetch<ProjectDetail>(`/org/projects/${duplicateTarget.id}/duplicate`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${accessToken}` },
+      });
+      router.push(`/org/projects/${copy.id}/edit`);
+    } catch (err) {
+      setDuplicateError(err instanceof Error ? err.message : "Failed to duplicate project.");
+      setDuplicating(false);
+    }
+  };
+
+  const duplicateButton = (p: Project) =>
+    !canCreate ? null : (
+      <button
+        type="button"
+        className="btn btn-ghost btn-sm"
+        disabled={atProjectLimit}
+        title={atProjectLimit ? "You've reached your plan's project limit" : "Duplicate project details"}
+        onClick={(e) => openDuplicate(e, p)}
+        style={atProjectLimit ? { opacity: 0.45, cursor: "not-allowed" } : undefined}
+      >
+        <Icon name="copy" size={13} /> Duplicate
+      </button>
+    );
 
   const SparklineWave = ({ color }: { color: string }) => (
     <svg
@@ -712,6 +759,7 @@ export default function OrgProjectsPage() {
                     </div>
                     <div className="row gap-8">
                       <span className="btn btn-soft btn-sm" style={{ color: "#0066f5", background: "#eff6ff" }}>Open</span>
+                      {duplicateButton(p)}
                     </div>
                   </div>
                 </Link>
@@ -769,7 +817,12 @@ export default function OrgProjectsPage() {
                         <td>{formatMoneyRange(p.priceMin, p.priceMax, p.currency)}</td>
                         <td>{p.unitTypeCount}</td>
                         <td>{p.landingPageCount}</td>
-                        <td><Link href={`/org/projects/${p.id}`} className="btn btn-ghost btn-sm">Open</Link></td>
+                        <td>
+                          <div className="row gap-8">
+                            <Link href={`/org/projects/${p.id}`} className="btn btn-ghost btn-sm">Open</Link>
+                            {duplicateButton(p)}
+                          </div>
+                        </td>
                       </tr>
                     ))
                   )}
@@ -825,7 +878,25 @@ export default function OrgProjectsPage() {
           Learn more <Icon name="external" size={13} />
         </Link>
       </div>
+
+      <ConfirmModal
+        open={duplicateTarget != null}
+        title="Duplicate project?"
+        message={
+          <>
+            A copy of <strong>&quot;{duplicateTarget?.name}&quot;</strong> will be created with the same
+            project details and manager. Units, leads, landing pages and sales agents are not copied.
+            The copy starts as <strong>Inactive</strong> — activate it once you&apos;ve made your changes.
+            {duplicateError ? <div style={{ color: "#dc2626", marginTop: 10 }}>{duplicateError}</div> : null}
+          </>
+        }
+        confirmLabel="Duplicate"
+        busy={duplicating}
+        onConfirm={() => void duplicate()}
+        onClose={() => {
+          if (!duplicating) setDuplicateTarget(null);
+        }}
+      />
     </>
   );
 }
-

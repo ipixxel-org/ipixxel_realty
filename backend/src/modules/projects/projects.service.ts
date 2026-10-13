@@ -567,6 +567,97 @@ export class ProjectsService {
     return this.getById(orgId, id);
   }
 
+  /**
+   * Copies a project's own details into a new, inactive project. Only the
+   * `projects` row is copied — units, unit types, sales agents, leads,
+   * landing pages and marketing connections all stay with the source. Media
+   * URLs are shared, which is safe: deleting a project never deletes its
+   * stored files.
+   */
+  async duplicate(orgId: string, id: string, actor?: JwtPayload) {
+    const source = await this.getOwnedProject(orgId, id, actor);
+
+    // A duplicate is a new project, so it counts against the plan quota.
+    const subscription = await this.prisma.subscription.findFirst({
+      where: { orgId, status: { not: 'cancelled' } },
+      include: { plan: true },
+    });
+    if (subscription) {
+      const currentCount = await countOrgProjects(this.prisma, orgId);
+      assertLimit(subscription.plan, 'projects', currentCount, 1);
+    }
+
+    const project = await this.prisma.$transaction(async (tx) => {
+      const created = await tx.project.create({
+        data: {
+          orgId,
+          name: `${source.name} (copy)`,
+          // Starts inactive and off the website so a half-edited copy never
+          // goes live; the user activates it once it's ready.
+          status: 'inactive',
+          publishedToWebsite: false,
+          managerId: source.managerId,
+          projectTypeId: source.projectTypeId,
+          projectType: source.projectType,
+          areaUnit: source.areaUnit,
+          projectFieldTemplate: source.projectFieldTemplate as Prisma.InputJsonValue,
+          unitFieldTemplate: source.unitFieldTemplate as Prisma.InputJsonValue,
+          customFields: source.customFields as Prisma.InputJsonValue,
+          location: source.location,
+          reraId: source.reraId,
+          possession: source.possession,
+          priceMin: source.priceMin,
+          priceMax: source.priceMax,
+          baseRate: source.baseRate,
+          tagline: source.tagline,
+          launchDate: source.launchDate,
+          constructionStage: source.constructionStage,
+          highlights: source.highlights,
+          salesTeam: source.salesTeam,
+          amenities: source.amenities as Prisma.InputJsonValue,
+          bookingAmount: source.bookingAmount,
+          currency: source.currency,
+          priceIncludes: source.priceIncludes,
+          paymentPlan: source.paymentPlan,
+          offers: source.offers,
+          addressLine: source.addressLine,
+          city: source.city,
+          locality: source.locality,
+          pincode: source.pincode,
+          latitude: source.latitude,
+          longitude: source.longitude,
+          connectivity: source.connectivity,
+          landmarks: source.landmarks,
+          specifications: (source.specifications ?? undefined) as
+            Prisma.InputJsonValue | undefined,
+          marketing: (source.marketing ?? undefined) as
+            Prisma.InputJsonValue | undefined,
+          requireBookingApproval: source.requireBookingApproval,
+          visibleToTelecallers: source.visibleToTelecallers,
+          coverImageUrl: source.coverImageUrl,
+          galleryUrls: source.galleryUrls,
+          brochureUrl: source.brochureUrl,
+          reraCertificateUrl: source.reraCertificateUrl,
+          floorPlanUrls: source.floorPlanUrls,
+        },
+      });
+
+      await tx.auditLog.create({
+        data: {
+          orgId,
+          action: 'project_duplicated',
+          entity: 'Project',
+          entityId: created.id,
+          metadata: { name: created.name, sourceId: id },
+        },
+      });
+
+      return created;
+    });
+
+    return this.getById(orgId, project.id);
+  }
+
   async remove(orgId: string, id: string, actor?: JwtPayload) {
     await this.getOwnedProject(orgId, id, actor);
     // Hard delete — no soft-delete anywhere in this codebase. Child
