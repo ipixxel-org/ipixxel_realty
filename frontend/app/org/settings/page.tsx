@@ -20,7 +20,13 @@ import { formatPaise } from "@/lib/razorpay";
 
 import { COUNTRY_META, COUNTRIES, CURRENCY_OPTIONS, TIMEZONE_OPTIONS } from "@/lib/countries";
 import { ORG_THEME_CHANGE_EVENT } from "@/components/global-theme-provider";
-import { INDUSTRY_OPTIONS } from "@/lib/org-profile";
+import {
+  INDUSTRY_OPTIONS,
+  ORG_ASSET_RULES,
+  ORG_BRANDING_CHANGE_EVENT,
+  orgAssetTooLarge,
+  type OrgBrandingChangeDetail,
+} from "@/lib/org-profile";
 import { ProfileAuditLog } from "@/components/org/profile-audit-log";
 
 const LANGUAGES = [
@@ -1718,6 +1724,11 @@ export default function OrgSettingsPage() {
     const setBusy = kind === "logo" ? setLogoUploading : setFaviconUploading;
     const key: "logoUrl" | "faviconUrl" = kind === "logo" ? "logoUrl" : "faviconUrl";
     setSaveError(null);
+    const tooLarge = orgAssetTooLarge(kind, file);
+    if (tooLarge) {
+      setSaveError(tooLarge);
+      return;
+    }
     setBusy(true);
     try {
       const { uploadUrl, publicUrl } = await apiFetch<{ uploadUrl: string; publicUrl: string }>(
@@ -1768,6 +1779,12 @@ export default function OrgSettingsPage() {
       });
       setOrg(updated); setForm(formToOrg(updated)); setSaved(true); setDirty(false);
       updateOrganisation(updated);
+      // Update the sidebar logo + browser-tab icon right away.
+      window.dispatchEvent(
+        new CustomEvent<OrgBrandingChangeDetail>(ORG_BRANDING_CHANGE_EVENT, {
+          detail: { logoUrl: updated.logo_url || null, faviconUrl: updated.favicon_url || null },
+        }),
+      );
       window.dispatchEvent(new CustomEvent(ORG_THEME_CHANGE_EVENT, { detail: { brandColour: updated.brand_colour } }));
     } catch (err) {
       setSaveError(err instanceof Error ? err.message : "Failed to save changes.");
@@ -2163,22 +2180,28 @@ export default function OrgSettingsPage() {
                     <AssetField
                       value={form.logoUrl}
                       uploading={logoUploading}
-                      accept="image/png,image/jpeg,image/webp,image/gif,image/svg+xml"
+                      accept={ORG_ASSET_RULES.logo.accept}
                       uploadedLabel="Logo uploaded"
                       onPick={(file) => void handleAssetUpload("logo", file)}
                       onRemove={() => updateForm({ logoUrl: "" })}
                     />
+                    <p className="muted" style={{ margin: "6px 0 0", fontSize: 12 }}>
+                      {ORG_ASSET_RULES.logo.hint}. Shown in the sidebar.
+                    </p>
                   </div>
                   <div className="field">
                     <label>Favicon</label>
                     <AssetField
                       value={form.faviconUrl}
                       uploading={faviconUploading}
-                      accept="image/png,image/svg+xml,image/x-icon,image/vnd.microsoft.icon,.ico"
+                      accept={ORG_ASSET_RULES.favicon.accept}
                       uploadedLabel="Favicon uploaded"
                       onPick={(file) => void handleAssetUpload("favicon", file)}
                       onRemove={() => updateForm({ faviconUrl: "" })}
                     />
+                    <p className="muted" style={{ margin: "6px 0 0", fontSize: 12 }}>
+                      {ORG_ASSET_RULES.favicon.hint}. Shown in the browser tab.
+                    </p>
                   </div>
                 </div>
                 {/* Brand colour hidden for now (not required). The stored value is still

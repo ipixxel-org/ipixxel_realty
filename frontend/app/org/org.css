@@ -6664,6 +6664,22 @@
   flex-shrink: 0;
 }
 
+/* Uploaded organisation logo — same 36px footprint as the default icon, on a
+   white tile so dark logos stay visible on the dark sidebar. */
+.org .sidebar .s-logo-wrap--org {
+  border-radius: 9px;
+  background: #ffffff;
+  padding: 3px;
+  overflow: hidden;
+}
+
+.org .sidebar .s-logo-wrap--org img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  display: block;
+}
+
 .org .sidebar .s-name {
   font-family: var(--display, var(--font-roboto, sans-serif));
   font-weight: 700;

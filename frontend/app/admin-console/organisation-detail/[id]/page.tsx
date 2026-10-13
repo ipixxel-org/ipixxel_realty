@@ -24,7 +24,7 @@ import type {
   Plan,
 } from "@/lib/types";
 import { COUNTRY_META, COUNTRIES } from "@/lib/countries";
-import { INDUSTRY_OPTIONS, industryLabel } from "@/lib/org-profile";
+import { INDUSTRY_OPTIONS, ORG_ASSET_RULES, industryLabel, orgAssetTooLarge } from "@/lib/org-profile";
 import { ProfileAuditLog } from "@/components/org/profile-audit-log";
 
 const TABS = ["Overview", "Subscription", "Templates", "Domains", "Activity"] as const;
@@ -632,6 +632,11 @@ export default function SuperAdminOrganisationDetailPage() {
     const setBusy = kind === "logo" ? setLogoUploading : setFaviconUploading;
     const formKey: "logoUrl" | "faviconUrl" = kind === "logo" ? "logoUrl" : "faviconUrl";
     setEditError(null);
+    const tooLarge = orgAssetTooLarge(kind, file);
+    if (tooLarge) {
+      setEditError(tooLarge);
+      return;
+    }
     setBusy(true);
     try {
       const { uploadUrl, publicUrl } = await apiFetch<{ uploadUrl: string; publicUrl: string }>(
@@ -1158,22 +1163,28 @@ export default function SuperAdminOrganisationDetailPage() {
                           <AssetUploadField
                             value={editForm.logoUrl}
                             uploading={logoUploading}
-                            accept="image/png,image/jpeg,image/webp,image/gif,image/svg+xml"
+                            accept={ORG_ASSET_RULES.logo.accept}
                             uploadedLabel="Logo uploaded"
                             onPick={(file) => void handleAssetUpload("logo", file)}
                             onRemove={() => setEditForm((f) => ({ ...f, logoUrl: "" }))}
                           />
+                          <p className="muted" style={{ margin: "6px 0 0", fontSize: 12 }}>
+                            {ORG_ASSET_RULES.logo.hint}. Shown in the org portal sidebar.
+                          </p>
                         </div>
                         <div className="field">
                           <label>Favicon</label>
                           <AssetUploadField
                             value={editForm.faviconUrl}
                             uploading={faviconUploading}
-                            accept="image/png,image/svg+xml,image/x-icon,image/vnd.microsoft.icon,.ico"
+                            accept={ORG_ASSET_RULES.favicon.accept}
                             uploadedLabel="Favicon uploaded"
                             onPick={(file) => void handleAssetUpload("favicon", file)}
                             onRemove={() => setEditForm((f) => ({ ...f, faviconUrl: "" }))}
                           />
+                          <p className="muted" style={{ margin: "6px 0 0", fontSize: 12 }}>
+                            {ORG_ASSET_RULES.favicon.hint}. Shown in the org portal browser tab.
+                          </p>
                         </div>
                       </div>
                       {/* Brand colour hidden for now (not required). The stored value is kept:

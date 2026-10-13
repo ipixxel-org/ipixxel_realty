@@ -26,6 +26,34 @@ export function industryShortLabel(value: string | null | undefined): string | n
   return INDUSTRY_OPTIONS.find((o) => o.value === value)?.short ?? value;
 }
 
+// Logo / favicon upload rules — mirror the backend's FIELD_RULES (storage.types
+// `logo` / `favicon`) so the forms can tell users the limits up front and
+// reject an oversized file before uploading. The server still enforces them.
+export const ORG_ASSET_RULES = {
+  logo: {
+    accept: "image/png,image/jpeg,image/webp,image/gif,image/svg+xml",
+    maxBytes: 2 * 1024 * 1024,
+    hint: "PNG, JPG, WebP or SVG · max 2 MB · recommended 512 × 512 px (square, transparent background)",
+  },
+  favicon: {
+    accept: "image/png,image/svg+xml,image/x-icon,image/vnd.microsoft.icon,.ico",
+    maxBytes: 512 * 1024,
+    hint: "PNG, ICO or SVG · max 512 KB · recommended 64 × 64 px (square)",
+  },
+} as const;
+
+export function orgAssetTooLarge(kind: "logo" | "favicon", file: File): string | null {
+  const rule = ORG_ASSET_RULES[kind];
+  if (file.size <= rule.maxBytes) return null;
+  const limit = kind === "logo" ? "2 MB" : "512 KB";
+  return `That ${kind} is too large — the limit is ${limit}.`;
+}
+
+// Fired after the org's logo/favicon are saved so the org portal shell
+// (sidebar logo + browser-tab icon) updates without a reload.
+export const ORG_BRANDING_CHANGE_EVENT = "ipixxel_org_branding_changed";
+export type OrgBrandingChangeDetail = { logoUrl: string | null; faviconUrl: string | null };
+
 export const ORG_COLOR_PRESETS = [
   { hex: "#0f1424", label: "Sapphire Navy" },
   { hex: "#2563eb", label: "Royal Blue" },
