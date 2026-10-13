@@ -2302,7 +2302,7 @@ function PlatformDetailInner() {
         open={showAppsScriptModal}
         onClose={() => setShowAppsScriptModal(false)}
         title="Google Sheets Apps Script Real-Time Auto-Sync"
-        description="Install this Google Apps Script in your spreadsheet. Any new lead added or edited in the sheet will automatically sync to your CRM in near real time."
+        description="Install this Google Apps Script in your spreadsheet to sync new leads and sheet edits to CRM in near real time. Changes to mapped cells, including clearing a value, are applied to the lead; deleting a sheet row does not delete its CRM lead."
         size="lg"
       >
         <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
@@ -2431,7 +2431,7 @@ function PlatformDetailInner() {
                     Click <b>Save (💾)</b>. In the function dropdown, select <code>initialSetup</code> and click <b>Run</b> (grant permissions once).
                   </li>
                   <li>
-                    Refresh your Google Sheet. A new <b>⚡ Lead Center CRM</b> menu will appear! Edits will stream to your CRM automatically in real time.
+                    Refresh your Google Sheet. A new <b>⚡ Lead Center CRM</b> menu will appear! Edits to mapped cells will update the matching CRM lead automatically, including cleared values. Deleting a row does not delete the CRM lead.
                   </li>
                 </ol>
               </div>
