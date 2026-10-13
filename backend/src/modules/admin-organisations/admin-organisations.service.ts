@@ -668,6 +668,9 @@ export class AdminOrganisationsService {
     const logs = await this.prisma.auditLog.findMany({
       where: { orgId: id },
       orderBy: { createdAt: 'desc' },
+      include: {
+        actor: { select: { firstName: true, lastName: true, email: true } },
+      },
     });
 
     return logs.map((log) => ({
@@ -676,6 +679,16 @@ export class AdminOrganisationsService {
       entity: log.entity,
       entityId: log.entityId,
       createdAt: log.createdAt,
+      // Who did it (null for system actions) — shown in the Activity feed.
+      actor: log.actor
+        ? {
+            name:
+              [log.actor.firstName, log.actor.lastName]
+                .filter(Boolean)
+                .join(' ') || null,
+            email: log.actor.email,
+          }
+        : null,
     }));
   }
 

@@ -26,6 +26,7 @@ import type {
 import { COUNTRY_META, COUNTRIES } from "@/lib/countries";
 import { INDUSTRY_OPTIONS, ORG_ASSET_RULES, industryLabel, orgAssetTooLarge } from "@/lib/org-profile";
 import { ProfileAuditLog } from "@/components/org/profile-audit-log";
+import { OrgActivityFeed } from "@/components/superadmin/org-activity-feed";
 
 const TABS = ["Overview", "Subscription", "Templates", "Domains", "Activity"] as const;
 type Tab = (typeof TABS)[number];
@@ -130,23 +131,6 @@ function formatDate(iso: string): string {
     month: "short",
     year: "numeric",
   });
-}
-
-function formatDateTime(iso: string): string {
-  return new Date(iso).toLocaleString("en-GB", {
-    day: "2-digit",
-    month: "short",
-    year: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
-}
-
-function formatActionLabel(action: string): string {
-  return action
-    .split("_")
-    .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
-    .join(" ");
 }
 
 function StatTile({
@@ -1661,28 +1645,7 @@ export default function SuperAdminOrganisationDetailPage() {
 
           {tab === "Activity" ? (
             <Reveal delay={2}>
-              <div className="card">
-                <div className="card-h">
-                  <span className="t">All activity</span>
-                </div>
-                <div className="card-b">
-                  {!activity || activity.length === 0 ? (
-                    <p className="muted">No activity yet.</p>
-                  ) : (
-                    <ul className="timeline">
-                      {activity.map((entry) => (
-                        <li key={entry.id}>
-                          <span className="td" />
-                          <b style={{ fontSize: 13 }}>{formatActionLabel(entry.action)}</b>
-                          <div className="tt">
-                            {entry.entity ?? "—"} · {formatDateTime(entry.createdAt)}
-                          </div>
-                        </li>
-                      ))}
-                    </ul>
-                  )}
-                </div>
-              </div>
+              <OrgActivityFeed activity={activity} />
             </Reveal>
           ) : null}
         </div>
