@@ -12,7 +12,6 @@ import {
   generateCustomDomainDnsInstructions,
   verifyDomainDns,
   verifyDomainSsl,
-  generateAutoSslCertificate,
 } from '../../common/utils/domain.util';
 
 import { buildNotificationData } from '../../common/utils/notifications.util';
@@ -237,7 +236,14 @@ export class OrgDomainService {
     if (targetPageId) {
       const page = await this.prisma.landingPage.findFirst({
         where: { id: targetPageId, orgId },
-        select: { id: true, name: true, pageType: true, parentId: true, content: true },
+        select: {
+          id: true,
+          name: true,
+          status: true,
+          pageType: true,
+          parentId: true,
+          content: true,
+        },
       });
       if (!page) {
         throw new BadRequestException('Landing page not found for this organisation');
@@ -394,14 +400,12 @@ export class OrgDomainService {
       ? 'failed'
       : 'pending';
 
-    // If DNS passed, automatically activate SSL certificate (Auto-SSL / ACME)
-    const currentSslStatus = (req as any).sslStatus ?? 'pending';
-    let newSslStatus = currentSslStatus;
+    let newSslStatus = (req as any).sslStatus ?? 'pending';
     let newSslDetails: any = (req as any).sslDetails ?? null;
     if (dnsResult.allPassed) {
-      const sslResult = await verifyDomainSsl(req.customDomain, true);
-      newSslStatus = 'active';
-      newSslDetails = sslResult.sslActive ? sslResult : generateAutoSslCertificate(req.customDomain);
+      const sslResult = await verifyDomainSsl(req.customDomain);
+      newSslStatus = sslResult.status;
+      newSslDetails = sslResult;
     }
 
     const updated = await this.prisma.orgDomainRequest.update({
@@ -441,7 +445,7 @@ export class OrgDomainService {
     return toView(updated, dnsOpts);
   }
 
-  // Live SSL Verification - automatically provisions and activates HTTPS
+  // Check the certificate currently served by the custom domain.
   async verifySsl(orgId: string, userId: string, domainRequestId: string) {
     const req = await this.prisma.orgDomainRequest.findFirst({
       where: { id: domainRequestId, orgId },
@@ -449,13 +453,12 @@ export class OrgDomainService {
     if (!req) throw new NotFoundException('Domain request not found');
     if (!req.customDomain) throw new BadRequestException('No custom domain attached to request');
 
-    const rawSsl = await verifyDomainSsl(req.customDomain, true);
-    const sslResult = rawSsl.sslActive ? rawSsl : generateAutoSslCertificate(req.customDomain);
+    const sslResult = await verifyDomainSsl(req.customDomain);
 
     const updated = await this.prisma.orgDomainRequest.update({
       where: { id: domainRequestId },
       data: {
-        sslStatus: 'active',
+        sslStatus: sslResult.status,
         sslDetails: sslResult as any,
       } as any,
       include: DOMAIN_RELATIONS_INCLUDE,
@@ -530,19 +533,16 @@ export class OrgDomainService {
     const org = await this.prisma.organisation.findUnique({ where: { id: orgId } });
     if (!org) throw new BadRequestException('Organisation not found');
 
+    const sslResult = await verifyDomainSsl(customDomain);
     const updated = await this.prisma.$transaction(async (tx) => {
       const now = new Date();
-      const currentSsl = (req as any).sslDetails;
-      const activeSslDetails = (req as any).sslStatus === 'active' && currentSsl
-        ? currentSsl
-        : generateAutoSslCertificate(customDomain);
 
       const updatedReq = await tx.orgDomainRequest.update({
         where: { id: domainRequestId },
         data: {
           status: 'connected',
-          sslStatus: 'active',
-          sslDetails: activeSslDetails as any,
+          sslStatus: sslResult.status,
+          sslDetails: sslResult as any,
           publishedAt: now,
         } as any,
         include: DOMAIN_RELATIONS_INCLUDE,

@@ -237,7 +237,7 @@ export default function OrgCustomDomainsPage() {
         type: "success",
         text:
           updated.dnsStatus === "verified"
-            ? `DNS records verified successfully for ${updated.customDomain}! SSL HTTPS certificate automatically activated.`
+            ? `DNS records verified successfully for ${updated.customDomain}. SSL status: ${updated.sslStatus ?? "pending"}.`
             : `DNS check completed for ${updated.customDomain}. Propagation may take a few minutes. Check status details.`,
       });
       await loadData();
@@ -260,11 +260,11 @@ export default function OrgCustomDomainsPage() {
     try {
       const updated = await verifyOrgDomainSsl(reqId);
       setFeedbackMsg({
-        type: "success",
+        type: updated.sslStatus === "active" ? "success" : "error",
         text:
           updated.sslStatus === "active"
             ? `SSL HTTPS certificate is active and verified for ${updated.customDomain}!`
-            : `SSL status is currently ${updated.sslStatus}. Certificate provisioning is in progress.`,
+            : `No valid SSL certificate is currently served by ${updated.customDomain}. Status: ${updated.sslStatus}.`,
       });
       await loadData();
       if (dnsModalReq?.id === reqId) {
