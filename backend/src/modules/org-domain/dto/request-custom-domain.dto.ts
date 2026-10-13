@@ -10,9 +10,9 @@ export class RequestCustomDomainDto {
   @IsString()
   projectId?: string;
 
-  @IsOptional()
   @IsString()
-  landingPageId?: string;
+  @IsNotEmpty()
+  landingPageId!: string;
 
   @IsOptional()
   @IsString()

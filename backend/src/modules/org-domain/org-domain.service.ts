@@ -20,7 +20,8 @@ import { PlatformConfigService } from '../platform-config/platform-config.servic
 import { RequestCustomDomainDto } from './dto/request-custom-domain.dto';
 
 function toView(req: any, opts: any = {}) {
-  const dnsRecords = req.customDomain
+  const isApproved = req.status === 'approved' || req.status === 'connected';
+  const dnsRecords = isApproved && req.customDomain
     ? generateCustomDomainDnsInstructions(req.customDomain, {
         ...opts,
         verificationToken: req.verificationToken ?? undefined,
@@ -48,8 +49,8 @@ function toView(req: any, opts: any = {}) {
     status: req.status,
     dnsStatus: req.dnsStatus ?? 'pending',
     sslStatus: req.sslStatus ?? 'pending',
-    verificationToken: req.verificationToken ?? null,
-    verificationDetails: req.verificationDetails ?? null,
+    verificationToken: isApproved ? req.verificationToken ?? null : null,
+    verificationDetails: isApproved ? req.verificationDetails ?? null : null,
     sslDetails: req.sslDetails ?? null,
     isPrimary: Boolean(req.isPrimary),
     redirectWww: Boolean(req.redirectWww),
@@ -198,7 +199,9 @@ export class OrgDomainService {
       customDomain: org.customDomain,
       customDomainStatus: org.customDomainStatus,
       customDomainLandingPageId: org.customDomainLandingPageId,
-      platformOrigin: cfg.infraIp || cfg.infraCname || null,
+      ...(approvedOrConnected.length > 0
+        ? { platformOrigin: cfg.infraIp || cfg.infraCname || null }
+        : {}),
       dnsMode: cfg.dnsMode,
       projects,
       landingPages: landingPagesWithDomain,
@@ -224,6 +227,11 @@ export class OrgDomainService {
     if (!org) throw new BadRequestException('Organisation not found');
 
     let targetPageId: string | null = dto.landingPageId?.trim() || null;
+    if (!targetPageId) {
+      throw new BadRequestException(
+        'Select a published landing page for this custom domain request.',
+      );
+    }
     let targetProjectId: string | null = dto.projectId?.trim() || null;
 
     if (targetPageId) {
@@ -237,6 +245,11 @@ export class OrgDomainService {
       if (page.pageType === 'thank_you' || page.parentId) {
         throw new BadRequestException(
           'Thank you pages cannot be assigned an independent custom domain. Assign the primary landing page instead.',
+        );
+      }
+      if (page.status !== 'published') {
+        throw new BadRequestException(
+          'Only published landing pages can be assigned to a custom domain.',
         );
       }
 
@@ -360,6 +373,11 @@ export class OrgDomainService {
     });
     if (!req) throw new NotFoundException('Domain request not found');
     if (!req.customDomain) throw new BadRequestException('No custom domain attached to request');
+    if (req.status !== 'approved' && req.status !== 'connected') {
+      throw new BadRequestException(
+        'DNS verification is available after Super Admin approval.',
+      );
+    }
 
     const cfg = await this.platformConfig.getConfig();
     const expectedIp = cfg.infraIp || process.env.INFRA_IP || null;

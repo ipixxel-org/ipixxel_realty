@@ -106,9 +106,6 @@ export default function OrgCustomDomainsPage() {
   const [newDomainType, setNewDomainType] = useState<"apex" | "subdomain">("apex");
   const [newProjectId, setNewProjectId] = useState<string>("");
   const [newLandingPageId, setNewLandingPageId] = useState<string>("");
-  const [newPreferredHost, setNewPreferredHost] = useState<string>("");
-  const [newIsPrimary, setNewIsPrimary] = useState(false);
-  const [newRedirectWww, setNewRedirectWww] = useState(true);
   const [newOwnershipConfirmed, setNewOwnershipConfirmed] = useState(false);
   const [newNotes, setNewNotes] = useState("");
   const [addSubmitting, setAddSubmitting] = useState(false);
@@ -182,6 +179,13 @@ export default function OrgCustomDomainsPage() {
   const handleAddSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newDomain.trim()) return;
+    if (!newLandingPageId) {
+      setFeedbackMsg({
+        type: "error",
+        text: "Please select a published landing page for this domain.",
+      });
+      return;
+    }
     if (!newOwnershipConfirmed) {
       setFeedbackMsg({
         type: "error",
@@ -198,9 +202,6 @@ export default function OrgCustomDomainsPage() {
         domainType: newDomainType,
         projectId: newProjectId || undefined,
         landingPageId: newLandingPageId || undefined,
-        preferredHostname: newPreferredHost.trim() || undefined,
-        isPrimary: newIsPrimary,
-        redirectWww: newRedirectWww,
         ownershipConfirmed: true,
         notes: newNotes.trim() || undefined,
       };
@@ -369,8 +370,9 @@ export default function OrgCustomDomainsPage() {
 
   // Filter landing pages by selected project in Add modal
   const addModalFilteredPages = useMemo(() => {
-    if (!newProjectId) return landingPages;
-    return landingPages.filter((p) => p.projectId === newProjectId);
+    const publishedPages = landingPages.filter((p) => p.status === "published");
+    if (!newProjectId) return publishedPages;
+    return publishedPages.filter((p) => p.projectId === newProjectId);
   }, [landingPages, newProjectId]);
 
   // Filter landing pages in Map modal
@@ -966,21 +968,9 @@ export default function OrgCustomDomainsPage() {
                               color: "var(--muted)",
                             }}
                           >
-                            {isApex ? "Apex" : "Subdomain"}
+                            {isApex ? "Root Domain" : "Subdomain"}
                           </span>
                         </div>
-                        {req.preferredHostname &&
-                          req.preferredHostname !== req.customDomain && (
-                            <div
-                              style={{
-                                fontSize: 11,
-                                color: "var(--muted)",
-                                marginTop: 3,
-                              }}
-                            >
-                              Preferred: {req.preferredHostname}
-                            </div>
-                          )}
                         {req.status === "changes_requested" && req.adminFeedback && (
                           <div
                             style={{
@@ -1221,30 +1211,34 @@ export default function OrgCustomDomainsPage() {
                             flexWrap: "nowrap",
                           }}
                         >
-                          {/* DNS Instructions Button */}
-                          <button
-                            onClick={() => setDnsModalReq(req)}
-                            className="btn btn-outline btn-xs"
-                            title="View DNS Records and Live Verification"
-                            style={{ fontSize: 11.5 }}
-                          >
-                            DNS Records
-                          </button>
+                          {(req.status === "approved" || req.status === "connected") && (
+                            <>
+                              {/* DNS Instructions Button */}
+                              <button
+                                onClick={() => setDnsModalReq(req)}
+                                className="btn btn-outline btn-xs"
+                                title="View DNS Records and Live Verification"
+                                style={{ fontSize: 11.5 }}
+                              >
+                                DNS Records
+                              </button>
 
-                          {/* Quick Verify */}
-                          <button
-                            onClick={() => handleVerifyDns(req.id)}
-                            className="btn btn-outline btn-xs"
-                            disabled={isBusy}
-                            title="Test DNS Resolution Now"
-                            style={{ fontSize: 11.5 }}
-                          >
-                            {isBusy ? (
-                              <RefreshCw size={12} className="spin" />
-                            ) : (
-                              "Verify"
-                            )}
-                          </button>
+                              {/* Quick Verify */}
+                              <button
+                                onClick={() => handleVerifyDns(req.id)}
+                                className="btn btn-outline btn-xs"
+                                disabled={isBusy}
+                                title="Test DNS Resolution Now"
+                                style={{ fontSize: 11.5 }}
+                              >
+                                {isBusy ? (
+                                  <RefreshCw size={12} className="spin" />
+                                ) : (
+                                  "Verify"
+                                )}
+                              </button>
+                            </>
+                          )}
 
                           {/* Map Page button */}
                           <button
@@ -1270,7 +1264,7 @@ export default function OrgCustomDomainsPage() {
                             >
                               Unpublish
                             </button>
-                          ) : (
+                          ) : req.dnsStatus !== "verified" ? (
                             <button
                               onClick={() => handlePublish(req.id)}
                               className="btn btn-primary btn-xs"
@@ -1292,7 +1286,7 @@ export default function OrgCustomDomainsPage() {
                             >
                               Publish Live
                             </button>
-                          )}
+                          ) : null}
 
                           {/* Live Preview Link */}
                           {req.status === "connected" && !req.isSuspended && (
@@ -1369,54 +1363,19 @@ export default function OrgCustomDomainsPage() {
               </span>
             </div>
 
-            {/* Domain Type & Hostname Preference */}
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
-              <div>
-                <label style={{ fontSize: 12.5, fontWeight: 600, display: "block", marginBottom: 6 }}>
-                  Domain Type
-                </label>
-                <select
-                  className="inp"
-                  value={newDomainType}
-                  onChange={(e) => setNewDomainType(e.target.value as any)}
-                  style={{ width: "100%", fontSize: 13 }}
-                >
-                  <option value="apex">Root / Apex Domain (e.g. domain.com)</option>
-                  <option value="subdomain">Subdomain (e.g. campaign.domain.com)</option>
-                </select>
-              </div>
-
-              <div>
-                <label style={{ fontSize: 12.5, fontWeight: 600, display: "block", marginBottom: 6 }}>
-                  Preferred Hostname
-                </label>
-                <select
-                  className="inp"
-                  value={newPreferredHost}
-                  onChange={(e) => setNewPreferredHost(e.target.value)}
-                  style={{ width: "100%", fontSize: 13 }}
-                >
-                  <option value="">{newDomain ? newDomain : "Root Hostname"}</option>
-                  {newDomain && !newDomain.startsWith("www.") && (
-                    <option value={`www.${newDomain}`}>www.{newDomain}</option>
-                  )}
-                </select>
-              </div>
-            </div>
-
-
             {/* Landing Page Selection */}
             <div>
               <label style={{ fontSize: 12.5, fontWeight: 600, display: "block", marginBottom: 6 }}>
-                Target Landing Page (Optional)
+                Target Landing Page <span style={{ color: "#f43f5e" }}>*</span>
               </label>
               <select
                 className="inp"
                 value={newLandingPageId}
                 onChange={(e) => setNewLandingPageId(e.target.value)}
+                required
                 style={{ width: "100%", fontSize: 13 }}
               >
-                <option value="">-- Select Landing Page --</option>
+                <option value="">-- Select a published landing page --</option>
                 {addModalFilteredPages.map((lp) => (
                   <option key={lp.id} value={lp.id}>
                     {lp.name} ({lp.status})
@@ -1426,27 +1385,6 @@ export default function OrgCustomDomainsPage() {
               <span style={{ fontSize: 11.5, color: "var(--muted)", marginTop: 4, display: "block" }}>
                 You can also map or change the target landing page anytime after Super Admin approval.
               </span>
-            </div>
-
-            {/* Toggles: Primary domain & WWW Redirect */}
-            <div style={{ display: "flex", flexDirection: "column", gap: 8, padding: "10px 12px", background: "var(--surface-2, rgba(0,0,0,0.02))", borderRadius: 8 }}>
-              <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13, cursor: "pointer" }}>
-                <input
-                  type="checkbox"
-                  checked={newIsPrimary}
-                  onChange={(e) => setNewIsPrimary(e.target.checked)}
-                />
-                <span>Set as organisation primary domain</span>
-              </label>
-
-              <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13, cursor: "pointer" }}>
-                <input
-                  type="checkbox"
-                  checked={newRedirectWww}
-                  onChange={(e) => setNewRedirectWww(e.target.checked)}
-                />
-                <span>Enable canonical redirect (www ↔ root domain)</span>
-              </label>
             </div>
 
             {/* Notes */}

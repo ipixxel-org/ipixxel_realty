@@ -11,8 +11,8 @@ export class UpdatePlatformConfigDto {
   subdomainMode?: 'localhost' | 'production';
 
   @IsOptional()
-  @IsIn(['a', 'cname', 'ns'])
-  dnsMode?: 'a' | 'cname' | 'ns';
+  @IsIn(['a'])
+  dnsMode?: 'a';
 
   @IsOptional()
   @IsString()

@@ -113,7 +113,7 @@ export class PlatformConfigService implements OnApplicationBootstrap {
       SUBDOMAIN_BASE_DOMAIN: subdomainBase
         ? normalizeDomain(subdomainBase)
         : null,
-      DNS_MODE: (row.dns_mode || row.dnsMode) || null,
+      DNS_MODE: 'a',
       INFRA_IP: (row.infra_ip || row.infraIp) || null,
       INFRA_IPV6: (row.infra_ipv6 || row.infraIpv6) || null,
       INFRA_CNAME_TARGET: (row.infra_cname || row.infraCname) || null,
@@ -136,7 +136,7 @@ export class PlatformConfigService implements OnApplicationBootstrap {
           id: r.id,
           subdomainMode: r.subdomain_mode || r.subdomainMode || 'production',
           subdomainBase: migrateLegacyBase(r.subdomain_base || r.subdomainBase),
-          dnsMode: r.dns_mode || r.dnsMode || 'a',
+          dnsMode: 'a',
           infraIp: r.infra_ip || r.infraIp || null,
           infraIpv6: r.infra_ipv6 || r.infraIpv6 || null,
           infraCname: r.infra_cname || r.infraCname || null,
@@ -161,7 +161,7 @@ export class PlatformConfigService implements OnApplicationBootstrap {
       subdomainMode:
         process.env.SUBDOMAIN_MODE === 'localhost' ? 'localhost' : 'production',
       subdomainBase: process.env.SUBDOMAIN_BASE_DOMAIN || 'ipixxel.ae',
-      dnsMode: process.env.DNS_MODE || 'cname',
+      dnsMode: 'a',
       infraIp: process.env.INFRA_IP || null,
       infraIpv6: process.env.INFRA_IPV6 || null,
       infraCname: process.env.INFRA_CNAME_TARGET || null,
@@ -221,7 +221,7 @@ export class PlatformConfigService implements OnApplicationBootstrap {
       ? (dto.subdomainBase?.trim() ? normalizeDomain(dto.subdomainBase) : null)
       : (existing?.subdomain_base ?? existing?.subdomainBase ?? null);
     const subdomainBase = rawSubdomainBase ? normalizeDomain(rawSubdomainBase) : null;
-    const dnsMode = dto.dnsMode ?? existing?.dns_mode ?? existing?.dnsMode ?? 'a';
+    const dnsMode = 'a';
     const infraIp = dto.infraIp !== undefined ? (dto.infraIp?.trim() || null) : (existing?.infra_ip ?? existing?.infraIp ?? null);
     const infraIpv6 = dto.infraIpv6 !== undefined ? (dto.infraIpv6?.trim() || null) : (existing?.infra_ipv6 ?? existing?.infraIpv6 ?? null);
     const infraCname = dto.infraCname !== undefined ? (dto.infraCname?.trim() || null) : (existing?.infra_cname ?? existing?.infraCname ?? null);
@@ -248,7 +248,7 @@ export class PlatformConfigService implements OnApplicationBootstrap {
     const ipv4Regex = /^(\d{1,3}\.){3}\d{1,3}$/;
     if (dnsMode === 'a' && infraIp && !ipv4Regex.test(infraIp)) {
       throw new BadRequestException(
-        'Origin IPv4 must be a valid numeric IP address (e.g. 187.126.119.156), not a domain name. If you want to use a domain name, switch DNS mode to CNAME.',
+        'Origin IPv4 must be a valid numeric IP address (e.g. 187.126.119.156), not a domain name.',
       );
     }
 
@@ -304,7 +304,7 @@ export class PlatformConfigService implements OnApplicationBootstrap {
     patchEnv({
       SUBDOMAIN_MODE: subdomainMode || null,
       SUBDOMAIN_BASE_DOMAIN: subdomainBase || null,
-      DNS_MODE: dnsMode || null,
+      DNS_MODE: 'a',
       INFRA_IP: infraIp || null,
       INFRA_IPV6: infraIpv6 || null,
       INFRA_CNAME_TARGET: infraCname || null,
