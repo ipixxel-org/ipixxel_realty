@@ -3,9 +3,9 @@ import { PrismaService } from '../../database/prisma.service';
 import { StorageService } from '../../common/storage/storage.service';
 import { toSafeOrganisation } from '../../common/utils/mappers.util';
 import {
-  listIndustryHistory,
+  listProfileHistory,
   updateOrganisationProfile,
-} from '../../common/utils/org-industry.util';
+} from '../../common/utils/org-profile-audit.util';
 import { UpdateOrganisationDto } from '../admin-organisations/dto/update-organisation.dto';
 import { AssetUploadUrlDto } from './dto/asset-upload-url.dto';
 
@@ -41,9 +41,9 @@ export class OrgSettingsService {
     return toSafeOrganisation(updated);
   }
 
-  // Industry ("role") change history — shown under Settings → General.
-  async industryHistory(orgId: string) {
-    return listIndustryHistory(this.prisma, orgId);
+  // Profile audit log (every field change) — shown under Settings → General.
+  async profileHistory(orgId: string) {
+    return listProfileHistory(this.prisma, orgId);
   }
 
   // Presigned PUT URL for the caller's own org logo/favicon, used by the

@@ -25,7 +25,7 @@ import type {
 } from "@/lib/types";
 import { COUNTRY_META, COUNTRIES } from "@/lib/countries";
 import { INDUSTRY_OPTIONS, industryLabel } from "@/lib/org-profile";
-import { IndustryHistory } from "@/components/org/industry-history";
+import { ProfileAuditLog } from "@/components/org/profile-audit-log";
 
 const TABS = ["Overview", "Subscription", "Templates", "Domains", "Activity"] as const;
 type Tab = (typeof TABS)[number];
@@ -1378,11 +1378,10 @@ export default function SuperAdminOrganisationDetailPage() {
                   )}
                 </div>
               </div>
-              {/* Industry change history — refetches after each save (org updates). */}
-              <IndustryHistory
-                endpoint={`/admin/organisations/${org.id}/industry-history`}
+              {/* Audit logs of every profile field change — refetches after each save (org updates). */}
+              <ProfileAuditLog
+                endpoint={`/admin/organisations/${org.id}/profile-history`}
                 reloadKey={org}
-                currentIndustry={org.industry}
               />
             </Reveal>
           ) : null}

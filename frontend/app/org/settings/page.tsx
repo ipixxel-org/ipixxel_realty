@@ -21,7 +21,7 @@ import { formatPaise } from "@/lib/razorpay";
 import { COUNTRY_META, COUNTRIES, CURRENCY_OPTIONS, TIMEZONE_OPTIONS } from "@/lib/countries";
 import { ORG_THEME_CHANGE_EVENT } from "@/components/global-theme-provider";
 import { INDUSTRY_OPTIONS } from "@/lib/org-profile";
-import { IndustryHistory } from "@/components/org/industry-history";
+import { ProfileAuditLog } from "@/components/org/profile-audit-log";
 
 const LANGUAGES = [
   { value: "en-IN", label: "English (India)" },
@@ -2248,13 +2248,6 @@ export default function OrgSettingsPage() {
               */}
                 </div>
               </Card>
-
-              {/* Industry change history — refetches after each save (org updates). */}
-              <IndustryHistory
-                endpoint="/org/settings/industry-history"
-                reloadKey={org}
-                currentIndustry={org.industry}
-              />
             </div>
 
             {/* LOCALIZATION */}
@@ -2280,6 +2273,12 @@ export default function OrgSettingsPage() {
             </div>
 
           </fieldset>
+
+          {/* General → Audit logs. Outside the read-only fieldset so view-only
+              users can still page through it; refetches after each save. */}
+          {activeSection === "general" ? (
+            <ProfileAuditLog endpoint="/org/settings/profile-history" reloadKey={org} />
+          ) : null}
 
           {/* DOMAIN */}
           <div className={`os-section${activeSection === "domain" ? " on" : ""}`}>

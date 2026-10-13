@@ -103,9 +103,9 @@ export class AdminOrganisationsController {
     return this.adminOrganisationsService.update(id, dto, actor);
   }
 
-  @Get(':id/industry-history')
-  industryHistory(@Param('id') id: string) {
-    return this.adminOrganisationsService.industryHistory(id);
+  @Get(':id/profile-history')
+  profileHistory(@Param('id') id: string) {
+    return this.adminOrganisationsService.profileHistory(id);
   }
 
   @Post(':id/logo-upload-url')
