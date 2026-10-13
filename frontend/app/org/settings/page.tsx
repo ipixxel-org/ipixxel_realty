@@ -70,7 +70,8 @@ const NAV_GROUPS = [
       // { s: "branding", icon: "sparkles" as IconName, t: "Branding" },
       // Hidden for now — uncomment to bring Localization back.
       // { s: "localization", icon: "globe" as IconName, t: "Localization" },
-      { s: "domain", icon: "globe" as IconName, t: "Domain" },
+      // Hidden for now — custom domains live in the Custom Domain module.
+      // { s: "domain", icon: "globe" as IconName, t: "Domain" },
     ]
   },
   {
@@ -103,7 +104,7 @@ const NAV_GROUPS = [
 
 // Sections whose nav items are commented out above — a direct
 // `?section=` link to one falls back to the first visible section.
-const HIDDEN_SECTIONS: ReadonlySet<string> = new Set(["branding", "localization", "whatsapp", "comms", "team-prefs"]);
+const HIDDEN_SECTIONS: ReadonlySet<string> = new Set(["branding", "domain", "localization", "whatsapp", "comms", "team-prefs"]);
 
 const SECTION_META: Record<string, { icon: IconName; title: string; sub: string }> = {
   general: { icon: "building", title: "General Information", sub: "Update your organisation's basic details and contact information." },
@@ -374,6 +375,8 @@ const DOMAIN_STATUS_LABEL: Record<string, string> = {
   none: "Not set", pending: "Pending approval", approved: "Approved", active: "Active", rejected: "Rejected", connected: "Connected",
 };
 
+// Kept for when the Domain section is re-enabled (its render is commented out).
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 function DomainSection({ canRequest }: { canRequest: boolean }) {
   const [info, setInfo] = useState<OrgDomainInfo | null>(null);
   const [loading, setLoading] = useState(true);
@@ -1546,7 +1549,8 @@ export default function OrgSettingsPage() {
   const canEditEmail = hasPermission("settings", SETTINGS_ACTIONS.editEmail);
   const canEditPipeline = hasPermission("settings", SETTINGS_ACTIONS.editPipeline);
   const canViewDomain = hasPermission("domains", "view");
-  const canRequestDomain = hasPermission("domains", "add");
+  // Used by the hidden Domain section — uncomment together with it.
+  // const canRequestDomain = hasPermission("domains", "add");
   const canViewBilling = hasPermission("billing", "view");
   const canEditBilling = hasPermission("billing", "edit");
   const canViewProjects = hasPermission("projects", "view");
@@ -2303,11 +2307,14 @@ export default function OrgSettingsPage() {
             <ProfileAuditLog endpoint="/org/settings/profile-history" reloadKey={org} />
           ) : null}
 
-          {/* DOMAIN */}
+          {/* DOMAIN — hidden for now: custom domains are managed in the org
+              portal's own Custom Domain module. Commented out (not just hidden)
+              so it doesn't fetch domain info on every Settings visit.
           <div className={`os-section${activeSection === "domain" ? " on" : ""}`}>
             <SectionHead section="domain" />
             {canViewDomain ? <DomainSection canRequest={canRequestDomain} /> : null}
           </div>
+          */}
 
           {/* CRM */}
           <div className={`os-section${activeSection === "crm" ? " on" : ""}`}>
