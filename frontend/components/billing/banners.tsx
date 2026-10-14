@@ -8,7 +8,7 @@ import type { BillingOverview, RetentionSummary } from "@/lib/billing/types";
 import { useBillingEnv, useOptionalOrgBilling } from "./context";
 import { BillingDialog, DialogActions } from "./dialog";
 import { usePayment } from "./payment";
-import { Banner, BLink, useCheckoutLive } from "./ui";
+import { Banner, BLink, useRenewalLive } from "./ui";
 
 /** Re-fetch the shared overview after an action (no-op outside OrgBillingProvider). */
 function useRefresh() {
@@ -28,7 +28,7 @@ export function usePayNow(overview: BillingOverview) {
     subtitle: `${plan.name} · ${overview.interval} · incl. 18% GST · ${overview.orgName}`,
     onActive: (r) => {
       void refresh();
-      toast({ variant: "success", title: `Payment received — ${r.planName} is active`, description: `Paid ${formatINR(r.amount)}. Next renewal ${formatDate(r.activeUntil)}.` });
+      toast({ variant: "success", title: `Payment received — ${r.planName || plan.name} is active`, description: r.activeUntil ? `Paid ${formatINR(r.amount)}. Next renewal ${formatDate(r.activeUntil)}.` : `Paid ${formatINR(r.amount)}.` });
     },
     onFailed: (reason) => toast({ variant: "error", title: "Payment failed", description: reason }),
     onClosed: () => toast({ variant: "info", title: "Payment cancelled", description: "The payment window was closed. Nothing was charged." }),
@@ -38,7 +38,7 @@ export function usePayNow(overview: BillingOverview) {
 export function PayNowButton({ overview, className = "btn btn-primary btn-sm" }: { overview: BillingOverview; className?: string }) {
   const { canEdit } = useBillingEnv();
   const pay = usePayNow(overview);
-  const live = useCheckoutLive(overview);
+  const live = useRenewalLive(overview);
   const plan = overview.paidPlan ?? overview.plan;
   return (
     <>
@@ -345,7 +345,7 @@ export function RenewalReminderPopup({ overview, alwaysOpen = false }: { overvie
   };
   const plan = overview.paidPlan ?? overview.plan;
   const price = overview.interval === "yearly" ? plan.priceYearly : plan.priceMonthly;
-  const live = useCheckoutLive(overview);
+  const live = useRenewalLive(overview);
   // Only when the customer can actually pay online.
   const show = live && overview.renewalMode === "manual" && overview.status === "renewal_due" && (!dismissed || alwaysOpen);
 

@@ -16,7 +16,7 @@ export interface ReceiptView {
   couponCode: string | null;
 }
 
-export function CheckoutSuccess({ receipt: r, orgName, renewalMode }: { receipt: ReceiptView; orgName: string; renewalMode: RenewalMode }) {
+export function CheckoutSuccess({ receipt: r, orgName, renewalMode, finishing = false }: { receipt: ReceiptView; orgName: string; renewalMode: RenewalMode; finishing?: boolean }) {
   const { toast } = useToast();
   return (
     <Section
@@ -27,6 +27,12 @@ export function CheckoutSuccess({ receipt: r, orgName, renewalMode }: { receipt:
       }
     >
       <div className="bl-stack">
+        {finishing ? (
+          <div className="form-alert" style={{ background: "var(--bg)" }}>
+            Payment received. We&apos;re finishing setting up {r.planName} — it usually takes a minute. Refresh Billing shortly; if it hasn&apos;t changed, contact support with
+            the reference below.
+          </div>
+        ) : null}
         <div style={{ fontSize: 15 }}>
           <b>{r.planName}</b> is now active for {orgName}. Every limit and feature on {r.planName} is unlocked, and anything that was paused is back.
         </div>

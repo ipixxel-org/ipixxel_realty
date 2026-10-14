@@ -24,6 +24,7 @@ import {
   COUPONS,
   DEFAULT_BILLING_DETAILS,
   DEMO_INVOICES,
+  MOCK_SELLER,
   DEMO_LANDING_PAGES,
   DEMO_ORG,
   DEMO_ORG_REDEEMED,
@@ -72,6 +73,8 @@ export interface MockState {
   paymentMethod: PaymentMethodSummary;
   redeemed: string[];
   invoices: InvoiceRow[];
+  /** Manual mode: an upgrade request waiting for Super Admin approval. */
+  pendingRequest: { requestId: string; checkoutId: string; planId: string; interval: BillingInterval; createdAt: string } | null;
   /* ---- platform-wide (admin) ---- */
   plans: BillingPlan[];
   coupons: Coupon[];
@@ -94,6 +97,7 @@ export function initialMockState(overrides: Partial<MockState> = {}): MockState 
     downgradeTargetId: "growth",
     picks: null,
     billingProfile: { ...DEFAULT_BILLING_DETAILS },
+    pendingRequest: null,
     paymentMethod: { ...SAVED_PAYMENT_METHOD },
     redeemed: [...DEMO_ORG_REDEEMED],
     invoices: clone(DEMO_INVOICES),
@@ -117,6 +121,8 @@ export function initialMockState(overrides: Partial<MockState> = {}): MockState 
       paymentMode: "online",
       paymentModeReason: null,
       supports: { fallBackToBasic: true, reminderSchedule: true },
+      seller: { ...MOCK_SELLER },
+      warnings: [],
     },
     creditNoteSeq: 42,
     invoiceSeq: 713,
@@ -285,6 +291,16 @@ export function deriveOverview(s: MockState, today: string): BillingOverview {
     ],
     locked: { users: locked.users.length, projects: locked.projects.length, landingPages: locked.landingPages.length },
     retention: retentionSummary(s),
+    pendingUpgrade: s.pendingRequest
+      ? {
+          status: "pending_approval",
+          requestId: s.pendingRequest.requestId,
+          checkoutId: s.pendingRequest.checkoutId,
+          toPlan: { id: s.pendingRequest.planId, name: planById(s, s.pendingRequest.planId).name },
+          interval: s.pendingRequest.interval,
+          createdAt: s.pendingRequest.createdAt,
+        }
+      : null,
   };
 }
 

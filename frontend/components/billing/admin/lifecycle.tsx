@@ -3,7 +3,8 @@
 import { useState } from "react";
 import { formPageStyles } from "@/components/forms/form-page";
 import { Switch } from "@/components/superadmin/switch";
-import type { AfterGraceBehavior, LifecycleSettings, ReminderRule } from "@/lib/billing/types";
+import { checkGstin, INDIAN_STATES } from "@/lib/billing/pricing";
+import type { AfterGraceBehavior, LifecycleSettings, ReminderRule, SellerSettings } from "@/lib/billing/types";
 import { useBillingEnv, useBillingQuery } from "../context";
 import { ErrorNote, Loading, SampleDataTag } from "../ui";
 
@@ -30,6 +31,62 @@ function paymentModeNote(s: LifecycleSettings, saved: LifecycleSettings): string
   return "Now: manual approval.";
 }
 
+/** The platform as GST seller: printed on invoices; its state decides CGST+SGST vs IGST. */
+function SellerFields({ value, onChange }: { value: SellerSettings; onChange: (patch: Partial<SellerSettings>) => void }) {
+  const text = (key: keyof SellerSettings, label: string, placeholder: string, hint?: string) => (
+    <div className="field">
+      <label>{label}</label>
+      <input
+        className="inp"
+        aria-label={label}
+        value={value[key] ?? ""}
+        placeholder={placeholder}
+        onChange={(e) => onChange({ [key]: key === "gstin" ? e.target.value.toUpperCase() : e.target.value })}
+      />
+      {hint ? <div className="hint">{hint}</div> : null}
+    </div>
+  );
+  const gstinError = checkGstin(value.gstin, value.state);
+  return (
+    <div style={{ display: "grid", gap: 4 }}>
+      <b style={{ fontSize: 13.5 }}>Company tax details</b>
+      <div className="hint" style={{ marginTop: 0, marginBottom: 8 }}>
+        Our details as the seller on GST invoices. The state decides the tax split: same state as the buyer = CGST + SGST, otherwise IGST.
+      </div>
+      <div className="row2">
+        {text("legalName", "Legal name", "iPixxel Technologies Pvt. Ltd.")}
+        <div className="field">
+          <label>GSTIN</label>
+          <input className="inp" aria-label="GSTIN" maxLength={15} value={value.gstin ?? ""} placeholder="29ABCDE1234F1Z5" onChange={(e) => onChange({ gstin: e.target.value.toUpperCase() })} />
+          {gstinError ? <div className="hint" style={{ color: "var(--rose)" }}>{gstinError}</div> : null}
+        </div>
+      </div>
+      <div className="row2">
+        {text("addressLine1", "Address", "Building, street, area")}
+        {text("addressLine2", "Address line 2", "Optional")}
+      </div>
+      <div className="row2">
+        {text("city", "City", "Bengaluru")}
+        <div className="field">
+          <label>State</label>
+          <select aria-label="Company state" value={value.state ?? ""} onChange={(e) => onChange({ state: e.target.value || null })}>
+            <option value="">Not set — every checkout is charged IGST</option>
+            {INDIAN_STATES.map((st) => (
+              <option key={st.code} value={st.code}>
+                {st.name} ({st.code})
+              </option>
+            ))}
+          </select>
+        </div>
+      </div>
+      <div className="row2">
+        {text("pincode", "PIN code", "560001")}
+        <div />
+      </div>
+    </div>
+  );
+}
+
 function Editor({ initial }: { initial: LifecycleSettings }) {
   const { client, canEdit } = useBillingEnv();
   const [saved, setSaved] = useState(initial);
@@ -42,9 +99,16 @@ function Editor({ initial }: { initial: LifecycleSettings }) {
   };
 
   async function save() {
+    const gstinError = checkGstin(s.seller.gstin, s.seller.state);
+    if (gstinError) {
+      setStatus({ tone: "err", text: `Company GSTIN: ${gstinError}` });
+      return;
+    }
+    // Empty text = not set.
+    const seller = Object.fromEntries(Object.entries(s.seller).map(([k, v]) => [k, typeof v === "string" && v.trim() ? v.trim() : null])) as unknown as SellerSettings;
     setBusy(true);
     try {
-      const next = await client.saveLifecycleSettings(s);
+      const next = await client.saveLifecycleSettings({ ...s, seller });
       setSaved(next);
       setS(next);
       setStatus({ tone: "ok", text: "Lifecycle settings saved — they apply from the next daily check." });
@@ -63,6 +127,11 @@ function Editor({ initial }: { initial: LifecycleSettings }) {
           <SampleDataTag fns={["getLifecycleSettings"]} />
         </div>
         <div className={`card-b ${formPageStyles.page}`} style={{ display: "grid", gap: 16 }}>
+          {saved.warnings.map((w) => (
+            <div key={w.code} className="form-alert" role="status">
+              {w.message}
+            </div>
+          ))}
           <div style={{ fontSize: 12.5, color: "var(--muted)", lineHeight: 1.6 }}>
             Controls what happens when an organisation&apos;s subscription term ends: when members are warned, how long the grace window lasts, and what happens once it
             closes.
@@ -102,6 +171,7 @@ function Editor({ initial }: { initial: LifecycleSettings }) {
             </div>
             <Switch checked={s.onlinePaymentsEnabled} onChange={(on) => set({ onlinePaymentsEnabled: on })} />
           </div>
+          <SellerFields value={s.seller} onChange={(patch) => set({ seller: { ...s.seller, ...patch } })} />
           <div className="field" style={{ marginBottom: 0 }}>
             <label>Expiry notification message</label>
             <textarea value={s.expiryMessage} onChange={(e) => set({ expiryMessage: e.target.value })} placeholder="Your plan has expired — renew to keep publishing…" style={{ minHeight: 84 }} />

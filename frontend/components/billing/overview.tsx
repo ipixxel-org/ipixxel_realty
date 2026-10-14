@@ -6,6 +6,7 @@ import type { BillingOverview } from "@/lib/billing/types";
 import { BillingBanner, PayNowButton, RenewalReminderPopup, UpdatePaymentMethodButton } from "./banners";
 
 export { RenewalReminderPopup };
+import { BillingDetailsSummary, PendingUpgradeBanner } from "./checkout";
 import { useOrgBilling } from "./context";
 import { InvoicesTable, PaymentHistoryTable } from "./invoices";
 import { BLink, countLabel, ErrorNote, Kv, Loading, SampleDataTag, Section, StatusBadge, UsageMeter } from "./ui";
@@ -112,13 +113,7 @@ export function BillingDetailsCard({ overview: o }: { overview: BillingOverview 
   return (
     <Section title="Billing details" sub="Printed on your GST invoices">
       {p ? (
-        <div style={{ display: "grid", gap: 4, fontSize: 13 }}>
-          <b>{p.legalName}</b>
-          <span className="bl-muted">
-            {p.addressLine}, {p.city}, {p.state} {p.pincode}
-          </span>
-          <span className="bl-muted">GSTIN: {p.gstin || "not provided"}</span>
-        </div>
+        <BillingDetailsSummary profile={p} />
       ) : (
         <div className="bl-muted">Added at your first purchase.</div>
       )}
@@ -136,6 +131,7 @@ export function BillingOverviewPanel({ showInvoices = true }: { showInvoices?: b
   return (
     <div className="bl-stack">
       <BillingBanner overview={o} />
+      {o.pendingUpgrade ? <PendingUpgradeBanner pending={o.pendingUpgrade} /> : null}
       <CurrentPlanCard overview={o} />
       <div className="bl-row">
         <BLink to="plans" className="btn btn-primary">

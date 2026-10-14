@@ -5,6 +5,7 @@ import { Icon } from "@/components/icons";
 import { useAuth } from "@/lib/auth-context";
 import { BLink, PageHead } from "../ui";
 import { AdminBillingEnv } from "./admin-env";
+import { CheckoutsNeedingReview } from "./checkouts-review";
 import { BLANK_COUPON, CouponForm, CouponsList, CouponUsage, EditCoupon } from "./coupons";
 import { LifecycleSettingsCard } from "./lifecycle";
 import { AdminPlansEditor } from "./plans-editor";
@@ -96,6 +97,15 @@ export function AdminCouponUsagePage({ code }: { code: string }) {
       <PageHead eyebrow="Coupons · usage" icon="tag" title={code} back={{ to: "adminCoupons", label: "Coupons" }} sampleFns={["getCoupon"]} />
       <CouponUsage code={code} />
     </Guard>
+  );
+}
+
+/** Above the Package Requests table: paid checkouts that need a Super Admin. */
+export function AdminCheckoutsNeedingReview() {
+  return (
+    <AdminBillingEnv>
+      <CheckoutsNeedingReview />
+    </AdminBillingEnv>
   );
 }
 

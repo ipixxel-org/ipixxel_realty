@@ -3,8 +3,10 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { Icon } from "@/components/icons";
+import type { BillingClient } from "@/lib/billing/client";
 import { formatINR } from "@/lib/billing/pricing";
-import type { CheckoutReceipt, RenewalMode, StartCheckoutRequest } from "@/lib/billing/types";
+import type { BillingInterval, CheckoutReceipt, ConfirmCheckoutResponse, RenewalMode, StartCheckoutRequest } from "@/lib/billing/types";
+import { openCheckout } from "@/lib/razorpay";
 import { useBillingEnv } from "./context";
 
 type PopupOutcome = { kind: "success" } | { kind: "failure"; reason: string } | { kind: "closed" };
@@ -124,20 +126,66 @@ export function SimulatedPaymentPopup({
 }
 
 /**
- * Runs a checkout end to end: startCheckout → payment popup → confirmCheckout.
+ * After a verified payment the server applies the plan (on verify or on the
+ * webhook, whichever is first). Poll the overview until it shows the new plan.
+ * Resolves the overview's period end, or null on timeout.
+ */
+export async function waitForPlan(
+  client: Pick<BillingClient, "getBillingOverview">,
+  planId: string,
+  interval: BillingInterval,
+  { everyMs = 1500, timeoutMs = 30000 }: { everyMs?: number; timeoutMs?: number } = {},
+): Promise<{ applied: boolean; periodEnd: string | null; planName: string | null }> {
+  const until = Date.now() + timeoutMs;
+  for (;;) {
+    try {
+      const ov = await client.getBillingOverview();
+      if (ov.plan.id === planId && ov.interval === interval && ov.status !== "free") return { applied: true, periodEnd: ov.periodEnd, planName: ov.plan.name };
+    } catch {
+      // keep polling — a blip shouldn't turn a paid order into an error
+    }
+    if (Date.now() + everyMs > until) return { applied: false, periodEnd: null, planName: null };
+    await new Promise((r) => setTimeout(r, everyMs));
+  }
+}
+
+/** What the success page needs; `finishing` = paid, but the plan isn't showing yet. */
+export type PaidReceipt = CheckoutReceipt & { finishing?: boolean };
+
+/**
+ * Runs a checkout end to end: startCheckout → payment (Razorpay Checkout, or
+ * the simulated popup on the mock client) → confirmCheckout → wait for the
+ * plan. Manual mode ends at startCheckout with a request for our team.
  * Returns the trigger and the popup element to render.
  */
 export function usePayment(handlers: {
   renewalMode: RenewalMode;
   title: string;
   subtitle: string;
-  onActive: (receipt: CheckoutReceipt) => void;
+  onActive: (receipt: PaidReceipt) => void;
   onFailed: (reason: string) => void;
   onClosed: () => void;
+  /** Manual mode: the upgrade request was sent (or one was already pending). */
+  onRequested?: (r: { requestId: string; checkoutId: string | null }) => void;
 }): { start: (req: StartCheckoutRequest) => Promise<void>; busy: boolean; popup: ReactNode } {
   const { client } = useBillingEnv();
   const [busy, setBusy] = useState(false);
-  const [pending, setPending] = useState<{ checkoutId: string; amount: number } | null>(null);
+  const [pending, setPending] = useState<{ checkoutId: string; amount: number; req: StartCheckoutRequest } | null>(null);
+
+  async function settlePaid(res: ConfirmCheckoutResponse, amount: number, req: StartCheckoutRequest) {
+    const reviewing = res.checkoutStatus === "needs_review";
+    const { applied, periodEnd, planName } = reviewing ? { applied: false, periodEnd: null, planName: null } : await waitForPlan(client, res.toPlanId, res.toInterval);
+    handlers.onActive({
+      planId: res.toPlanId,
+      planName: planName ?? "",
+      interval: res.toInterval,
+      amount,
+      reference: res.checkoutId,
+      activeUntil: periodEnd ?? "",
+      couponCode: req.couponCode ?? null,
+      finishing: !applied,
+    });
+  }
 
   async function start(req: StartCheckoutRequest) {
     setBusy(true);
@@ -147,17 +195,41 @@ export function usePayment(handlers: {
         handlers.onActive(res.receipt);
         return;
       }
-      if (res.razorpay) {
-        // REAL PAYMENT WIRING (when the backend returns a Razorpay order):
-        //   await openCheckout({ keyId: res.razorpay.keyId, orderId: res.razorpay.orderId,
-        //     amount: res.razorpay.amountPaise, currency: "INR", verifyPath: "/org/billing/checkout/confirm",
-        //     onSuccess: … , onFailure: (_r, message) => handlers.onFailed(message) })
-        // from lib/razorpay.ts — the backend verifies the signature in confirmCheckout.
-        handlers.onFailed("Online payment isn't connected yet.");
+      if (res.status === "pending_approval") {
+        handlers.onRequested?.({ requestId: res.requestId, checkoutId: res.checkoutId });
+        return;
+      }
+      const rz = res.razorpay;
+      if (rz) {
+        // Razorpay Checkout; the backend verifies the signature and applies the plan.
+        await new Promise<void>((resolve) => {
+          void openCheckout({
+            keyId: rz.keyId,
+            orderId: rz.orderId,
+            amount: rz.amountPaise,
+            currency: rz.currency,
+            name: rz.name,
+            description: rz.description,
+            prefill: rz.prefill,
+            verifyPath: "/org/billing/checkout/confirm",
+            onSuccess: (row) => {
+              void settlePaid(row as unknown as ConfirmCheckoutResponse, res.amount, req).finally(resolve);
+            },
+            onFailure: (reason, message) => {
+              if (reason === "dismissed") handlers.onClosed();
+              else handlers.onFailed(message);
+              resolve();
+            },
+          });
+        });
+        return;
+      }
+      if (!client.isMock) {
+        handlers.onFailed("Online payment isn't available right now. Please try again later.");
         return;
       }
       // Mock client: simulated popup instead of Razorpay.
-      setPending({ checkoutId: res.checkoutId, amount: res.amount });
+      setPending({ checkoutId: res.checkoutId, amount: res.amount, req });
     } catch (e) {
       handlers.onFailed(e instanceof Error ? e.message : "Couldn't start the payment.");
     } finally {
@@ -171,14 +243,17 @@ export function usePayment(handlers: {
     if (!p) return;
     if (o.kind === "closed") return handlers.onClosed();
     if (o.kind === "failure") return handlers.onFailed(o.reason);
-    const res = await client.confirmCheckout({
-      checkoutId: p.checkoutId,
-      razorpayOrderId: `order_SIM${p.checkoutId.slice(4)}`,
-      razorpayPaymentId: `pay_SIM${Math.random().toString(36).slice(2, 10).toUpperCase()}`,
-      razorpaySignature: "simulated",
-    });
-    if (res.status === "active") handlers.onActive(res.receipt);
-    else handlers.onFailed(res.reason);
+    try {
+      const res = await client.confirmCheckout({
+        checkoutId: p.checkoutId,
+        razorpayOrderId: `order_SIM${p.checkoutId.slice(4)}`,
+        razorpayPaymentId: `pay_SIM${Math.random().toString(36).slice(2, 10).toUpperCase()}`,
+        razorpaySignature: "simulated",
+      });
+      await settlePaid(res, p.amount, p.req);
+    } catch (e) {
+      handlers.onFailed(e instanceof Error ? e.message : "We couldn't confirm the payment.");
+    }
   }
 
   return {

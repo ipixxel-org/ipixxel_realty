@@ -276,3 +276,10 @@ export function useCheckoutLive(overview: BillingOverview | null): boolean {
   if (!overview || overview.paymentMode !== "online") return false;
   return client.isMock || client.isReal("startCheckout");
 }
+
+/** Paid renewals arrive in backend step 3 — until then "Pay now" works on the mock client only. */
+export function useRenewalLive(overview: BillingOverview | null): boolean {
+  const { client } = useBillingEnv();
+  const live = useCheckoutLive(overview);
+  return live && client.isMock;
+}

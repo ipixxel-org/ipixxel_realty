@@ -23,8 +23,9 @@ import { useFlash } from "@/lib/flash";
 import { LIST_PAGE_SIZE, ListPager } from "@/components/ui/list-pager";
 import { ORG_SUBS_TAB, SUBS_FLASH_KEY, SUBS_PATH } from "./subscriptions-shared";
 import { ChangeSubscriptionModal } from "./change-subscription-modal";
-import { AdminLifecycleSettings, AdminPlansV2 } from "@/components/billing/admin/admin-pages";
+import { AdminCheckoutsNeedingReview, AdminLifecycleSettings, AdminPlansV2 } from "@/components/billing/admin/admin-pages";
 import { BILLING_V2 } from "@/lib/billing/flag";
+import { formatPaise } from "@/lib/razorpay";
 import type {
   Plan,
   PlanCapability,
@@ -1233,6 +1234,8 @@ export default function SuperAdminSubscriptionsPage() {
               </div>
             </div>
 
+            {BILLING_V2 ? <AdminCheckoutsNeedingReview /> : null}
+
             <div style={{ border: "1px solid #e2e8f0", borderRadius: 14, overflow: "hidden" }}>
               <div style={{ overflowX: "auto" }}>
                 <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
@@ -1283,6 +1286,13 @@ export default function SuperAdminSubscriptionsPage() {
                             <span style={{ padding: "3px 8px", borderRadius: 6, background: "rgba(21, 27, 46, 0.08)", color: "#0f1424", fontWeight: 700, fontSize: 11 }}>
                               {r.targetPlan?.name ?? "Target"}
                             </span>
+                            {BILLING_V2 && r.billingCheckout ? (
+                              <div style={{ fontSize: 11, color: "#64748b", marginTop: 4, whiteSpace: "nowrap" }}>
+                                {formatPaise(r.billingCheckout.totalPaise)} incl. GST
+                                {r.billingCheckout.kind === "upgrade_same_interval" ? " · prorated" : r.billingCheckout.kind === "interval_change" ? " · less monthly credit" : ""}
+                                <div>{r.billingCheckout.buyerGstin ? `GSTIN ${r.billingCheckout.buyerGstin}` : "No GSTIN"}</div>
+                              </div>
+                            ) : null}
                           </td>
                           <td style={{ padding: "12px 16px", textAlign: "center", textTransform: "capitalize" }}>
                             {r.billingCycle}

@@ -78,11 +78,25 @@ export const DEMO_ORG = {
 
 export const DEFAULT_BILLING_DETAILS = {
   legalName: "Skyline Developers Pvt. Ltd.",
-  addressLine: "4th Floor, Prestige Tech Park, Outer Ring Road",
+  addressLine1: "4th Floor, Prestige Tech Park, Outer Ring Road",
+  addressLine2: null as string | null,
   city: "Bengaluru",
-  state: "Karnataka",
+  /** GST state code — Karnataka. */
+  state: "29",
   pincode: "560103",
-  gstin: "29AABCS1234F1Z5",
+  country: "IN",
+  gstin: "29AABCS1234F1Z5" as string | null,
+};
+
+/** The mock platform as GST seller. */
+export const MOCK_SELLER = {
+  legalName: "iPixxel Technologies Pvt. Ltd.",
+  gstin: "29AAICI1234A1Z9",
+  state: "29",
+  addressLine1: "2nd Floor, Indiranagar 100 Ft Road",
+  addressLine2: null,
+  city: "Bengaluru",
+  pincode: "560038",
 };
 
 /** Option A: the card / UPI mandate saved for auto-renewals. */

@@ -3,18 +3,18 @@
 import { useEffect, useRef, useState } from "react";
 import { Icon } from "@/components/icons";
 import { useToast } from "@/components/ui/toast";
-import { checkGstin, COMPANY_STATE, formatDate, formatINR, INDIAN_STATES, withGst } from "@/lib/billing/pricing";
-import type { BillingInterval, BillingOverview, BillingProfile, CheckoutPreview } from "@/lib/billing/types";
+import { checkGstin, formatDate, formatINR, INDIAN_STATES, stateName } from "@/lib/billing/pricing";
+import type { BillingInterval, BillingOverview, BillingProfile, CheckoutPreview, PendingUpgrade } from "@/lib/billing/types";
 import { useBillingEnv, useBillingQuery, useOrgBilling } from "./context";
 import { usePayment } from "./payment";
 import { Banner, BLink, ErrorNote, Loading, Section, useCheckoutLive } from "./ui";
 
-export const EMPTY_PROFILE: BillingProfile = { legalName: "", addressLine: "", city: "", state: "", pincode: "", gstin: "" };
+export const EMPTY_PROFILE: BillingProfile = { legalName: "", addressLine1: "", addressLine2: null, city: "", state: "", pincode: "", country: "IN", gstin: null };
 
 export function profileErrors(d: BillingProfile): Partial<Record<keyof BillingProfile, string>> {
   const e: Partial<Record<keyof BillingProfile, string>> = {};
   if (!d.legalName.trim()) e.legalName = "Enter the legal name for invoices.";
-  if (!d.addressLine.trim()) e.addressLine = "Enter the billing address.";
+  if (!d.addressLine1.trim()) e.addressLine1 = "Enter the billing address.";
   if (!d.city.trim()) e.city = "Enter the city.";
   if (!d.state) e.state = "Choose the state — it decides how GST is split.";
   if (!/^[1-9][0-9]{5}$/.test(d.pincode.trim())) e.pincode = "Enter a 6-digit PIN code.";
@@ -45,9 +45,11 @@ export function BillingDetailsForm({
       </label>
       <input
         className="inp"
-        value={value[key]}
+        aria-label={label}
+        value={value[key] ?? ""}
         placeholder={placeholder}
         onChange={(e) => onChange({ ...value, [key]: key === "gstin" ? e.target.value.toUpperCase() : e.target.value })}
+        maxLength={key === "gstin" ? 15 : key === "pincode" ? 6 : undefined}
         onBlur={() => setTouched((t) => ({ ...t, [key]: true }))}
       />
       {err(key)}
@@ -56,15 +58,16 @@ export function BillingDetailsForm({
   return (
     <div className="bl-stack" style={{ gap: 12 }}>
       {input("legalName", "Legal name", "Skyline Developers Pvt. Ltd.")}
-      {input("addressLine", "Address", "Building, street, area")}
+      {input("addressLine1", "Address", "Building, street, area")}
+      {input("addressLine2", "Address line 2", "Landmark, locality", true)}
       <div className="bl-grid3" style={{ gap: 12 }}>
         {input("city", "City", "Bengaluru")}
         <div className="field" style={{ marginBottom: 0 }}>
           <label>State</label>
-          <select className="inp" value={value.state} onChange={(e) => onChange({ ...value, state: e.target.value })}>
+          <select className="inp" aria-label="State" value={value.state} onChange={(e) => onChange({ ...value, state: e.target.value })}>
             <option value="">Choose…</option>
             {INDIAN_STATES.map((s) => (
-              <option key={s.name} value={s.name}>
+              <option key={s.code} value={s.code}>
                 {s.name}
               </option>
             ))}
@@ -152,7 +155,17 @@ export function PriceSummary({ preview: p, renewalMode }: { preview: CheckoutPre
           </span>
           <span>{formatINR(p.planPrice)}</span>
         </div>
-        {p.proration ? (
+        {p.proration && p.kind === "interval_change" ? (
+          <div className="bl-line minus">
+            <span>
+              Credit for the unused part of your monthly plan
+              <div className="bl-work">
+                {formatINR(p.proration.oldPrice)} × {p.proration.daysLeft} days left ÷ {p.proration.daysInPeriod} = <b>{formatINR(p.proration.credit)}</b>
+              </div>
+            </span>
+            <span>−{formatINR(p.proration.credit)}</span>
+          </div>
+        ) : p.proration ? (
           <div className="bl-line minus">
             <span>
               Credit for the part of this {per} you&apos;ve already paid for
@@ -197,12 +210,18 @@ export function PriceSummary({ preview: p, renewalMode }: { preview: CheckoutPre
         </div>
       </div>
       <div className="bl-muted" style={{ marginTop: 6 }}>
-        {p.gst.kind === "intra"
-          ? `Billing state ${p.billingState} is the same as ours (${COMPANY_STATE}), so GST is split into CGST and SGST.`
-          : `Billing state ${p.billingState} is outside ${COMPANY_STATE}, so it's charged as IGST.`}
+        {!p.billingState
+          ? "Add your billing state to see how GST is split."
+          : p.gst.kind === "intra"
+            ? `Billing state ${stateName(p.billingState)} is the same as ours, so GST is split into CGST and SGST.`
+            : `Billing state ${stateName(p.billingState)} is outside ours, so it's charged as IGST.`}
       </div>
       <div className="bl-muted" style={{ marginTop: 10, padding: "10px 12px", background: "var(--bg)", borderRadius: 10 }}>
-        {p.kind === "upgrade" ? `Your renewal date stays ${formatDate(p.periodEnd)}. ` : `Your plan runs until ${formatDate(p.periodEnd)}. `}
+        {p.kind === "upgrade_same_interval"
+          ? `Your renewal date stays ${formatDate(p.periodEnd)}. `
+          : p.kind === "interval_change"
+            ? `A new yearly cycle starts today and runs until ${formatDate(p.periodEnd)}. `
+            : `Your plan runs until ${formatDate(p.periodEnd)}. `}
         Then {formatINR(p.recurringPrice)} + GST per {per}
         {p.coupon && p.couponRenewalsLeft > 0 && p.couponRenewalsLeft < 99 ? ` (${p.coupon.code} also covers the next ${p.couponRenewalsLeft} renewals)` : ""}
         {renewalMode === "auto" ? ", charged automatically to the method you pay with now." : ". We'll remind you 3 days before each renewal."}
@@ -211,53 +230,20 @@ export function PriceSummary({ preview: p, renewalMode }: { preview: CheckoutPre
   );
 }
 
-/* ---------------------------------------------------------- Manual approval */
-
-/**
- * When online payment isn't available (Super Admin switch off, Razorpay not
- * set up, or checkout not live yet), upgrades are approved by our team.
- * Sending the request arrives in the next backend step.
- */
-export function UpgradeRequestPanel({ planName, price, interval, currentPlan }: { planName: string; price: number; interval: BillingInterval; currentPlan: string }) {
-  const per = interval === "yearly" ? "year" : "month";
-  return (
-    <Section title={`Request an upgrade to ${planName}`} sub="Approved by our team">
-      <div className="bl-stack" style={{ gap: 12 }}>
-        <div className="bl-breakdown">
-          <div className="bl-line">
-            <span>
-              {planName} plan ({interval})
-            </span>
-            <span>
-              {formatINR(price)} + GST / {per}
-            </span>
-          </div>
-          <div className="bl-line total">
-            <span>Total per {per}</span>
-            <span>{formatINR(withGst(price))}</span>
-          </div>
-        </div>
-        <div className="bl-muted" style={{ padding: "10px 12px", background: "var(--bg)", borderRadius: 10, lineHeight: 1.55 }}>
-          Online payment isn&apos;t available for your account yet, so upgrades are approved by our team. Send a request and we&apos;ll confirm the plan and how to pay.
-          You stay on {currentPlan} with everything working until the upgrade is approved.
-        </div>
-        <div className="bl-row">
-          <button type="button" className="btn btn-primary" disabled title="Upgrade requests open soon">
-            <Icon name="arrow-up" size={15} /> Send upgrade request
-          </button>
-          <BLink to="plans" className="btn btn-ghost">
-            Back to plans
-          </BLink>
-          <span className="bl-muted bl-small">Upgrade requests open soon.</span>
-        </div>
-      </div>
-    </Section>
-  );
-}
-
 /* --------------------------------------------------------------- Checkout */
 
 type Part = "details" | "coupon" | "summary";
+
+/** An upgrade request (manual mode) or a paid order waiting on our team. */
+export function PendingUpgradeBanner({ pending: u }: { pending: PendingUpgrade }) {
+  return (
+    <Banner tone="info" icon="clock" title={u.status === "needs_review" ? "Your payment is being checked" : `Upgrade to ${u.toPlan.name} requested`}>
+      {u.status === "needs_review"
+        ? `We received your payment for ${u.toPlan.name} (${u.interval}). Our team is finishing the setup — nothing more to do on your side.`
+        : `Sent on ${formatDate(u.createdAt)} for ${u.toPlan.name} (${u.interval}). Our team will approve it shortly; you keep everything on your current plan until then.`}
+    </Banner>
+  );
+}
 
 export function CheckoutScreen({
   planId,
@@ -284,10 +270,12 @@ export function CheckoutScreen({
   const [coupon, setCoupon] = useState<string | null>(null);
   const [couponError, setCouponError] = useState<string | null>(null);
   const [preview, setPreview] = useState<CheckoutPreview | null>(null);
+  const [previewError, setPreviewError] = useState<string | null>(null);
   const [checking, setChecking] = useState(false);
   const [saving, setSaving] = useState(false);
   const autoDone = useRef(false);
-  const live = useCheckoutLive(overview);
+  // Online = Razorpay Checkout; otherwise the order is a request our team approves.
+  const online = useCheckoutLive(overview);
 
   const firstPurchase = !!overview && !overview.billingProfile;
   const showForm = firstPurchase || editDetails;
@@ -295,13 +283,19 @@ export function CheckoutScreen({
   const billingState = showForm ? form.state || undefined : undefined;
 
   useEffect(() => {
-    let live = true;
+    let active = true;
     client
       .previewCheckout({ planId, interval, couponCode: coupon ?? undefined, billingState })
-      .then((p) => live && setPreview(p))
-      .catch(() => undefined);
+      .then((p) => {
+        if (!active) return;
+        setPreview(p);
+        setPreviewError(null);
+      })
+      .catch((e: unknown) => {
+        if (active) setPreviewError(e instanceof Error ? e.message : "Couldn't work out the price.");
+      });
     return () => {
-      live = false;
+      active = false;
     };
   }, [client, planId, interval, coupon, billingState]);
 
@@ -310,13 +304,26 @@ export function CheckoutScreen({
   const payment = usePayment({
     renewalMode: overview?.renewalMode ?? "auto",
     title: `${target?.name ?? ""} · ${interval}`,
-    subtitle: preview?.kind === "upgrade" ? `Upgrade ${overview?.plan.name} → ${target?.name}` : `Buy ${target?.name}`,
+    subtitle: preview?.kind === "upgrade_same_interval" || preview?.kind === "interval_change" ? `Upgrade ${overview?.plan.name} → ${target?.name}` : `Buy ${target?.name}`,
     onActive: (r) => {
       void refresh();
-      nav.go("checkoutSuccess", { plan: r.planId, interval: r.interval, amount: r.amount, ref: r.reference, until: r.activeUntil, coupon: r.couponCode });
+      nav.go("checkoutSuccess", {
+        plan: r.planId,
+        interval: r.interval,
+        amount: r.amount,
+        ref: r.reference,
+        until: r.activeUntil || undefined,
+        coupon: r.couponCode ?? undefined,
+        finishing: r.finishing ? 1 : undefined,
+      });
     },
     onFailed: (reason) => nav.go("checkoutFailure", { plan: planId, interval, reason }),
     onClosed: () => toast({ variant: "info", title: "Payment cancelled", description: "You closed the payment window. Nothing was charged — try again when you're ready." }),
+    onRequested: () => {
+      void refresh();
+      toast({ variant: "success", title: "Request sent", description: "Our team will approve it shortly. You keep everything on your current plan until then." });
+      nav.go("overview");
+    },
   });
 
   async function applyCoupon(code: string) {
@@ -333,6 +340,8 @@ export function CheckoutScreen({
         setCouponError(null);
         setPreview(p);
       }
+    } catch (e) {
+      setCouponError(e instanceof Error ? e.message : "Couldn't check that coupon.");
     } finally {
       setChecking(false);
     }
@@ -342,7 +351,11 @@ export function CheckoutScreen({
     setShowErrors(true);
     if (showForm) {
       if (Object.keys(profileErrors(form)).length) {
-        toast({ variant: "warning", title: "Check your billing details", description: "A few fields need fixing before you pay." });
+        toast({
+          variant: "warning",
+          title: "Check your billing details",
+          description: online ? "A few fields need fixing before you pay." : "A few fields need fixing before you send the request.",
+        });
         return;
       }
       setSaving(true);
@@ -370,11 +383,11 @@ export function CheckoutScreen({
   // Apply a preset coupon on arrival (walkthrough). Idempotent, so a re-run is harmless.
   useEffect(() => {
     if (!initialCoupon) return;
-    let live = true;
+    let active = true;
     client
       .previewCheckout({ planId, interval, couponCode: initialCoupon })
       .then((p) => {
-        if (!live) return;
+        if (!active) return;
         if (p.couponError) setCouponError(p.couponError);
         else {
           setCoupon(p.coupon!.code);
@@ -383,7 +396,7 @@ export function CheckoutScreen({
       })
       .catch(() => undefined);
     return () => {
-      live = false;
+      active = false;
     };
   }, [client, initialCoupon, planId, interval]);
 
@@ -392,107 +405,143 @@ export function CheckoutScreen({
 
   const onFree = overview.status === "free" || overview.status === "moved_to_basic";
   const inGrace = overview.status === "past_due" || overview.status === "grace_ending";
-  if (target.isFree || (!onFree && !inGrace && target.rank <= overview.plan.rank)) {
+  const samePlan = target.id === overview.plan.id;
+  // Same plan monthly → yearly is an interval change (allowed); yearly → monthly happens at renewal.
+  const notAnUpgrade =
+    !onFree &&
+    !inGrace &&
+    (target.rank < overview.plan.rank || (target.rank === overview.plan.rank && !samePlan) || (samePlan && (interval === overview.interval || interval === "monthly")));
+  if (target.isFree || notAnUpgrade) {
     return (
       <Banner
         tone="amber"
         icon="info"
-        title={target.isFree ? "Basic is free — there's nothing to buy" : `You're already on ${overview.plan.name}`}
+        title={target.isFree ? "Basic is free — there's nothing to buy" : samePlan && interval === overview.interval ? `You're already on ${overview.plan.name}` : "This isn't an upgrade"}
         actions={
           <BLink to="plans" className="btn btn-primary btn-sm">
             See plans
           </BLink>
         }
       >
-        Moving to a smaller plan is a downgrade, which takes effect at the end of your billing period.
+        Moving to a smaller plan (or from yearly to monthly billing) is a downgrade, which takes effect at the end of your billing period.
       </Banner>
     );
   }
 
-  if (!live) return <UpgradeRequestPanel planName={target.name} price={interval === "yearly" ? target.priceYearly : target.priceMonthly} interval={interval} currentPlan={overview.plan.name} />;
-
-  const left = parts.includes("details") || parts.includes("coupon");
+  const pendingUpgrade = overview.pendingUpgrade;
+  const showCoupon = parts.includes("coupon") && preview?.couponsEnabled !== false;
+  const left = parts.includes("details") || showCoupon;
   const right = parts.includes("summary");
+  const disabled = !canEdit || saving || payment.busy || !!pendingUpgrade;
 
   return (
-    <div className={left && right ? "bl-split" : "bl-stack"}>
-      {left ? (
-        <div className="bl-stack">
-          {parts.includes("details") ? (
-            <Section
-              title="Billing details"
-              sub={firstPurchase ? "First purchase — these go on your GST invoices" : "From your last purchase"}
-              action={
-                !firstPurchase ? (
-                  <button type="button" className="btn btn-ghost btn-sm" onClick={() => setEditDetails((v) => !v)}>
-                    {editDetails ? "Use saved details" : "Edit"}
-                  </button>
-                ) : null
-              }
-            >
-              {showForm ? (
-                <BillingDetailsForm value={form} onChange={setProfile} showErrors={showErrors} />
-              ) : (
-                <div style={{ display: "grid", gap: 3, fontSize: 13 }}>
-                  <b>{overview.billingProfile!.legalName}</b>
-                  <span className="bl-muted">
-                    {overview.billingProfile!.addressLine}, {overview.billingProfile!.city}, {overview.billingProfile!.state} {overview.billingProfile!.pincode}
-                  </span>
-                  <span className="bl-muted">GSTIN {overview.billingProfile!.gstin || "—"}</span>
-                </div>
-              )}
-            </Section>
-          ) : null}
-          {parts.includes("coupon") ? (
-            <Section title="Coupon" sub="Taken off before GST">
-              <CouponField
-                applied={preview?.coupon && coupon ? preview.coupon : null}
-                error={couponError}
-                busy={checking}
-                initialCode={initialCoupon}
-                onApply={(c) => void applyCoupon(c)}
-                onRemove={() => {
-                  setCoupon(null);
-                  setCouponError(null);
-                }}
-              />
-            </Section>
-          ) : null}
-        </div>
-      ) : null}
-      {right ? (
-        <Section title="Order summary" sub={`${target.name} · ${interval === "yearly" ? "billed yearly" : "billed monthly"}`}>
-          {preview ? (
-            <>
-              <PriceSummary preview={preview} renewalMode={overview.renewalMode} />
-              <button
-                type="button"
-                className="btn btn-primary"
-                style={{ width: "100%", justifyContent: "center", marginTop: 14, padding: 12 }}
-                disabled={!canEdit || saving || payment.busy}
-                title={canEdit ? undefined : "Ask an admin with billing access to buy a plan"}
-                onClick={() => void pay()}
+    <div className="bl-stack">
+      {pendingUpgrade ? <PendingUpgradeBanner pending={pendingUpgrade} /> : null}
+      <div className={left && right ? "bl-split" : "bl-stack"}>
+        {left ? (
+          <div className="bl-stack">
+            {parts.includes("details") ? (
+              <Section
+                title="Billing details"
+                sub={firstPurchase ? "First purchase — these go on your GST invoices" : "From your last purchase"}
+                action={
+                  !firstPurchase ? (
+                    <button type="button" className="btn btn-ghost btn-sm" onClick={() => setEditDetails((v) => !v)}>
+                      {editDetails ? "Use saved details" : "Edit"}
+                    </button>
+                  ) : null
+                }
               >
-                {preview.total === 0 ? (
-                  <>
-                    <Icon name="check" size={15} /> Activate {target.name} — nothing to pay
-                  </>
-                ) : (
-                  <>
-                    <Icon name="lock" size={15} /> Pay {formatINR(preview.total)}
-                  </>
-                )}
-              </button>
-              <div className="bl-muted bl-small" style={{ textAlign: "center", marginTop: 8 }}>
-                Secure payment by Razorpay. GST invoice by email.
+                {showForm ? <BillingDetailsForm value={form} onChange={setProfile} showErrors={showErrors} /> : <BillingDetailsSummary profile={overview.billingProfile!} />}
+              </Section>
+            ) : null}
+            {showCoupon ? (
+              <Section title="Coupon" sub="Taken off before GST">
+                <CouponField
+                  applied={preview?.coupon && coupon ? preview.coupon : null}
+                  error={couponError}
+                  busy={checking}
+                  initialCode={initialCoupon}
+                  onApply={(c) => void applyCoupon(c)}
+                  onRemove={() => {
+                    setCoupon(null);
+                    setCouponError(null);
+                  }}
+                />
+              </Section>
+            ) : null}
+          </div>
+        ) : null}
+        {right ? (
+          <Section
+            title={online ? "Order summary" : `Request an upgrade to ${target.name}`}
+            sub={online ? `${target.name} · ${interval === "yearly" ? "billed yearly" : "billed monthly"}` : "Approved by our team"}
+          >
+            {preview ? (
+              <>
+                <PriceSummary preview={preview} renewalMode={overview.renewalMode} />
+                {!online ? (
+                  <div className="bl-muted" style={{ marginTop: 10, padding: "10px 12px", background: "var(--bg)", borderRadius: 10, lineHeight: 1.55 }}>
+                    Online payment isn&apos;t available for your account, so upgrades are approved by our team. Send a request and we&apos;ll confirm the plan and how to
+                    pay. You stay on {overview.plan.name} with everything working until the upgrade is approved.
+                  </div>
+                ) : null}
+                <button
+                  type="button"
+                  className="btn btn-primary"
+                  style={{ width: "100%", justifyContent: "center", marginTop: 14, padding: 12 }}
+                  disabled={disabled}
+                  title={pendingUpgrade ? "An upgrade request is already waiting for approval" : canEdit ? undefined : "Ask an admin with billing access to buy a plan"}
+                  onClick={() => void pay()}
+                >
+                  {pendingUpgrade ? (
+                    <>
+                      <Icon name="clock" size={15} /> Request pending
+                    </>
+                  ) : !online ? (
+                    <>
+                      <Icon name="arrow-up" size={15} /> Send upgrade request
+                    </>
+                  ) : preview.total === 0 ? (
+                    <>
+                      <Icon name="check" size={15} /> Activate {target.name} — nothing to pay
+                    </>
+                  ) : (
+                    <>
+                      <Icon name="lock" size={15} /> Pay {formatINR(preview.total)}
+                    </>
+                  )}
+                </button>
+                <div className="bl-muted bl-small" style={{ textAlign: "center", marginTop: 8 }}>
+                  {online ? "Secure payment by Razorpay. GST invoice by email." : "No payment is taken now."}
+                </div>
+              </>
+            ) : previewError ? (
+              <div className="bl-stack" style={{ gap: 10 }}>
+                <ErrorNote message={previewError} />
+                <BLink to="plans" className="btn btn-ghost btn-sm">
+                  Back to plans
+                </BLink>
               </div>
-            </>
-          ) : (
-            <Loading what="price" />
-          )}
-        </Section>
-      ) : null}
-      {payment.popup}
+            ) : (
+              <Loading what="price" />
+            )}
+          </Section>
+        ) : null}
+        {payment.popup}
+      </div>
+    </div>
+  );
+}
+
+export function BillingDetailsSummary({ profile: p }: { profile: BillingProfile }) {
+  return (
+    <div style={{ display: "grid", gap: 3, fontSize: 13 }}>
+      <b>{p.legalName}</b>
+      <span className="bl-muted">
+        {[p.addressLine1, p.addressLine2, p.city].filter(Boolean).join(", ")}, {stateName(p.state)} {p.pincode}
+      </span>
+      <span className="bl-muted">GSTIN {p.gstin || "—"}</span>
     </div>
   );
 }

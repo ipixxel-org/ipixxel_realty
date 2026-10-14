@@ -32,7 +32,24 @@ export function PlansScreen({ interval: controlled, onIntervalChange }: { interv
   const interval = controlled ?? own ?? overview.interval;
   const current = overview.plan;
 
+  const pending = overview.pendingUpgrade;
+  const onPaidMonthly = overview.interval === "monthly" && overview.status !== "free" && overview.status !== "moved_to_basic";
   function action(p: BillingPlan) {
+    if (pending && pending.toPlan.id === p.id && pending.interval === interval) {
+      return (
+        <button type="button" className="btn btn-ghost" disabled style={{ width: "100%", justifyContent: "center" }} title="Waiting for approval by our team">
+          <Icon name="clock" size={15} /> Request pending
+        </button>
+      );
+    }
+    // Same paid plan, monthly → yearly: an upgrade with credit for the unused month.
+    if (p.id === current.id && !p.isFree && onPaidMonthly && interval === "yearly") {
+      return (
+        <BLink to="checkout" params={{ plan: p.id, interval }} className="btn btn-primary" style={{ width: "100%", justifyContent: "center" }}>
+          <Icon name="arrow-up" size={15} /> {live ? "Switch to yearly" : "Request yearly billing"}
+        </BLink>
+      );
+    }
     if (p.id === current.id) {
       return (
         <button type="button" className="btn" disabled style={{ width: "100%", justifyContent: "center", background: "var(--surface-2)", color: "var(--muted)", border: "1px solid var(--line)" }}>

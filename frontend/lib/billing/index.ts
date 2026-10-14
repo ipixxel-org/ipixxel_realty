@@ -19,11 +19,14 @@ export const REAL_FUNCTIONS: Record<BillingFunction, boolean> = {
   saveAdminPlan: true,
   getLifecycleSettings: true,
   saveLifecycleSettings: true,
+  // Step 2 — billing profile and checkout (online via Razorpay, or a manual request)
+  getBillingProfile: true,
+  saveBillingProfile: true,
+  previewCheckout: true,
+  startCheckout: true,
+  confirmCheckout: true,
+  listAdminCheckouts: true,
   // Still mock
-  previewCheckout: false,
-  saveBillingProfile: false,
-  startCheckout: false,
-  confirmCheckout: false,
   updatePaymentMethod: false, // not offered: renewals are "pay each time"
   cancelPlan: false,
   undoCancel: false,

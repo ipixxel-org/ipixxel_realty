@@ -8,6 +8,8 @@ import {
   priceBreakdown,
   prorate,
   splitGst,
+  stateCodeOf,
+  stateName,
   validateCoupon,
   type CouponContext,
 } from "../pricing";
@@ -139,5 +141,26 @@ describe("checkGstin", () => {
     expect(checkGstin("29AABCS1234F1Z", "Karnataka")).toMatch(/15 characters/);
     expect(checkGstin("29AABCS1234F1X5", "Karnataka")).toMatch(/doesn't look like/);
     expect(checkGstin("29AABCS1234F1Z5", "Maharashtra")).toMatch(/state code 29/);
+  });
+});
+
+describe("GST state codes", () => {
+  it("maps names and codes both ways", () => {
+    expect(stateCodeOf("29")).toBe("29");
+    expect(stateCodeOf(" karnataka ")).toBe("29");
+    expect(stateCodeOf("Atlantis")).toBeNull();
+    expect(stateName("27")).toBe("Maharashtra");
+    expect(stateName("97")).toBe("Other Territory");
+  });
+
+  it("splits GST by code, the way the API stores the state", () => {
+    expect(splitGst(5000, "29").kind).toBe("intra");
+    expect(splitGst(5000, "27").kind).toBe("inter");
+    expect(splitGst(5000, null).kind).toBe("inter");
+  });
+
+  it("checks a GSTIN against a state code", () => {
+    expect(checkGstin("29AABCS1234F1Z5", "29")).toBeNull();
+    expect(checkGstin("29AABCS1234F1Z5", "27")).toMatch(/Maharashtra \(27\)/);
   });
 });

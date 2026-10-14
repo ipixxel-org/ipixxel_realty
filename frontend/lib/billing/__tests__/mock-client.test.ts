@@ -25,7 +25,7 @@ describe("mock billing client", () => {
   it("previews a mid-cycle upgrade with the prorated charge", async () => {
     const c = createMockBillingClient({ initial: { paidPlanId: "growth" } });
     const p = await c.previewCheckout({ planId: "pro", interval: "monthly" });
-    expect(p.kind).toBe("upgrade");
+    expect(p.kind).toBe("upgrade_same_interval");
     expect(p.proration?.charge).toBe(1741.94);
     expect(p.total).toBe(2055.48);
   });
@@ -33,14 +33,14 @@ describe("mock billing client", () => {
   it("first purchase: profile, coupon, payment, then the plan is active", async () => {
     const c = createMockBillingClient({ initial: { situation: "basic", billingProfile: null, redeemed: [] } });
     await expect(c.startCheckout({ planId: "growth", interval: "monthly", purpose: "purchase" })).rejects.toThrow(/billing details/);
-    await expect(c.saveBillingProfile({ legalName: "X", addressLine: "Y", city: "Z", state: "Karnataka", pincode: "123", gstin: "" })).rejects.toThrow(/PIN/);
-    await c.saveBillingProfile({ legalName: "Acme", addressLine: "1 Road", city: "Mysuru", state: "Karnataka", pincode: "570001", gstin: "" });
+    await expect(c.saveBillingProfile({ legalName: "X", addressLine1: "Y", addressLine2: null, city: "Z", state: "29", pincode: "123", country: "IN", gstin: null })).rejects.toThrow(/PIN/);
+    await c.saveBillingProfile({ legalName: "Acme", addressLine1: "1 Road", addressLine2: null, city: "Mysuru", state: "29", pincode: "570001", country: "IN", gstin: null });
     const start = await c.startCheckout({ planId: "growth", interval: "monthly", couponCode: "LAUNCH20", purpose: "purchase" });
     expect(start.status).toBe("payment_required");
     if (start.status !== "payment_required") return;
     expect(start.amount).toBe(1888);
     const done = await c.confirmCheckout({ checkoutId: start.checkoutId, razorpayOrderId: "o", razorpayPaymentId: "pay_1", razorpaySignature: "s" });
-    expect(done.status).toBe("active");
+    expect(done).toMatchObject({ checkoutStatus: "paid", toPlanId: "growth", toInterval: "monthly" });
     const o = await c.getBillingOverview();
     expect(o.plan.id).toBe("growth");
     expect(o.periodEnd).toBe("2026-11-14");

@@ -10,7 +10,8 @@ type ProtoPlan = Pick<BillingPlan, "priceMonthly" | "priceYearly">;
 type ProtoCoupon = Coupon;
 
 /** The platform's registered state — decides CGST+SGST vs IGST. */
-export const COMPANY_STATE = "Karnataka";
+/** The mock platform's GST state code (Karnataka). The real seller state is a Super Admin setting. */
+export const COMPANY_STATE = "29";
 export const GST_RATE = 0.18;
 
 /* ------------------------------------------------------------- Rounding */
@@ -108,8 +109,8 @@ export type GstSplit =
  * 18% GST: CGST 9% + SGST 9% when the buyer's billing state is the
  * platform's own state (intra-state supply), otherwise IGST 18%.
  */
-export function splitGst(taxable: number, billingState: string, companyState: string = COMPANY_STATE): GstSplit {
-  const same = billingState.trim().toLowerCase() === companyState.trim().toLowerCase();
+export function splitGst(taxable: number, billingState: string | null | undefined, companyState: string = COMPANY_STATE): GstSplit {
+  const same = (stateCodeOf(billingState) ?? "") === (stateCodeOf(companyState) ?? "-");
   if (same) {
     const half = round2((taxable * GST_RATE) / 2);
     return { kind: "intra", cgst: half, sgst: half, igst: 0, total: round2(half * 2) };
@@ -232,43 +233,72 @@ export function priceBreakdown(opts: {
 
 /* ------------------------------------------------------------- Indian states */
 
-/** GST state codes (first two digits of a GSTIN). */
+/** GST state / UT codes (the first two characters of a GSTIN) — same list as the backend. */
 export const INDIAN_STATES: { name: string; code: string }[] = [
+  { name: "Andaman and Nicobar Islands", code: "35" },
   { name: "Andhra Pradesh", code: "37" },
+  { name: "Arunachal Pradesh", code: "12" },
   { name: "Assam", code: "18" },
   { name: "Bihar", code: "10" },
+  { name: "Chandigarh", code: "04" },
   { name: "Chhattisgarh", code: "22" },
+  { name: "Dadra and Nagar Haveli and Daman and Diu", code: "26" },
   { name: "Delhi", code: "07" },
   { name: "Goa", code: "30" },
   { name: "Gujarat", code: "24" },
   { name: "Haryana", code: "06" },
   { name: "Himachal Pradesh", code: "02" },
+  { name: "Jammu and Kashmir", code: "01" },
   { name: "Jharkhand", code: "20" },
   { name: "Karnataka", code: "29" },
   { name: "Kerala", code: "32" },
+  { name: "Ladakh", code: "38" },
+  { name: "Lakshadweep", code: "31" },
   { name: "Madhya Pradesh", code: "23" },
   { name: "Maharashtra", code: "27" },
+  { name: "Manipur", code: "14" },
+  { name: "Meghalaya", code: "17" },
+  { name: "Mizoram", code: "15" },
+  { name: "Nagaland", code: "13" },
   { name: "Odisha", code: "21" },
+  { name: "Puducherry", code: "34" },
   { name: "Punjab", code: "03" },
   { name: "Rajasthan", code: "08" },
+  { name: "Sikkim", code: "11" },
   { name: "Tamil Nadu", code: "33" },
   { name: "Telangana", code: "36" },
+  { name: "Tripura", code: "16" },
   { name: "Uttar Pradesh", code: "09" },
   { name: "Uttarakhand", code: "05" },
   { name: "West Bengal", code: "19" },
+  { name: "Other Territory", code: "97" },
 ];
+
+/** "29" → "Karnataka"; unknown codes come back as given. */
+export function stateName(code: string | null | undefined): string {
+  if (!code) return "";
+  return INDIAN_STATES.find((s) => s.code === code)?.name ?? code;
+}
+
+/** Accepts a code ("29") or a name ("Karnataka"); returns the code, or null. */
+export function stateCodeOf(value: string | null | undefined): string | null {
+  const v = (value ?? "").trim();
+  if (!v) return null;
+  const hit = INDIAN_STATES.find((s) => s.code === v || s.name.toLowerCase() === v.toLowerCase());
+  return hit?.code ?? null;
+}
 
 const GSTIN_RE = /^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z][1-9A-Z]Z[0-9A-Z]$/;
 
-/** Returns an error message, or null when the GSTIN is empty (optional) or valid. */
-export function checkGstin(raw: string, state: string): string | null {
-  const gstin = raw.trim().toUpperCase();
+/** Returns an error message, or null when the GSTIN is empty (optional) or valid. `state` is a GST state code. */
+export function checkGstin(raw: string | null | undefined, state: string | null | undefined): string | null {
+  const gstin = (raw ?? "").trim().toUpperCase();
   if (!gstin) return null;
   if (gstin.length !== 15) return "A GSTIN has 15 characters.";
   if (!GSTIN_RE.test(gstin)) return "That doesn't look like a GSTIN (format: 29ABCDE1234F1Z5).";
-  const st = INDIAN_STATES.find((s) => s.name === state);
-  if (st && gstin.slice(0, 2) !== st.code) {
-    return `This GSTIN is registered in state code ${gstin.slice(0, 2)}, but the billing state ${state} is ${st.code}.`;
+  const code = stateCodeOf(state);
+  if (code && gstin.slice(0, 2) !== code) {
+    return `This GSTIN is registered in state code ${gstin.slice(0, 2)}, but the state chosen is ${stateName(code)} (${code}).`;
   }
   return null;
 }

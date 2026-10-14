@@ -6,6 +6,8 @@
  */
 import type {
   AccessStatus,
+  AdminCheckoutRow,
+  CheckoutStatus,
   AdminCancelRequest,
   AdminPaymentList,
   ApplyCouponRequest,
@@ -45,9 +47,12 @@ import type {
 } from "./types";
 
 export class BillingError extends Error {
-  constructor(message: string) {
+  /** Machine-readable reason from the API (e.g. "same_plan", "billing_profile_required"). */
+  readonly code: string | null;
+  constructor(message: string, code: string | null = null) {
     super(message);
     this.name = "BillingError";
+    this.code = code;
   }
 }
 
@@ -67,6 +72,8 @@ export interface BillingClient {
   /** POST /org/billing/checkout/preview */
   previewCheckout(req: PreviewCheckoutRequest): Promise<CheckoutPreview>;
   /** PUT /org/billing/profile */
+  /** GET /org/billing/profile — null until the first purchase saves one. */
+  getBillingProfile(): Promise<BillingProfile | null>;
   saveBillingProfile(profile: BillingProfile): Promise<BillingProfile>;
   /** POST /org/billing/checkout — creates the Razorpay order (or activates a ₹0 checkout). */
   startCheckout(req: StartCheckoutRequest): Promise<StartCheckoutResponse>;
@@ -122,6 +129,8 @@ export interface BillingClient {
   listAdminPayments(req: ListAdminPaymentsRequest): Promise<AdminPaymentList>;
   /** POST /admin/billing/payments/:id/refund — full amount only; issues a credit note. */
   refundPayment(req: RefundPaymentRequest): Promise<RefundPaymentResponse>;
+  /** GET /admin/billing/checkouts?status= — "needs review" by default (paid but not applied). */
+  listAdminCheckouts(status?: CheckoutStatus): Promise<AdminCheckoutRow[]>;
   /** GET /admin/billing/lifecycle */
   getLifecycleSettings(): Promise<LifecycleSettings>;
   /** PUT /admin/billing/lifecycle */

@@ -77,13 +77,43 @@ export interface PaymentMethodSummary {
 
 export interface BillingProfile {
   legalName: string;
-  addressLine: string;
+  addressLine1: string;
+  addressLine2: string | null;
   city: string;
-  /** Indian state name — decides CGST+SGST vs IGST. */
+  /** 2-digit GST state code ("29" = Karnataka) — decides CGST+SGST vs IGST and must match the GSTIN. */
   state: string;
   pincode: string;
+  /** ISO country code; only "IN" is fully supported (others: IGST, no GSTIN). */
+  country: string;
   /** Optional, upper-case. */
-  gstin: string;
+  gstin: string | null;
+}
+
+/** The platform as GST seller (Super Admin → company tax settings). Every field null until set. */
+export interface SellerSettings {
+  legalName: string | null;
+  gstin: string | null;
+  /** 2-digit GST state code. */
+  state: string | null;
+  addressLine1: string | null;
+  addressLine2: string | null;
+  city: string | null;
+  pincode: string | null;
+}
+
+export interface BillingWarning {
+  code: "seller_state_missing" | "buyer_outside_india";
+  message: string;
+}
+
+/** An upgrade waiting on someone: a request awaiting approval, or a paid checkout under review. */
+export interface PendingUpgrade {
+  status: "pending_approval" | "needs_review";
+  requestId: string | null;
+  checkoutId: string | null;
+  toPlan: { id: PlanId; name: string };
+  interval: BillingInterval;
+  createdAt: string;
 }
 
 export interface UsageItem {
@@ -121,6 +151,8 @@ export interface BillingOverview {
   renewalMode: RenewalMode;
   paymentMethod: PaymentMethodSummary | null;
   billingProfile: BillingProfile | null;
+  /** A pending upgrade request, or a paid upgrade under review. */
+  pendingUpgrade: PendingUpgrade | null;
   periodStart: string | null;
   /** Renewal date (end of the current or unpaid period). */
   periodEnd: string | null;
@@ -164,20 +196,37 @@ export interface GstBreakdown {
   total: number;
 }
 
+/**
+ * new: no active paid plan — full price, a new cycle starts now.
+ * upgrade_same_interval: (new − old) × daysLeft ÷ daysInCycle; renewal date unchanged.
+ * interval_change: monthly → yearly — yearly price minus the unused monthly credit; new yearly cycle.
+ * renewal: paying the current plan again (step 3; mock only for now).
+ */
+export type CheckoutKind = "new" | "upgrade_same_interval" | "interval_change" | "renewal";
+
 export interface CheckoutPreview {
   planId: PlanId;
   planName: string;
   interval: BillingInterval;
-  kind: "new" | "upgrade" | "renewal";
+  kind: CheckoutKind;
+  /** The plan the org is on when quoted. */
+  fromPlan: { id: PlanId; name: string; interval: BillingInterval } | null;
   planPrice: number;
-  /** Mid-cycle upgrade: pay only the difference for the days left. */
+  /**
+   * upgrade_same_interval: the difference for the days left (charge) and the
+   * credit for what's already paid. interval_change: credit = unused part of
+   * the monthly cycle, charge = what's left to pay.
+   */
   proration: { oldPrice: number; newPrice: number; daysLeft: number; daysInPeriod: number; charge: number; credit: number } | null;
+  /** False until coupons ship — the UI hides the coupon field. */
+  couponsEnabled: boolean;
   coupon: { code: string; description: string } | null;
   /** Why the entered coupon was rejected (shown under the field). */
   couponError: string | null;
   couponDiscount: number;
   taxable: number;
-  billingState: string;
+  /** Buyer's GST state code (or name, from the mock); null when unknown. */
+  billingState: string | null;
   gst: GstBreakdown;
   total: number;
   /** When the paid-for period ends. */
@@ -186,6 +235,10 @@ export interface CheckoutPreview {
   recurringPrice: number;
   /** Renewals after this payment that the coupon still covers. */
   couponRenewalsLeft: number;
+  paymentMode: PaymentMode;
+  paymentModeReason: ManualReason | null;
+  /** E.g. the seller's state isn't set (charged IGST) — for admins, not customers. */
+  warnings: BillingWarning[];
 }
 
 export interface StartCheckoutRequest {
@@ -200,18 +253,32 @@ export type StartCheckoutResponse =
   | { status: "activated"; receipt: CheckoutReceipt }
   | {
       status: "payment_required";
+      mode: "online";
       checkoutId: string;
       amount: number;
       /** Razorpay order for `openCheckout` (lib/razorpay.ts). null from the mock client. */
-      razorpay: { keyId: string; orderId: string; amountPaise: number; currency: "INR" } | null;
-    };
+      razorpay: {
+        keyId: string;
+        orderId: string;
+        amountPaise: number;
+        currency: "INR";
+        name: string;
+        description: string;
+        prefill: { name?: string; email?: string; contact?: string };
+      } | null;
+    }
+  /** Manual mode: an upgrade request for Super Admin approval (an existing pending one is returned, not duplicated). */
+  | { status: "pending_approval"; mode: "manual"; checkoutId: string | null; requestId: string };
 
+/** Razorpay Checkout's success payload (sent to the API as razorpay_order_id etc.). */
 export interface ConfirmCheckoutRequest {
   checkoutId: string;
   razorpayOrderId: string;
   razorpayPaymentId: string;
   razorpaySignature: string;
 }
+
+export type CheckoutStatus = "pending" | "paid" | "failed" | "expired" | "cancelled" | "approved" | "rejected" | "needs_review";
 
 export interface CheckoutReceipt {
   planId: PlanId;
@@ -223,7 +290,37 @@ export interface CheckoutReceipt {
   couponCode: string | null;
 }
 
-export type ConfirmCheckoutResponse = { status: "active"; receipt: CheckoutReceipt } | { status: "failed"; reason: string };
+/**
+ * The plan is applied by the server when the payment is captured (by this
+ * call's verify or the webhook). `paid` = already applied; otherwise the UI
+ * polls getBillingOverview until the plan changes.
+ */
+export interface ConfirmCheckoutResponse {
+  checkoutId: string;
+  checkoutStatus: CheckoutStatus;
+  paymentStatus: "created" | "pending" | "captured" | "failed" | "refunded";
+  toPlanId: PlanId;
+  toInterval: BillingInterval;
+}
+
+/** Super Admin: a checkout, e.g. one paid but not applied ("needs review"). */
+export interface AdminCheckoutRow {
+  id: string;
+  organisation: { id: string; name: string };
+  fromPlanName: string | null;
+  toPlanName: string;
+  toInterval: BillingInterval;
+  kind: CheckoutKind;
+  mode: PaymentMode;
+  status: CheckoutStatus;
+  total: number;
+  paid: number | null;
+  razorpayPaymentId: string | null;
+  buyerGstin: string | null;
+  reviewReason: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
 
 /* -------------------------------------------------------- Plan changes */
 
@@ -496,4 +593,8 @@ export interface LifecycleSettings {
   paymentModeReason: ManualReason | null;
   /** Read-only: what the backend can store yet; the UI disables the rest. */
   supports: { fallBackToBasic: boolean; reminderSchedule: boolean };
+  /** Company tax settings (the platform as GST seller). */
+  seller: SellerSettings;
+  /** E.g. the seller state isn't set, so every checkout is IGST. */
+  warnings: BillingWarning[];
 }

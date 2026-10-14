@@ -56,7 +56,7 @@ export function CheckoutPage({ plan, interval }: { plan?: string; interval?: str
   );
 }
 
-export function CheckoutSuccessPage(p: { plan?: string; interval?: string; amount?: string; reference?: string; until?: string; coupon?: string }) {
+export function CheckoutSuccessPage(p: { plan?: string; interval?: string; amount?: string; reference?: string; until?: string; coupon?: string; finishing?: string }) {
   const { overview } = useOrgBilling();
   const { data: plans } = useBillingQuery((c) => c.listPlans(), []);
   const plan = plans?.find((x) => x.id === p.plan);
@@ -67,6 +67,7 @@ export function CheckoutSuccessPage(p: { plan?: string; interval?: string; amoun
         <CheckoutSuccess
           orgName={overview.orgName}
           renewalMode={overview.renewalMode}
+          finishing={p.finishing === "1"}
           receipt={{
             planId: p.plan ?? "",
             planName: plan?.name ?? p.plan ?? "",

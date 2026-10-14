@@ -109,6 +109,7 @@ export function createMockBillingClient(opts: { initial?: Partial<MockState>; pe
     const isUpgrade = purpose === "purchase" && !onFree && plan.rank > ov.plan.rank;
     const midCycle = isUpgrade && !inGrace && interval === ov.interval && ov.daysLeftInPeriod > 0;
     const stateName = billingState || (s.billingProfile ?? DEFAULT_BILLING_DETAILS).state || COMPANY_STATE;
+    const fromPlanRow = ov.paidPlan && !onFree ? ov.paidPlan : ov.plan;
 
     let coupon: Coupon | null = null;
     let couponError: string | null = null;
@@ -137,8 +138,10 @@ export function createMockBillingClient(opts: { initial?: Partial<MockState>; pe
       planId,
       planName: plan.name,
       interval,
-      kind: purpose === "renewal" ? "renewal" : midCycle ? "upgrade" : "new",
+      kind: purpose === "renewal" ? "renewal" : midCycle ? "upgrade_same_interval" : "new",
+      fromPlan: { id: fromPlanRow.id, name: fromPlanRow.name, interval: ov.interval },
       planPrice: b.planPrice,
+      couponsEnabled: true,
       proration: b.proration
         ? { oldPrice: b.proration.oldPrice, newPrice: b.proration.newPrice, daysLeft: b.proration.daysLeft, daysInPeriod: b.proration.daysInCycle, charge: b.proration.charge, credit: b.proration.credit }
         : null,
@@ -152,6 +155,9 @@ export function createMockBillingClient(opts: { initial?: Partial<MockState>; pe
       periodEnd: midCycle ? ov.periodEnd! : addCycle(renewalFrom, interval),
       recurringPrice: planPrice(plan, interval),
       couponRenewalsLeft: coupon?.duration === "first_n" ? Math.max(0, (coupon.durationCount ?? 1) - 1) : coupon?.duration === "forever" ? 99 : 0,
+      paymentMode: ov.paymentMode,
+      paymentModeReason: ov.paymentModeReason,
+      warnings: [],
     };
   }
 
@@ -177,7 +183,7 @@ export function createMockBillingClient(opts: { initial?: Partial<MockState>; pe
           id: `inv_${seq}`,
           number: `IPX/26-27/0${seq}`,
           issuedAt: today,
-          description: `${plan.name} · ${p.interval}${pv.kind === "upgrade" ? " (upgrade, prorated)" : p.purpose === "renewal" ? " renewal" : ""}${p.couponCode ? ` (${p.couponCode})` : ""}`,
+          description: `${plan.name} · ${p.interval}${pv.kind === "upgrade_same_interval" ? " (upgrade, prorated)" : p.purpose === "renewal" ? " renewal" : ""}${p.couponCode ? ` (${p.couponCode})` : ""}`,
           subtotal: pv.taxable,
           gst: pv.gst.total,
           total: pv.total,
@@ -190,7 +196,7 @@ export function createMockBillingClient(opts: { initial?: Partial<MockState>; pe
           id: `pay_${seq}`,
           orgId: DEMO_ORG.id,
           createdAt: `${today}T12:00:00`,
-          description: `${plan.name} ${p.purpose === "renewal" ? "renewal" : pv.kind === "upgrade" ? "upgrade (prorated)" : "purchase"}`,
+          description: `${plan.name} ${p.purpose === "renewal" ? "renewal" : pv.kind === "upgrade_same_interval" ? "upgrade (prorated)" : "purchase"}`,
           amount: pv.total,
           method: pv.total === 0 ? "100% coupon — no payment" : s.renewalMode === "auto" ? `Card · ${s.paymentMethod.label}` : "UPI",
           status: "captured",
@@ -306,21 +312,24 @@ export function createMockBillingClient(opts: { initial?: Partial<MockState>; pe
     getBillingOverview: () => ok(overview()),
     listPlans: () => ok([...get().plans].sort((a, b) => a.rank - b.rank)),
 
+    getBillingProfile: () => ok(get().billingProfile),
+    listAdminCheckouts: () => ok([]),
+
     previewCheckout: (req) => ok(preview(req.planId, req.interval, req.couponCode, req.billingState, "purchase")),
 
     saveBillingProfile(profile) {
       const required: [keyof typeof profile, string][] = [
         ["legalName", "legal name"],
-        ["addressLine", "address"],
+        ["addressLine1", "address"],
         ["city", "city"],
         ["state", "state"],
       ];
-      const missing = required.find(([k]) => !profile[k].trim());
+      const missing = required.find(([k]) => !String(profile[k] ?? "").trim());
       if (missing) return fail(`Enter the ${missing[1]}.`);
       if (!/^[1-9][0-9]{5}$/.test(profile.pincode.trim())) return fail("Enter a 6-digit PIN code.");
       const gstErr = checkGstin(profile.gstin, profile.state);
       if (gstErr) return fail(gstErr);
-      const clean = { ...profile, gstin: profile.gstin.trim().toUpperCase() };
+      const clean = { ...profile, country: profile.country || "IN", addressLine2: profile.addressLine2?.trim() || null, gstin: profile.gstin?.trim().toUpperCase() || null };
       set({ billingProfile: clean });
       return ok(clean);
     },
@@ -333,15 +342,24 @@ export function createMockBillingClient(opts: { initial?: Partial<MockState>; pe
       const p: PendingCheckout = { planId: req.planId, interval: req.interval, couponCode: pv.coupon?.code ?? null, purpose: req.purpose, amount: pv.total };
       if (pv.total === 0) return ok({ status: "activated" as const, receipt: activate(p, "free_coupon") });
       const id = `chk_${Math.random().toString(36).slice(2, 10)}`;
+      if (pv.paymentMode === "manual") {
+        // Same as the API: one pending request, returned again instead of duplicated.
+        const existing = s.pendingRequest;
+        if (existing) return ok({ status: "pending_approval" as const, mode: "manual" as const, checkoutId: existing.checkoutId, requestId: existing.requestId });
+        const pendingRequest = { requestId: `pcr_${id.slice(4)}`, checkoutId: id, planId: p.planId, interval: p.interval, createdAt: `${today}T12:00:00.000Z` };
+        set({ pendingRequest });
+        return ok({ status: "pending_approval" as const, mode: "manual" as const, checkoutId: id, requestId: pendingRequest.requestId });
+      }
       pending.set(id, p);
-      return ok({ status: "payment_required" as const, checkoutId: id, amount: pv.total, razorpay: null });
+      return ok({ status: "payment_required" as const, mode: "online" as const, checkoutId: id, amount: pv.total, razorpay: null });
     },
 
     confirmCheckout(req) {
       const p = pending.get(req.checkoutId);
-      if (!p) return ok({ status: "failed" as const, reason: "This checkout has expired. Please start again." });
+      if (!p) return fail("This checkout has expired. Please start again.");
       pending.delete(req.checkoutId);
-      return ok({ status: "active" as const, receipt: activate(p, req.razorpayPaymentId) });
+      activate(p, req.razorpayPaymentId);
+      return ok({ checkoutId: req.checkoutId, checkoutStatus: "paid" as const, paymentStatus: "captured" as const, toPlanId: p.planId, toInterval: p.interval });
     },
 
     updatePaymentMethod(req) {
