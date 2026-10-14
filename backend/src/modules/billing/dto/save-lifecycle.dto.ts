@@ -13,6 +13,18 @@ import {
   ValidateNested,
 } from 'class-validator';
 
+/** The platform as GST seller. Every field optional (null = not set yet). */
+export class SellerSettingsDto {
+  @IsOptional() @IsString() @MaxLength(200) legalName?: string | null;
+  @IsOptional() @IsString() @MaxLength(20) gstin?: string | null;
+  /** 2-digit GST state code. */
+  @IsOptional() @IsString() @MaxLength(2) state?: string | null;
+  @IsOptional() @IsString() @MaxLength(200) addressLine1?: string | null;
+  @IsOptional() @IsString() @MaxLength(200) addressLine2?: string | null;
+  @IsOptional() @IsString() @MaxLength(100) city?: string | null;
+  @IsOptional() @IsString() @MaxLength(12) pincode?: string | null;
+}
+
 class ReminderRuleDto {
   @IsIn(['before_renewal', 'payment_day', 'mid_grace', 'day_before_grace_ends'])
   id!: 'before_renewal' | 'payment_day' | 'mid_grace' | 'day_before_grace_ends';
@@ -38,4 +50,10 @@ export class SaveLifecycleDto {
   @IsOptional() @IsIn(['online', 'manual']) paymentMode?: string;
   @IsOptional() @IsString() paymentModeReason?: string | null;
   @IsOptional() @IsObject() supports?: Record<string, boolean>;
+  @IsOptional() @IsArray() warnings?: unknown[];
+  /** Company tax settings; omitted = unchanged. */
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => SellerSettingsDto)
+  seller?: SellerSettingsDto;
 }

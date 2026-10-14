@@ -12,9 +12,55 @@ import {
   toBillingPlan,
   toBillingPlans,
 } from './plan-modules';
-import type { BillingPlanV2, LifecycleSettingsV2 } from './billing.types';
+import type {
+  BillingPlanV2,
+  BillingWarning,
+  LifecycleSettingsV2,
+  SellerSettingsV2,
+} from './billing.types';
 import type { SaveAdminPlanDto } from './dto/save-admin-plan.dto';
-import type { SaveLifecycleDto } from './dto/save-lifecycle.dto';
+import type {
+  SaveLifecycleDto,
+  SellerSettingsDto,
+} from './dto/save-lifecycle.dto';
+import { gstinProblem, isGstStateCode, normaliseGstin } from './gst';
+
+/* --------------------------------------------------------- seller settings */
+
+const blank = (v: string | null | undefined) => v?.trim() || null;
+
+export function cleanSeller(s: SellerSettingsDto): SellerSettingsV2 {
+  return {
+    legalName: blank(s.legalName),
+    gstin: normaliseGstin(s.gstin) || null,
+    state: blank(s.state),
+    addressLine1: blank(s.addressLine1),
+    addressLine2: blank(s.addressLine2),
+    city: blank(s.city),
+    pincode: blank(s.pincode),
+  };
+}
+
+/** Company tax settings check: all optional, but what's given must be valid. Pure. */
+export function sellerProblem(s: SellerSettingsV2): string | null {
+  if (s.state && !isGstStateCode(s.state)) return "Choose the company's state.";
+  if (s.gstin && !s.state)
+    return "Choose the company's state to go with the GSTIN.";
+  if (s.pincode && !/^[1-9][0-9]{5}$/.test(s.pincode))
+    return 'Enter a 6-digit PIN code.';
+  return gstinProblem(s.gstin, s.state);
+}
+
+export function sellerWarnings(s: SellerSettingsV2): BillingWarning[] {
+  if (s.state) return [];
+  return [
+    {
+      code: 'seller_state_missing',
+      message:
+        "The company's state isn't set, so every checkout is charged IGST. Set it under company tax settings.",
+    },
+  ];
+}
 
 const MAX_LIMIT = 100_000;
 const LIMIT_LABEL = {
@@ -140,9 +186,10 @@ export class AdminBillingService {
   /* -------------------------------------------------------------- lifecycle */
 
   async getLifecycle(): Promise<LifecycleSettingsV2> {
-    const [cfg, mode] = await Promise.all([
+    const [cfg, mode, seller] = await Promise.all([
       this.platformConfig.getConfig(),
       this.mode.getMode(),
+      this.platformConfig.getSellerSettings(),
     ]);
     return {
       notifyDaysBefore: Number(cfg.billingExpiryNotifyDays),
@@ -161,6 +208,8 @@ export class AdminBillingService {
       paymentMode: mode.mode,
       paymentModeReason: mode.reason,
       supports: { fallBackToBasic: false, reminderSchedule: false },
+      seller,
+      warnings: sellerWarnings(seller),
     };
   }
 
@@ -170,6 +219,9 @@ export class AdminBillingService {
         '"Fall back to Basic" isn\'t available yet. Choose Restrict or Cancel for now.',
       );
     }
+    const seller = dto.seller ? cleanSeller(dto.seller) : null;
+    const problem = seller ? sellerProblem(seller) : null;
+    if (problem) throw new BadRequestException(problem);
     await this.platformConfig.updateConfig({
       billingExpiryNotifyDays: dto.notifyDaysBefore,
       billingGracePeriodDays: dto.graceDays,
@@ -177,6 +229,7 @@ export class AdminBillingService {
       billingExpiryMessage: dto.expiryMessage,
       onlinePaymentsEnabled: dto.onlinePaymentsEnabled,
     });
+    if (seller) await this.platformConfig.saveSellerSettings(seller);
     return this.getLifecycle();
   }
 }

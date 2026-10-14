@@ -69,7 +69,9 @@ export interface BillingOverviewV2 {
   autoRenewAvailable: boolean;
   renewalMode: 'auto' | 'manual';
   paymentMethod: null;
-  billingProfile: null;
+  billingProfile: BillingProfileV2 | null;
+  /** A pending upgrade request, or a paid upgrade under review (step 2). */
+  pendingUpgrade: PendingUpgradeV2 | null;
   periodStart: string | null;
   periodEnd: string | null;
   daysLeftInPeriod: number;
@@ -118,4 +120,137 @@ export interface LifecycleSettingsV2 {
   paymentModeReason: ManualReason | null;
   /** What this backend can store yet; the UI greys out the rest. */
   supports: { fallBackToBasic: boolean; reminderSchedule: boolean };
+  /** Company tax settings (step 2). */
+  seller: SellerSettingsV2;
+  /** E.g. the seller state is missing, so every checkout is IGST. */
+  warnings: BillingWarning[];
+}
+
+/* ------------------------------------------------------------ Step 2 */
+
+/** The org as GST buyer. `state` is the 2-digit GST state code. */
+export interface BillingProfileV2 {
+  legalName: string;
+  addressLine1: string;
+  addressLine2: string | null;
+  city: string;
+  state: string;
+  pincode: string;
+  /** ISO country code; only 'IN' is fully supported (others: IGST, TODO). */
+  country: string;
+  gstin: string | null;
+}
+
+/** The platform as GST seller (Super Admin → lifecycle / billing settings). */
+export interface SellerSettingsV2 {
+  legalName: string | null;
+  gstin: string | null;
+  state: string | null;
+  addressLine1: string | null;
+  addressLine2: string | null;
+  city: string | null;
+  pincode: string | null;
+}
+
+export interface BillingWarning {
+  code: 'seller_state_missing' | 'buyer_outside_india';
+  message: string;
+}
+
+export type CheckoutKind = 'new' | 'upgrade_same_interval' | 'interval_change';
+
+export interface GstBreakdownV2 {
+  kind: 'intra' | 'inter';
+  cgst: number;
+  sgst: number;
+  igst: number;
+  total: number;
+}
+
+export interface CheckoutPreviewV2 {
+  planId: string;
+  planName: string;
+  interval: BillingInterval;
+  kind: CheckoutKind;
+  fromPlan: { id: string; name: string; interval: BillingInterval } | null;
+  /** Full price of the chosen plan and interval (rupees, before GST). */
+  planPrice: number;
+  /**
+   * Upgrade: the difference for the days left. Interval change: credit for
+   * the unused part of the current monthly cycle. null for a new purchase.
+   */
+  proration: {
+    oldPrice: number;
+    newPrice: number;
+    daysLeft: number;
+    daysInPeriod: number;
+    charge: number;
+    credit: number;
+  } | null;
+  coupon: null;
+  couponError: null;
+  couponsEnabled: false;
+  couponDiscount: 0;
+  taxable: number;
+  billingState: string | null;
+  gst: GstBreakdownV2;
+  total: number;
+  periodEnd: string;
+  recurringPrice: number;
+  couponRenewalsLeft: 0;
+  paymentMode: PaymentMode;
+  paymentModeReason: ManualReason | null;
+  warnings: BillingWarning[];
+}
+
+export type StartCheckoutResultV2 =
+  | {
+      status: 'payment_required';
+      mode: 'online';
+      checkoutId: string;
+      amount: number;
+      razorpay: {
+        keyId: string;
+        orderId: string;
+        amountPaise: number;
+        currency: 'INR';
+        name: string;
+        description: string;
+        prefill: { name?: string; email?: string; contact?: string };
+      };
+    }
+  | {
+      status: 'pending_approval';
+      mode: 'manual';
+      /** null when an older request (made before billing v2) is the pending one. */
+      checkoutId: string | null;
+      requestId: string;
+    };
+
+export type CheckoutStatusV2 =
+  | 'pending'
+  | 'paid'
+  | 'failed'
+  | 'expired'
+  | 'cancelled'
+  | 'approved'
+  | 'rejected'
+  | 'needs_review';
+
+export interface ConfirmCheckoutResultV2 {
+  checkoutId: string;
+  checkoutStatus: CheckoutStatusV2;
+  paymentStatus: 'created' | 'pending' | 'captured' | 'failed' | 'refunded';
+  toPlanId: string;
+  toInterval: BillingInterval;
+}
+
+/** An upgrade waiting on someone: a request for approval, or a paid checkout under review. */
+export interface PendingUpgradeV2 {
+  status: 'pending_approval' | 'needs_review';
+  requestId: string | null;
+  checkoutId: string | null;
+  toPlan: { id: string; name: string };
+  interval: BillingInterval;
+  createdAt: string;
 }

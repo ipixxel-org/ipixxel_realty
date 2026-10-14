@@ -6,8 +6,10 @@ import type {
   BillingInterval,
   BillingOverviewV2,
   BillingPlanV2,
+  BillingProfileV2,
   PaymentMode,
   ManualReason,
+  PendingUpgradeV2,
   SubscriptionStatusV2,
 } from './billing.types';
 
@@ -24,6 +26,8 @@ export interface OverviewInput {
   now: Date;
   orgName: string;
   ownerName: string;
+  billingProfile?: BillingProfileV2 | null;
+  pendingUpgrade?: PendingUpgradeV2 | null;
   /** The org's plan (subscription plan, or the free plan when it has none). */
   plan: BillingPlanV2;
   subscription: {
@@ -92,7 +96,8 @@ export function buildOverview(input: OverviewInput): BillingOverviewV2 {
     autoRenewAvailable: false,
     renewalMode: 'manual',
     paymentMethod: null,
-    billingProfile: null,
+    billingProfile: input.billingProfile ?? null,
+    pendingUpgrade: input.pendingUpgrade ?? null,
     periodStart: periodStart ? isoDate(periodStart) : null,
     periodEnd: periodEnd ? isoDate(periodEnd) : null,
     daysLeftInPeriod:

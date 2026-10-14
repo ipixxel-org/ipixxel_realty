@@ -10,6 +10,8 @@ import { AdminBillingService } from './admin-billing.service';
 import { OrgBillingV2Service } from './org-billing-v2.service';
 import { SaveAdminPlanDto } from './dto/save-admin-plan.dto';
 import { SaveLifecycleDto } from './dto/save-lifecycle.dto';
+import { BillingProfileService } from './billing-profile.service';
+import { SaveBillingProfileDto } from './dto/save-billing-profile.dto';
 
 /**
  * Billing v2 — organisation side. Shares the /org/billing prefix with the
@@ -19,7 +21,10 @@ import { SaveLifecycleDto } from './dto/save-lifecycle.dto';
 @UseGuards(JwtAuthGuard, OrgApprovedGuard, PermissionGuard)
 @Controller('org/billing')
 export class OrgBillingV2Controller {
-  constructor(private readonly service: OrgBillingV2Service) {}
+  constructor(
+    private readonly service: OrgBillingV2Service,
+    private readonly profiles: BillingProfileService,
+  ) {}
 
   @RequirePermission('billing', 'view')
   @Get('v2')
@@ -37,6 +42,21 @@ export class OrgBillingV2Controller {
   @Get('access')
   access(@CurrentUser() user: JwtPayload) {
     return this.service.getAccess(user.orgId as string);
+  }
+
+  @RequirePermission('billing', 'view')
+  @Get('profile')
+  getProfile(@CurrentUser() user: JwtPayload) {
+    return this.profiles.get(user.orgId as string);
+  }
+
+  @RequirePermission('billing', 'edit')
+  @Put('profile')
+  saveProfile(
+    @CurrentUser() user: JwtPayload,
+    @Body() dto: SaveBillingProfileDto,
+  ) {
+    return this.profiles.save(user.orgId as string, dto);
   }
 }
 

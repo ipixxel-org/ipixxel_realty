@@ -11,6 +11,8 @@ import {
 } from '../../common/utils/subscription-lifecycle.util';
 import { BillingModeService } from './billing-mode.service';
 import { buildOverview } from './billing-overview';
+import { toProfileV2 } from './billing-profile.service';
+import { expireStaleCheckouts, findPendingUpgrade } from './checkout-state';
 import {
   isFreePlan,
   sortPlans,
@@ -48,6 +50,7 @@ export class OrgBillingV2Service {
   ): Promise<BillingOverviewV2> {
     // Same lazy lifecycle pass as GET /org/billing, so a lapsed term shows up.
     await applyOrgSubscriptionLifecycle(this.prisma, orgId);
+    await expireStaleCheckouts(this.prisma, orgId, now);
 
     const [
       org,
@@ -60,6 +63,8 @@ export class OrgBillingV2Service {
       templates,
       cfg,
       mode,
+      profile,
+      pendingUpgrade,
     ] = await Promise.all([
       this.prisma.organisation.findUnique({
         where: { id: orgId },
@@ -82,6 +87,10 @@ export class OrgBillingV2Service {
       this.prisma.organisationTemplate.count({ where: { orgId } }),
       getBillingExpiryConfig(this.prisma),
       this.mode.getMode(),
+      this.prisma.billingProfile.findUnique({
+        where: { organisationId: orgId },
+      }),
+      findPendingUpgrade(this.prisma, orgId),
     ]);
     if (!org) throw new NotFoundException('Organisation not found');
 
@@ -106,6 +115,8 @@ export class OrgBillingV2Service {
       now,
       orgName: org.name,
       ownerName,
+      billingProfile: profile ? toProfileV2(profile) : null,
+      pendingUpgrade,
       plan: toBillingPlan(planRow, rankOf(planRow.id)),
       subscription: subscription
         ? {

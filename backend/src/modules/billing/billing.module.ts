@@ -12,6 +12,7 @@ import {
   OrgBillingV2Controller,
 } from './billing.controller';
 import { OrgBillingV2Service } from './org-billing-v2.service';
+import { BillingProfileService } from './billing-profile.service';
 
 /**
  * Billing v2 (docs/billing-ui-contract.md). Built on the existing payments
@@ -24,6 +25,7 @@ import { OrgBillingV2Service } from './org-billing-v2.service';
     BillingModeService,
     OrgBillingV2Service,
     AdminBillingService,
+    BillingProfileService,
     OrgApprovedGuard,
     PermissionGuard,
     SuperAdminGuard,

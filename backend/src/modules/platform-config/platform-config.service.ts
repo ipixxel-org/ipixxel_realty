@@ -11,6 +11,27 @@ import { UpdatePlatformConfigDto } from './dto/update-platform-config.dto';
 // The single global config row id. Only one row is ever used.
 const PLATFORM_CONFIG_ID = 'platform';
 
+const SELLER_COLUMNS = [
+  'seller_legal_name',
+  'seller_gstin',
+  'seller_state',
+  'seller_address_line1',
+  'seller_address_line2',
+  'seller_city',
+  'seller_pincode',
+] as const;
+
+/** Billing v2: the platform as GST seller. `state` is the 2-digit GST state code. */
+export interface SellerSettings {
+  legalName: string | null;
+  gstin: string | null;
+  state: string | null;
+  addressLine1: string | null;
+  addressLine2: string | null;
+  city: string | null;
+  pincode: string | null;
+}
+
 function migrateLegacyBase(base: string | null | undefined): string {
   const normalized = base ? normalizeDomain(base) : '';
   if (!normalized || normalized === 'ipixxel.in') return 'ipixxel.ae';
@@ -77,6 +98,73 @@ export class PlatformConfigService implements OnApplicationBootstrap {
         `ALTER TABLE "identity"."platform_configs" ADD COLUMN IF NOT EXISTS "online_payments_enabled" BOOLEAN NOT NULL DEFAULT false;`,
       );
     } catch {}
+    // Billing v2 seller (GST) settings (also in migration 20261014110220).
+    for (const col of SELLER_COLUMNS) {
+      try {
+        await this.prisma.$executeRawUnsafe(
+          `ALTER TABLE "identity"."platform_configs" ADD COLUMN IF NOT EXISTS "${col}" TEXT;`,
+        );
+      } catch {}
+    }
+  }
+
+  /** Billing v2: the platform as GST seller. Every field null until set. */
+  async getSellerSettings(): Promise<SellerSettings> {
+    const empty: SellerSettings = {
+      legalName: null,
+      gstin: null,
+      state: null,
+      addressLine1: null,
+      addressLine2: null,
+      city: null,
+      pincode: null,
+    };
+    try {
+      await this.ensureTable();
+      const rows: any[] = await this.prisma.$queryRaw`
+        SELECT "seller_legal_name", "seller_gstin", "seller_state", "seller_address_line1",
+               "seller_address_line2", "seller_city", "seller_pincode"
+        FROM "identity"."platform_configs" WHERE "id" = ${PLATFORM_CONFIG_ID} LIMIT 1
+      `;
+      const r = rows?.[0];
+      if (!r) return empty;
+      return {
+        legalName: r.seller_legal_name ?? null,
+        gstin: r.seller_gstin ?? null,
+        state: r.seller_state ?? null,
+        addressLine1: r.seller_address_line1 ?? null,
+        addressLine2: r.seller_address_line2 ?? null,
+        city: r.seller_city ?? null,
+        pincode: r.seller_pincode ?? null,
+      };
+    } catch (err: any) {
+      this.logger.warn(`Could not read seller settings: ${err.message}`);
+      return empty;
+    }
+  }
+
+  /** Billing v2: save the seller fields (validated by the caller). */
+  async saveSellerSettings(s: SellerSettings): Promise<SellerSettings> {
+    await this.ensureTable();
+    // Make sure the single row exists (all other columns have defaults).
+    await this.prisma.$executeRaw`
+      INSERT INTO "identity"."platform_configs" ("id", "updated_at")
+      VALUES (${PLATFORM_CONFIG_ID}, CURRENT_TIMESTAMP)
+      ON CONFLICT ("id") DO NOTHING
+    `;
+    await this.prisma.$executeRaw`
+      UPDATE "identity"."platform_configs" SET
+        "seller_legal_name" = ${s.legalName},
+        "seller_gstin" = ${s.gstin},
+        "seller_state" = ${s.state},
+        "seller_address_line1" = ${s.addressLine1},
+        "seller_address_line2" = ${s.addressLine2},
+        "seller_city" = ${s.city},
+        "seller_pincode" = ${s.pincode},
+        "updated_at" = CURRENT_TIMESTAMP
+      WHERE "id" = ${PLATFORM_CONFIG_ID}
+    `;
+    return this.getSellerSettings();
   }
 
   /**
