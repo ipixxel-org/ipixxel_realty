@@ -19,6 +19,8 @@ import {
 import { ORG_BRANDING_CHANGE_EVENT, type OrgBrandingChangeDetail } from "@/lib/org-profile";
 import type { OrgBillingSummary, OrgNotification, PermissionAction } from "@/lib/types";
 import { useToast } from "@/components/ui/toast";
+import { BillingV2Root } from "@/components/billing/shell-integration";
+import { BILLING_V2 } from "@/lib/billing/flag";
 import { SETTINGS_ACTIONS } from "@/lib/permissions";
 import { TEAM_CHAT_OPEN_EVENT, TeamChatProvider, useTeamChat } from "@/lib/team-chat/context";
 import { isChatHost } from "@/lib/team-chat/socket";
@@ -959,7 +961,8 @@ export function OrgAdminShell({ children }: { children: ReactNode }) {
             </div>
           </div>
         </header>
-        {expiryBanner ? (
+        {/* Billing v2 shows its own banners (BillingV2Root) — never both. */}
+        {expiryBanner && !BILLING_V2 ? (
           <div
             role="alert"
             style={{
@@ -1032,7 +1035,9 @@ export function OrgAdminShell({ children }: { children: ReactNode }) {
           </div>
         ) : null}
         <div className="page">
-          <LeadStagesProvider>{children}</LeadStagesProvider>
+          <LeadStagesProvider>
+            <BillingV2Root canEdit={hasPermission("billing", "edit")}>{children}</BillingV2Root>
+          </LeadStagesProvider>
         </div>
 
         {hasPermission("support", "view") ? (

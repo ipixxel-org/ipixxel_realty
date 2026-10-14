@@ -3,6 +3,8 @@ import type { Metadata } from "next";
 // import { Reveal } from "@/components/superadmin/reveal";
 // import { Switch } from "@/components/superadmin/switch";
 import { BillingExpirySettings } from "@/components/superadmin/billing-expiry-settings";
+import { AdminLifecycleSettings } from "@/components/billing/admin/admin-pages";
+import { BILLING_V2 } from "@/lib/billing/flag";
 import { GlobalBrandingSettings } from "@/components/superadmin/global-branding-settings";
 import { Icon } from "@/components/icons";
 
@@ -32,7 +34,8 @@ export default function SuperAdminSettingsPage() {
         Configure grace periods and automated expiration rules for organisations.
       </div>
       <div style={{ marginBottom: 24 }}>
-        <BillingExpirySettings />
+        {/* Billing v2 (NEXT_PUBLIC_BILLING_V2): lifecycle card with "Fall back to Basic" + reminder schedule. */}
+        {BILLING_V2 ? <AdminLifecycleSettings /> : <BillingExpirySettings />}
       </div>
 
       {/* TODO: static tabs — commented out until tab switching is implemented.

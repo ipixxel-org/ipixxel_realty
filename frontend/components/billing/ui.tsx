@@ -1,0 +1,242 @@
+"use client";
+
+import Link from "next/link";
+import type { CSSProperties, ReactNode } from "react";
+import { Icon, type IconName } from "@/components/icons";
+import { formatINR } from "@/lib/billing/pricing";
+import type { BillingInterval, BillingPlan, SubscriptionStatus } from "@/lib/billing/types";
+import { useBillingEnv, type BillingRoute, type RouteParams } from "./context";
+
+export const STATUS_META: Record<SubscriptionStatus, { label: string; badge: string }> = {
+  free: { label: "Free plan", badge: "b-gray" },
+  active: { label: "Active", badge: "b-green" },
+  renewal_due: { label: "Renews in 3 days", badge: "b-amber" },
+  past_due: { label: "Payment due", badge: "b-rose" },
+  grace_ending: { label: "Grace ends tomorrow", badge: "b-rose" },
+  moved_to_basic: { label: "Moved to Basic", badge: "b-gray" },
+  cancellation_scheduled: { label: "Cancellation scheduled", badge: "b-amber" },
+  downgrade_scheduled: { label: "Downgrade scheduled", badge: "b-violet" },
+};
+
+export function StatusBadge({ status }: { status: SubscriptionStatus }) {
+  return <span className={`badge ${STATUS_META[status].badge}`}>{STATUS_META[status].label}</span>;
+}
+
+/** Link to a billing screen; presentation pages can intercept it. */
+export function BLink({
+  to,
+  params,
+  className,
+  style,
+  children,
+}: {
+  to: BillingRoute;
+  params?: RouteParams;
+  className?: string;
+  style?: CSSProperties;
+  children: ReactNode;
+}) {
+  const { nav } = useBillingEnv();
+  return (
+    <Link
+      href={nav.href(to, params)}
+      className={className}
+      style={style}
+      onClick={(e) => {
+        if (nav.intercept?.(to, params)) e.preventDefault();
+      }}
+    >
+      {children}
+    </Link>
+  );
+}
+
+/** Shown while the mock data layer is active, so sample numbers aren't mistaken for real ones. */
+export function SampleDataTag() {
+  const { client } = useBillingEnv();
+  if (!client.isMock) return null;
+  return (
+    <span className="bl-tag" title="The billing backend isn't connected yet — these are sample figures.">
+      Sample data
+    </span>
+  );
+}
+
+export function PageHead({
+  eyebrow,
+  icon = "billing",
+  title,
+  sub,
+  actions,
+  back,
+}: {
+  eyebrow: string;
+  icon?: IconName;
+  title: string;
+  sub?: ReactNode;
+  actions?: ReactNode;
+  back?: { to: BillingRoute; params?: RouteParams; label: string };
+}) {
+  return (
+    <>
+      {back ? (
+        <BLink to={back.to} params={back.params} className="bl-crumb">
+          <Icon name="chevron-left" size={14} /> {back.label}
+        </BLink>
+      ) : null}
+      <div className="page-head">
+        <div>
+          <div className="eyebrow">
+            <Icon name={icon} size={14} /> {eyebrow}
+          </div>
+          <div className="bl-row">
+            <h1>{title}</h1>
+            <SampleDataTag />
+          </div>
+          {sub ? <div className="sub">{sub}</div> : null}
+        </div>
+        {actions ? <div className="actions">{actions}</div> : null}
+      </div>
+    </>
+  );
+}
+
+export function Section({
+  title,
+  sub,
+  action,
+  children,
+  flush,
+}: {
+  title: ReactNode;
+  sub?: ReactNode;
+  action?: ReactNode;
+  children: ReactNode;
+  flush?: boolean;
+}) {
+  return (
+    <div className="card">
+      <div className="card-h" style={{ flexWrap: "wrap", gap: 10 }}>
+        <div>
+          <span className="t">{title}</span>
+          {sub ? <div className="bl-muted" style={{ marginTop: 2 }}>{sub}</div> : null}
+        </div>
+        {action ? <div style={{ marginLeft: "auto" }}>{action}</div> : null}
+      </div>
+      <div className="card-b" style={flush ? { padding: 0 } : undefined}>
+        {children}
+      </div>
+    </div>
+  );
+}
+
+export type BannerTone = "rose" | "amber" | "info" | "green" | "gray";
+
+export function Banner({
+  tone,
+  icon,
+  title,
+  children,
+  actions,
+  aside,
+}: {
+  tone: BannerTone;
+  icon: IconName;
+  title: ReactNode;
+  children?: ReactNode;
+  actions?: ReactNode;
+  aside?: ReactNode;
+}) {
+  return (
+    <div className={`bl-banner bl-banner--${tone}`} role="status">
+      {aside ?? (
+        <span className="bl-banner-ic">
+          <Icon name={icon} size={17} />
+        </span>
+      )}
+      <div className="bl-banner-body">
+        <b>{title}</b>
+        {children}
+      </div>
+      {actions ? <div className="bl-banner-actions">{actions}</div> : null}
+    </div>
+  );
+}
+
+export function UsageMeter({ label, used, limit }: { label: string; used: number; limit: number }) {
+  const over = used > limit;
+  const full = used >= limit;
+  return (
+    <div>
+      <div className="bl-between" style={{ marginBottom: 6, fontSize: 13 }}>
+        <span className="bl-strong">{label}</span>
+        <span style={{ color: over ? "var(--rose)" : "var(--ink-2)", fontWeight: 600 }}>
+          {used}/{limit}
+          {over ? " · over limit" : full ? " · limit reached" : ""}
+        </span>
+      </div>
+      <div className="bl-meter-track">
+        <div className={`bl-meter-fill${full ? " full" : ""}`} style={{ width: `${Math.min(100, (used / Math.max(1, limit)) * 100)}%` }} />
+      </div>
+    </div>
+  );
+}
+
+export function Kv({ label, children }: { label: string; children: ReactNode }) {
+  return (
+    <div>
+      <div style={{ fontSize: 11, textTransform: "uppercase", fontWeight: 700, color: "var(--muted)", letterSpacing: "0.04em" }}>{label}</div>
+      <div style={{ fontWeight: 700, fontSize: 14, marginTop: 3 }}>{children}</div>
+    </div>
+  );
+}
+
+export function PlanPrice({ plan, interval }: { plan: BillingPlan; interval: BillingInterval }) {
+  if (plan.isFree) {
+    return (
+      <div className="bl-plan-price">
+        <b>Free</b>
+        <span className="bl-muted">forever</span>
+      </div>
+    );
+  }
+  return (
+    <div className="bl-plan-price">
+      <b>{formatINR(interval === "yearly" ? plan.priceYearly : plan.priceMonthly)}</b>
+      <span className="bl-muted">/ {interval === "yearly" ? "year" : "month"} + GST</span>
+    </div>
+  );
+}
+
+export function planFeatureRows(plan: BillingPlan): { label: string; on: boolean }[] {
+  const n = (v: number, one: string, many: string) => `${v} ${v === 1 ? one : many}`;
+  return [
+    { label: n(plan.limits.users, "user", "users"), on: true },
+    { label: n(plan.limits.projects, "project", "projects"), on: true },
+    { label: n(plan.limits.landingPages, "landing page", "landing pages"), on: true },
+    { label: n(plan.limits.templates, "template", "templates"), on: true },
+    { label: "Team chat", on: plan.modules.teamChat },
+    { label: plan.modules.metaLeadAds ? `Meta lead ads (${n(plan.modules.metaPages, "page", "pages")})` : "Meta lead ads", on: plan.modules.metaLeadAds },
+  ];
+}
+
+export function Empty({ children }: { children: ReactNode }) {
+  return <div style={{ padding: 28, textAlign: "center", color: "var(--muted)", fontSize: 13 }}>{children}</div>;
+}
+
+export function Loading({ what = "billing" }: { what?: string }) {
+  return <div className="bl-muted" style={{ padding: 16 }}>Loading {what}…</div>;
+}
+
+export function ErrorNote({ message }: { message: string }) {
+  return <div className="form-alert">{message}</div>;
+}
+
+export const PAYMENT_STATUS_META: Record<string, { label: string; badge: string }> = {
+  captured: { label: "Paid", badge: "b-green" },
+  failed: { label: "Failed", badge: "b-rose" },
+  refunded: { label: "Refunded", badge: "b-gray" },
+  offline: { label: "Paid offline", badge: "b-indigo" },
+};
+
+export const cap = (s: string) => (s ? s[0].toUpperCase() + s.slice(1) : s);

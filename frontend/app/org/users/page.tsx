@@ -14,6 +14,7 @@ import type {
   OrgUsersListResponse,
 } from "@/lib/types";
 import { USERS_FLASH_KEY, USERS_PATH } from "./user-form";
+import { useSeatLimitGate } from "@/components/billing/locked";
 import "./users.css";
 
 const PAGE_SIZE = 10;
@@ -207,8 +208,11 @@ export default function OrgUsersPage() {
       .catch(() => setSeatQuota(null));
   }, [accessToken, reloadTick]);
 
+  // Billing v2: at the new plan's user limit, "Create user" opens the upgrade
+  // dialog. Inactive with the flag off — then the existing seat check applies.
+  const seatGate = useSeatLimitGate(seatQuota?.used ?? 0);
   const atSeatLimit =
-    seatQuota != null && seatQuota.limit != null && seatQuota.used >= seatQuota.limit;
+    !seatGate.active && seatQuota != null && seatQuota.limit != null && seatQuota.used >= seatQuota.limit;
 
   function reload() {
     setReloadTick((t) => t + 1);
@@ -314,7 +318,7 @@ export default function OrgUsersPage() {
             <button
               type="button"
               className="usr-btn-create"
-              onClick={() => router.push(`${USERS_PATH}/new`)}
+              onClick={() => (seatGate.atLimit ? seatGate.open() : router.push(`${USERS_PATH}/new`))}
               disabled={atSeatLimit}
               title={atSeatLimit ? "You've reached your plan's user limit" : undefined}
               style={atSeatLimit ? { opacity: 0.45, cursor: "not-allowed" } : undefined}
@@ -325,6 +329,7 @@ export default function OrgUsersPage() {
           ) : null}
         </div>
       </Reveal>
+      {seatGate.dialog}
 
       {canAdd && atSeatLimit ? (
         <div

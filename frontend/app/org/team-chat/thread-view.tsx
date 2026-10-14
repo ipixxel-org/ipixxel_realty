@@ -36,6 +36,7 @@ import { Avatar, ConfirmDialog, PromptDialog, errorText } from "./chat-ui";
 import { AttachmentsView } from "./attachments-view";
 import { Composer, type ComposerHandle, type SentAttachment } from "./composer";
 import { MembersDrawer } from "./members-drawer";
+import { TeamChatComposerGate } from "@/components/billing/locked";
 import {
   ForwardDialog,
   MessageActionSheet,
@@ -829,6 +830,8 @@ export function ThreadView({
               You can&apos;t reply to this conversation — {conv.name} is no longer active.
             </div>
           ) : (
+            // Billing v2: read-only history + upgrade prompt when the plan has no team chat.
+            <TeamChatComposerGate>
             <Composer
               key={conversationId}
               ref={composerRef}
@@ -842,6 +845,7 @@ export function ThreadView({
               onCancelEdit={() => setEditing(null)}
               onTyping={(t) => chat.sendTyping(conversationId, t)}
             />
+            </TeamChatComposerGate>
           )}
         </div>
 

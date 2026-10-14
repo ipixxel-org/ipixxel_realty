@@ -67,6 +67,7 @@ import {
   needsInventorySelection,
   type InventoryBindValue,
 } from "@/components/org/inventory-bind-fields";
+import { LandingPageAccessBadge } from "@/components/billing/locked";
 import "@/app/openpage.css";
 import "./landing-pages.css";
 
@@ -1498,7 +1499,9 @@ export default function OrgLandingPagesPage() {
                       />
                     </td>
                     <td>
-                      <span style={{ fontWeight: 700, color: "var(--ink)" }}>{row.name}</span>
+                      <span style={{ fontWeight: 700, color: "var(--ink)" }}>{row.name}</span>{" "}
+                      {/* Billing v2: "Offline" when the org's plan allows fewer live pages (renders nothing otherwise). */}
+                      <LandingPageAccessBadge landingPageId={row.id} />
                       <div style={{ fontSize: 11.5, color: "var(--muted)", marginTop: 2 }}>{row.slug}</div>
                     </td>
                     <td>

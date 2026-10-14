@@ -23,6 +23,8 @@ import { useFlash } from "@/lib/flash";
 import { LIST_PAGE_SIZE, ListPager } from "@/components/ui/list-pager";
 import { ORG_SUBS_TAB, SUBS_FLASH_KEY, SUBS_PATH } from "./subscriptions-shared";
 import { ChangeSubscriptionModal } from "./change-subscription-modal";
+import { AdminSubscriptionsPageV2 } from "@/components/billing/admin/admin-pages";
+import { BILLING_V2 } from "@/lib/billing/flag";
 import type {
   Plan,
   PlanCapability,
@@ -89,7 +91,12 @@ function perFor(cycle: "Monthly" | "Yearly") {
   return cycle === "Monthly" ? "/mo" : "/yr";
 }
 
-export default function SuperAdminSubscriptionsPage() {
+/** Billing v2 (NEXT_PUBLIC_BILLING_V2) swaps in the new Subscriptions + Plans page; off = unchanged. */
+export default function SuperAdminSubscriptionsRoute() {
+  return BILLING_V2 ? <AdminSubscriptionsPageV2 /> : <SuperAdminSubscriptionsPage />;
+}
+
+function SuperAdminSubscriptionsPage() {
   const { hasPermission, isLoading: authLoading } = useAuth();
   const canViewSubscriptions = hasPermission("admin_subscriptions", "view");
   const canCreatePlan = hasPermission("admin_subscriptions", "add");
