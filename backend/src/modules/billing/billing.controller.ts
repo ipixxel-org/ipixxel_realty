@@ -1,4 +1,13 @@
-import { Body, Controller, Get, Param, Put, UseGuards } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Get,
+  HttpCode,
+  Param,
+  Post,
+  Put,
+  UseGuards,
+} from '@nestjs/common';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { OrgApprovedGuard } from '../../common/guards/org-approved.guard';
 import { PermissionGuard } from '../../common/guards/permission.guard';
@@ -11,6 +20,8 @@ import { OrgBillingV2Service } from './org-billing-v2.service';
 import { SaveAdminPlanDto } from './dto/save-admin-plan.dto';
 import { SaveLifecycleDto } from './dto/save-lifecycle.dto';
 import { BillingProfileService } from './billing-profile.service';
+import { BillingCheckoutService } from './billing-checkout.service';
+import { PreviewCheckoutDto } from './dto/checkout.dto';
 import { SaveBillingProfileDto } from './dto/save-billing-profile.dto';
 
 /**
@@ -24,6 +35,7 @@ export class OrgBillingV2Controller {
   constructor(
     private readonly service: OrgBillingV2Service,
     private readonly profiles: BillingProfileService,
+    private readonly checkouts: BillingCheckoutService,
   ) {}
 
   @RequirePermission('billing', 'view')
@@ -42,6 +54,14 @@ export class OrgBillingV2Controller {
   @Get('access')
   access(@CurrentUser() user: JwtPayload) {
     return this.service.getAccess(user.orgId as string);
+  }
+
+  // A read: anyone who can view billing can see a price.
+  @RequirePermission('billing', 'view')
+  @Post('checkout/preview')
+  @HttpCode(200)
+  preview(@CurrentUser() user: JwtPayload, @Body() dto: PreviewCheckoutDto) {
+    return this.checkouts.preview(user.orgId as string, dto);
   }
 
   @RequirePermission('billing', 'view')
