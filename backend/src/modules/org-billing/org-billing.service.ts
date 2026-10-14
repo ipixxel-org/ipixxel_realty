@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import { NotFoundException } from '@nestjs/common';
+import { BadRequestException, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../../database/prisma.service';
 import {
   assertPlanFitsCurrentUsage,
@@ -173,6 +173,18 @@ export class OrgBillingService {
   async changePlan(orgId: string, dto: ChangePlanDto) {
     const plan = await this.prisma.plan.findUnique({ where: { id: dto.planId } });
     if (!plan || !plan.isActive) throw new NotFoundException('Plan not found or inactive');
+    // Closed loophole (billing v2 step 2): this path switched plans for free.
+    // Paid plans are bought through checkout (or a Super Admin approval);
+    // free plans can still be selected here.
+    if (plan.priceMonthly > 0 || plan.priceYearly > 0) {
+      throw new BadRequestException({
+        statusCode: 400,
+        error: 'Bad Request',
+        code: 'paid_plan_requires_checkout',
+        message:
+          'Paid plans are bought from Billing → Plans, not switched here.',
+      });
+    }
 
     // Downgrade guard — refuse to move onto a plan the org already exceeds.
     // Nothing is deleted to make it fit; upgrades and same-usage moves pass.
