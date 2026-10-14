@@ -1,8 +1,24 @@
-import { BadRequestException, Injectable } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  Logger,
+  NotFoundException,
+  type OnModuleInit,
+} from '@nestjs/common';
+import type { BillingCheckoutStatus, Prisma } from '@prisma/client';
 import { PrismaService } from '../../database/prisma.service';
+import { applyPlanChange } from '../../common/utils/plan-change.util';
+import { assertPlanFitsCurrentUsage } from '../../common/utils/plan-quota.util';
 import { PlatformConfigService } from '../platform-config/platform-config.service';
+import { PaymentsService } from '../payments/payments.service';
+import {
+  PaymentEventsService,
+  type PaymentEvent,
+} from '../payments/payment-events';
+import { PackageChangeRequestsService } from '../package-change-requests/package-change-requests.service';
 import { BillingModeService, type BillingMode } from './billing-mode.service';
 import {
+  MIN_ONLINE_PAISE,
   quoteCheckout,
   QuoteError,
   toRupees,
@@ -10,9 +26,44 @@ import {
   type Quote,
   type QuotePlan,
 } from './checkout-quote';
+import { expireStaleCheckouts } from './checkout-state';
 import { isFreePlan, sortPlans } from './plan-modules';
-import type { CheckoutPreviewV2 } from './billing.types';
-import type { PreviewCheckoutDto } from './dto/checkout.dto';
+import type {
+  CheckoutPreviewV2,
+  ConfirmCheckoutResultV2,
+  StartCheckoutResultV2,
+} from './billing.types';
+import type {
+  ConfirmCheckoutDto,
+  PreviewCheckoutDto,
+  StartCheckoutDto,
+} from './dto/checkout.dto';
+
+type NotifyDb = Pick<Prisma.TransactionClient, 'notification'>;
+
+/** Tell all Super Admins (recipientId null) that a paid checkout needs a look. */
+async function notifyNeedsReview(
+  db: NotifyDb,
+  orgId: string,
+  checkoutId: string,
+  planName: string,
+  reason: string,
+) {
+  await db.notification.create({
+    data: {
+      orgId,
+      // Existing Super Admin request type (no enum change); title says what it is.
+      type: 'package_change_request',
+      title: 'Plan payment needs review',
+      body: `A payment for the "${planName}" plan was captured but the plan wasn't applied. ${reason}`.slice(
+        0,
+        1000,
+      ),
+      entity: 'BillingCheckout',
+      entityId: checkoutId,
+    },
+  });
+}
 
 const isoDate = (d: Date) => d.toISOString().slice(0, 10);
 
@@ -39,17 +90,425 @@ export interface QuoteContext {
   hasProfile: boolean;
 }
 
+/** What a payment.captured did to its checkout (returned for tests / logs). */
+export type FulfilOutcome =
+  'paid' | 'needs_review' | 'already_done' | 'not_found';
+
+const ONLINE_CHECKOUT_TTL_MS = 30 * 60 * 1000;
+
 /**
- * Billing v2 checkout: price preview (step 2 part 1). The quote maths lives
- * in checkout-quote.ts; this service gathers the real inputs.
+ * Billing v2 checkout: price preview, starting a checkout (online → Razorpay
+ * order; manual → package change request), confirming the Razorpay result,
+ * and applying the plan when the payment is captured. The quote maths lives
+ * in checkout-quote.ts; the plan change in common/utils/plan-change.util.ts.
  */
 @Injectable()
-export class BillingCheckoutService {
+export class BillingCheckoutService implements OnModuleInit {
+  private readonly logger = new Logger(BillingCheckoutService.name);
+
   constructor(
     protected readonly prisma: PrismaService,
     protected readonly mode: BillingModeService,
     protected readonly platformConfig: PlatformConfigService,
+    private readonly payments: PaymentsService,
+    private readonly events: PaymentEventsService,
+    private readonly requests: PackageChangeRequestsService,
   ) {}
+
+  onModuleInit() {
+    this.events.on('payment.captured', (e) => this.onCaptured(e));
+    this.events.on('payment.failed', (e) => this.onFailed(e));
+  }
+
+  /* ------------------------------------------------------------- start */
+
+  async start(
+    orgId: string,
+    userId: string,
+    dto: StartCheckoutDto,
+  ): Promise<StartCheckoutResultV2> {
+    if (dto.purpose === 'renewal') {
+      throw billingError(
+        'renewal_not_available',
+        'Renewing online is coming soon. Our team will contact you to renew.',
+      );
+    }
+    await expireStaleCheckouts(this.prisma, orgId);
+    const ctx = await this.quote(orgId, dto.planId, dto.interval);
+    if (!ctx.hasProfile) {
+      throw billingError(
+        'billing_profile_required',
+        'Add your billing details first — they go on your GST invoice.',
+      );
+    }
+    return ctx.mode.mode === 'manual'
+      ? this.startManual(orgId, userId, ctx)
+      : this.startOnline(orgId, userId, ctx);
+  }
+
+  private async startManual(
+    orgId: string,
+    userId: string,
+    ctx: QuoteContext,
+  ): Promise<StartCheckoutResultV2> {
+    const existing = await this.pendingRequest(orgId);
+    if (existing) return existing;
+    const q = ctx.quote;
+    let requestId: string;
+    try {
+      // The existing request path: checks usage and "one pending request".
+      const res = await this.requests.submitOrgRequest(orgId, userId, {
+        targetPlanId: q.toPlan.id,
+        billingCycle: q.toInterval,
+      });
+      requestId = res.request.id;
+    } catch (e) {
+      // Lost a race with another tab: return the request that won.
+      const raced = await this.pendingRequest(orgId);
+      if (raced) return raced;
+      throw e;
+    }
+    const checkout = await this.prisma.billingCheckout.create({
+      data: {
+        ...this.checkoutData(orgId, userId, ctx, 'manual'),
+        packageChangeRequestId: requestId,
+      },
+    });
+    return {
+      status: 'pending_approval',
+      mode: 'manual',
+      checkoutId: checkout.id,
+      requestId,
+    };
+  }
+
+  private async pendingRequest(
+    orgId: string,
+  ): Promise<StartCheckoutResultV2 | null> {
+    const pending = await this.prisma.packageChangeRequest.findFirst({
+      where: { orgId, status: 'pending' },
+      include: { billingCheckout: { select: { id: true } } },
+    });
+    return pending
+      ? {
+          status: 'pending_approval',
+          mode: 'manual',
+          checkoutId: pending.billingCheckout?.id ?? null,
+          requestId: pending.id,
+        }
+      : null;
+  }
+
+  private async startOnline(
+    orgId: string,
+    userId: string,
+    ctx: QuoteContext,
+  ): Promise<StartCheckoutResultV2> {
+    const q = ctx.quote;
+    if (q.totalPaise < MIN_ONLINE_PAISE) {
+      throw billingError(
+        'amount_too_small',
+        "This change costs less than ₹1, so it can't be paid online. Contact us and we'll switch it for you.",
+      );
+    }
+    if (await this.pendingRequest(orgId)) {
+      throw billingError(
+        'request_pending',
+        'You already have an upgrade request waiting for approval. Cancel it first to pay online instead.',
+      );
+    }
+
+    // One open checkout per org: under a per-org lock, cancel older pending
+    // online checkouts, then record this quote.
+    const checkout = await this.prisma.$transaction(async (tx) => {
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`billing_checkout:${orgId}`}))`;
+      await tx.billingCheckout.updateMany({
+        where: { organisationId: orgId, status: 'pending', mode: 'online' },
+        data: { status: 'cancelled' },
+      });
+      return tx.billingCheckout.create({
+        data: {
+          ...this.checkoutData(orgId, userId, ctx, 'online'),
+          expiresAt: new Date(Date.now() + ONLINE_CHECKOUT_TTL_MS),
+        },
+      });
+    });
+
+    try {
+      const order = await this.payments.createOrder({
+        organisationId: orgId,
+        amountPaise: q.totalPaise,
+        purpose: 'plan_purchase',
+        referenceType: 'billing_checkout',
+        referenceId: checkout.id,
+        notes: {
+          plan: q.toPlan.name,
+          interval: q.toInterval,
+          kind: q.kind,
+        },
+        createdById: userId,
+      });
+      await this.prisma.billingCheckout.update({
+        where: { id: checkout.id },
+        data: { paymentId: order.paymentId },
+      });
+      return {
+        status: 'payment_required',
+        mode: 'online',
+        checkoutId: checkout.id,
+        amount: toRupees(q.totalPaise),
+        razorpay: {
+          keyId: order.keyId,
+          orderId: order.orderId,
+          amountPaise: order.amount,
+          currency: 'INR',
+          name: order.name,
+          description: `${q.toPlan.name} plan (${q.toInterval})`,
+          prefill: order.prefill,
+        },
+      };
+    } catch (e) {
+      await this.prisma.billingCheckout.update({
+        where: { id: checkout.id },
+        data: {
+          status: 'failed',
+          reviewReason: 'Could not create the payment order',
+        },
+      });
+      throw e;
+    }
+  }
+
+  private checkoutData(
+    orgId: string,
+    userId: string,
+    ctx: QuoteContext,
+    mode: 'online' | 'manual',
+  ) {
+    const q = ctx.quote;
+    return {
+      organisationId: orgId,
+      fromPlanId: q.fromPlan?.id ?? null,
+      toPlanId: q.toPlan.id,
+      fromInterval: q.fromInterval,
+      toInterval: q.toInterval,
+      kind: q.kind,
+      subtotalPaise: q.subtotalPaise,
+      creditPaise: q.creditPaise,
+      taxablePaise: q.taxablePaise,
+      cgstPaise: q.cgstPaise,
+      sgstPaise: q.sgstPaise,
+      igstPaise: q.igstPaise,
+      totalPaise: q.totalPaise,
+      buyerLegalName: ctx.buyer.legalName ?? '',
+      buyerState: ctx.buyer.state ?? '',
+      buyerGstin: ctx.buyer.gstin,
+      sellerSnapshot: { ...ctx.seller },
+      mode,
+      status: 'pending' as const,
+      createdById: userId,
+    };
+  }
+
+  /* ----------------------------------------------------------- confirm */
+
+  /**
+   * Razorpay Checkout's success payload → the existing payments verify path.
+   * If the payment is captured, verify fires payment.captured, whose handler
+   * (below) applies the plan before this returns. The UI then polls the
+   * overview until the plan changes.
+   */
+  async confirm(
+    orgId: string,
+    dto: ConfirmCheckoutDto,
+  ): Promise<ConfirmCheckoutResultV2> {
+    const payment = await this.prisma.payment.findFirst({
+      where: {
+        razorpayOrderId: dto.razorpay_order_id,
+        organisationId: orgId,
+        purpose: 'plan_purchase',
+      },
+      select: { id: true, referenceId: true },
+    });
+    if (!payment?.referenceId)
+      throw new NotFoundException('Checkout not found');
+    const verified = await this.payments.verifyCheckout(dto, orgId);
+    const checkout = await this.prisma.billingCheckout.findFirstOrThrow({
+      where: { id: payment.referenceId, organisationId: orgId },
+    });
+    return {
+      checkoutId: checkout.id,
+      checkoutStatus: checkout.status,
+      paymentStatus: verified.status,
+      toPlanId: checkout.toPlanId,
+      toInterval: checkout.toInterval,
+    };
+  }
+
+  /* -------------------------------------------------- payment events */
+
+  private async onCaptured(e: PaymentEvent) {
+    if (
+      e.purpose !== 'plan_purchase' ||
+      e.referenceType !== 'billing_checkout' ||
+      !e.referenceId
+    ) {
+      return;
+    }
+    await this.fulfil(e.referenceId, e.amount);
+  }
+
+  private async onFailed(e: PaymentEvent) {
+    if (e.purpose !== 'plan_purchase' || !e.referenceId) return;
+    await this.prisma.billingCheckout.updateMany({
+      where: { id: e.referenceId, status: { in: ['pending', 'expired'] } },
+      data: { status: 'failed' },
+    });
+  }
+
+  /**
+   * Apply the plan for a captured payment. Runs once per checkout: the row is
+   * locked and `fulfilledAt` is the marker, so /confirm and the webhook can
+   * both arrive safely. Anything that stops the plan being applied leaves the
+   * payment captured and puts the checkout in `needs_review` for a Super
+   * Admin. Never throws (it runs inside the payment event handler).
+   */
+  async fulfil(checkoutId: string, paidPaise: number): Promise<FulfilOutcome> {
+    try {
+      return await this.prisma.$transaction(async (tx) => {
+        await tx.$queryRaw`SELECT id FROM "billing"."billing_checkouts" WHERE id = ${checkoutId} FOR UPDATE`;
+        const c = await tx.billingCheckout.findUnique({
+          where: { id: checkoutId },
+          include: { toPlan: true },
+        });
+        if (!c) return 'not_found';
+        if (
+          c.fulfilledAt ||
+          ['paid', 'approved', 'needs_review'].includes(c.status)
+        ) {
+          return 'already_done';
+        }
+
+        const review = async (reason: string): Promise<FulfilOutcome> => {
+          await tx.billingCheckout.update({
+            where: { id: c.id },
+            data: { status: 'needs_review', reviewReason: reason },
+          });
+          await notifyNeedsReview(
+            tx,
+            c.organisationId,
+            c.id,
+            c.toPlan.name,
+            reason,
+          );
+          return 'needs_review';
+        };
+
+        if (paidPaise !== c.totalPaise) {
+          return review(
+            `Amount mismatch: paid ${toRupees(paidPaise)}, quoted ${toRupees(c.totalPaise)}.`,
+          );
+        }
+        // A late payment on an old quote must still match the org's plan.
+        const sub = await tx.subscription.findFirst({
+          where: { orgId: c.organisationId, status: { not: 'cancelled' } },
+        });
+        if (
+          (sub?.planId ?? null) !== c.fromPlanId ||
+          (c.fromInterval !== null && sub?.billingCycle !== c.fromInterval)
+        ) {
+          return review('The plan changed after this price was quoted.');
+        }
+        try {
+          await assertPlanFitsCurrentUsage(tx, c.organisationId, c.toPlan);
+        } catch (err) {
+          return review(err instanceof Error ? err.message : String(err));
+        }
+
+        await applyPlanChange(tx, {
+          organisationId: c.organisationId,
+          toPlanId: c.toPlanId,
+          toInterval: c.toInterval,
+          kind: c.kind,
+          source: 'payment',
+          actorId: null,
+          checkoutId: c.id,
+          requestedById: c.createdById,
+        });
+        await tx.billingCheckout.update({
+          where: { id: c.id },
+          data: { status: 'paid', fulfilledAt: new Date() },
+        });
+        return 'paid';
+      });
+    } catch (err) {
+      const reason = `Could not apply the plan: ${err instanceof Error ? err.message : String(err)}`;
+      this.logger.error(`Checkout ${checkoutId}: ${reason}`);
+      try {
+        const { count } = await this.prisma.billingCheckout.updateMany({
+          where: {
+            id: checkoutId,
+            fulfilledAt: null,
+            status: { notIn: ['paid', 'approved'] },
+          },
+          data: { status: 'needs_review', reviewReason: reason.slice(0, 500) },
+        });
+        if (count > 0) {
+          const c = await this.prisma.billingCheckout.findUnique({
+            where: { id: checkoutId },
+            include: { toPlan: { select: { name: true } } },
+          });
+          if (c)
+            await notifyNeedsReview(
+              this.prisma,
+              c.organisationId,
+              c.id,
+              c.toPlan.name,
+              reason,
+            );
+        }
+      } catch {
+        // Logged above; the payment stays captured and is visible to admins.
+      }
+      return 'needs_review';
+    }
+  }
+
+  /* -------------------------------------------------------------- admin */
+
+  /** Super Admin: checkouts in a status (default needs_review), newest first. */
+  async adminList(status: BillingCheckoutStatus = 'needs_review') {
+    const rows = await this.prisma.billingCheckout.findMany({
+      where: { status },
+      orderBy: { updatedAt: 'desc' },
+      take: 100,
+      include: {
+        organisation: { select: { id: true, name: true } },
+        fromPlan: { select: { name: true } },
+        toPlan: { select: { name: true } },
+        payment: {
+          select: { razorpayPaymentId: true, amount: true, status: true },
+        },
+      },
+    });
+    return rows.map((c) => ({
+      id: c.id,
+      organisation: c.organisation,
+      fromPlanName: c.fromPlan?.name ?? null,
+      toPlanName: c.toPlan.name,
+      toInterval: c.toInterval,
+      kind: c.kind,
+      mode: c.mode,
+      status: c.status,
+      total: toRupees(c.totalPaise),
+      paid: c.payment ? toRupees(c.payment.amount) : null,
+      razorpayPaymentId: c.payment?.razorpayPaymentId ?? null,
+      buyerGstin: c.buyerGstin,
+      reviewReason: c.reviewReason,
+      createdAt: c.createdAt.toISOString(),
+      updatedAt: c.updatedAt.toISOString(),
+    }));
+  }
 
   /** Recompute the quote from the database. Never takes amounts from the client. */
   async quote(

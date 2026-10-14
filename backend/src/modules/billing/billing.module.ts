@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { PrismaModule } from '../../database/prisma.module';
 import { AuthModule } from '../auth/auth.module';
 import { PaymentsModule } from '../payments/payments.module';
+import { PackageChangeRequestsModule } from '../package-change-requests/package-change-requests.module';
 import { OrgApprovedGuard } from '../../common/guards/org-approved.guard';
 import { PermissionGuard } from '../../common/guards/permission.guard';
 import { SuperAdminGuard } from '../../common/guards/super-admin.guard';
@@ -20,7 +21,12 @@ import { BillingCheckoutService } from './billing-checkout.service';
  * module (Razorpay Orders + Checkout); PlatformConfigModule is global.
  */
 @Module({
-  imports: [PrismaModule, AuthModule, PaymentsModule],
+  imports: [
+    PrismaModule,
+    AuthModule,
+    PaymentsModule,
+    PackageChangeRequestsModule,
+  ],
   controllers: [OrgBillingV2Controller, AdminBillingController],
   providers: [
     BillingModeService,

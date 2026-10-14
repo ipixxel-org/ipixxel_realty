@@ -6,6 +6,7 @@ import {
   Matches,
   MaxLength,
 } from 'class-validator';
+import type { BillingCheckoutStatus } from '@prisma/client';
 
 /** POST /org/billing/checkout/preview */
 export class PreviewCheckoutDto {
@@ -40,4 +41,20 @@ export class ConfirmCheckoutDto {
   @IsNotEmpty()
   @MaxLength(256)
   razorpay_signature!: string;
+}
+
+/** GET /admin/billing/checkouts */
+export class ListCheckoutsQueryDto {
+  @IsOptional()
+  @IsIn([
+    'pending',
+    'paid',
+    'failed',
+    'expired',
+    'cancelled',
+    'approved',
+    'rejected',
+    'needs_review',
+  ])
+  status?: BillingCheckoutStatus;
 }

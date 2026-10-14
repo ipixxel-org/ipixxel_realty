@@ -6,6 +6,7 @@ import {
   Param,
   Post,
   Put,
+  Query,
   UseGuards,
 } from '@nestjs/common';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
@@ -21,7 +22,12 @@ import { SaveAdminPlanDto } from './dto/save-admin-plan.dto';
 import { SaveLifecycleDto } from './dto/save-lifecycle.dto';
 import { BillingProfileService } from './billing-profile.service';
 import { BillingCheckoutService } from './billing-checkout.service';
-import { PreviewCheckoutDto } from './dto/checkout.dto';
+import {
+  ConfirmCheckoutDto,
+  ListCheckoutsQueryDto,
+  PreviewCheckoutDto,
+  StartCheckoutDto,
+} from './dto/checkout.dto';
 import { SaveBillingProfileDto } from './dto/save-billing-profile.dto';
 
 /**
@@ -64,6 +70,20 @@ export class OrgBillingV2Controller {
     return this.checkouts.preview(user.orgId as string, dto);
   }
 
+  @RequirePermission('billing', 'edit')
+  @Post('checkout')
+  @HttpCode(200)
+  start(@CurrentUser() user: JwtPayload, @Body() dto: StartCheckoutDto) {
+    return this.checkouts.start(user.orgId as string, user.sub, dto);
+  }
+
+  @RequirePermission('billing', 'edit')
+  @Post('checkout/confirm')
+  @HttpCode(200)
+  confirm(@CurrentUser() user: JwtPayload, @Body() dto: ConfirmCheckoutDto) {
+    return this.checkouts.confirm(user.orgId as string, dto);
+  }
+
   @RequirePermission('billing', 'view')
   @Get('profile')
   getProfile(@CurrentUser() user: JwtPayload) {
@@ -88,7 +108,16 @@ export class OrgBillingV2Controller {
 @UseGuards(JwtAuthGuard, SuperAdminGuard)
 @Controller('admin/billing')
 export class AdminBillingController {
-  constructor(private readonly service: AdminBillingService) {}
+  constructor(
+    private readonly service: AdminBillingService,
+    private readonly checkouts: BillingCheckoutService,
+  ) {}
+
+  /** Checkouts by status — "needs review" (paid but not applied) by default. */
+  @Get('checkouts')
+  listCheckouts(@Query() query: ListCheckoutsQueryDto) {
+    return this.checkouts.adminList(query.status ?? 'needs_review');
+  }
 
   @Get('plans')
   listPlans() {
