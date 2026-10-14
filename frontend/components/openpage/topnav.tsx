@@ -28,6 +28,7 @@ import {
   User,
   Eye,
   FileText,
+  LoaderCircle,
 } from "lucide-react";
 import { useEditorStore, type Viewport } from "@/components/openpage/store/editorStore";
 import type { ModuleKey } from "@/lib/openpage/types";
@@ -144,6 +145,7 @@ export function TopNav({
   settingsHref,
   homeHref,
   unsaved,
+  saving = false,
   pageType = "landing",
   companionPage,
   onSwitchCompanion,
@@ -177,6 +179,7 @@ export function TopNav({
   settingsHref?: string;
   homeHref?: string;
   unsaved?: boolean;
+  saving?: boolean;
   pageType?: "landing" | "thank-you";
   companionPage?: { id?: string; name?: string; slug?: string; pageType?: "landing" | "thank-you" } | null;
   onSwitchCompanion?: () => void;
@@ -470,10 +473,13 @@ export function TopNav({
               <button
                 type="button"
                 onClick={onSave}
+                disabled={saving}
+                aria-busy={saving}
                 className="ps-topnav-btn"
-                title="Save draft changes (Ctrl+S)"
+                title={saving ? "Saving changes…" : "Save draft changes (Ctrl+S)"}
               >
-                <Save size={14} /> <span className="ps-btn-label">Save</span>
+                {saving ? <LoaderCircle size={14} className="animate-spin" /> : <Save size={14} />}
+                <span className="ps-btn-label">{saving ? "Saving…" : "Save"}</span>
               </button>
               {published && canUnpublish ? (
                 <button

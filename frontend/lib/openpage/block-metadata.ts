@@ -13,9 +13,9 @@ export const blockMetadata: BlockMeta[] = [
   {
     type: 'columns',
     label: 'Container / Columns',
-    description: 'Section with 2–4 columns',
+    description: 'Single-column container that can expand into a grid',
     category: 'Core',
-    variants: ['2-col', '3-col', '4-col'],
+    variants: ['1-col', '2-col', '3-col', '4-col'],
     defaultProps: { gap: '24px' },
   },
   {

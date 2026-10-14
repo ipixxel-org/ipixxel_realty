@@ -700,6 +700,7 @@ interface PendingSave {
   rejecters: ((reason: unknown) => void)[];
 }
 const pendingSaves = new Map<string, PendingSave>();
+const saveQueues = new Map<string, Promise<LandingPageData>>();
 
 /** Debounced single-record save — replaces the old bulk "save the whole
  *  array" pattern. Multiple calls for the same record id (within the same
@@ -722,7 +723,7 @@ export function saveTemplate(record: LandingPageData, resource: Resource = "temp
     if (existing) clearTimeout(existing.timer);
 
     entry.timer = setTimeout(() => {
-      void flushPendingSave(key, resource);
+      void flushPendingSave(key, resource).catch(() => undefined);
     }, SAVE_DEBOUNCE_MS);
 
     pendingSaves.set(key, entry);
@@ -734,15 +735,27 @@ async function flushPendingSave(key: string, resource: Resource): Promise<Landin
   if (!entry) return null;
   clearTimeout(entry.timer);
   pendingSaves.delete(key);
-  const patcher = resource === "landing-page" ? patchLandingPage : patchTemplate;
   try {
-    const updated = await patcher(entry.latest.id, entry.latest);
+    const updated = await saveRecordInOrder(entry.latest, resource);
     entry.resolvers.forEach((r) => r(updated));
     return updated;
   } catch (err) {
     entry.rejecters.forEach((r) => r(err));
     throw err;
   }
+}
+
+function saveRecordInOrder(record: LandingPageData, resource: Resource): Promise<LandingPageData> {
+  const key = `${resource}:${record.id}`;
+  const previous = saveQueues.get(key);
+  const patcher = resource === "landing-page" ? patchLandingPage : patchTemplate;
+  const current = (previous ? previous.catch(() => undefined) : Promise.resolve(undefined))
+    .then(() => patcher(record.id, record));
+  saveQueues.set(key, current);
+  void current.finally(() => {
+    if (saveQueues.get(key) === current) saveQueues.delete(key);
+  }).catch(() => undefined);
+  return current;
 }
 
 /** Immediate save used by Publish so the live page gets the current builder JSON, not a stale draft. */
@@ -754,8 +767,7 @@ export async function saveTemplateNow(record: LandingPageData, resource: Resourc
     existing.latest = record;
     return (await flushPendingSave(key, resource))!;
   }
-  const patcher = resource === "landing-page" ? patchLandingPage : patchTemplate;
-  return patcher(record.id, record);
+  return saveRecordInOrder(record, resource);
 }
 
 export async function deleteTemplate(id: string): Promise<void> {

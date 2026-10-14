@@ -10,6 +10,7 @@ import {
   resolveBlockStyleForDevice,
 } from "@/lib/openpage/block-style";
 import { useDevice } from "@/components/openpage/runtime/device";
+import { filterHiddenItems } from "./render-utils";
 
 import { NavbarBlock } from "./navbar/NavbarBlock";
 import { HeroBlock } from "./hero/HeroBlock";
@@ -173,6 +174,10 @@ export function RenderBlock({ block }: { block: BlockConfig }): ReactNode {
   }
   const animationClass = blockAnimationClass(block)
   const className = animationClass || undefined
+  const renderBlock: BlockConfig = {
+    ...block,
+    props: filterHiddenItems(block.props) as Record<string, unknown>,
+  }
 
   return (
     <BlockErrorBoundary blockType={block.type}>
@@ -186,7 +191,7 @@ export function RenderBlock({ block }: { block: BlockConfig }): ReactNode {
         {block.style?.customCss ? (
           <style>{`[data-block-id="${block.id}"] { ${block.style.customCss} }`}</style>
         ) : null}
-        <Renderer block={block} />
+        <Renderer block={renderBlock} />
       </div>
     </BlockErrorBoundary>
   )

@@ -1447,6 +1447,7 @@ export class GoogleSheetsService {
     sheetName?: string;
     sheetTabId?: string | number;
     rowNumber?: number;
+    changedColumns?: number[];
     lead?: Record<string, unknown>;
     leads?: Array<Record<string, unknown>>;
     [key: string]: unknown;
@@ -1520,6 +1521,7 @@ export class GoogleSheetsService {
         payload.sheetName,
         payload.sheetTabId,
         payload.rowNumber,
+        payload.changedColumns,
       );
 
       if (result.action === 'created') {
@@ -1577,6 +1579,9 @@ export class GoogleSheetsService {
           payload.sheetName || (item.sheetName as string),
           payload.sheetTabId || (item.sheetTabId as string | number),
           itemRowNumber,
+          Array.isArray(item.changedColumns)
+            ? item.changedColumns.map(Number).filter(Number.isFinite)
+            : undefined,
         );
 
         if (res && res.leadId) {
@@ -1639,18 +1644,24 @@ export class GoogleSheetsService {
     sheetName?: string,
     sheetTabId?: string | number,
     rowNumber?: number,
+    changedColumns?: number[],
   ): Promise<{ leadId?: string; action: string; ok: boolean; message?: string }> {
     const orgId = connection.orgId;
-    const name = String(leadInput.name || '').trim();
-    const phone = String(leadInput.phone || '').trim();
-    const email = String(leadInput.email || '').trim().toLowerCase();
+    const applyColumn = (column: number) =>
+      !changedColumns || changedColumns.includes(column);
+    const name = String(leadInput.name ?? '').trim();
+    const phone = String(leadInput.phone ?? '').trim();
+    const email = String(leadInput.email ?? '').trim().toLowerCase();
     const leadId = String(leadInput.id || leadInput.leadId || '').trim();
-    const status = this.normalizeLeadStatus(String(leadInput.status || ''));
-    const notes = String(leadInput.notes || leadInput.message || '').trim();
-    const projectStr = String(leadInput.project || '').trim();
-    const source = String(leadInput.source || 'google_sheets').trim();
-    const platform = String(leadInput.platform || 'google_sheets').trim();
-    const campaign = String(leadInput.campaign || '').trim();
+    const statusInput = String(leadInput.status ?? '').trim();
+    const status = statusInput
+      ? this.normalizeLeadStatus(statusInput)
+      : LeadStatus.new;
+    const notes = String(leadInput.notes ?? leadInput.message ?? '').trim();
+    const projectStr = String(leadInput.project ?? '').trim();
+    const source = String(leadInput.source ?? '').trim();
+    const platform = String(leadInput.platform ?? '').trim();
+    const campaign = String(leadInput.campaign ?? '').trim();
 
     // Skip empty lines with no identifying info
     if (!name && !phone && !email && !leadId) {
@@ -1731,10 +1742,13 @@ export class GoogleSheetsService {
       const existingData = (existingLead.data as Record<string, unknown>) ?? {};
       const updatedData = {
         ...existingData,
-        ...(name ? { fullName: name, name } : {}),
-        ...(phone ? { phone } : {}),
-        ...(email ? { email } : {}),
-        ...(notes ? { notes } : {}),
+        ...(applyColumn(2) ? { fullName: name, name } : {}),
+        ...(applyColumn(3) ? { phone } : {}),
+        ...(applyColumn(4) ? { email } : {}),
+        ...(applyColumn(5) ? { source } : {}),
+        ...(applyColumn(6) ? { platform } : {}),
+        ...(applyColumn(7) ? { campaign } : {}),
+        ...(applyColumn(10) ? { notes } : {}),
         googleSheetId: spreadsheetId || existingData.googleSheetId || null,
         googleSheetTabId:
           sheetTabId != null
@@ -1750,9 +1764,11 @@ export class GoogleSheetsService {
         where: { id: existingLead.id },
         data: {
           data: updatedData,
-          status,
+          ...(applyColumn(9) ? { status } : {}),
           ...(resolvedProjectId ? { projectId: resolvedProjectId } : {}),
-          ...(campaign ? { campaign } : {}),
+          ...(applyColumn(5) ? { source: source || null } : {}),
+          ...(applyColumn(6) ? { platform: platform || null } : {}),
+          ...(applyColumn(7) ? { campaign: campaign || null } : {}),
         },
       });
 
@@ -1921,15 +1937,24 @@ function handleSheetEdit(e) {
   if (!e || !e.range) return;
   const range = e.range;
   const sheet = range.getSheet();
-  const row = range.getRow();
+  const firstRow = range.getRow();
+  const lastRow = firstRow + range.getNumRows() - 1;
 
   // Skip header row
-  if (row <= 1) return;
+  if (lastRow <= 1) return;
 
-  // Don't loop if editing the Lead ID column itself
-  if (range.getColumn() === CRM_CONFIG.COL_LEAD_ID) return;
+  // Column K is written back by the CRM and must never trigger a loop.
+  const changedColumns = [];
+  const firstColumn = range.getColumn();
+  const lastColumn = firstColumn + range.getNumColumns() - 1;
+  for (let column = firstColumn; column <= lastColumn; column++) {
+    if (column !== CRM_CONFIG.COL_LEAD_ID) changedColumns.push(column);
+  }
+  if (changedColumns.length === 0) return;
 
-  syncSingleRow(sheet, row);
+  for (let row = Math.max(2, firstRow); row <= lastRow; row++) {
+    syncSingleRow(sheet, row, changedColumns);
+  }
 }
 
 /**
@@ -1959,7 +1984,7 @@ function fetchWithRetry(url, options, maxRetries) {
 /**
  * Reads row columns and sends to CRM webhook with retry support.
  */
-function syncSingleRow(sheet, row) {
+function syncSingleRow(sheet, row, changedColumns) {
   const values = sheet.getRange(row, 1, 1, 11).getValues()[0];
 
   const leadData = {
@@ -1989,6 +2014,7 @@ function syncSingleRow(sheet, row) {
     sheetTabId: sheet.getSheetId(),
     action: 'edit',
     rowNumber: row,
+    changedColumns: changedColumns || null,
     lead: leadData,
   };
 

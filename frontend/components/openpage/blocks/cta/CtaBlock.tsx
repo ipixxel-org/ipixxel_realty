@@ -1,5 +1,6 @@
 "use client";
 
+import type { MouseEvent } from "react";
 import type { BlockConfig } from "../types";
 import { ArrowRight, Sparkles } from "lucide-react";
 import { useOpenPageRuntime } from "@/components/openpage/runtime/OpenPageRuntime";
@@ -11,6 +12,10 @@ interface CtaProps {
   buttonUrl?: string;
   buttonColor?: string;
   buttonTextColor?: string;
+  buttonHoverColor?: string;
+  buttonHoverTextColor?: string;
+  buttonRadius?: number | string;
+  buttonTarget?: "_self" | "_blank";
   popupId?: string;
   image?: string;
   bgImage?: string;
@@ -28,6 +33,10 @@ function useCtaClick(props: CtaProps) {
       return;
     }
     if (props.buttonUrl) {
+      if (props.buttonTarget === "_blank") {
+        window.open(props.buttonUrl, "_blank", "noopener,noreferrer");
+        return;
+      }
       if (props.buttonUrl.startsWith("#")) {
         document.getElementById(props.buttonUrl.slice(1))?.scrollIntoView({ behavior: "smooth" });
         return;
@@ -40,9 +49,24 @@ function useCtaClick(props: CtaProps) {
 }
 
 function getBtnStyle(props: CtaProps) {
+  const radius = Number(props.buttonRadius);
   return {
     backgroundColor: props.buttonColor || undefined,
     color: props.buttonTextColor || undefined,
+    borderRadius: Number.isFinite(radius) && radius >= 0 ? `${radius}px` : undefined,
+  };
+}
+
+function getBtnHoverHandlers(props: CtaProps) {
+  return {
+    onMouseEnter: (event: MouseEvent<HTMLButtonElement>) => {
+      if (props.buttonHoverColor) event.currentTarget.style.backgroundColor = props.buttonHoverColor;
+      if (props.buttonHoverTextColor) event.currentTarget.style.color = props.buttonHoverTextColor;
+    },
+    onMouseLeave: (event: MouseEvent<HTMLButtonElement>) => {
+      event.currentTarget.style.backgroundColor = props.buttonColor || "";
+      event.currentTarget.style.color = props.buttonTextColor || "";
+    },
   };
 }
 
@@ -85,6 +109,7 @@ function CtaSimple({ props }: { props: CtaProps }) {
             type="button"
             onClick={onClick}
             style={btnStyle}
+            {...getBtnHoverHandlers(props)}
             className="px-8 py-3 rounded-lg bg-green text-black text-sm font-semibold hover:opacity-90 transition-all inline-flex items-center gap-2 shadow-sm"
           >
             {props.buttonText}
@@ -127,6 +152,7 @@ function CtaBooking({ props }: { props: CtaProps }) {
               type="button"
               onClick={onClick}
               style={btnStyle}
+              {...getBtnHoverHandlers(props)}
               className="px-6 py-3 rounded-full bg-green text-white text-sm font-semibold hover:opacity-90 transition-colors shadow-sm"
             >
               {props.buttonText}
@@ -174,6 +200,7 @@ function CtaSplit({ props }: { props: CtaProps }) {
           type="button"
           onClick={onClick}
           style={btnStyle}
+          {...getBtnHoverHandlers(props)}
           className="relative z-10 px-6 py-3 rounded-lg bg-green text-black text-sm font-semibold hover:opacity-90 transition-all shrink-0 flex items-center gap-2"
         >
           {props.buttonText}
@@ -226,6 +253,7 @@ function CtaBanner({ props }: { props: CtaProps }) {
             type="button"
             onClick={onClick}
             style={btnStyle}
+            {...getBtnHoverHandlers(props)}
             className="px-8 py-3.5 rounded-lg bg-green text-black text-sm font-semibold hover:opacity-90 transition-all inline-flex items-center gap-2"
           >
             {props.buttonText}
@@ -268,6 +296,7 @@ function CtaStrip({ props }: { props: CtaProps }) {
           type="button"
           onClick={onClick}
           style={btnStyle}
+          {...getBtnHoverHandlers(props)}
           className="px-6 py-2.5 rounded-lg bg-green text-black text-xs @md:text-sm font-semibold hover:opacity-90 transition-all shrink-0 inline-flex items-center gap-1.5"
         >
           {props.buttonText}
@@ -306,6 +335,7 @@ function CtaCard({ props }: { props: CtaProps }) {
             type="button"
             onClick={onClick}
             style={btnStyle}
+            {...getBtnHoverHandlers(props)}
             className="px-8 py-3.5 rounded-full bg-green text-black text-sm font-semibold hover:opacity-90 transition-all shadow-md inline-flex items-center gap-2"
           >
             {props.buttonText}

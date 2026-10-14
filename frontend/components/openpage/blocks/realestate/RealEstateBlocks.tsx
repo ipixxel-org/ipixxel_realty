@@ -55,11 +55,6 @@ function itemPart(listKey: string, item: unknown, subKey?: string): ElementId {
   return subKey ? subElementId(base, subKey) : base;
 }
 
-/** True when the inspector flagged this list item as hidden. */
-function isHiddenItem(item: unknown): boolean {
-  return (item as { hidden?: unknown } | null | undefined)?.hidden === true;
-}
-
 /**
  * Section heading. Wrapped in {@link El} so the heading and its subheading are
  * individually selectable and styleable rather than inheriting section styles.
@@ -1170,7 +1165,7 @@ export function AmenitiesBlock({ block }: { block: BlockConfig }) {
       <SectionShell id={str(p.anchor, "amenities")}>
         <Title block={block} title={str(p.title, "Amenities")} subtitle={str(p.subtitle)} />
         <div className="flex flex-wrap justify-center gap-2">
-          {amen.map((a, i) => (
+          {amen.map((a) => (
             <El
               key={itemPart("items", a)}
               block={block}
@@ -1406,6 +1401,7 @@ export function AmenitiesBlock({ block }: { block: BlockConfig }) {
 export function FloorPlansBlock({ block }: { block: BlockConfig }) {
   const runtime = useOpenPageRuntime();
   const plans = items<{
+    _id?: string;
     name: string;
     beds: string;
     area: string;
@@ -1420,11 +1416,11 @@ export function FloorPlansBlock({ block }: { block: BlockConfig }) {
   const forms = resolveRuntimeForms(runtime.forms);
   const form = formId ? findFormById(formId, forms) : forms.find((f) => f.id.includes("floor")) || forms[0];
 
-  function unlockKey(plan: { name: string; image?: string }, index: number) {
-    return `floor-plan:${index}:${plan.image || plan.name}`;
+  function unlockKey(plan: { _id?: string; name: string; image?: string }, index: number) {
+    return `floor-plan:${plan._id || `${plan.image || plan.name}:${index}`}`;
   }
 
-  function openGate(plan: { name: string; image?: string; downloadUrl?: string }, index: number) {
+  function openGate(plan: { _id?: string; name: string; image?: string; downloadUrl?: string }, index: number) {
     const key = unlockKey(plan, index);
     if (!gateEnabled || runtime.isUnlocked(key)) {
       const url = plan.downloadUrl || plan.image;
@@ -1689,10 +1685,10 @@ export function UnitConfigBlock({ block }: { block: BlockConfig }) {
 }
 
 export function RePricingBlock({ block }: { block: BlockConfig }) {
-  const cards = items<{ name: string; price: string; meta?: string; cta?: string; features?: string[] }>(block.props.items);
+  const cards = items<{ _id?: string; name: string; price: string; meta?: string; cta?: string; features?: string[]; priceColor?: string }>(block.props.items);
   const variant = block.variant || (cards.length ? "cards" : "simple");
   const startingPrice = str(block.props.startingPrice).trim();
-  type PriceCard = { name: string; price: string; meta?: string; cta?: string; features?: string[] };
+  type PriceCard = { _id?: string; name: string; price: string; meta?: string; cta?: string; features?: string[]; priceColor?: string };
   const fallbackCard: PriceCard = { name: "Starting", price: startingPrice || "₹ 1.2 Cr*", meta: str(block.props.disclaimer) };
   const pricedCards: PriceCard[] = cards.length ? cards : [fallbackCard];
 
@@ -1701,7 +1697,9 @@ export function RePricingBlock({ block }: { block: BlockConfig }) {
   const StartingHeadline = startingPrice ? (
     <div className="text-center mb-10">
       <div className="text-[11px] uppercase tracking-[0.2em] text-green font-semibold mb-2">Starting from</div>
-      <div className="font-display text-4xl @md:text-5xl font-semibold">{startingPrice}</div>
+      <El block={block} id={part(block, "startingPrice")} className="font-display text-4xl @md:text-5xl font-semibold" style={{ color: str(block.props.priceColor) || undefined }}>
+        {startingPrice}
+      </El>
       {str(block.props.subtitle) ? (
         <p className="text-text-2 text-sm mt-3 max-w-lg mx-auto">{str(block.props.subtitle)}</p>
       ) : null}
@@ -1726,7 +1724,16 @@ export function RePricingBlock({ block }: { block: BlockConfig }) {
               {pricedCards.map((c, i) => (
                 <tr key={i} className="border-b border-border-subtle">
                   <td className="py-4 pr-4 font-semibold">{c.name}</td>
-                  <td className="py-4 pr-4 text-green font-semibold">{c.price}</td>
+                  <td className="py-4 pr-4">
+                    <El
+                      block={block}
+                      id={subElementId(itemPart("items", { _id: c._id || `price_${i}` }), "price")}
+                      className="text-green font-semibold"
+                      style={{ color: str(c.priceColor) || str(block.props.priceColor) || undefined }}
+                    >
+                      {c.price}
+                    </El>
+                  </td>
                   <td className="py-4 text-text-2">{c.meta || "—"}</td>
                 </tr>
               ))}
@@ -1743,7 +1750,9 @@ export function RePricingBlock({ block }: { block: BlockConfig }) {
       <SectionShell id={str(block.props.anchor, "pricing")} className="bg-bg-2">
         <div className="max-w-4xl mx-auto rounded-3xl border border-border-default bg-gradient-to-br from-bg-1 to-green/5 px-8 @md:px-12 py-12 text-center">
           <p className="text-[11px] uppercase tracking-[0.2em] text-green font-semibold mb-3">Starting from</p>
-          <h2 className="font-display text-4xl @md:text-5xl font-semibold mb-3">{startingPrice || cards[0]?.price || "₹ 1.2 Cr*"}</h2>
+          <El block={block} id={part(block, "startingPrice")} as="h2" className="font-display text-4xl @md:text-5xl font-semibold mb-3" style={{ color: str(block.props.priceColor) || undefined }}>
+            {startingPrice || cards[0]?.price || "₹ 1.2 Cr*"}
+          </El>
           <p className="text-text-2 text-sm mb-8 max-w-lg mx-auto">{str(block.props.subtitle, str(block.props.title, "Exclusive pricing for limited units"))}</p>
           <a href="#enquire" className="inline-flex px-6 py-3 rounded-lg bg-green text-black text-sm font-semibold">{str(block.props.ctaText, "Enquire Now")}</a>
           {str(block.props.disclaimer) ? <p className="text-text-3 text-xs mt-6">{str(block.props.disclaimer)}</p> : null}
@@ -1761,7 +1770,14 @@ export function RePricingBlock({ block }: { block: BlockConfig }) {
           {pricedCards.map((c, i) => (
             <div key={i} className="rounded-2xl border border-border-default bg-bg-2 p-6 text-center hover:border-green/40 transition-all">
               <div className="text-sm text-text-2 mb-2">{c.name}</div>
-              <div className="font-display text-3xl font-semibold text-green mb-2">{c.price}</div>
+              <El
+                block={block}
+                id={subElementId(itemPart("items", { _id: c._id || `price_${i}` }), "price")}
+                className="font-display text-3xl font-semibold text-green mb-2"
+                style={{ color: str(c.priceColor) || str(block.props.priceColor) || undefined }}
+              >
+                {c.price}
+              </El>
               {c.meta ? <p className="text-text-3 text-xs mb-5">{c.meta}</p> : null}
               <a href="#enquire" className="inline-flex px-4 py-2 rounded-lg bg-green text-black text-sm font-semibold">{c.cta || str(block.props.ctaText, "Enquire")}</a>
             </div>
@@ -1775,7 +1791,9 @@ export function RePricingBlock({ block }: { block: BlockConfig }) {
     <SectionShell id={str(block.props.anchor, "pricing")}>
       <Title block={block} title={str(block.props.title, "Pricing")} subtitle={str(block.props.subtitle)} />
       <div className="text-center">
-        <div className="font-display text-4xl font-bold">{startingPrice || "₹ 1.2 Cr*"}</div>
+        <El block={block} id={part(block, "startingPrice")} className="font-display text-4xl font-bold" style={{ color: str(block.props.priceColor) || undefined }}>
+          {startingPrice || "₹ 1.2 Cr*"}
+        </El>
         <p className="text-text-3 text-xs mt-2">{str(block.props.disclaimer, "*T&C apply. Price on request for selected units.")}</p>
       </div>
     </SectionShell>

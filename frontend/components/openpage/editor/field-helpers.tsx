@@ -4,7 +4,7 @@ import type { ReactNode } from "react";
 import { ITEM_ID_KEY } from "@/components/openpage/blocks/types";
 import { MediaPicker } from "@/components/media-picker";
 
-export type ItemFieldKind = "text" | "textarea" | "select" | "image" | "icon" | "toggle" | "number";
+export type ItemFieldKind = "text" | "textarea" | "select" | "image" | "icon" | "toggle" | "number" | "color" | "array-strings";
 
 export interface ItemFieldDef {
   key: string;
@@ -38,6 +38,8 @@ const LONG_TEXT_HINTS = ["body", "description", "text", "content", "message", "n
 function kindForKey(key: string, sample: unknown): ItemFieldKind {
   const media = mediaKindForKey(key);
   if (media) return media;
+  if (key.toLowerCase().includes("color") || key.toLowerCase().endsWith("bg")) return "color";
+  if (Array.isArray(sample)) return "array-strings";
   if (typeof sample === "boolean") return "toggle";
   if (typeof sample === "number") return "number";
   const k = key.toLowerCase();
@@ -93,7 +95,31 @@ export const AMENITY_FIELDS: ItemFieldDef[] = [
   { key: "description", label: "Description", kind: "textarea", placeholder: "Short description" },
   { key: "image", label: "Image (optional)", kind: "image" },
   { key: "icon", label: "Icon (optional if image used)", kind: "icon" },
-  { key: "cardBg", label: "Card Color (optional)", kind: "text", placeholder: "e.g. #ffffff or #f8fafc" },
+  { key: "iconColor", label: "Icon Color", kind: "color" },
+  { key: "iconBg", label: "Icon Background", kind: "color" },
+  { key: "cardBg", label: "Card Color (optional)", kind: "color", placeholder: "#ffffff" },
+];
+
+export const ICON_BOX_FIELDS: ItemFieldDef[] = [
+  { key: "title", label: "Title", kind: "text" },
+  { key: "description", label: "Description", kind: "textarea" },
+  { key: "icon", label: "Icon / Image", kind: "icon" },
+  { key: "iconColor", label: "Icon Color", kind: "color" },
+  { key: "iconBg", label: "Icon Background", kind: "color" },
+  { key: "cardBg", label: "Card Background", kind: "color" },
+  { key: "textColor", label: "Title Color", kind: "color" },
+  { key: "link", label: "Link URL", kind: "text" },
+  { key: "target", label: "Link target", kind: "select", options: ["_self", "_blank"] },
+];
+
+export const PRICING_TIER_FIELDS: ItemFieldDef[] = [
+  { key: "name", label: "Plan name", kind: "text" },
+  { key: "price", label: "Price", kind: "text" },
+  { key: "period", label: "Billing period", kind: "text" },
+  { key: "description", label: "Description", kind: "textarea" },
+  { key: "features", label: "Features", kind: "array-strings" },
+  { key: "cta", label: "Button text", kind: "text" },
+  { key: "featured", label: "Featured", kind: "toggle" },
 ];
 
 /**
@@ -174,6 +200,68 @@ export function ItemFields({
           );
         }
 
+        if (field.kind === "color") {
+          const color = String(value ?? "");
+          const picker = /^#[0-9a-f]{6}$/i.test(color) ? color : "#000000";
+          return (
+            <div key={field.key}>
+              <p className="text-[10px] text-text-3 mb-0.5">{label}</p>
+              <div className="flex items-center gap-1.5">
+                <input
+                  type="color"
+                  value={picker}
+                  onChange={(e) => onChange(field.key, e.target.value)}
+                  aria-label={`${label} picker`}
+                  className="h-7 w-8 rounded border border-border-subtle bg-bg-3 p-1"
+                />
+                <input
+                  type="text"
+                  value={color}
+                  onChange={(e) => onChange(field.key, e.target.value)}
+                  placeholder={field.placeholder ?? "#ffffff"}
+                  aria-label={`${label} value`}
+                  className={`${FIELD_CLS} flex-1`}
+                />
+              </div>
+            </div>
+          );
+        }
+
+        if (field.kind === "array-strings") {
+          const values = Array.isArray(value) ? value.map(String) : [];
+          return (
+            <div key={field.key}>
+              <p className="text-[10px] text-text-3 mb-0.5">{label}</p>
+              <div className="space-y-1">
+                {values.map((entry, index) => (
+                  <div key={index} className="flex gap-1">
+                    <input
+                      type="text"
+                      value={entry}
+                      onChange={(e) => {
+                        const next = [...values];
+                        next[index] = e.target.value;
+                        onChange(field.key, next);
+                      }}
+                      className={`${FIELD_CLS} flex-1`}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => onChange(field.key, values.filter((_, i) => i !== index))}
+                      className="px-1 text-text-3 hover:text-status-red"
+                    >
+                      x
+                    </button>
+                  </div>
+                ))}
+                <button type="button" onClick={() => onChange(field.key, [...values, ""])} className="text-[10px] text-green">
+                  + Add value
+                </button>
+              </div>
+            </div>
+          );
+        }
+
         if (field.kind === "select") {
           return (
             <div key={field.key}>
@@ -215,7 +303,7 @@ export function ItemFields({
               type={field.kind === "number" ? "number" : "text"}
               value={String(value ?? "")}
               onChange={(e) =>
-                onChange(field.key, field.kind === "number" ? Number(e.target.value) : e.target.value)
+                onChange(field.key, field.kind === "number" ? (e.target.value === "" ? undefined : Number(e.target.value)) : e.target.value)
               }
               placeholder={field.placeholder}
               className={FIELD_CLS}

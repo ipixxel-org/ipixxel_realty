@@ -17,12 +17,21 @@ interface NavbarProps {
   logo: string;
   logoImage?: string;
   logoSize?: number | string;
+  logoWidth?: number | string;
+  logoHeight?: number | string;
   /** Legacy string labels or structured { label, id } menu items. */
   links?: Array<string | NavMenuItem>;
   menuItems?: NavMenuItem[];
   ctaText: string;
   ctaId?: string;
   ctaHref?: string;
+  ctaButtonColor?: string;
+  ctaTextColor?: string;
+  ctaHoverColor?: string;
+  ctaHoverTextColor?: string;
+  ctaBorderColor?: string;
+  ctaRadius?: number | string;
+  ctaTarget?: "_self" | "_blank";
   phone?: string;
   email?: string;
   badge?: string;
@@ -124,8 +133,22 @@ function marketingDropdownLabels(
   return out;
 }
 
-function Brand({ logo, logoImage, logoSize = 32 }: { logo: string; logoImage?: string; logoSize?: number | string }) {
-  const size = Number(logoSize) || 32;
+function Brand({
+  logo,
+  logoImage,
+  logoSize = 32,
+  logoWidth,
+  logoHeight,
+}: {
+  logo: string;
+  logoImage?: string;
+  logoSize?: number | string;
+  logoWidth?: number | string;
+  logoHeight?: number | string;
+}) {
+  const legacySize = Number(logoSize) || 32;
+  const width = Number(logoWidth) || legacySize;
+  const height = Number(logoHeight) || legacySize;
   return (
     <div className="flex items-center gap-2">
       {logoImage ? (
@@ -133,16 +156,16 @@ function Brand({ logo, logoImage, logoSize = 32 }: { logo: string; logoImage?: s
         <img
           src={logoImage}
           alt={logo}
-          style={{ height: `${size}px` }}
-          className="w-auto object-contain max-h-[120px]"
+          style={{ width: `${width}px`, height: `${height}px` }}
+          className="object-contain max-w-[240px] max-h-[120px]"
         />
       ) : (
         <div
-          style={{ width: `${size}px`, height: `${size}px` }}
+          style={{ width: `${width}px`, height: `${height}px` }}
           className="rounded-lg bg-green/10 flex items-center justify-center shrink-0"
         >
           <div
-            style={{ width: `${Math.max(4, Math.round(size * 0.5))}px`, height: `${Math.max(4, Math.round(size * 0.5))}px` }}
+            style={{ width: `${Math.max(4, Math.round(Math.min(width, height) * 0.5))}px`, height: `${Math.max(4, Math.round(Math.min(width, height) * 0.5))}px` }}
             className="rounded-full bg-green"
           />
         </div>
@@ -156,16 +179,41 @@ function CtaButton({
   text,
   href,
   onClick,
+  styleProps,
+  className,
 }: {
   text: string;
   href: string;
   onClick?: () => void;
+  styleProps: NavbarProps;
+  className?: string;
 }) {
+  const backgroundColor = styleProps.ctaButtonColor || undefined;
+  const radius = Number(styleProps.ctaRadius);
   return (
     <a
       href={href}
-      onClick={(e) => handleNavClick(e, href, onClick)}
-      className="px-4 py-2 rounded-full bg-green text-white text-[13px] font-semibold hover:bg-green-dim transition-all hover:accent-glow-md"
+      onClick={(e) => {
+        if (styleProps.ctaTarget !== "_blank") handleNavClick(e, href, onClick);
+        else onClick?.();
+      }}
+      target={styleProps.ctaTarget || "_self"}
+      rel={styleProps.ctaTarget === "_blank" ? "noopener noreferrer" : undefined}
+      onMouseEnter={(e) => {
+        if (styleProps.ctaHoverColor) e.currentTarget.style.backgroundColor = styleProps.ctaHoverColor;
+        if (styleProps.ctaHoverTextColor) e.currentTarget.style.color = styleProps.ctaHoverTextColor;
+      }}
+      onMouseLeave={(e) => {
+        e.currentTarget.style.backgroundColor = backgroundColor || "";
+        e.currentTarget.style.color = styleProps.ctaTextColor || "";
+      }}
+      style={{
+        backgroundColor,
+        color: styleProps.ctaTextColor || undefined,
+        borderColor: styleProps.ctaBorderColor || undefined,
+        borderRadius: Number.isFinite(radius) && radius >= 0 ? `${radius}px` : undefined,
+      }}
+      className={className || "px-4 py-2 rounded-full border border-transparent bg-green text-white text-[13px] font-semibold hover:opacity-90 transition-all hover:accent-glow-md"}
     >
       {text}
     </a>
@@ -188,12 +236,12 @@ function NavbarDefault({ props, sticky }: { props: NavbarProps; sticky?: boolean
   return (
     <nav className={`${sticky ? "sticky top-0 z-40 backdrop-blur-md bg-bg-1/90 border-b border-border-subtle" : ""} px-6 @md:px-10 py-3.5`}>
       <div className="flex items-center justify-between gap-4">
-        <Brand logo={logo} logoImage={logoImage} logoSize={props.logoSize} />
+        <Brand logo={logo} logoImage={logoImage} logoSize={props.logoSize} logoWidth={props.logoWidth} logoHeight={props.logoHeight} />
         <div className="hidden @2xl:flex items-center gap-7">
           <NavLinks items={items} />
         </div>
         <div className="flex items-center gap-3">
-          {ctaText ? <CtaButton text={ctaText} href={ctaHref} /> : null}
+          {ctaText ? <CtaButton text={ctaText} href={ctaHref} styleProps={props} /> : null}
           <button
             type="button"
             className="@2xl:hidden w-9 h-9 rounded-lg border border-border-default flex items-center justify-center text-text-2 hover:text-text-0 hover:bg-bg-3 transition-colors"
@@ -226,10 +274,10 @@ function NavbarCentered({ props, sticky }: { props: NavbarProps; sticky?: boolea
         <div className="hidden @2xl:flex items-center gap-6 flex-1">
           <NavLinks items={items.slice(0, mid)} />
         </div>
-        <Brand logo={logo} logoImage={logoImage} logoSize={props.logoSize} />
+        <Brand logo={logo} logoImage={logoImage} logoSize={props.logoSize} logoWidth={props.logoWidth} logoHeight={props.logoHeight} />
         <div className="hidden @2xl:flex items-center gap-6 flex-1 justify-end">
           <NavLinks items={items.slice(mid)} />
-          {ctaText ? <CtaButton text={ctaText} href={ctaHref} /> : null}
+          {ctaText ? <CtaButton text={ctaText} href={ctaHref} styleProps={props} /> : null}
         </div>
         <button
           type="button"
@@ -243,7 +291,7 @@ function NavbarCentered({ props, sticky }: { props: NavbarProps; sticky?: boolea
       {open ? (
         <div className="@2xl:hidden flex flex-col gap-3 pt-4">
           <NavLinks items={items} onClick={() => setOpen(false)} />
-          {ctaText ? <CtaButton text={ctaText} href={ctaHref} onClick={() => setOpen(false)} /> : null}
+          {ctaText ? <CtaButton text={ctaText} href={ctaHref} onClick={() => setOpen(false)} styleProps={props} /> : null}
         </div>
       ) : null}
     </nav>
@@ -281,12 +329,12 @@ function NavbarDual({ props, sticky }: { props: NavbarProps; sticky?: boolean })
       </div>
       <div className="px-6 @md:px-10 py-3">
         <div className="flex items-center justify-between gap-4">
-          <Brand logo={logo} logoImage={logoImage} logoSize={props.logoSize} />
+          <Brand logo={logo} logoImage={logoImage} logoSize={props.logoSize} logoWidth={props.logoWidth} logoHeight={props.logoHeight} />
           <div className="hidden @2xl:flex items-center gap-7">
             <NavLinks items={items} />
           </div>
           <div className="flex items-center gap-3">
-            {ctaText ? <CtaButton text={ctaText} href={ctaHref} /> : null}
+            {ctaText ? <CtaButton text={ctaText} href={ctaHref} styleProps={props} /> : null}
             <button
               type="button"
               className="@2xl:hidden w-9 h-9 rounded-lg border border-border-default flex items-center justify-center text-text-2 hover:text-text-0 hover:bg-bg-3 transition-colors"
@@ -316,12 +364,12 @@ function NavbarPill({ props, sticky }: { props: NavbarProps; sticky?: boolean })
   return (
     <nav className={`${sticky ? "sticky top-4 z-40" : ""} px-4 @md:px-8`}>
       <div className="flex items-center justify-between gap-4 rounded-full border border-border-subtle bg-bg-2/85 backdrop-blur-md shadow-lg shadow-black/30 pl-5 pr-2 py-2 @md:px-6">
-        <Brand logo={logo} logoImage={logoImage} logoSize={props.logoSize} />
+        <Brand logo={logo} logoImage={logoImage} logoSize={props.logoSize} logoWidth={props.logoWidth} logoHeight={props.logoHeight} />
         <div className="hidden @2xl:flex items-center gap-6">
           <NavLinks items={items} />
         </div>
         <div className="flex items-center gap-2">
-          {ctaText ? <CtaButton text={ctaText} href={ctaHref} /> : null}
+          {ctaText ? <CtaButton text={ctaText} href={ctaHref} styleProps={props} /> : null}
           <button
             type="button"
             className="@2xl:hidden w-9 h-9 rounded-full border border-border-default flex items-center justify-center text-text-2 hover:text-text-0 hover:bg-bg-3 transition-colors"
@@ -335,7 +383,7 @@ function NavbarPill({ props, sticky }: { props: NavbarProps; sticky?: boolean })
       {open ? (
         <div className="@2xl:hidden mt-2 rounded-2xl border border-border-subtle bg-bg-2/95 backdrop-blur-md p-4 flex flex-col gap-3">
           <NavLinks items={items} onClick={() => setOpen(false)} />
-          {ctaText ? <CtaButton text={ctaText} href={ctaHref} onClick={() => setOpen(false)} /> : null}
+          {ctaText ? <CtaButton text={ctaText} href={ctaHref} onClick={() => setOpen(false)} styleProps={props} /> : null}
         </div>
       ) : null}
     </nav>
@@ -352,7 +400,7 @@ function NavbarGlass({ props, sticky }: { props: NavbarProps; sticky?: boolean }
     <nav className={`${sticky ? "sticky top-0 z-40" : ""} px-4 @md:px-8 py-4`}>
       <div className="rounded-2xl border border-white/10 bg-white/5 backdrop-blur-xl px-5 py-3">
         <div className="flex items-center justify-between gap-4">
-          <Brand logo={logo} logoImage={logoImage} logoSize={props.logoSize} />
+          <Brand logo={logo} logoImage={logoImage} logoSize={props.logoSize} logoWidth={props.logoWidth} logoHeight={props.logoHeight} />
           <div className="hidden @2xl:flex items-center gap-7">
             {items.map((item, i) => (
               <a
@@ -367,13 +415,7 @@ function NavbarGlass({ props, sticky }: { props: NavbarProps; sticky?: boolean }
           </div>
           <div className="flex items-center gap-3">
             {ctaText ? (
-              <a
-                href={ctaHref}
-                onClick={(e) => handleNavClick(e, ctaHref, undefined)}
-                className="px-4 py-2 rounded-lg bg-green text-black text-[13px] font-semibold hover:bg-green-dim transition-all"
-              >
-                {ctaText}
-              </a>
+              <CtaButton text={ctaText} href={ctaHref} styleProps={props} className="px-4 py-2 rounded-lg bg-green text-black text-[13px] font-semibold hover:bg-green-dim transition-all" />
             ) : null}
             <button
               type="button"
@@ -398,13 +440,7 @@ function NavbarGlass({ props, sticky }: { props: NavbarProps; sticky?: boolean }
               </a>
             ))}
             {ctaText ? (
-              <a
-                href={ctaHref}
-                onClick={(e) => handleNavClick(e, ctaHref, () => setOpen(false))}
-                className="px-4 py-2 rounded-lg bg-green text-black text-[13px] font-semibold mt-1 self-start"
-              >
-                {ctaText}
-              </a>
+              <CtaButton text={ctaText} href={ctaHref} onClick={() => setOpen(false)} styleProps={props} className="px-4 py-2 rounded-lg bg-green text-black text-[13px] font-semibold mt-1 self-start" />
             ) : null}
           </div>
         ) : null}
@@ -424,7 +460,7 @@ function NavbarMarketing({ props, sticky }: { props: NavbarProps; sticky?: boole
   return (
     <nav className={`${sticky ? "sticky top-0 z-40" : ""} px-4 @md:px-8 py-3 @md:py-4 bg-bg-0`}>
       <div className="flex items-center justify-between gap-3 rounded-full border border-black/[0.06] bg-bg-1 shadow-[0_8px_30px_rgba(0,0,0,0.06)] pl-4 @md:pl-6 pr-2 @md:pr-3 py-2 @md:py-2.5 max-w-6xl mx-auto">
-        <Brand logo={logo} logoImage={logoImage} logoSize={props.logoSize} />
+        <Brand logo={logo} logoImage={logoImage} logoSize={props.logoSize} logoWidth={props.logoWidth} logoHeight={props.logoHeight} />
         <div className="hidden @2xl:flex items-center gap-5 @3xl:gap-6 flex-1 justify-center">
           <NavLinks
             items={items}
@@ -434,13 +470,7 @@ function NavbarMarketing({ props, sticky }: { props: NavbarProps; sticky?: boole
         </div>
         <div className="flex items-center gap-2 shrink-0">
           {ctaText ? (
-            <a
-              href={ctaHref}
-              onClick={(e) => handleNavClick(e, ctaHref, undefined)}
-              className="px-4 @md:px-5 py-2 rounded-full bg-text-0 text-bg-1 text-[13px] font-semibold hover:opacity-90 transition-opacity"
-            >
-              {ctaText}
-            </a>
+            <CtaButton text={ctaText} href={ctaHref} styleProps={props} className="px-4 @md:px-5 py-2 rounded-full bg-text-0 text-bg-1 text-[13px] font-semibold hover:opacity-90 transition-opacity" />
           ) : null}
           <button
             type="button"
@@ -470,19 +500,13 @@ function NavbarMinimal({ props, sticky }: { props: NavbarProps; sticky?: boolean
   return (
     <nav className={`${sticky ? "sticky top-0 z-40" : ""} px-6 @md:px-10 py-4`}>
       <div className="flex items-center justify-between gap-4">
-        <Brand logo={logo} logoImage={logoImage} logoSize={props.logoSize} />
+        <Brand logo={logo} logoImage={logoImage} logoSize={props.logoSize} logoWidth={props.logoWidth} logoHeight={props.logoHeight} />
         <div className="hidden @2xl:flex items-center gap-7">
           <NavLinks items={items} />
         </div>
         <div className="flex items-center gap-3">
           {ctaText ? (
-            <a
-              href={ctaHref}
-              onClick={(e) => handleNavClick(e, ctaHref, undefined)}
-              className="text-[13px] font-semibold text-green hover:text-green-dim transition-colors"
-            >
-              {ctaText}
-            </a>
+            <CtaButton text={ctaText} href={ctaHref} styleProps={props} className="text-[13px] font-semibold text-green hover:text-green-dim transition-colors" />
           ) : null}
           <button
             type="button"

@@ -16,15 +16,6 @@ interface GalleryImage {
   category?: string;
 }
 
-const defaultImages: GalleryImage[] = [
-  { _id: "img_0", alt: "Image 1" },
-  { _id: "img_1", alt: "Image 2" },
-  { _id: "img_2", alt: "Image 3" },
-  { _id: "img_3", alt: "Image 4" },
-  { _id: "img_4", alt: "Image 5" },
-  { _id: "img_5", alt: "Image 6" },
-];
-
 /** Clamp a user-entered image height so a bad value can never collapse the grid. */
 function imageHeight(value: unknown, fallback: number): number {
   const n = typeof value === "number" ? value : Number(value);
@@ -88,11 +79,8 @@ export function GalleryBlock({ block }: { block: BlockConfig }) {
   const { variant, props } = block;
   const title = props.title as string | undefined;
   const images = ((): GalleryImage[] => {
-    const src = (props.images as GalleryImage[]) || [];
-    if (src.length > 0) {
-      return src.map((it, i) => ({ _id: (it as GalleryImage)._id || `img_${i}`, ...it }));
-    }
-    return defaultImages;
+    const src = Array.isArray(props.images) ? props.images as GalleryImage[] : [];
+    return src.map((it, i) => ({ ...it, _id: it._id || `img_${i}` }));
   })();
   const categories = useMemo(() => {
     const cats = Array.from(new Set(images.map((i) => i.category).filter(Boolean))) as string[];
