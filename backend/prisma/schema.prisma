@@ -206,6 +206,8 @@ model Organisation {
   marketingConnections  MarketingConnection[]
   marketingOrgAccess    MarketingOrgPlatformAccess[]
   payments              Payment[]
+  billingProfile        BillingProfile?
+  billingCheckouts      BillingCheckout[]
 
   @@map("organisations")
   @@schema("identity")
@@ -291,6 +293,7 @@ model User {
   packageChangeRequests PackageChangeRequest[] @relation("PackageChangeRequestedBy")
   packageChangeReviews  PackageChangeRequest[] @relation("PackageChangeReviewedBy")
   paymentsCreated       Payment[]              @relation("PaymentCreatedBy")
+  billingCheckouts      BillingCheckout[]      @relation("BillingCheckoutCreatedBy")
 
   @@map("users")
   @@schema("identity")
@@ -1052,6 +1055,8 @@ model Plan {
   subscriptions Subscription[]
   currentPlanRequests PackageChangeRequest[] @relation("CurrentPlanRequests")
   targetPlanRequests  PackageChangeRequest[] @relation("TargetPlanRequests")
+  checkoutsFrom       BillingCheckout[]      @relation("BillingCheckoutFromPlan")
+  checkoutsTo         BillingCheckout[]      @relation("BillingCheckoutToPlan")
 
   @@map("plans")
   @@schema("billing")
@@ -1115,6 +1120,8 @@ model PackageChangeRequest {
   reviewedBy   User?        @relation("PackageChangeReviewedBy", fields: [reviewedById], references: [id], onDelete: SetNull)
   currentPlan  Plan         @relation("CurrentPlanRequests", fields: [currentPlanId], references: [id], onDelete: Restrict)
   targetPlan   Plan         @relation("TargetPlanRequests", fields: [targetPlanId], references: [id], onDelete: Restrict)
+  // Billing v2: set when the request was raised by a manual-mode checkout.
+  billingCheckout BillingCheckout?
 
   @@index([orgId])
   @@index([status])
@@ -1142,6 +1149,10 @@ enum PaymentStatus {
 enum PaymentPurpose {
   // Super Admin ₹1 test-mode payment (verifies the integration end-to-end).
   test
+  // Billing v2: buying / upgrading a plan. referenceType 'billing_checkout',
+  // referenceId = BillingCheckout.id. Fulfilled by BillingCheckoutService on
+  // the payment.captured event.
+  plan_purchase
 
   @@schema("billing")
 }
@@ -1168,11 +1179,118 @@ model Payment {
 
   organisation Organisation @relation(fields: [organisationId], references: [id], onDelete: Cascade)
   createdBy    User         @relation("PaymentCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+  billingCheckout BillingCheckout?
 
   @@index([organisationId])
   @@index([status])
   @@index([referenceType, referenceId])
   @@map("payments")
+  @@schema("billing")
+}
+
+// ---------------------------------------------------------------------------
+// Billing v2 (docs/billing-ui-contract.md)
+// ---------------------------------------------------------------------------
+
+// The organisation as GST buyer — printed on its invoices. One per org.
+model BillingProfile {
+  id             String   @id @default(uuid())
+  organisationId String   @unique @map("organisation_id")
+  legalName      String   @map("legal_name")
+  addressLine1   String   @map("address_line1")
+  addressLine2   String?  @map("address_line2")
+  city           String
+  // 2-digit GST state code ("29" = Karnataka); must match the GSTIN prefix.
+  state          String
+  pincode        String
+  country        String   @default("IN")
+  gstin          String?
+  createdAt      DateTime @default(now()) @map("created_at")
+  updatedAt      DateTime @updatedAt @map("updated_at")
+
+  organisation Organisation @relation(fields: [organisationId], references: [id], onDelete: Cascade)
+
+  @@map("billing_profiles")
+  @@schema("billing")
+}
+
+enum BillingCheckoutKind {
+  // From Basic / no active paid plan: full price, new cycle starts now.
+  new
+  // Higher plan, same interval: (new − old) × daysLeft ÷ daysInCycle; renewsAt unchanged.
+  upgrade_same_interval
+  // Monthly → yearly: yearly price − unused credit; new yearly cycle starts now.
+  interval_change
+
+  @@schema("billing")
+}
+
+enum BillingCheckoutMode {
+  online
+  manual
+
+  @@schema("billing")
+}
+
+enum BillingCheckoutStatus {
+  pending
+  paid
+  failed
+  expired
+  cancelled
+  approved
+  rejected
+  // Payment captured but the plan couldn't be applied (amount mismatch,
+  // usage over the new plan's limits) — a Super Admin must look at it.
+  needs_review
+
+  @@schema("billing")
+}
+
+// What an organisation was quoted when it started buying / upgrading a plan.
+// Amounts are integer paise and never come from the client.
+model BillingCheckout {
+  id                     String                @id @default(uuid())
+  organisationId         String                @map("organisation_id")
+  fromPlanId             String?               @map("from_plan_id")
+  toPlanId               String                @map("to_plan_id")
+  fromInterval           BillingCycle?         @map("from_interval")
+  toInterval             BillingCycle          @map("to_interval")
+  kind                   BillingCheckoutKind
+  subtotalPaise          Int                   @map("subtotal_paise")
+  creditPaise            Int                   @map("credit_paise")
+  taxablePaise           Int                   @map("taxable_paise")
+  cgstPaise              Int                   @map("cgst_paise")
+  sgstPaise              Int                   @map("sgst_paise")
+  igstPaise              Int                   @map("igst_paise")
+  totalPaise             Int                   @map("total_paise")
+  buyerLegalName         String                @map("buyer_legal_name")
+  buyerState             String                @map("buyer_state")
+  buyerGstin             String?               @map("buyer_gstin")
+  sellerSnapshot         Json                  @map("seller_snapshot")
+  mode                   BillingCheckoutMode
+  status                 BillingCheckoutStatus @default(pending)
+  paymentId              String?               @unique @map("payment_id")
+  packageChangeRequestId String?               @unique @map("package_change_request_id")
+  // Online checkouts expire unpaid after 30 minutes.
+  expiresAt              DateTime?             @map("expires_at")
+  createdById            String                @map("created_by_id")
+  // Set exactly once when the plan is applied; the idempotency marker.
+  fulfilledAt            DateTime?             @map("fulfilled_at")
+  reviewReason           String?               @map("review_reason")
+  createdAt              DateTime              @default(now()) @map("created_at")
+  updatedAt              DateTime              @updatedAt @map("updated_at")
+
+  organisation         Organisation          @relation(fields: [organisationId], references: [id], onDelete: Cascade)
+  fromPlan             Plan?                 @relation("BillingCheckoutFromPlan", fields: [fromPlanId], references: [id], onDelete: Restrict)
+  toPlan               Plan                  @relation("BillingCheckoutToPlan", fields: [toPlanId], references: [id], onDelete: Restrict)
+  payment              Payment?              @relation(fields: [paymentId], references: [id], onDelete: SetNull)
+  packageChangeRequest PackageChangeRequest? @relation(fields: [packageChangeRequestId], references: [id], onDelete: SetNull)
+  createdBy            User                  @relation("BillingCheckoutCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+
+  @@index([organisationId, status])
+  @@index([status])
+  @@map("billing_checkouts")
   @@schema("billing")
 }
 
@@ -2393,6 +2511,16 @@ model PlatformConfig {
   // upgrades go to Super Admin for manual approval. The effective mode also
   // needs usable Razorpay keys — see BillingModeService.
   onlinePaymentsEnabled   Boolean @default(false) @map("online_payments_enabled")
+  // Billing v2: the platform as GST seller, printed on invoices and used to
+  // split GST (CGST+SGST when the buyer's state = sellerState, else IGST).
+  // sellerState is the 2-digit GST state code ("29" = Karnataka).
+  sellerLegalName         String? @map("seller_legal_name")
+  sellerGstin             String? @map("seller_gstin")
+  sellerState             String? @map("seller_state")
+  sellerAddressLine1      String? @map("seller_address_line1")
+  sellerAddressLine2      String? @map("seller_address_line2")
+  sellerCity              String? @map("seller_city")
+  sellerPincode           String? @map("seller_pincode")
   primaryColor            String  @default("#0f1424") @map("primary_color")
   secondaryColor          String  @default("#2a3348") @map("secondary_color")
   updatedAt               DateTime @updatedAt @map("updated_at")
