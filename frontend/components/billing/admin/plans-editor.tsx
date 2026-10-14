@@ -55,7 +55,8 @@ function PlanCard({ initial }: { initial: BillingPlan }) {
   const [busy, setBusy] = useState(false);
   const dirty = JSON.stringify(plan) !== JSON.stringify(saved);
   const set = (patch: Partial<BillingPlan>) => setPlan((p) => ({ ...p, ...patch }));
-  const setLimit = (key: keyof PlanLimits, v: string) => set({ limits: { ...plan.limits, [key]: Math.max(0, Math.floor(Number(v) || 0)) } });
+  // Empty = unlimited (null).
+  const setLimit = (key: keyof PlanLimits, v: string) => set({ limits: { ...plan.limits, [key]: v.trim() === "" ? null : Math.max(0, Math.floor(Number(v) || 0)) } });
   const setModule = (patch: Partial<PlanModules>) => set({ modules: { ...plan.modules, ...patch } });
   const yearlySaving = plan.priceMonthly > 0 ? Math.round((1 - plan.priceYearly / (plan.priceMonthly * 12)) * 100) : 0;
 
@@ -122,7 +123,7 @@ function PlanCard({ initial }: { initial: BillingPlan }) {
             {LIMIT_FIELDS.map((f) => (
               <div className="field" key={f.key} style={{ marginBottom: 0 }}>
                 <label>{f.label}</label>
-                <input className="inp" type="number" min={0} value={plan.limits[f.key]} onChange={(e) => setLimit(f.key, e.target.value)} />
+                <input className="inp" type="number" min={0} placeholder="Unlimited" value={plan.limits[f.key] ?? ""} onChange={(e) => setLimit(f.key, e.target.value)} />
               </div>
             ))}
           </div>
@@ -136,7 +137,7 @@ function PlanCard({ initial }: { initial: BillingPlan }) {
             label="Meta lead ads"
             hint="Pull leads from Facebook / Instagram lead forms"
             on={plan.modules.metaLeadAds}
-            onChange={(v) => setModule({ metaLeadAds: v, metaPages: v ? Math.max(1, plan.modules.metaPages) : 0 })}
+            onChange={(v) => setModule({ metaLeadAds: v, metaPages: v ? (plan.modules.metaPages === 0 ? 1 : plan.modules.metaPages) : 0 })}
           >
             {plan.modules.metaLeadAds ? (
               <label className="bl-row bl-muted" style={{ gap: 6 }}>
@@ -146,8 +147,9 @@ function PlanCard({ initial }: { initial: BillingPlan }) {
                   type="number"
                   min={1}
                   style={{ width: 70, padding: "6px 8px" }}
-                  value={plan.modules.metaPages}
-                  onChange={(e) => setModule({ metaPages: Math.max(1, Math.floor(Number(e.target.value) || 1)) })}
+                  placeholder="Unlimited"
+                  value={plan.modules.metaPages ?? ""}
+                  onChange={(e) => setModule({ metaPages: e.target.value.trim() === "" ? null : Math.max(1, Math.floor(Number(e.target.value) || 1)) })}
                 />
               </label>
             ) : null}

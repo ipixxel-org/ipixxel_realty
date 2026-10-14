@@ -8,7 +8,7 @@ import { BillingBanner, PayNowButton, RenewalReminderPopup, UpdatePaymentMethodB
 export { RenewalReminderPopup };
 import { useOrgBilling } from "./context";
 import { InvoicesTable, PaymentHistoryTable } from "./invoices";
-import { BLink, ErrorNote, Kv, Loading, SampleDataTag, Section, StatusBadge, UsageMeter } from "./ui";
+import { BLink, countLabel, ErrorNote, Kv, Loading, SampleDataTag, Section, StatusBadge, UsageMeter } from "./ui";
 
 function planLine(o: BillingOverview): string {
   if (o.plan.isFree) {
@@ -17,14 +17,15 @@ function planLine(o: BillingOverview): string {
       : "Free forever. Upgrade any time.";
   }
   if (o.status === "past_due" || o.status === "grace_ending") return `Renewal was due ${formatDate(o.dueDate!)} · grace until ${formatDate(o.graceEndsAt!)}`;
+  if (o.status === "expired") return `Expired${o.dueDate ? ` on ${formatDate(o.dueDate)}` : ""} — publishing is paused until you renew`;
   if (o.status === "cancellation_scheduled") return `Ends ${formatDate(o.cancelAt!)} — full access until then`;
-  return `Renews on ${formatDate(o.periodEnd!)}${o.renewalMode === "auto" ? " automatically" : ""}`;
+  return `Renews on ${formatDate(o.periodEnd!)}${o.renewalMode === "auto" && o.autoRenewAvailable ? " automatically" : ""}`;
 }
 
 /** Current plan card — also used on its own in the walkthrough. */
 export function CurrentPlanCard({ overview: o }: { overview: BillingOverview }) {
   return (
-    <Section title="Current plan" sub="What you're on today" action={<SampleDataTag />}>
+    <Section title="Current plan" sub="What you're on today" action={<SampleDataTag fns={["getBillingOverview"]} />}>
       <div className="bl-between" style={{ padding: "14px 16px", background: "var(--surface-2)", borderRadius: 12, border: "1px solid var(--line-2)" }}>
         <div className="bl-row" style={{ gap: 14 }}>
           <span style={{ width: 44, height: 44, borderRadius: 12, background: "var(--amber-050)", color: "var(--amber)", display: "inline-flex", alignItems: "center", justifyContent: "center" }}>
@@ -64,7 +65,7 @@ export function UsageCard({ overview: o }: { overview: BillingOverview }) {
       <div className="bl-row" style={{ marginTop: 14, gap: 8 }}>
         <span className="chip">Team chat: {o.plan.modules.teamChat ? "on" : "off"}</span>
         <span className="chip">
-          Meta lead ads: {o.plan.modules.metaLeadAds ? `on (${o.plan.modules.metaPages} page${o.plan.modules.metaPages === 1 ? "" : "s"})` : "off"}
+          Meta lead ads: {o.plan.modules.metaLeadAds ? `on (${countLabel(o.plan.modules.metaPages, "page", "pages")})` : "off"}
         </span>
       </div>
     </Section>
@@ -74,10 +75,10 @@ export function UsageCard({ overview: o }: { overview: BillingOverview }) {
 export function PaymentMethodCard({ overview: o }: { overview: BillingOverview }) {
   const payNear = o.status === "renewal_due" || o.status === "past_due" || o.status === "grace_ending";
   return (
-    <Section title="How you pay" sub={o.renewalMode === "auto" ? "Automatic renewal" : "Pay each renewal yourself"}>
+    <Section title="How you pay" sub={o.renewalMode === "auto" && o.autoRenewAvailable ? "Automatic renewal" : "Pay each renewal yourself"}>
       {o.plan.isFree ? (
         <div className="bl-muted">No payment method needed on Basic. You&apos;ll add one when you buy a plan.</div>
-      ) : o.renewalMode === "auto" && o.paymentMethod ? (
+      ) : o.renewalMode === "auto" && o.autoRenewAvailable && o.paymentMethod ? (
         <div className="bl-between">
           <div className="bl-row">
             <span className="bl-card-chip">{o.paymentMethod.kind === "card" ? "CARD" : "UPI"}</span>

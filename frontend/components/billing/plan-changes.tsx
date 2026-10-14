@@ -8,7 +8,7 @@ import type { BillingPlan } from "@/lib/billing/types";
 import { BillingBanner, PicksSummary } from "./banners";
 import { useBillingEnv, useBillingQuery, useOrgBilling } from "./context";
 import { BillingDialog, DialogActions } from "./dialog";
-import { Banner, BLink, ErrorNote, Kv, Loading, Section } from "./ui";
+import { Banner, BLink, countLabel, ErrorNote, Kv, Loading, Section } from "./ui";
 
 function ConfirmDialog({
   open,
@@ -82,8 +82,8 @@ export function DowngradeScreen({ planId }: { planId: string }) {
   }
 
   const effective = o.graceEndsAt ?? o.periodEnd;
-  const over = o.usage.filter((u) => u.used > target.limits[u.key]);
-  const fewerPages = target.modules.metaPages < o.plan.modules.metaPages;
+  const over = o.usage.filter((u) => target.limits[u.key] !== null && u.used > target.limits[u.key]!);
+  const fewerPages = (target.modules.metaPages ?? Infinity) < (o.plan.modules.metaPages ?? Infinity);
 
   async function schedule() {
     setBusy(true);
@@ -151,7 +151,7 @@ export function DowngradeScreen({ planId }: { planId: string }) {
       {!target.modules.teamChat || !target.modules.metaLeadAds || fewerPages ? (
         <Banner tone="gray" icon="info" title="Features that change">
           {!target.modules.teamChat ? "Team chat becomes read-only history. " : ""}
-          {!target.modules.metaLeadAds ? "Meta lead ads switches off. " : fewerPages ? `Meta lead ads drops to ${target.modules.metaPages} connected page${target.modules.metaPages === 1 ? "" : "s"}. ` : ""}
+          {!target.modules.metaLeadAds ? "Meta lead ads switches off. " : fewerPages ? `Meta lead ads drops to ${countLabel(target.modules.metaPages, "connected page", "connected pages")}. ` : ""}
           Leads from your forms and landing pages keep coming in.
         </Banner>
       ) : null}

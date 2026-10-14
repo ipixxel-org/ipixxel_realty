@@ -191,10 +191,10 @@ export function useSeatLimitGate(used: number) {
   const next = current ? (plans ?? []).filter((p) => p.rank > current.rank).sort((a, b) => a.rank - b.rank)[0] ?? null : null;
   return {
     active: !!access,
-    atLimit: !!access && used >= access.limits.users,
+    atLimit: !!access && access.limits.users !== null && used >= access.limits.users,
     open: () => setOpen(true),
     dialog: access ? (
-      <LimitReachedDialog open={open} onClose={() => setOpen(false)} used={used} limit={access.limits.users} planName={access.planName} nextPlan={next} />
+      <LimitReachedDialog open={open} onClose={() => setOpen(false)} used={used} limit={access.limits.users ?? 0} planName={access.planName} nextPlan={next} />
     ) : null,
   };
 }

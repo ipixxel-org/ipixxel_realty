@@ -23,6 +23,7 @@ const DATE_LABEL: Record<SubscriptionStatus, string> = {
   renewal_due: "Renews",
   past_due: "Grace ends",
   grace_ending: "Grace ends",
+  expired: "Expired on",
   moved_to_basic: "Moved on",
   cancellation_scheduled: "Ends",
   downgrade_scheduled: "Downgrades",
@@ -39,7 +40,7 @@ const TIMELINE_COLOR: Record<TimelineEvent["kind"], string> = {
   cancel: "var(--amber)",
 };
 
-const ALL: SubscriptionStatus[] = ["free", "active", "renewal_due", "past_due", "grace_ending", "moved_to_basic", "cancellation_scheduled", "downgrade_scheduled"];
+const ALL: SubscriptionStatus[] = ["free", "active", "renewal_due", "past_due", "grace_ending", "expired", "moved_to_basic", "cancellation_scheduled", "downgrade_scheduled"];
 
 /* ------------------------------------------------------------------- List */
 
@@ -66,7 +67,7 @@ export function SubscriptionsList() {
             style={{ border: status === s ? "1px solid currentColor" : "1px solid transparent", cursor: "pointer" }}
             onClick={() => filter(() => setStatus(status === s ? "" : s))}
           >
-            {ADMIN_STATUS_LABEL[s]} · {data?.countsByStatus[s] ?? "…"}
+            {ADMIN_STATUS_LABEL[s]} · {data ? (data.countsByStatus[s] ?? 0) : "…"}
           </button>
         ))}
       </div>

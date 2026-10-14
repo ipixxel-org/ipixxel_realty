@@ -23,7 +23,7 @@ import { useFlash } from "@/lib/flash";
 import { LIST_PAGE_SIZE, ListPager } from "@/components/ui/list-pager";
 import { ORG_SUBS_TAB, SUBS_FLASH_KEY, SUBS_PATH } from "./subscriptions-shared";
 import { ChangeSubscriptionModal } from "./change-subscription-modal";
-import { AdminSubscriptionsPageV2 } from "@/components/billing/admin/admin-pages";
+import { AdminLifecycleSettings, AdminPlansV2 } from "@/components/billing/admin/admin-pages";
 import { BILLING_V2 } from "@/lib/billing/flag";
 import type {
   Plan,
@@ -91,12 +91,7 @@ function perFor(cycle: "Monthly" | "Yearly") {
   return cycle === "Monthly" ? "/mo" : "/yr";
 }
 
-/** Billing v2 (NEXT_PUBLIC_BILLING_V2) swaps in the new Subscriptions + Plans page; off = unchanged. */
-export default function SuperAdminSubscriptionsRoute() {
-  return BILLING_V2 ? <AdminSubscriptionsPageV2 /> : <SuperAdminSubscriptionsPage />;
-}
-
-function SuperAdminSubscriptionsPage() {
+export default function SuperAdminSubscriptionsPage() {
   const { hasPermission, isLoading: authLoading } = useAuth();
   const canViewSubscriptions = hasPermission("admin_subscriptions", "view");
   const canCreatePlan = hasPermission("admin_subscriptions", "add");
@@ -826,8 +821,14 @@ function SuperAdminSubscriptionsPage() {
           </div>
         )}
 
-        {/* Tab 1: Plans & Pricing Matrices */}
-        {tab === 1 && (
+        {/* Tab 1: Plans & Pricing Matrices — billing v2 (NEXT_PUBLIC_BILLING_V2) swaps in the new
+            plan editor; every other tab stays as-is until its billing v2 version is real. */}
+        {tab === 1 && BILLING_V2 && (
+          <div style={{ padding: 24 }}>
+            <AdminPlansV2 />
+          </div>
+        )}
+        {tab === 1 && !BILLING_V2 && (
           <div style={{ padding: 24 }}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
               <div>
@@ -1367,8 +1368,14 @@ function SuperAdminSubscriptionsPage() {
           </div>
         )}
 
-        {/* Tab 5: Subscription Expiry Policy */}
-        {tab === 5 && (
+        {/* Tab 5: Subscription Expiry Policy — billing v2: the new lifecycle card (incl. the
+            Online payments switch), the same one as Settings → Subscription Expiry & Lifecycle. */}
+        {tab === 5 && BILLING_V2 && (
+          <div style={{ padding: 24 }}>
+            <AdminLifecycleSettings />
+          </div>
+        )}
+        {tab === 5 && !BILLING_V2 && (
           <div style={{ padding: 24, display: "grid", gap: 20 }}>
             <div style={{ padding: 24, borderRadius: 14, border: "1px solid #e2e8f0", background: "#fff", maxWidth: 720 }}>
               <div style={{ fontWeight: 700, fontSize: 16, color: "#0f172a", marginBottom: 4 }}>

@@ -1,14 +1,59 @@
 # Billing v2 — UI ↔ backend contract
 
 The new billing UI (behind `NEXT_PUBLIC_BILLING_V2=true`) talks to one interface,
-`BillingClient` in `frontend/lib/billing/client.ts`. Today it is implemented by
-`createMockBillingClient` (`frontend/lib/billing/mock/`). To go live, write an
-`apiBillingClient` that calls the endpoints below with `apiFetch` and export it from
-`frontend/lib/billing/index.ts` — no screen changes needed.
+`BillingClient` in `frontend/lib/billing/client.ts`. The app uses a **hybrid client**
+(`frontend/lib/billing/index.ts`): every function marked `true` in `REAL_FUNCTIONS`
+calls the backend through `frontend/lib/billing/http-client.ts`; the rest still run on
+`createMockBillingClient` (`frontend/lib/billing/mock/`). Each backend step implements
+endpoints, adds them to `http-client.ts` and flips them to `true`. The walkthrough pages
+always use the mock. Screens show a "Sample data" tag on sections whose data is still mock
+(`client.isReal(fn)`).
 
-All request/response types live in `frontend/lib/billing/types.ts`; the names below
-refer to them. The mock client is the reference behaviour (see
-`frontend/lib/billing/__tests__/mock-client.test.ts`).
+All request/response types live in `frontend/lib/billing/types.ts` (mirrored on the backend
+in `backend/src/modules/billing/billing.types.ts`); the names below refer to them. The mock
+client is the reference behaviour (see `frontend/lib/billing/__tests__/mock-client.test.ts`).
+
+## Implementation status
+
+| Step | Real now | Backend |
+|---|---|---|
+| 1 | `getBillingOverview`, `listPlans`, `getAccessStatus`, `listAdminPlans`, `saveAdminPlan`, `getLifecycleSettings`, `saveLifecycleSettings` | `backend/src/modules/billing/` |
+
+Everything else is mock. `updatePaymentMethod` stays unimplemented on purpose: renewals are
+"pay each time" through the existing Razorpay Orders + Checkout flow (no Razorpay
+Subscriptions), and the overview says `autoRenewAvailable: false`, which hides the auto-renew UI.
+
+### Payment mode
+
+`BillingOverview.paymentMode` is `online` only when the Super Admin switch
+(`platform_configs.online_payments_enabled`, default **off**) is on **and** Razorpay is usable
+(keys in Integrations → Razorpay or the `RAZORPAY_*` env fallback, not turned off). Otherwise
+it is `manual` with `paymentModeReason`: `switched_off`, `keys_missing` or `gateway_disabled`
+(`BillingModeService`). In manual mode — and until `startCheckout` is real — the UI shows
+"Request upgrade" and an approval panel instead of payment.
+
+### Step 1 notes
+
+- **Unlimited:** `PlanLimits`, `UsageItem.limit` and `PlanModules.metaPages` are `number | null`;
+  `null` means unlimited (real plans use it).
+- **`expired` status:** today's lifecycle "restrict" policy leaves the org on its paid plan with
+  publishing paused; that is `status: "expired"` until "fall back to Basic" exists.
+- **Plan modules:** team chat and Meta lead ads aren't in the capability catalog, so v2 stores
+  them as reserved keys — `Plan.capabilities.teamChat` / `.metaLeadAds` and
+  `Plan.limits.metaPages`. Missing = on / unlimited (neither is plan-gated today).
+  `modules.whatsapp` reads the existing `whatsappIntegration` capability and isn't editable here.
+  The legacy plan editor's save keeps these keys.
+- **Plan rank:** free plan first, then by monthly price. `isFree` = the system (Basic) plan or
+  a ₹0 plan. Only active plans are listed.
+- **Periods:** the existing subscription code sets `renewsAt` = start + 30 / 365 days, so
+  `daysInPeriod` is 30 or 365. Dates are the UTC calendar date.
+- **Owner:** the org's earliest-created user (the person who signed up).
+- **Lifecycle:** `supports.fallBackToBasic` and `supports.reminderSchedule` are `false`, so the
+  UI disables those controls; saving `afterGrace: "fall_back_to_basic"` returns 400, and the
+  `reminders` array is accepted but not stored. Read-only fields (`paymentMode`,
+  `paymentModeReason`, `supports`, and a plan's `id` / `rank`) may be sent back and are ignored.
+- **Access:** `getAccessStatus` returns the real plan's limits and modules; nothing is paused yet,
+  so the id lists are empty.
 
 ## Conventions
 
@@ -25,8 +70,10 @@ refer to them. The mock client is the reference behaviour (see
   - default picks: owner, then admins, then most recent login; projects by last update;
     landing pages by leads in the last 30 days
 - **Permissions:** org calls need `billing:view` (reads) / `billing:edit` (writes). Admin calls
-  need `admin_subscriptions` view/edit. Every new `/admin/billing/...` path must be added to
-  `PLATFORM_ROUTE_MODULES` (handoff §4.8 — unmapped admin paths are open to any platform role).
+  need `admin_subscriptions` view/edit, except `/admin/billing/lifecycle`, which is
+  `admin_settings` (it sits on the Settings page). Both prefixes are in
+  `PLATFORM_ROUTE_MODULES` (handoff §4.8 — unmapped admin paths are open to any platform role;
+  the more specific prefix is listed first).
 
 ## Organisation
 
@@ -95,7 +142,8 @@ The existing payments module (`backend/src/modules/payments`) should create the 
 | Plans · checkout · success · failure · downgrade · cancel · invoices · choose what stays | `/org/settings/billing/...` | `components/billing/{plans,checkout,checkout-result,plan-changes,invoices,choose-what-stays}.tsx` |
 | Banners + renewal popup | org shell (`components/org/shell.tsx` → `BillingV2Root`) | `components/billing/banners.tsx` |
 | Locked states | login, project detail, landing pages list, team chat composer, Users "Create user" | `components/billing/locked.tsx` |
-| Admin subscriptions · plans · payments | `/admin-console/subscriptions` (tabs) · `/admin-console/subscriptions/org/:orgId` | `components/billing/admin/*` |
+| Admin plans | `/admin-console/subscriptions` → "Plans & Pricing Matrices" tab (the existing page keeps all its tabs; with the flag on only this tab and "Expiry & Grace Policy" are swapped) | `components/billing/admin/plans-editor.tsx` |
+| Admin subscriptions · payments (not real yet) | Will replace the existing "Organisation Subscriptions" and "Payments & Invoicing" tabs when real; org detail at `/admin-console/subscriptions/org/:orgId` | `components/billing/admin/{subscriptions,payments}.tsx` |
 | Admin coupons | `/admin-console/coupons` (+ `new`, `:code`, `:code/edit`) | `components/billing/admin/coupons.tsx` |
 | Admin lifecycle | `/admin-console/settings` | `components/billing/admin/lifecycle.tsx` |
 | Walkthroughs (always on, not in nav) | `/org/billing-walkthrough`, `/org/billing-walkthrough/banners`, `/admin-console/billing-walkthrough` | `components/billing/walkthrough/*` |

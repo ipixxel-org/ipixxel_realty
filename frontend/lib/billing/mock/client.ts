@@ -295,6 +295,7 @@ export function createMockBillingClient(opts: { initial?: Partial<MockState>; pe
 
   const client: MockBillingClient = {
     isMock: true,
+    isReal: () => false,
     snapshot: () => get(),
     overviewNow: () => overview(),
     reset() {
@@ -381,9 +382,9 @@ export function createMockBillingClient(opts: { initial?: Partial<MockState>; pe
     saveRetentionChoices(req) {
       const s = get();
       const target = planById(s, req.targetPlanId);
-      if (req.userIds.length > target.limits.users) return fail(`${target.name} allows ${target.limits.users} users.`);
-      if (req.projectIds.length > target.limits.projects) return fail(`${target.name} allows ${target.limits.projects} projects.`);
-      if (req.landingPageIds.length > target.limits.landingPages) return fail(`${target.name} allows ${target.limits.landingPages} landing pages.`);
+      if (req.userIds.length > (target.limits.users ?? Infinity)) return fail(`${target.name} allows ${target.limits.users} users.`);
+      if (req.projectIds.length > (target.limits.projects ?? Infinity)) return fail(`${target.name} allows ${target.limits.projects} projects.`);
+      if (req.landingPageIds.length > (target.limits.landingPages ?? Infinity)) return fail(`${target.name} allows ${target.limits.landingPages} landing pages.`);
       const owner = deriveRetention(s, today, target.id).users.find((u) => u.locked);
       if (owner && !req.userIds.includes(owner.id)) return fail("The owner always stays active.");
       set({ picks: { targetPlanId: target.id, users: req.userIds, projects: req.projectIds, landingPages: req.landingPageIds } });
@@ -556,8 +557,10 @@ export function createMockBillingClient(opts: { initial?: Partial<MockState>; pe
     getLifecycleSettings: () => ok(get().lifecycle),
     saveLifecycleSettings(settings) {
       if (settings.graceDays < 0 || settings.notifyDaysBefore < 0) return fail("Days can't be negative.");
-      set({ lifecycle: settings });
-      return ok(settings);
+      const on = settings.onlinePaymentsEnabled;
+      const lifecycle = { ...settings, paymentMode: on ? ("online" as const) : ("manual" as const), paymentModeReason: on ? null : ("switched_off" as const) };
+      set({ lifecycle });
+      return ok(lifecycle);
     },
   };
   return client;

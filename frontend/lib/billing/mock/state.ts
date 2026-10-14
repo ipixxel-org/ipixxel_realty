@@ -113,6 +113,10 @@ export function initialMockState(overrides: Partial<MockState> = {}): MockState 
         { id: "mid_grace", enabled: true },
         { id: "day_before_grace_ends", enabled: true },
       ],
+      onlinePaymentsEnabled: true,
+      paymentMode: "online",
+      paymentModeReason: null,
+      supports: { fallBackToBasic: true, reminderSchedule: true },
     },
     creditNoteSeq: 42,
     invoiceSeq: 713,
@@ -202,9 +206,9 @@ export function effectivePicks(s: MockState, target: BillingPlan): Picks & { isD
   if (
     p &&
     p.targetPlanId === target.id &&
-    p.users.length <= target.limits.users &&
-    p.projects.length <= target.limits.projects &&
-    p.landingPages.length <= target.limits.landingPages
+    p.users.length <= (target.limits.users ?? Infinity) &&
+    p.projects.length <= (target.limits.projects ?? Infinity) &&
+    p.landingPages.length <= (target.limits.landingPages ?? Infinity)
   ) {
     return { users: p.users, projects: p.projects, landingPages: p.landingPages, isDefault: false };
   }
@@ -253,6 +257,9 @@ export function deriveOverview(s: MockState, today: string): BillingOverview {
     paidPlan,
     interval: s.interval,
     status: STATUS[s.situation],
+    paymentMode: s.lifecycle.onlinePaymentsEnabled ? "online" : "manual",
+    paymentModeReason: s.lifecycle.onlinePaymentsEnabled ? null : "switched_off",
+    autoRenewAvailable: true,
     renewalMode: s.renewalMode,
     paymentMethod: paidPlan && s.renewalMode === "auto" ? s.paymentMethod : null,
     billingProfile: s.billingProfile,
@@ -296,7 +303,7 @@ export function deriveRetention(s: MockState, today: string, requested?: string)
     targetPlan: target,
     appliesOn,
     isDefault: keep.isDefault,
-    users: rankUsers(DEMO_USERS, target.limits.users).map(({ item, reason, picked }) => ({
+    users: rankUsers(DEMO_USERS, target.limits.users ?? Infinity).map(({ item, reason, picked }) => ({
       id: item.id,
       name: item.name,
       detail: `${cap(item.role)} · ${item.email}`,
@@ -305,7 +312,7 @@ export function deriveRetention(s: MockState, today: string, requested?: string)
       selected: keep.users.includes(item.id),
       locked: item.role === "owner",
     })),
-    projects: rankProjects(DEMO_PROJECTS, target.limits.projects).map(({ item, reason, picked }) => ({
+    projects: rankProjects(DEMO_PROJECTS, target.limits.projects ?? Infinity).map(({ item, reason, picked }) => ({
       id: item.id,
       name: item.name,
       detail: `${item.location} · ${item.units} units`,
@@ -314,7 +321,7 @@ export function deriveRetention(s: MockState, today: string, requested?: string)
       selected: keep.projects.includes(item.id),
       locked: false,
     })),
-    landingPages: rankLandingPages(DEMO_LANDING_PAGES, target.limits.landingPages).map(({ item, reason, picked }) => ({
+    landingPages: rankLandingPages(DEMO_LANDING_PAGES, target.limits.landingPages ?? Infinity).map(({ item, reason, picked }) => ({
       id: item.id,
       name: item.name,
       detail: `${item.url} · ${item.leadsTotal} leads all time`,

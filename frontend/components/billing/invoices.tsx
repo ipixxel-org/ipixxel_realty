@@ -6,7 +6,7 @@ import { ListPager } from "@/components/ui/list-pager";
 import { useToast } from "@/components/ui/toast";
 import { formatDate, formatINR } from "@/lib/billing/pricing";
 import { useBillingQuery } from "./context";
-import { Empty, ErrorNote, Loading, PAYMENT_STATUS_META, Section } from "./ui";
+import { Empty, ErrorNote, Loading, PAYMENT_STATUS_META, SampleDataTag, Section } from "./ui";
 
 function useDownload() {
   const { toast } = useToast();
@@ -27,7 +27,7 @@ export function InvoicesTable({ pageSize = 10, paged = true, action }: { pageSiz
 
   return (
     <>
-      <Section title="Invoices" sub="GST invoices for every payment" action={action} flush>
+      <Section title={<span className="bl-row" style={{ gap: 8 }}>Invoices <SampleDataTag fns={["listInvoices"]} /></span>} sub="GST invoices for every payment" action={action} flush>
         {error ? (
           <div style={{ padding: 16 }}>
             <ErrorNote message={error} />
@@ -86,7 +86,7 @@ export function PaymentHistoryTable({ pageSize = 10 }: { pageSize?: number }) {
   const { data, error } = useBillingQuery((c) => c.listPayments({ page, pageSize }), [page, pageSize]);
   return (
     <>
-      <Section title="Payment history" sub="Every attempt, including failed ones" flush>
+      <Section title={<span className="bl-row" style={{ gap: 8 }}>Payment history <SampleDataTag fns={["listPayments"]} /></span>} sub="Every attempt, including failed ones" flush>
         {error ? (
           <div style={{ padding: 16 }}>
             <ErrorNote message={error} />

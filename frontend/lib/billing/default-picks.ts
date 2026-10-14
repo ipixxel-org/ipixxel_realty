@@ -79,8 +79,8 @@ export function defaultPicks(
 ) {
   const ids = <T extends { id: string }>(ranked: RankedItem<T>[]) => ranked.filter((r) => r.picked).map((r) => r.item.id);
   return {
-    users: ids(rankUsers(data.users, limits.users)),
-    projects: ids(rankProjects(data.projects, limits.projects)),
-    landingPages: ids(rankLandingPages(data.landingPages, limits.landingPages)),
+    users: ids(rankUsers(data.users, limits.users ?? Infinity)),
+    projects: ids(rankProjects(data.projects, limits.projects ?? Infinity)),
+    landingPages: ids(rankLandingPages(data.landingPages, limits.landingPages ?? Infinity)),
   };
 }

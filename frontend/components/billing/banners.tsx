@@ -8,7 +8,7 @@ import type { BillingOverview, RetentionSummary } from "@/lib/billing/types";
 import { useBillingEnv, useOptionalOrgBilling } from "./context";
 import { BillingDialog, DialogActions } from "./dialog";
 import { usePayment } from "./payment";
-import { Banner, BLink } from "./ui";
+import { Banner, BLink, useCheckoutLive } from "./ui";
 
 /** Re-fetch the shared overview after an action (no-op outside OrgBillingProvider). */
 function useRefresh() {
@@ -38,14 +38,15 @@ export function usePayNow(overview: BillingOverview) {
 export function PayNowButton({ overview, className = "btn btn-primary btn-sm" }: { overview: BillingOverview; className?: string }) {
   const { canEdit } = useBillingEnv();
   const pay = usePayNow(overview);
+  const live = useCheckoutLive(overview);
   const plan = overview.paidPlan ?? overview.plan;
   return (
     <>
       <button
         type="button"
         className={className}
-        disabled={!canEdit || pay.busy}
-        title={canEdit ? undefined : "Ask an admin with billing access to pay"}
+        disabled={!canEdit || pay.busy || !live}
+        title={!live ? "Online payment isn't available yet — our team will contact you to renew." : canEdit ? undefined : "Ask an admin with billing access to pay"}
         onClick={() => void pay.start({ planId: plan.id, interval: overview.interval, purpose: "renewal" })}
       >
         Pay now · {formatINR(overview.renewalAmount ?? 0)}
@@ -178,7 +179,8 @@ export function BillingBanner({ overview }: { overview: BillingOverview }) {
   const { client } = useBillingEnv();
   const o = overview;
   const plan = o.paidPlan ?? o.plan;
-  const auto = o.renewalMode === "auto";
+  // Auto-renew copy only when the backend offers it (it doesn't yet: "pay each time").
+  const auto = o.renewalMode === "auto" && o.autoRenewAvailable;
 
   switch (o.status) {
     case "renewal_due":
@@ -241,6 +243,26 @@ export function BillingBanner({ overview }: { overview: BillingOverview }) {
         </Banner>
       );
     }
+
+    case "expired":
+      return (
+        <Banner
+          tone="rose"
+          icon="alert"
+          title={`Your ${plan.name} plan has expired`}
+          actions={
+            <>
+              <PayNowButton overview={o} />
+              <BLink to="plans" className="btn btn-ghost btn-sm">
+                See plans
+              </BLink>
+            </>
+          }
+        >
+          Publishing is paused{o.dueDate ? ` since the renewal on ${formatDate(o.dueDate)} wasn't paid` : ""}. Nothing was deleted and leads keep coming in. Renew to bring
+          your live pages back.
+        </Banner>
+      );
 
     case "moved_to_basic":
       return (
@@ -323,7 +345,9 @@ export function RenewalReminderPopup({ overview, alwaysOpen = false }: { overvie
   };
   const plan = overview.paidPlan ?? overview.plan;
   const price = overview.interval === "yearly" ? plan.priceYearly : plan.priceMonthly;
-  const show = overview.renewalMode === "manual" && overview.status === "renewal_due" && (!dismissed || alwaysOpen);
+  const live = useCheckoutLive(overview);
+  // Only when the customer can actually pay online.
+  const show = live && overview.renewalMode === "manual" && overview.status === "renewal_due" && (!dismissed || alwaysOpen);
 
   return (
     <>

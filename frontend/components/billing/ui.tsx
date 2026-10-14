@@ -4,7 +4,8 @@ import Link from "next/link";
 import type { CSSProperties, ReactNode } from "react";
 import { Icon, type IconName } from "@/components/icons";
 import { formatINR } from "@/lib/billing/pricing";
-import type { BillingInterval, BillingPlan, SubscriptionStatus } from "@/lib/billing/types";
+import type { BillingFunction } from "@/lib/billing/client";
+import type { BillingInterval, BillingOverview, BillingPlan, SubscriptionStatus } from "@/lib/billing/types";
 import { useBillingEnv, type BillingRoute, type RouteParams } from "./context";
 
 export const STATUS_META: Record<SubscriptionStatus, { label: string; badge: string }> = {
@@ -13,6 +14,7 @@ export const STATUS_META: Record<SubscriptionStatus, { label: string; badge: str
   renewal_due: { label: "Renews in 3 days", badge: "b-amber" },
   past_due: { label: "Payment due", badge: "b-rose" },
   grace_ending: { label: "Grace ends tomorrow", badge: "b-rose" },
+  expired: { label: "Expired", badge: "b-rose" },
   moved_to_basic: { label: "Moved to Basic", badge: "b-gray" },
   cancellation_scheduled: { label: "Cancellation scheduled", badge: "b-amber" },
   downgrade_scheduled: { label: "Downgrade scheduled", badge: "b-violet" },
@@ -51,10 +53,14 @@ export function BLink({
   );
 }
 
-/** Shown while the mock data layer is active, so sample numbers aren't mistaken for real ones. */
-export function SampleDataTag() {
-  const { client } = useBillingEnv();
-  if (!client.isMock) return null;
+/**
+ * Shown on a section whose data still comes from the mock (any of `fns` not
+ * real yet), so sample numbers aren't mistaken for real ones. Hidden in the
+ * walkthroughs, which carry their own "Preview" tag.
+ */
+export function SampleDataTag({ fns }: { fns: BillingFunction[] }) {
+  const { client, inlineDialogs } = useBillingEnv();
+  if (inlineDialogs || fns.every((fn) => client.isReal(fn))) return null;
   return (
     <span className="bl-tag" title="The billing backend isn't connected yet — these are sample figures.">
       Sample data
@@ -69,6 +75,7 @@ export function PageHead({
   sub,
   actions,
   back,
+  sampleFns = [],
 }: {
   eyebrow: string;
   icon?: IconName;
@@ -76,6 +83,8 @@ export function PageHead({
   sub?: ReactNode;
   actions?: ReactNode;
   back?: { to: BillingRoute; params?: RouteParams; label: string };
+  /** Functions the page reads; the "Sample data" tag shows while any is still mock. */
+  sampleFns?: BillingFunction[];
 }) {
   return (
     <>
@@ -91,7 +100,7 @@ export function PageHead({
           </div>
           <div className="bl-row">
             <h1>{title}</h1>
-            <SampleDataTag />
+            <SampleDataTag fns={sampleFns} />
           </div>
           {sub ? <div className="sub">{sub}</div> : null}
         </div>
@@ -163,7 +172,18 @@ export function Banner({
   );
 }
 
-export function UsageMeter({ label, used, limit }: { label: string; used: number; limit: number }) {
+export function UsageMeter({ label, used, limit }: { label: string; used: number; limit: number | null }) {
+  if (limit === null) {
+    return (
+      <div>
+        <div className="bl-between" style={{ marginBottom: 6, fontSize: 13 }}>
+          <span className="bl-strong">{label}</span>
+          <span style={{ color: "var(--ink-2)", fontWeight: 600 }}>{used} · unlimited</span>
+        </div>
+        <div className="bl-meter-track" />
+      </div>
+    );
+  }
   const over = used > limit;
   const full = used >= limit;
   return (
@@ -208,8 +228,13 @@ export function PlanPrice({ plan, interval }: { plan: BillingPlan; interval: Bil
   );
 }
 
+/** "5 users", "1 project", "Unlimited users". */
+export function countLabel(v: number | null, one: string, many: string): string {
+  return v === null ? `Unlimited ${many}` : `${v} ${v === 1 ? one : many}`;
+}
+
 export function planFeatureRows(plan: BillingPlan): { label: string; on: boolean }[] {
-  const n = (v: number, one: string, many: string) => `${v} ${v === 1 ? one : many}`;
+  const n = countLabel;
   return [
     { label: n(plan.limits.users, "user", "users"), on: true },
     { label: n(plan.limits.projects, "project", "projects"), on: true },
@@ -240,3 +265,14 @@ export const PAYMENT_STATUS_META: Record<string, { label: string; badge: string 
 };
 
 export const cap = (s: string) => (s ? s[0].toUpperCase() + s.slice(1) : s);
+
+/**
+ * Can this org pay online right now? Needs the backend's online mode AND a
+ * real checkout (or the all-mock walkthrough client). Otherwise upgrades are
+ * requests a Super Admin approves.
+ */
+export function useCheckoutLive(overview: BillingOverview | null): boolean {
+  const { client } = useBillingEnv();
+  if (!overview || overview.paymentMode !== "online") return false;
+  return client.isMock || client.isReal("startCheckout");
+}

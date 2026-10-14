@@ -6,7 +6,7 @@ import { Seg } from "@/components/superadmin/seg";
 import { formatINR } from "@/lib/billing/pricing";
 import type { BillingInterval, BillingPlan } from "@/lib/billing/types";
 import { useBillingQuery, useOrgBilling } from "./context";
-import { BLink, ErrorNote, Loading, PlanPrice, Section, planFeatureRows } from "./ui";
+import { BLink, countLabel, ErrorNote, Loading, PlanPrice, Section, planFeatureRows, useCheckoutLive } from "./ui";
 
 function Yes({ on, children }: { on: boolean; children?: ReactNode }) {
   return on ? <span className="bl-yes">✓ {children}</span> : <span className="bl-no">—</span>;
@@ -26,6 +26,7 @@ export function PlansScreen({ interval: controlled, onIntervalChange }: { interv
   const { overview } = useOrgBilling();
   const { data: plans, error } = useBillingQuery((c) => c.listPlans(), []);
   const [own, setOwn] = useState<BillingInterval | null>(null);
+  const live = useCheckoutLive(overview);
   if (error) return <ErrorNote message={error} />;
   if (!plans || !overview) return <Loading what="plans" />;
   const interval = controlled ?? own ?? overview.interval;
@@ -42,7 +43,7 @@ export function PlansScreen({ interval: controlled, onIntervalChange }: { interv
     if (p.rank > current.rank) {
       return (
         <BLink to="checkout" params={{ plan: p.id, interval }} className="btn btn-primary" style={{ width: "100%", justifyContent: "center" }}>
-          <Icon name="arrow-up" size={15} /> Upgrade
+          <Icon name="arrow-up" size={15} /> {live ? "Upgrade" : "Request upgrade"}
         </BLink>
       );
     }
@@ -55,12 +56,12 @@ export function PlansScreen({ interval: controlled, onIntervalChange }: { interv
 
   const rows: { label: string; render: (p: BillingPlan) => ReactNode }[] = [
     { label: "Price", render: (p) => (p.isFree ? "Free" : `${formatINR(interval === "yearly" ? p.priceYearly : p.priceMonthly)} + GST`) },
-    { label: "Users", render: (p) => p.limits.users },
-    { label: "Projects", render: (p) => p.limits.projects },
-    { label: "Landing pages", render: (p) => p.limits.landingPages },
-    { label: "Templates", render: (p) => p.limits.templates },
+    { label: "Users", render: (p) => p.limits.users ?? "Unlimited" },
+    { label: "Projects", render: (p) => p.limits.projects ?? "Unlimited" },
+    { label: "Landing pages", render: (p) => p.limits.landingPages ?? "Unlimited" },
+    { label: "Templates", render: (p) => p.limits.templates ?? "Unlimited" },
     { label: "Team chat", render: (p) => <Yes on={p.modules.teamChat} /> },
-    { label: "Meta lead ads", render: (p) => <Yes on={p.modules.metaLeadAds}>{p.modules.metaPages} page{p.modules.metaPages === 1 ? "" : "s"}</Yes> },
+    { label: "Meta lead ads", render: (p) => <Yes on={p.modules.metaLeadAds}>{countLabel(p.modules.metaPages, "page", "pages")}</Yes> },
     { label: "WhatsApp", render: () => <span className="bl-muted">Coming later</span> },
     { label: "AI calling", render: () => <span className="bl-muted">Coming later</span> },
   ];

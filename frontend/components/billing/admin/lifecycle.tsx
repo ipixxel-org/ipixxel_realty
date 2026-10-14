@@ -21,6 +21,15 @@ function reminderWhen(id: ReminderRule["id"], s: LifecycleSettings): string {
   return "Day before grace ends";
 }
 
+/** What the switch does right now — the effective mode needs usable Razorpay keys too. */
+function paymentModeNote(s: LifecycleSettings, saved: LifecycleSettings): string {
+  if (s.onlinePaymentsEnabled !== saved.onlinePaymentsEnabled) return "Save to apply.";
+  if (saved.paymentMode === "online") return "Now: customers pay online with Razorpay.";
+  if (saved.paymentModeReason === "keys_missing") return "Now: manual approval — add Razorpay keys in Integrations → Razorpay to take payments online.";
+  if (saved.paymentModeReason === "gateway_disabled") return "Now: manual approval — Razorpay is turned off in Integrations → Razorpay.";
+  return "Now: manual approval.";
+}
+
 function Editor({ initial }: { initial: LifecycleSettings }) {
   const { client, canEdit } = useBillingEnv();
   const [saved, setSaved] = useState(initial);
@@ -51,7 +60,7 @@ function Editor({ initial }: { initial: LifecycleSettings }) {
       <div className="card">
         <div className="card-h">
           <span className="t">Subscription expiry policy</span>
-          <SampleDataTag />
+          <SampleDataTag fns={["getLifecycleSettings"]} />
         </div>
         <div className={`card-b ${formPageStyles.page}`} style={{ display: "grid", gap: 16 }}>
           <div style={{ fontSize: 12.5, color: "var(--muted)", lineHeight: 1.6 }}>
@@ -73,7 +82,9 @@ function Editor({ initial }: { initial: LifecycleSettings }) {
           <div className="field" style={{ marginBottom: 0 }}>
             <label>When grace period ends</label>
             <select value={s.afterGrace} onChange={(e) => set({ afterGrace: e.target.value as AfterGraceBehavior })}>
-              <option value="fall_back_to_basic">Fall back to Basic (recommended)</option>
+              <option value="fall_back_to_basic" disabled={!s.supports.fallBackToBasic}>
+                Fall back to Basic (recommended){s.supports.fallBackToBasic ? "" : " — coming soon"}
+              </option>
               <option value="restrict">Restrict organisation (expired → publishing paused)</option>
               <option value="cancel">Cancel subscription (blocked effectively)</option>
             </select>
@@ -82,6 +93,14 @@ function Editor({ initial }: { initial: LifecycleSettings }) {
                 ? "The org moves to the free plan: what fits Basic stays active (their “Choose what stays” picks, or ours), everything else is paused — never deleted — and leads keep coming in. Buying again restores everything."
                 : "Restrict keeps the org open with publishing paused; Cancel soft-cancels the subscription (an admin can renew it in place)."}
             </div>
+          </div>
+          <div className="bl-between" style={{ padding: "12px 0", borderTop: "1px solid var(--line)", borderBottom: "1px solid var(--line)" }}>
+            <div style={{ minWidth: 0, flex: 1 }}>
+              <b style={{ fontSize: 13.5 }}>Online payments (Razorpay)</b>
+              <div className="hint" style={{ marginTop: 2 }}>When off, upgrades are sent to Super Admin for manual approval.</div>
+              <div className="hint" style={{ marginTop: 4 }}>{paymentModeNote(s, saved)}</div>
+            </div>
+            <Switch checked={s.onlinePaymentsEnabled} onChange={(on) => set({ onlinePaymentsEnabled: on })} />
           </div>
           <div className="field" style={{ marginBottom: 0 }}>
             <label>Expiry notification message</label>
@@ -103,7 +122,7 @@ function Editor({ initial }: { initial: LifecycleSettings }) {
       <div className="card">
         <div className="card-h">
           <span className="t">Reminder schedule</span>
-          <span className="x">Email + in-app · to the owner and admins</span>
+          <span className="x">{s.supports.reminderSchedule ? "Email + in-app · to the owner and admins" : "Fixed schedule for now · email + in-app to the owner and admins"}</span>
         </div>
         <div className="card-b" style={{ padding: 0 }}>
           <div className="tbl-wrap">
@@ -125,7 +144,11 @@ function Editor({ initial }: { initial: LifecycleSettings }) {
                     <td>{REMINDER_COPY[r.id].auto}</td>
                     <td>{REMINDER_COPY[r.id].manual}</td>
                     <td>
-                      <Switch checked={r.enabled} onChange={(on) => set({ reminders: s.reminders.map((x) => (x.id === r.id ? { ...x, enabled: on } : x)) })} />
+                      {s.supports.reminderSchedule ? (
+                        <Switch checked={r.enabled} onChange={(on) => set({ reminders: s.reminders.map((x) => (x.id === r.id ? { ...x, enabled: on } : x)) })} />
+                      ) : (
+                        <div className={`switch${r.enabled ? " on" : ""}`} aria-disabled="true" title="This schedule is fixed for now" style={{ opacity: 0.5, cursor: "not-allowed" }} />
+                      )}
                     </td>
                   </tr>
                 ))}

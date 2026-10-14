@@ -1,0 +1,121 @@
+/**
+ * Billing v2 response shapes. These mirror frontend/lib/billing/types.ts
+ * (the contract in docs/billing-ui-contract.md) — keep the two in step.
+ * Money is rupees (2 dp max); dates are "YYYY-MM-DD".
+ */
+
+export type BillingInterval = 'monthly' | 'yearly';
+
+export interface PlanLimitsV2 {
+  /** null = unlimited */
+  users: number | null;
+  projects: number | null;
+  landingPages: number | null;
+  templates: number | null;
+}
+
+export interface PlanModulesV2 {
+  teamChat: boolean;
+  metaLeadAds: boolean;
+  /** null = unlimited */
+  metaPages: number | null;
+  whatsapp: boolean;
+  aiCalling: boolean;
+}
+
+export interface BillingPlanV2 {
+  id: string;
+  name: string;
+  tagline: string;
+  priceMonthly: number;
+  priceYearly: number;
+  isFree: boolean;
+  rank: number;
+  limits: PlanLimitsV2;
+  modules: PlanModulesV2;
+}
+
+export type SubscriptionStatusV2 =
+  | 'free'
+  | 'active'
+  | 'renewal_due'
+  | 'past_due'
+  | 'grace_ending'
+  | 'expired'
+  | 'moved_to_basic'
+  | 'cancellation_scheduled'
+  | 'downgrade_scheduled';
+
+export type PaymentMode = 'online' | 'manual';
+export type ManualReason = 'switched_off' | 'keys_missing' | 'gateway_disabled';
+
+export interface UsageItemV2 {
+  key: 'users' | 'projects' | 'landingPages' | 'templates';
+  label: string;
+  used: number;
+  limit: number | null;
+}
+
+export interface BillingOverviewV2 {
+  orgName: string;
+  ownerName: string;
+  plan: BillingPlanV2;
+  paidPlan: BillingPlanV2 | null;
+  interval: BillingInterval;
+  status: SubscriptionStatusV2;
+  paymentMode: PaymentMode;
+  paymentModeReason: ManualReason | null;
+  /** Auto-renew (saved card / UPI mandate) isn't offered — renewals are "pay each time". */
+  autoRenewAvailable: boolean;
+  renewalMode: 'auto' | 'manual';
+  paymentMethod: null;
+  billingProfile: null;
+  periodStart: string | null;
+  periodEnd: string | null;
+  daysLeftInPeriod: number;
+  daysInPeriod: number;
+  dueDate: string | null;
+  graceEndsAt: string | null;
+  graceDays: number;
+  graceDay: number;
+  graceDaysLeft: number;
+  movedToBasicAt: string | null;
+  cancelAt: string | null;
+  downgradeTo: BillingPlanV2 | null;
+  downgradeAt: string | null;
+  renewalAmount: number | null;
+  usage: UsageItemV2[];
+  locked: { users: number; projects: number; landingPages: number };
+  retention: null;
+}
+
+export interface AccessStatusV2 {
+  planId: string;
+  planName: string;
+  limits: PlanLimitsV2;
+  modules: PlanModulesV2;
+  pausedUserIds: string[];
+  viewOnlyProjectIds: string[];
+  offlineLandingPageIds: string[];
+}
+
+export type AfterGraceBehavior = 'fall_back_to_basic' | 'restrict' | 'cancel';
+
+export interface ReminderRule {
+  id: 'before_renewal' | 'payment_day' | 'mid_grace' | 'day_before_grace_ends';
+  enabled: boolean;
+}
+
+export interface LifecycleSettingsV2 {
+  notifyDaysBefore: number;
+  graceDays: number;
+  afterGrace: AfterGraceBehavior;
+  expiryMessage: string;
+  reminders: ReminderRule[];
+  onlinePaymentsEnabled: boolean;
+  /** Effective mode (read-only): the switch AND usable Razorpay keys. */
+  paymentMode: PaymentMode;
+  paymentModeReason: ManualReason | null;
+  /** What this backend can store yet; the UI greys out the rest. */
+  supports: { fallBackToBasic: boolean; reminderSchedule: boolean };
+}

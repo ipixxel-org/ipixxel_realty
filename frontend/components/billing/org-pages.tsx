@@ -40,6 +40,7 @@ export function PlansPage() {
         title="Plans"
         sub="Prices exclude 18% GST. Upgrades start now (you pay only the difference for the rest of this period); downgrades start at the end of the period."
         back={{ to: "overview", label: "Billing" }}
+        sampleFns={["listPlans", "getBillingOverview"]}
       />
       <PlansScreen />
     </Guard>
@@ -49,7 +50,7 @@ export function PlansPage() {
 export function CheckoutPage({ plan, interval }: { plan?: string; interval?: string }) {
   return (
     <Guard>
-      <PageHead eyebrow={EYEBROW} icon="tag" title="Checkout" sub="Billing details, coupon and the full price before you pay." back={{ to: "plans", label: "Plans" }} />
+      <PageHead eyebrow={EYEBROW} icon="tag" title="Checkout" sub="Billing details, coupon and the full price before you pay." back={{ to: "plans", label: "Plans" }} sampleFns={["listPlans", "getBillingOverview"]} />
       <CheckoutScreen planId={plan ?? "growth"} interval={toInterval(interval)} />
     </Guard>
   );
@@ -97,7 +98,7 @@ export function CheckoutFailurePage(p: { plan?: string; interval?: string; reaso
 export function DowngradePage({ plan }: { plan?: string }) {
   return (
     <Guard>
-      <PageHead eyebrow={EYEBROW} icon="arrow-down" title="Downgrade plan" sub="See when it starts and what doesn't fit, before you confirm." back={{ to: "plans", label: "Plans" }} />
+      <PageHead eyebrow={EYEBROW} icon="arrow-down" title="Downgrade plan" sub="See when it starts and what doesn't fit, before you confirm." back={{ to: "plans", label: "Plans" }} sampleFns={["getRetentionChoices", "scheduleDowngrade"]} />
       <DowngradeScreen planId={plan ?? "growth"} />
     </Guard>
   );
@@ -112,6 +113,7 @@ export function CancelPage() {
         title="Cancel plan"
         sub="Cancelling stops the next renewal. You keep everything you've paid for until the end date."
         back={{ to: "overview", label: "Billing" }}
+        sampleFns={["cancelPlan"]}
       />
       <CancelScreen />
     </Guard>
@@ -121,7 +123,7 @@ export function CancelPage() {
 export function InvoicesPage() {
   return (
     <Guard>
-      <PageHead eyebrow={EYEBROW} icon="document" title="Invoices & payments" back={{ to: "overview", label: "Billing" }} />
+      <PageHead eyebrow={EYEBROW} icon="document" title="Invoices & payments" back={{ to: "overview", label: "Billing" }} sampleFns={["listInvoices", "listPayments"]} />
       <div className="bl-stack">
         <InvoicesTable />
         <PaymentHistoryTable />
@@ -140,6 +142,7 @@ export function ChooseWhatStaysPage({ target }: { target?: string }) {
         title="Choose what stays"
         sub="When you move to a smaller plan, pick what stays active. Everything else is paused, never deleted."
         back={{ to: "overview", label: "Billing" }}
+        sampleFns={["getRetentionChoices"]}
       />
       <div className="bl-stack">
         {overview ? <BillingBanner overview={overview} /> : null}

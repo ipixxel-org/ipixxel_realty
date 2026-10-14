@@ -14,18 +14,19 @@ export type BillingInterval = "monthly" | "yearly";
 
 /* ------------------------------------------------------------------ Plans */
 
+/** null = unlimited. */
 export interface PlanLimits {
-  users: number;
-  projects: number;
-  landingPages: number;
-  templates: number;
+  users: number | null;
+  projects: number | null;
+  landingPages: number | null;
+  templates: number | null;
 }
 
 export interface PlanModules {
   teamChat: boolean;
   metaLeadAds: boolean;
-  /** Facebook pages that can be connected for Meta lead ads (0 when off). */
-  metaPages: number;
+  /** Facebook pages that can be connected for Meta lead ads (0 when off, null = unlimited). */
+  metaPages: number | null;
   /** Not sold yet — shown disabled as "coming later". */
   whatsapp: boolean;
   aiCalling: boolean;
@@ -54,12 +55,19 @@ export type SubscriptionStatus =
   | "renewal_due"
   | "past_due"
   | "grace_ending"
+  /** Grace ended under the "restrict" policy: still on the paid plan, publishing paused. */
+  | "expired"
   | "moved_to_basic"
   | "cancellation_scheduled"
   | "downgrade_scheduled";
 
 /** "auto" = Option A (saved card / UPI mandate); "manual" = Option B (Pay now each time). */
 export type RenewalMode = "auto" | "manual";
+
+/** "online" = pay with Razorpay; "manual" = upgrades are requests a Super Admin approves. */
+export type PaymentMode = "online" | "manual";
+/** Why payments are manual: Super Admin switch off, no usable Razorpay keys, or Razorpay turned off in Integrations. */
+export type ManualReason = "switched_off" | "keys_missing" | "gateway_disabled";
 
 export interface PaymentMethodSummary {
   kind: "card" | "upi";
@@ -82,7 +90,8 @@ export interface UsageItem {
   key: "users" | "projects" | "landingPages" | "templates";
   label: string;
   used: number;
-  limit: number;
+  /** null = unlimited */
+  limit: number | null;
 }
 
 /** Names of what stays active on the target plan (saved choice or default picks). */
@@ -104,6 +113,11 @@ export interface BillingOverview {
   paidPlan: BillingPlan | null;
   interval: BillingInterval;
   status: SubscriptionStatus;
+  /** How upgrades and renewals are paid right now (switch AND usable Razorpay keys). */
+  paymentMode: PaymentMode;
+  paymentModeReason: ManualReason | null;
+  /** False = no saved card / UPI mandate: hide auto-renew and "Update payment method". */
+  autoRenewAvailable: boolean;
   renewalMode: RenewalMode;
   paymentMethod: PaymentMethodSummary | null;
   billingProfile: BillingProfile | null;
@@ -475,4 +489,11 @@ export interface LifecycleSettings {
   afterGrace: AfterGraceBehavior;
   expiryMessage: string;
   reminders: ReminderRule[];
+  /** Super Admin switch: online (Razorpay) plan payments. Off = manual approval. */
+  onlinePaymentsEnabled: boolean;
+  /** Read-only: the effective mode (switch AND usable Razorpay keys) and why it is manual. */
+  paymentMode: PaymentMode;
+  paymentModeReason: ManualReason | null;
+  /** Read-only: what the backend can store yet; the UI disables the rest. */
+  supports: { fallBackToBasic: boolean; reminderSchedule: boolean };
 }

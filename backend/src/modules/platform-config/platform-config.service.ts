@@ -71,6 +71,29 @@ export class PlatformConfigService implements OnApplicationBootstrap {
         `ALTER TABLE "identity"."platform_configs" ADD COLUMN IF NOT EXISTS "secondary_color" TEXT NOT NULL DEFAULT '#2a3348';`,
       );
     } catch {}
+    // Billing v2 payment switch (also in migration 20261014090925).
+    try {
+      await this.prisma.$executeRawUnsafe(
+        `ALTER TABLE "identity"."platform_configs" ADD COLUMN IF NOT EXISTS "online_payments_enabled" BOOLEAN NOT NULL DEFAULT false;`,
+      );
+    } catch {}
+  }
+
+  /**
+   * Billing v2: is online (Razorpay) plan payment switched on by Super Admin?
+   * Off by default and on any read failure — manual approval is the safe side.
+   */
+  async getOnlinePaymentsEnabled(): Promise<boolean> {
+    try {
+      await this.ensureTable();
+      const rows: any[] = await this.prisma.$queryRaw`
+        SELECT "online_payments_enabled" FROM "identity"."platform_configs" WHERE "id" = ${PLATFORM_CONFIG_ID} LIMIT 1
+      `;
+      return rows?.[0]?.online_payments_enabled === true;
+    } catch (err: any) {
+      this.logger.warn(`Could not read online payments switch: ${err.message}`);
+      return false;
+    }
   }
 
   async onApplicationBootstrap() {
@@ -146,6 +169,7 @@ export class PlatformConfigService implements OnApplicationBootstrap {
           billingGracePeriodDays: r.billing_grace_period_days ?? r.billingGracePeriodDays ?? 7,
           billingExpiryBehavior: r.billing_expiry_behavior || r.billingExpiryBehavior || 'restrict',
           billingExpiryMessage: r.billing_expiry_message || r.billingExpiryMessage || 'Your subscription is due for renewal soon. Renew to keep your landing pages and features running without interruption.',
+          onlinePaymentsEnabled: (r.online_payments_enabled ?? r.onlinePaymentsEnabled) === true,
           primaryColor: r.primary_color || r.primaryColor || '#0f1424',
           secondaryColor: r.secondary_color || r.secondaryColor || '#2a3348',
           updatedAt: r.updated_at ? new Date(r.updated_at).toISOString() : null,
@@ -172,6 +196,7 @@ export class PlatformConfigService implements OnApplicationBootstrap {
       billingExpiryBehavior: 'restrict',
       billingExpiryMessage:
         'Your subscription is due for renewal soon. Renew to keep your landing pages and features running without interruption.',
+      onlinePaymentsEnabled: false,
       primaryColor: process.env.PLATFORM_PRIMARY_COLOR || '#0f1424',
       secondaryColor: process.env.PLATFORM_SECONDARY_COLOR || '#2a3348',
       updatedAt: null,
@@ -233,6 +258,9 @@ export class PlatformConfigService implements OnApplicationBootstrap {
     const billingExpiryMessage = dto.billingExpiryMessage !== undefined
       ? dto.billingExpiryMessage.trim()
       : (existing?.billing_expiry_message ?? existing?.billingExpiryMessage ?? 'Your subscription is due for renewal soon. Renew to keep your landing pages and features running without interruption.');
+    const onlinePaymentsEnabled = dto.onlinePaymentsEnabled !== undefined
+      ? dto.onlinePaymentsEnabled
+      : (existing?.online_payments_enabled ?? existing?.onlinePaymentsEnabled ?? false) === true;
     const primaryColor = dto.primaryColor !== undefined
       ? dto.primaryColor.trim()
       : (existing?.primary_color ?? existing?.primaryColor ?? '#0f1424');
@@ -258,7 +286,7 @@ export class PlatformConfigService implements OnApplicationBootstrap {
           "id", "subdomain_mode", "subdomain_base", "dns_mode", "infra_ip", "infra_ipv6",
           "infra_cname", "infra_ns1", "infra_ns2", "billing_expiry_notify_days",
           "billing_grace_period_days", "billing_expiry_behavior", "billing_expiry_message",
-          "primary_color", "secondary_color", "updated_at"
+          "online_payments_enabled", "primary_color", "secondary_color", "updated_at"
         ) VALUES (
           ${PLATFORM_CONFIG_ID},
           ${subdomainMode},
@@ -273,6 +301,7 @@ export class PlatformConfigService implements OnApplicationBootstrap {
           ${billingGracePeriodDays},
           ${billingExpiryBehavior},
           ${billingExpiryMessage},
+          ${onlinePaymentsEnabled},
           ${primaryColor},
           ${secondaryColor},
           CURRENT_TIMESTAMP
@@ -290,6 +319,7 @@ export class PlatformConfigService implements OnApplicationBootstrap {
           "billing_grace_period_days" = EXCLUDED."billing_grace_period_days",
           "billing_expiry_behavior" = EXCLUDED."billing_expiry_behavior",
           "billing_expiry_message" = EXCLUDED."billing_expiry_message",
+          "online_payments_enabled" = EXCLUDED."online_payments_enabled",
           "primary_color" = EXCLUDED."primary_color",
           "secondary_color" = EXCLUDED."secondary_color",
           "updated_at" = CURRENT_TIMESTAMP;
@@ -328,6 +358,7 @@ export class PlatformConfigService implements OnApplicationBootstrap {
       billingGracePeriodDays,
       billingExpiryBehavior,
       billingExpiryMessage,
+      onlinePaymentsEnabled,
       primaryColor,
       secondaryColor,
       updatedAt: new Date().toISOString(),

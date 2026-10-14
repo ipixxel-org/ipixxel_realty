@@ -6,7 +6,7 @@ import { useToast } from "@/components/ui/toast";
 import { formatDate } from "@/lib/billing/pricing";
 import type { RetentionChoices, RetentionItem } from "@/lib/billing/types";
 import { useBillingEnv, useBillingQuery, useOptionalOrgBilling } from "./context";
-import { Banner, BLink, ErrorNote, Loading, Section } from "./ui";
+import { Banner, BLink, countLabel, ErrorNote, Loading, Section } from "./ui";
 
 type Kind = "users" | "projects" | "landingPages";
 
@@ -22,15 +22,17 @@ function TickList({
   noun: string;
   items: RetentionItem[];
   selected: string[];
-  limit: number;
+  /** null = unlimited (nothing to choose). */
+  limit: number | null;
   onToggle: (id: string) => void;
 }) {
-  const full = selected.length >= limit;
+  const max = limit ?? Infinity;
+  const full = selected.length >= max;
   return (
     <Section
       title={title}
-      sub={`${limit} ${noun} can stay active`}
-      action={<span className={`bl-counter${selected.length > limit ? " over" : ""}`}>{selected.length} of {limit} selected</span>}
+      sub={limit === null ? `All ${noun} stay active` : `${limit} ${noun} can stay active`}
+      action={<span className={`bl-counter${selected.length > max ? " over" : ""}`}>{limit === null ? `${selected.length} selected` : `${selected.length} of ${limit} selected`}</span>}
       flush
     >
       {items.map((it) => {
@@ -99,7 +101,7 @@ function Editor({ choices, onSaved }: { choices: RetentionChoices; onSaved: (c: 
 
   return (
     <div className="bl-stack">
-      <Banner tone="info" icon="info" title={`On ${t.name}: ${t.limits.users} users, ${t.limits.projects} ${t.limits.projects === 1 ? "project" : "projects"}, ${t.limits.landingPages} ${t.limits.landingPages === 1 ? "landing page" : "landing pages"}`}>
+      <Banner tone="info" icon="info" title={`On ${t.name}: ${countLabel(t.limits.users, "user", "users")}, ${countLabel(t.limits.projects, "project", "projects")}, ${countLabel(t.limits.landingPages, "landing page", "landing pages")}`}>
         {choices.appliesOn ? `This applies if you move to ${t.name} on ${formatDate(choices.appliesOn)}. ` : `You're on ${t.name} now — changes apply straight away. `}
         Anything you untick is paused, never deleted: paused people can&apos;t sign in, projects become view-only and landing pages go offline. Leads keep coming in.
         <div style={{ marginTop: 6 }}>

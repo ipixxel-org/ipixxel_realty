@@ -51,9 +51,13 @@ export class BillingError extends Error {
   }
 }
 
+export type BillingFunction = Exclude<keyof BillingClient, "isMock" | "isReal">;
+
 export interface BillingClient {
-  /** True for the mock — the UI then shows a "Sample data" tag and a simulated payment popup. */
+  /** True when the whole client is the mock (walkthroughs) — the payment step uses the simulated popup. */
   readonly isMock: boolean;
+  /** Whether this function returns real backend data (false = sample data from the mock). */
+  isReal(fn: BillingFunction): boolean;
 
   /* ---------------- Organisation (billing:view / billing:edit) ---------------- */
   /** GET /org/billing/v2 */

@@ -1,4 +1,4 @@
-import { IsIn, IsInt, IsOptional, IsString, Matches, Max, MaxLength, Min } from 'class-validator';
+import { IsBoolean, IsIn, IsInt, IsOptional, IsString, Matches, Max, MaxLength, Min } from 'class-validator';
 
 export class UpdatePlatformConfigDto {
   @IsOptional()
@@ -63,6 +63,11 @@ export class UpdatePlatformConfigDto {
   @IsString()
   @MaxLength(500)
   billingExpiryMessage?: string;
+
+  /** Billing v2: online (Razorpay) plan payments. Off = manual approval by Super Admin. */
+  @IsOptional()
+  @IsBoolean()
+  onlinePaymentsEnabled?: boolean;
 
   /** Global primary brand color (HEX, e.g. #0f1424 or #6366f1). */
   @IsOptional()

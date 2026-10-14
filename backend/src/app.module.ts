@@ -54,6 +54,7 @@ import { MarketingModule } from './modules/marketing/marketing.module';
 import { IntegrationsModule } from './modules/integrations/integrations.module';
 import { PaymentsModule } from './modules/payments/payments.module';
 import { AiModule } from './modules/ai/ai.module';
+import { BillingModule } from './modules/billing/billing.module';
 
 @Module({
   imports: [
@@ -108,6 +109,7 @@ import { AiModule } from './modules/ai/ai.module';
     MarketingModule,
     IntegrationsModule,
     PaymentsModule,
+    BillingModule,
   ],
   controllers: [AppController],
   providers: [AppService],

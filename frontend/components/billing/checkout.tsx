@@ -3,11 +3,11 @@
 import { useEffect, useRef, useState } from "react";
 import { Icon } from "@/components/icons";
 import { useToast } from "@/components/ui/toast";
-import { checkGstin, COMPANY_STATE, formatDate, formatINR, INDIAN_STATES } from "@/lib/billing/pricing";
+import { checkGstin, COMPANY_STATE, formatDate, formatINR, INDIAN_STATES, withGst } from "@/lib/billing/pricing";
 import type { BillingInterval, BillingOverview, BillingProfile, CheckoutPreview } from "@/lib/billing/types";
 import { useBillingEnv, useBillingQuery, useOrgBilling } from "./context";
 import { usePayment } from "./payment";
-import { Banner, BLink, ErrorNote, Loading, Section } from "./ui";
+import { Banner, BLink, ErrorNote, Loading, Section, useCheckoutLive } from "./ui";
 
 export const EMPTY_PROFILE: BillingProfile = { legalName: "", addressLine: "", city: "", state: "", pincode: "", gstin: "" };
 
@@ -211,6 +211,50 @@ export function PriceSummary({ preview: p, renewalMode }: { preview: CheckoutPre
   );
 }
 
+/* ---------------------------------------------------------- Manual approval */
+
+/**
+ * When online payment isn't available (Super Admin switch off, Razorpay not
+ * set up, or checkout not live yet), upgrades are approved by our team.
+ * Sending the request arrives in the next backend step.
+ */
+export function UpgradeRequestPanel({ planName, price, interval, currentPlan }: { planName: string; price: number; interval: BillingInterval; currentPlan: string }) {
+  const per = interval === "yearly" ? "year" : "month";
+  return (
+    <Section title={`Request an upgrade to ${planName}`} sub="Approved by our team">
+      <div className="bl-stack" style={{ gap: 12 }}>
+        <div className="bl-breakdown">
+          <div className="bl-line">
+            <span>
+              {planName} plan ({interval})
+            </span>
+            <span>
+              {formatINR(price)} + GST / {per}
+            </span>
+          </div>
+          <div className="bl-line total">
+            <span>Total per {per}</span>
+            <span>{formatINR(withGst(price))}</span>
+          </div>
+        </div>
+        <div className="bl-muted" style={{ padding: "10px 12px", background: "var(--bg)", borderRadius: 10, lineHeight: 1.55 }}>
+          Online payment isn&apos;t available for your account yet, so upgrades are approved by our team. Send a request and we&apos;ll confirm the plan and how to pay.
+          You stay on {currentPlan} with everything working until the upgrade is approved.
+        </div>
+        <div className="bl-row">
+          <button type="button" className="btn btn-primary" disabled title="Upgrade requests open soon">
+            <Icon name="arrow-up" size={15} /> Send upgrade request
+          </button>
+          <BLink to="plans" className="btn btn-ghost">
+            Back to plans
+          </BLink>
+          <span className="bl-muted bl-small">Upgrade requests open soon.</span>
+        </div>
+      </div>
+    </Section>
+  );
+}
+
 /* --------------------------------------------------------------- Checkout */
 
 type Part = "details" | "coupon" | "summary";
@@ -243,6 +287,7 @@ export function CheckoutScreen({
   const [checking, setChecking] = useState(false);
   const [saving, setSaving] = useState(false);
   const autoDone = useRef(false);
+  const live = useCheckoutLive(overview);
 
   const firstPurchase = !!overview && !overview.billingProfile;
   const showForm = firstPurchase || editDetails;
@@ -363,6 +408,8 @@ export function CheckoutScreen({
       </Banner>
     );
   }
+
+  if (!live) return <UpgradeRequestPanel planName={target.name} price={interval === "yearly" ? target.priceYearly : target.priceMonthly} interval={interval} currentPlan={overview.plan.name} />;
 
   const left = parts.includes("details") || parts.includes("coupon");
   const right = parts.includes("summary");
