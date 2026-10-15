@@ -15,6 +15,7 @@ import {
 import { OrgBillingV2Service } from './org-billing-v2.service';
 import { BillingProfileService } from './billing-profile.service';
 import { BillingCheckoutService } from './billing-checkout.service';
+import { BillingPlanChangeService } from './billing-plan-change.service';
 
 /**
  * Billing v2 (docs/billing-ui-contract.md). Built on the existing payments
@@ -34,6 +35,7 @@ import { BillingCheckoutService } from './billing-checkout.service';
     AdminBillingService,
     BillingProfileService,
     BillingCheckoutService,
+    BillingPlanChangeService,
     OrgApprovedGuard,
     PermissionGuard,
     SuperAdminGuard,

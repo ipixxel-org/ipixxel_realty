@@ -40,7 +40,8 @@ export type QuoteErrorCode =
   | 'yearly_to_monthly'
   | 'nothing_to_renew'
   | 'renewal_not_due'
-  | 'renewal_plan_mismatch';
+  | 'renewal_plan_mismatch'
+  | 'cancellation_scheduled';
 
 export class QuoteError extends Error {
   constructor(
@@ -70,6 +71,9 @@ export interface QuoteInput {
     interval: Interval;
     status: string;
     renewsAt: Date | null;
+    /** Step 4: set for the end of the term (renewals only look at these). */
+    cancelAtPeriodEnd?: boolean;
+    scheduled?: { plan: QuotePlan; interval: Interval } | null;
   } | null;
   /** Buyer's GST state code (null = unknown) and ISO country. */
   buyer: { state: string | null; country: string };
@@ -304,14 +308,16 @@ const dateLabel = (d: Date) =>
 
 /**
  * Renewal ("pay each time"): the current plan and interval at today's price,
- * for one more term. Open from `notifyDays` before renewsAt (when the
- * reminder goes out), through the grace window, and after expiry. The plan
- * comes from the subscription, so an archived plan can still be renewed.
+ * for one more term — or, when a downgrade is scheduled, the smaller plan /
+ * interval it switches to (that's what the next term is). Open from
+ * `notifyDays` before renewsAt (when the reminder goes out), through the
+ * grace window, and after expiry. The plan comes from the subscription, so
+ * an archived plan can still be renewed. Not while a cancellation is set.
  */
 export function quoteRenewal(
   input: Omit<QuoteInput, 'target' | 'interval'> & {
     notifyDays: number;
-    /** What the UI asked to renew — must be the current plan + interval. */
+    /** What the UI asked to renew — the current (or scheduled) plan + interval. */
     requested: { planId: string; interval: Interval };
   },
 ): Quote {
@@ -326,13 +332,20 @@ export function quoteRenewal(
       "There's no paid plan to renew. Pick a plan to buy instead.",
     );
   }
-  if (
-    input.requested.planId !== cur.plan.id ||
-    input.requested.interval !== cur.interval
-  ) {
+  if (cur.cancelAtPeriodEnd) {
+    throw new QuoteError(
+      'cancellation_scheduled',
+      'Your plan is set to end. Undo the cancellation to renew it.',
+    );
+  }
+  const next = cur.scheduled ?? { plan: cur.plan, interval: cur.interval };
+  const asks = (p: { plan: QuotePlan; interval: Interval }) =>
+    input.requested.planId === p.plan.id &&
+    input.requested.interval === p.interval;
+  if (!asks({ plan: cur.plan, interval: cur.interval }) && !asks(next)) {
     throw new QuoteError(
       'renewal_plan_mismatch',
-      `Renewing keeps your ${cur.plan.name} plan (${cur.interval}). To change plan, use Change plan.`,
+      `Renewing keeps your ${next.plan.name} plan (${next.interval}). To change plan, use Change plan.`,
     );
   }
   if (
@@ -346,19 +359,19 @@ export function quoteRenewal(
     );
   }
 
-  const subtotal = pricePaise(cur.plan, cur.interval);
+  const subtotal = pricePaise(next.plan, next.interval);
   return {
     kind: 'renewal',
     fromPlan: cur.plan,
     fromInterval: cur.interval,
-    toPlan: cur.plan,
-    toInterval: cur.interval,
+    toPlan: next.plan,
+    toInterval: next.interval,
     subtotalPaise: subtotal,
     creditPaise: 0,
     taxablePaise: subtotal,
     ...taxOn(subtotal, input),
     proration: null,
-    periodEnd: renewalPeriodEnd(cur, cur.interval, now),
+    periodEnd: renewalPeriodEnd(cur, next.interval, now),
     recurringPaise: subtotal,
     fromRenewsAt: cur.renewsAt,
   };

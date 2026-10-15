@@ -449,8 +449,10 @@ export class BillingCheckoutService implements OnModuleInit {
               'The subscription was already renewed after this price was quoted.',
             );
           }
-        } else {
-          // A renewal keeps the plan the org already has, so only changes check usage.
+        }
+        // A renewal on the same plan doesn't re-check usage (it's what the org
+        // already has); one that applies a scheduled downgrade does.
+        if (c.kind !== 'renewal' || c.toPlanId !== c.fromPlanId) {
           try {
             await assertPlanFitsCurrentUsage(tx, c.organisationId, c.toPlan);
           } catch (err) {
@@ -588,12 +590,22 @@ export class BillingCheckoutService implements OnModuleInit {
       country: profile?.country ?? 'IN',
       gstin: profile?.gstin ?? null,
     };
+    const scheduledRow = sub?.scheduledPlanId
+      ? active.find((p) => p.id === sub.scheduledPlanId)
+      : undefined;
     const current = sub
       ? {
           plan: asQuotePlan(sub.plan),
           interval: sub.billingCycle,
           status: sub.status,
           renewsAt: sub.renewsAt,
+          cancelAtPeriodEnd: sub.cancelAtPeriodEnd,
+          scheduled: scheduledRow
+            ? {
+                plan: asQuotePlan(scheduledRow),
+                interval: sub.scheduledInterval ?? sub.billingCycle,
+              }
+            : null,
         }
       : null;
     const parties = {

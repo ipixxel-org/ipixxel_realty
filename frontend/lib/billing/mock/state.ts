@@ -281,6 +281,7 @@ export function deriveOverview(s: MockState, today: string): BillingOverview {
     movedToBasicAt: d.movedToBasicAt,
     cancelAt: s.situation === "cancellation_scheduled" ? scheduledAt : null,
     downgradeTo: s.situation === "downgrade_scheduled" ? planById(s, s.downgradeTargetId) : null,
+    downgradeInterval: s.situation === "downgrade_scheduled" ? s.interval : null,
     downgradeAt: s.situation === "downgrade_scheduled" ? scheduledAt : null,
     renewalAmount: paidPlan ? withGst(planPrice(paidPlan, s.interval), billingState) : null,
     usage: [

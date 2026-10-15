@@ -23,6 +23,7 @@ async function call<T>(path: string, init?: RequestInit): Promise<T> {
 
 const put = (body: unknown): RequestInit => ({ method: "PUT", body: JSON.stringify(body) });
 const post = (body: unknown): RequestInit => ({ method: "POST", body: JSON.stringify(body) });
+const del: RequestInit = { method: "DELETE" };
 
 export const httpBilling: Impl = {
   getBillingOverview: () => call("/org/billing/v2"),
@@ -50,6 +51,12 @@ export const httpBilling: Impl = {
     ),
   listAdminCheckouts: (status) =>
     call(`/admin/billing/checkouts${status ? `?status=${encodeURIComponent(status)}` : ""}`),
+
+  // Step 4 — cancel / downgrade at the end of the term (each returns the overview)
+  cancelPlan: (req) => call("/org/billing/cancel", post(req)),
+  undoCancel: () => call("/org/billing/cancel", del),
+  scheduleDowngrade: (req) => call("/org/billing/downgrade", post(req)),
+  undoDowngrade: () => call("/org/billing/downgrade", del),
 };
 
 export const HTTP_FUNCTIONS = Object.keys(httpBilling) as BillingFunction[];

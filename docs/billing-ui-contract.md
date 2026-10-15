@@ -20,6 +20,7 @@ client is the reference behaviour (see `frontend/lib/billing/__tests__/mock-clie
 | 1 | `getBillingOverview`, `listPlans`, `getAccessStatus`, `listAdminPlans`, `saveAdminPlan`, `getLifecycleSettings`, `saveLifecycleSettings` | `backend/src/modules/billing/` |
 | 2 | `getBillingProfile`, `saveBillingProfile`, `previewCheckout`, `startCheckout`, `confirmCheckout`, `listAdminCheckouts` | `billing-profile.service.ts`, `billing-checkout.service.ts`, `checkout-quote.ts`, `common/utils/plan-change.util.ts` |
 | 3 | Renewals through the same functions: `previewCheckout` / `startCheckout` with `purpose: "renewal"` (no new client function) | `quoteRenewal` in `checkout-quote.ts`, `renewalPeriodEnd` in `plan-change.util.ts` |
+| 4 | `cancelPlan`, `undoCancel`, `scheduleDowngrade`, `undoDowngrade` | `billing-plan-change.service.ts`; applied by the lifecycle sweep (`subscription-lifecycle.util.ts`) |
 
 Everything else is mock. Coupons are step 5: `CheckoutPreview.couponsEnabled` is `false`, which hides
 the coupon field; a sent `couponCode` is ignored. `updatePaymentMethod` stays unimplemented on purpose: renewals are
@@ -105,6 +106,35 @@ period rule (`applyPlanChange`).
   (`paid_renewal_requires_checkout`); a free plan still renews there. With the flag off, the
   legacy Settings → Billing "Renew now" button now shows that message for paid plans.
 
+### Step 4 notes — downgrade and cancel at the end of the term
+
+- **Stored on the subscription:** `cancelAtPeriodEnd` + `cancelReason`, or `scheduledPlanId` +
+  `scheduledInterval` (at most one; scheduling one replaces the other). Any plan change —
+  upgrade, renewal, Super Admin approval — clears them (`NO_SCHEDULED_CHANGE` in
+  `applyPlanChange`). The endpoints only record the choice; the lifecycle sweep (hourly, and
+  lazily on every billing read) applies it when the term ends.
+- **Cancel** (`POST /org/billing/cancel` `{ reason? }`, undo `DELETE`): at `renewsAt` the org
+  moves to the free plan (no grace — they chose to stop; `renewsAt` null, amount 0). Made during
+  grace, it applies when grace ends; on an expired plan, at once. Overview: status
+  `cancellation_scheduled`, `cancelAt`, `renewalAmount: null`; a renewal is refused
+  (`cancellation_scheduled`). Admins get "Plan ended". Codes: `nothing_to_cancel`,
+  `nothing_scheduled`.
+- **Downgrade** (`POST /org/billing/downgrade` `{ planId, interval? }`, undo `DELETE`): a
+  smaller plan, or the same plan yearly → monthly; a free target is a cancellation. Only while
+  active (not in grace: `downgrade_not_now`), not with a pending upgrade request
+  (`request_pending`), and the org must already fit the smaller plan (`over_plan_limits`) —
+  nothing can be paused until "choose what stays" is real, so the UI disables Confirm and says
+  to remove the extras first. Other codes: `same_plan`, `not_a_downgrade`, `plan_not_found`.
+- **When the term ends:** the renewal paid before then is charged at the smaller plan's price
+  and switches to it (usage re-checked → `needs_review` if over). Unpaid, the sweep switches the
+  plan at `renewsAt` and the term goes into grace on the smaller plan as usual.
+- **Overview:** `downgradeTo`, new `downgradeInterval`, `downgradeAt` (= period end); status
+  `downgrade_scheduled`, except in the renewal window, where `renewal_due` shows first (Pay now
+  at the smaller price, banner says the plan changes).
+- **Not yet:** pausing what doesn't fit (cancel to Basic leaves extra users/projects/pages as
+  they are, but nothing new can be added past Basic's limits) — that is "choose what stays".
+  The Super Admin "Renew" on a cancelling subscription doesn't clear the cancellation.
+
 ### Step 1 notes
 
 - **Unlimited:** `PlanLimits`, `UsageItem.limit` and `PlanModules.metaPages` are `number | null`;
@@ -164,7 +194,7 @@ period rule (`applyPlanChange`).
 | `updatePaymentMethod(req)` | `POST /org/billing/payment-method` | `UpdatePaymentMethodRequest` | `PaymentMethodSummary` |
 | `cancelPlan(req)` | `POST /org/billing/cancel` | `CancelPlanRequest` | `BillingOverview` |
 | `undoCancel()` | `DELETE /org/billing/cancel` | — | `BillingOverview` |
-| `scheduleDowngrade(req)` | `POST /org/billing/downgrade` | `ScheduleDowngradeRequest` | `BillingOverview` |
+| `scheduleDowngrade(req)` | `POST /org/billing/downgrade` | `ScheduleDowngradeRequest` (`interval?` for yearly → monthly) | `BillingOverview` |
 | `undoDowngrade()` | `DELETE /org/billing/downgrade` | — | `BillingOverview` |
 | `getRetentionChoices(req)` | `GET /org/billing/retention?targetPlanId=` | `GetRetentionChoicesRequest` | `RetentionChoices` |
 | `saveRetentionChoices(req)` | `PUT /org/billing/retention` | `SaveRetentionChoicesRequest` | `RetentionChoices` (reject over-limit picks or a missing owner) |

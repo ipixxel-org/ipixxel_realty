@@ -45,6 +45,8 @@ export class SubscriptionLifecycleSweeper
         summary.newlyPastDue ||
         summary.newlyExpired ||
         summary.newlyCancelled ||
+        summary.movedToFreePlan ||
+        summary.scheduledPlanApplied ||
         summary.expiringNotified ||
         summary.pastDueNotified ||
         summary.expiredNotified

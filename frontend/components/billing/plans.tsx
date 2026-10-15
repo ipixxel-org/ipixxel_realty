@@ -50,6 +50,14 @@ export function PlansScreen({ interval: controlled, onIntervalChange }: { interv
         </BLink>
       );
     }
+    // Same paid plan, yearly → monthly: scheduled for the renewal date.
+    if (p.id === current.id && !p.isFree && overview!.interval === "yearly" && interval === "monthly") {
+      return (
+        <BLink to="downgrade" params={{ plan: p.id, interval }} className="btn btn-ghost" style={{ width: "100%", justifyContent: "center" }}>
+          <Icon name="arrow-down" size={15} /> Switch to monthly
+        </BLink>
+      );
+    }
     if (p.id === current.id) {
       return (
         <button type="button" className="btn" disabled style={{ width: "100%", justifyContent: "center", background: "var(--surface-2)", color: "var(--muted)", border: "1px solid var(--line)" }}>
@@ -65,7 +73,7 @@ export function PlansScreen({ interval: controlled, onIntervalChange }: { interv
       );
     }
     return (
-      <BLink to="downgrade" params={{ plan: p.id }} className="btn btn-ghost" style={{ width: "100%", justifyContent: "center" }}>
+      <BLink to="downgrade" params={{ plan: p.id, interval }} className="btn btn-ghost" style={{ width: "100%", justifyContent: "center" }}>
         <Icon name="arrow-down" size={15} /> Downgrade
       </BLink>
     );

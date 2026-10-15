@@ -36,6 +36,9 @@ export interface OverviewInput {
     billingCycle: BillingInterval;
     renewsAt: Date | null;
     graceEndsAt: Date | null;
+    /** Step 4: cancellation / downgrade scheduled for the end of the term. */
+    cancelAtPeriodEnd?: boolean;
+    scheduled?: { plan: BillingPlanV2; interval: BillingInterval } | null;
   } | null;
   counts: {
     users: number;
@@ -61,11 +64,18 @@ export function deriveStatus(
   switch (sub.status) {
     case 'active':
     case 'trial':
-      return sub.renewsAt &&
+      // Cancelling: nothing to renew. A scheduled downgrade still renews
+      // (at the smaller plan's price), so the renewal window shows first.
+      if (sub.cancelAtPeriodEnd) return 'cancellation_scheduled';
+      if (
+        sub.renewsAt &&
         daysUntil(sub.renewsAt, input.now) <= input.notifyDays
-        ? 'renewal_due'
-        : 'active';
+      ) {
+        return 'renewal_due';
+      }
+      return sub.scheduled ? 'downgrade_scheduled' : 'active';
     case 'past_due':
+      if (sub.cancelAtPeriodEnd) return 'cancellation_scheduled';
       return sub.graceEndsAt && daysUntil(sub.graceEndsAt, input.now) <= 1
         ? 'grace_ending'
         : 'past_due';
@@ -86,8 +96,16 @@ export function buildOverview(input: OverviewInput): BillingOverviewV2 {
   const periodStart = periodEnd
     ? new Date(periodEnd.getTime() - cycleDays * DAY_MS)
     : null;
-  const inGrace = status === 'past_due' || status === 'grace_ending';
-  const price = interval === 'yearly' ? plan.priceYearly : plan.priceMonthly;
+  const inGrace =
+    status === 'past_due' ||
+    status === 'grace_ending' ||
+    (status === 'cancellation_scheduled' && sub?.status === 'past_due');
+  const scheduled = sub?.scheduled ?? null;
+  // The next term is charged at the scheduled plan's price.
+  const next = scheduled ?? { plan, interval };
+  const price =
+    next.interval === 'yearly' ? next.plan.priceYearly : next.plan.priceMonthly;
+  const cancelling = !!sub?.cancelAtPeriodEnd;
 
   return {
     orgName: input.orgName,
@@ -130,14 +148,22 @@ export function buildOverview(input: OverviewInput): BillingOverviewV2 {
         ? Math.max(0, daysUntil(sub.graceEndsAt, now))
         : 0,
     movedToBasicAt: null,
-    cancelAt: null,
-    downgradeTo: null,
-    downgradeAt: null,
-    renewalAmount: !paid
-      ? null
-      : input.renewalTotalPaise != null
-        ? input.renewalTotalPaise / 100
-        : round2(price * (1 + GST_RATE)),
+    cancelAt: cancelling
+      ? sub?.status === 'past_due' && sub.graceEndsAt
+        ? isoDate(sub.graceEndsAt)
+        : periodEnd
+          ? isoDate(periodEnd)
+          : null
+      : null,
+    downgradeTo: scheduled?.plan ?? null,
+    downgradeInterval: scheduled?.interval ?? null,
+    downgradeAt: scheduled && periodEnd ? isoDate(periodEnd) : null,
+    renewalAmount:
+      !paid || cancelling
+        ? null
+        : input.renewalTotalPaise != null
+          ? input.renewalTotalPaise / 100
+          : round2(price * (1 + GST_RATE)),
     usage: [
       {
         key: 'users',

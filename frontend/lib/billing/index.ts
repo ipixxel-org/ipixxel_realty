@@ -26,12 +26,14 @@ export const REAL_FUNCTIONS: Record<BillingFunction, boolean> = {
   startCheckout: true,
   confirmCheckout: true,
   listAdminCheckouts: true,
+  // Step 3 (renewals) reuses previewCheckout / startCheckout with purpose "renewal".
+  // Step 4 — cancel / downgrade at the end of the term
+  cancelPlan: true,
+  undoCancel: true,
+  scheduleDowngrade: true,
+  undoDowngrade: true,
   // Still mock
   updatePaymentMethod: false, // not offered: renewals are "pay each time"
-  cancelPlan: false,
-  undoCancel: false,
-  scheduleDowngrade: false,
-  undoDowngrade: false,
   getRetentionChoices: false,
   saveRetentionChoices: false,
   listInvoices: false,

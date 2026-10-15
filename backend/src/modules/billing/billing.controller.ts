@@ -1,6 +1,7 @@
 import {
   Body,
   Controller,
+  Delete,
   Get,
   HttpCode,
   Param,
@@ -29,6 +30,8 @@ import {
   StartCheckoutDto,
 } from './dto/checkout.dto';
 import { SaveBillingProfileDto } from './dto/save-billing-profile.dto';
+import { BillingPlanChangeService } from './billing-plan-change.service';
+import { CancelPlanDto, ScheduleDowngradeDto } from './dto/plan-change.dto';
 
 /**
  * Billing v2 — organisation side. Shares the /org/billing prefix with the
@@ -42,6 +45,7 @@ export class OrgBillingV2Controller {
     private readonly service: OrgBillingV2Service,
     private readonly profiles: BillingProfileService,
     private readonly checkouts: BillingCheckoutService,
+    private readonly changes: BillingPlanChangeService,
   ) {}
 
   @RequirePermission('billing', 'view')
@@ -97,6 +101,36 @@ export class OrgBillingV2Controller {
     @Body() dto: SaveBillingProfileDto,
   ) {
     return this.profiles.save(user.orgId as string, dto);
+  }
+
+  // Step 4: cancel / downgrade at the end of the term (and undo). Each returns the overview.
+  @RequirePermission('billing', 'edit')
+  @Post('cancel')
+  @HttpCode(200)
+  cancel(@CurrentUser() user: JwtPayload, @Body() dto: CancelPlanDto) {
+    return this.changes.cancel(user.orgId as string, user.sub, dto);
+  }
+
+  @RequirePermission('billing', 'edit')
+  @Delete('cancel')
+  undoCancel(@CurrentUser() user: JwtPayload) {
+    return this.changes.undoCancel(user.orgId as string, user.sub);
+  }
+
+  @RequirePermission('billing', 'edit')
+  @Post('downgrade')
+  @HttpCode(200)
+  downgrade(
+    @CurrentUser() user: JwtPayload,
+    @Body() dto: ScheduleDowngradeDto,
+  ) {
+    return this.changes.scheduleDowngrade(user.orgId as string, user.sub, dto);
+  }
+
+  @RequirePermission('billing', 'edit')
+  @Delete('downgrade')
+  undoDowngrade(@CurrentUser() user: JwtPayload) {
+    return this.changes.undoDowngrade(user.orgId as string, user.sub);
   }
 }
 

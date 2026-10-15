@@ -4,7 +4,7 @@ import { useState } from "react";
 import { Icon } from "@/components/icons";
 import { useToast } from "@/components/ui/toast";
 import { formatDate, formatINR, planPrice } from "@/lib/billing/pricing";
-import type { BillingPlan } from "@/lib/billing/types";
+import type { BillingInterval, BillingPlan } from "@/lib/billing/types";
 import { BillingBanner, PicksSummary } from "./banners";
 import { useBillingEnv, useBillingQuery, useOrgBilling } from "./context";
 import { BillingDialog, DialogActions } from "./dialog";
@@ -51,7 +51,7 @@ function ConfirmDialog({
 
 /* --------------------------------------------------------------- Downgrade */
 
-export function DowngradeScreen({ planId }: { planId: string }) {
+export function DowngradeScreen({ planId, interval: wanted }: { planId: string; interval?: BillingInterval }) {
   const { client, nav, canEdit } = useBillingEnv();
   const { overview, refresh } = useOrgBilling();
   const { toast } = useToast();
@@ -64,9 +64,13 @@ export function DowngradeScreen({ planId }: { planId: string }) {
   if (!target) return <ErrorNote message="That plan doesn't exist." />;
   const o = overview;
   const onFree = o.status === "free" || o.status === "moved_to_basic";
+  const interval = wanted ?? o.interval;
+  // Same plan, yearly → monthly, is a downgrade too (it starts at renewal).
+  const toMonthly = target.id === o.plan.id && o.interval === "yearly" && interval === "monthly";
+  const per = interval === "yearly" ? "year" : "month";
 
-  if (o.status === "downgrade_scheduled") return <BillingBanner overview={o} />;
-  if (onFree || target.rank >= o.plan.rank) {
+  if (o.downgradeTo) return <BillingBanner overview={{ ...o, status: "downgrade_scheduled" }} />;
+  if (onFree || (target.rank >= o.plan.rank && !toMonthly)) {
     return (
       <Banner
         tone="amber"
@@ -83,12 +87,15 @@ export function DowngradeScreen({ planId }: { planId: string }) {
 
   const effective = o.graceEndsAt ?? o.periodEnd;
   const over = o.usage.filter((u) => target.limits[u.key] !== null && u.used > target.limits[u.key]!);
+  // Until "choose what stays" is live, nothing can be paused: the org has to fit first.
+  const canPause = client.isMock || client.isReal("saveRetentionChoices");
+  const blocked = over.length > 0 && !canPause;
   const fewerPages = (target.modules.metaPages ?? Infinity) < (o.plan.modules.metaPages ?? Infinity);
 
   async function schedule() {
     setBusy(true);
     try {
-      await client.scheduleDowngrade({ planId: target!.id });
+      await client.scheduleDowngrade({ planId: target!.id, interval });
       await refresh();
       setConfirm(false);
       toast({ variant: "success", title: "Downgrade scheduled", description: `${target!.name} starts on ${effective ? formatDate(effective) : "your renewal date"}.` });
@@ -102,15 +109,29 @@ export function DowngradeScreen({ planId }: { planId: string }) {
 
   return (
     <div className="bl-stack">
-      <Section title={`Downgrade ${o.plan.name} → ${target.name}`} sub="Nothing changes until the end of the period you've paid for.">
+      <Section
+        title={toMonthly ? `Switch ${o.plan.name} to monthly billing` : `Downgrade ${o.plan.name} → ${target.name}`}
+        sub="Nothing changes until the end of the period you've paid for."
+      >
         <div className="bl-grid3">
           <Kv label="Takes effect">{effective ? formatDate(effective) : "—"}</Kv>
           <Kv label="Until then">{o.plan.name} — everything as today</Kv>
-          <Kv label="Then you pay">{target.isFree ? "Nothing — Basic is free" : `${formatINR(planPrice(target, o.interval))} + GST / ${o.interval === "yearly" ? "year" : "month"}`}</Kv>
+          <Kv label="Then you pay">{target.isFree ? "Nothing — Basic is free" : `${formatINR(planPrice(target, interval))} + GST / ${per}`}</Kv>
         </div>
       </Section>
 
-      {over.length ? (
+      {blocked ? (
+        <Banner tone="amber" icon="alert" title={`You're over ${target.name}'s limits`}>
+          <ul style={{ margin: "4px 0 0", paddingLeft: 18 }}>
+            {over.map((u) => (
+              <li key={u.key}>
+                You have {u.used} {u.label.toLowerCase()}; {target.name} allows {target.limits[u.key]}.
+              </li>
+            ))}
+          </ul>
+          <div style={{ marginTop: 6 }}>Remove or deactivate the extra ones first, then come back to schedule the downgrade. Nothing changes until then.</div>
+        </Banner>
+      ) : over.length ? (
         <Banner
           tone="amber"
           icon="alert"
@@ -157,8 +178,14 @@ export function DowngradeScreen({ planId }: { planId: string }) {
       ) : null}
 
       <div className="bl-row">
-        <button type="button" className="btn btn-primary" disabled={!canEdit} onClick={() => setConfirm(true)}>
-          <Icon name="arrow-down" size={15} /> Confirm downgrade
+        <button
+          type="button"
+          className="btn btn-primary"
+          disabled={!canEdit || blocked}
+          title={blocked ? `Get within ${target.name}'s limits first` : undefined}
+          onClick={() => setConfirm(true)}
+        >
+          <Icon name="arrow-down" size={15} /> {toMonthly ? "Confirm switch to monthly" : "Confirm downgrade"}
         </button>
         <BLink to="plans" className="btn btn-ghost">
           Keep {o.plan.name}
@@ -166,7 +193,7 @@ export function DowngradeScreen({ planId }: { planId: string }) {
       </div>
       <ConfirmDialog
         open={confirm}
-        title={`Downgrade to ${target.name}?`}
+        title={toMonthly ? "Switch to monthly billing?" : `Downgrade to ${target.name}?`}
         message={`You keep ${o.plan.name} until ${effective ? formatDate(effective) : "the end of the period"}. You can undo this any time before then.`}
         confirmLabel="Schedule downgrade"
         busy={busy}
@@ -195,6 +222,7 @@ export function CancelScreen() {
   if (o.status === "cancellation_scheduled") return <BillingBanner overview={o} />;
   const endsOn = o.graceEndsAt ?? o.periodEnd;
   const free = plans.find((p) => p.isFree) as BillingPlan;
+  const canPause = client.isMock || client.isReal("saveRetentionChoices");
 
   async function cancel() {
     setBusy(true);
@@ -220,8 +248,10 @@ export function CancelScreen() {
           <Kv label="After that">{free.name} (free)</Kv>
         </div>
         <div className="bl-muted" style={{ marginTop: 14 }}>
-          No further charges{o.renewalMode === "auto" ? " — automatic payments stop too" : ""}. Nothing is deleted: whatever doesn&apos;t fit on {free.name} is paused, and leads keep
-          coming in.
+          No further charges{o.renewalMode === "auto" ? " — automatic payments stop too" : ""}.{" "}
+          {canPause
+            ? `Nothing is deleted: whatever doesn't fit on ${free.name} is paused, and leads keep coming in.`
+            : `Nothing is deleted and leads keep coming in. If you have more than ${free.name} allows, you can't add more until you're within its limits.`}
         </div>
         {o.retention ? <PicksSummary retention={o.retention} /> : null}
         <div className="field" style={{ marginTop: 16, marginBottom: 0, maxWidth: 360 }}>
@@ -238,9 +268,11 @@ export function CancelScreen() {
         <button type="button" className="btn btn-danger" disabled={!canEdit} onClick={() => setConfirm(true)}>
           Cancel plan
         </button>
-        <BLink to="chooseWhatStays" className="btn btn-ghost">
-          Choose what stays first
-        </BLink>
+        {canPause ? (
+          <BLink to="chooseWhatStays" className="btn btn-ghost">
+            Choose what stays first
+          </BLink>
+        ) : null}
         <BLink to="overview" className="btn btn-ghost">
           Keep {o.plan.name}
         </BLink>

@@ -104,11 +104,11 @@ export function CheckoutFailurePage(p: { plan?: string; interval?: string; reaso
   );
 }
 
-export function DowngradePage({ plan }: { plan?: string }) {
+export function DowngradePage({ plan, interval }: { plan?: string; interval?: string }) {
   return (
     <Guard>
       <PageHead eyebrow={EYEBROW} icon="arrow-down" title="Downgrade plan" sub="See when it starts and what doesn't fit, before you confirm." back={{ to: "plans", label: "Plans" }} sampleFns={["getRetentionChoices", "scheduleDowngrade"]} />
-      <DowngradeScreen planId={plan ?? "growth"} />
+      <DowngradeScreen planId={plan ?? "growth"} interval={interval === "monthly" || interval === "yearly" ? interval : undefined} />
     </Guard>
   );
 }

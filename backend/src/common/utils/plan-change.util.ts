@@ -5,6 +5,15 @@ import { orgBillingRecipientsWhere } from './notification-recipients.util';
 const DAY_MS = 24 * 60 * 60 * 1000;
 const CYCLE_DAYS = { monthly: 30, yearly: 365 } as const;
 
+/** Subscription fields that clear a scheduled cancellation / downgrade. */
+export const NO_SCHEDULED_CHANGE = {
+  cancelAtPeriodEnd: false,
+  cancelReason: null,
+  scheduledPlanId: null,
+  scheduledInterval: null,
+  changeScheduledAt: null,
+} as const;
+
 export type PlanChangeKind =
   'new' | 'upgrade_same_interval' | 'interval_change' | 'renewal';
 
@@ -39,7 +48,8 @@ export interface ApplyPlanChangeInput {
   /**
    * Period rule: 'new' and 'interval_change' start a fresh cycle now;
    * 'upgrade_same_interval' keeps the current renewsAt; 'renewal' adds one
-   * term (renewalPeriodEnd).
+   * term (renewalPeriodEnd) — on a scheduled smaller plan / interval if the
+   * caller passes it as toPlanId / toInterval.
    */
   kind: PlanChangeKind;
   source: 'payment' | 'super_admin';
@@ -119,6 +129,9 @@ export async function applyPlanChange(
           renewsAt,
           graceEndsAt: null,
           cancelledAt: null,
+          // Any plan change (upgrade, renewal, approval) replaces a scheduled
+          // cancellation or downgrade; a renewal has just applied it.
+          ...NO_SCHEDULED_CHANGE,
         },
       })
     : await tx.subscription.create({

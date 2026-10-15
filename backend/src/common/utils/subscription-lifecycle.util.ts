@@ -6,6 +6,7 @@ import {
   resolveLimit,
 } from './plan-quota.util';
 import { orgBillingRecipientsWhere } from './notification-recipients.util';
+import { NO_SCHEDULED_CHANGE } from './plan-change.util';
 
 // ---------------------------------------------------------------------------
 // Subscription expiry lifecycle + plan-package gates for org-owned resources.
@@ -20,6 +21,11 @@ import { orgBillingRecipientsWhere } from './notification-recipients.util';
 //     quota-gated actions) stop for `expired`.
 //   - active/trial whose renewsAt falls within `notifyDays` => an
 //     "expiring soon" popup notification is raised for the org's admins.
+//   - billing v2 end-of-term changes, when the term ends: a scheduled
+//     cancellation moves the org to the free plan (no grace — they chose to
+//     stop); a scheduled smaller plan / interval is switched to, and the
+//     unpaid term then goes through grace as usual on that plan. A
+//     cancellation scheduled during grace applies when grace ends.
 //
 // The sweep is cheap (a single scan) and runs on a timer + lazily on every
 // org billing read / publish attempt, so the UI always reflects reality even
@@ -43,6 +49,8 @@ export const DEFAULT_BILLING_EXPIRY_CONFIG: BillingExpiryConfig = {
 
 export type LifecycleRunSummary = {
   scanned: number;
+  movedToFreePlan: number;
+  scheduledPlanApplied: number;
   newlyPastDue: number;
   newlyExpired: number;
   newlyCancelled: number;
@@ -53,6 +61,8 @@ export type LifecycleRunSummary = {
 
 const EMPTY_SUMMARY: LifecycleRunSummary = {
   scanned: 0,
+  movedToFreePlan: 0,
+  scheduledPlanApplied: 0,
   newlyPastDue: 0,
   newlyExpired: 0,
   newlyCancelled: 0,
@@ -138,8 +148,34 @@ export async function applyOrgSubscriptionLifecycle(
 
     summary.scanned = subs.length;
 
-    for (const sub of subs) {
+    for (let sub of subs) {
       const renewsAt = sub.renewsAt as Date;
+
+      // Billing v2: end-of-term changes the org scheduled.
+      const termOver = renewsAt.getTime() <= now.getTime();
+      const graceOver =
+        sub.status === 'past_due' &&
+        !!sub.graceEndsAt &&
+        sub.graceEndsAt.getTime() <= now.getTime();
+      if (
+        sub.cancelAtPeriodEnd &&
+        (((sub.status === 'active' || sub.status === 'trial') && termOver) ||
+          graceOver)
+      ) {
+        if (await moveToFreePlan(prisma, sub)) {
+          summary.movedToFreePlan++;
+          continue;
+        }
+      }
+      if (
+        sub.scheduledPlanId &&
+        (sub.status === 'active' || sub.status === 'trial') &&
+        termOver
+      ) {
+        sub = await applyScheduledPlan(prisma, sub);
+        summary.scheduledPlanApplied++;
+        // …then the unpaid term goes past_due below, on the new plan.
+      }
 
       // Term ended -> enter the grace window.
       if (
@@ -206,6 +242,160 @@ export async function applyOrgSubscriptionLifecycle(
     return summary;
   }
   return summary;
+}
+
+type ChangeDb = Pick<
+  PrismaClient,
+  'plan' | 'subscription' | 'notification' | 'user'
+> &
+  Partial<Pick<PrismaClient, 'auditLog'>>;
+
+async function notifyOrgAdmins(
+  prisma: ChangeDb,
+  sub: Subscription,
+  type: NotificationType,
+  title: string,
+  body: string,
+) {
+  const recipients = await prisma.user.findMany({
+    where: orgBillingRecipientsWhere(sub.orgId),
+    select: { id: true },
+  });
+  if (recipients.length === 0) return;
+  await prisma.notification.createMany({
+    data: recipients.map((u) => ({
+      orgId: sub.orgId,
+      recipientId: u.id,
+      type,
+      title,
+      body,
+      entity: 'Subscription',
+      entityId: sub.id,
+    })),
+  });
+}
+
+/** The platform's free plan: the system (Basic) plan, else any active ₹0 plan. */
+export async function findFreePlan(prisma: Pick<PrismaClient, 'plan'>) {
+  return (
+    (await prisma.plan.findFirst({
+      where: { isSystem: true, isActive: true },
+    })) ??
+    (await prisma.plan.findFirst({
+      where: { isActive: true, priceMonthly: 0, priceYearly: 0 },
+      orderBy: { createdAt: 'asc' },
+    }))
+  );
+}
+
+/**
+ * Billing v2 cancellation taking effect: the subscription moves to the free
+ * plan (no renewal date, nothing to pay). Returns false when there is no
+ * free plan, so the caller falls back to the normal expiry handling.
+ * Nothing is deleted; until "choose what stays" exists, anything over the
+ * free plan's limits stays as it is but can't grow.
+ */
+export async function moveToFreePlan(
+  prisma: ChangeDb,
+  sub: Subscription,
+): Promise<boolean> {
+  const free = await findFreePlan(prisma);
+  if (!free) return false;
+  const old = await prisma.plan.findUnique({ where: { id: sub.planId } });
+  await prisma.subscription.update({
+    where: { id: sub.id },
+    data: {
+      planId: free.id,
+      billingCycle: 'monthly',
+      status: 'active',
+      amount: 0,
+      mrr: 0,
+      renewsAt: null,
+      graceEndsAt: null,
+      ...NO_SCHEDULED_CHANGE,
+    },
+  });
+  await prisma.auditLog
+    ?.create({
+      data: {
+        orgId: sub.orgId,
+        action: 'subscription_cancelled',
+        entity: 'Subscription',
+        entityId: sub.id,
+        metadata: {
+          source: 'scheduled_cancellation',
+          fromPlanId: sub.planId,
+          toPlanId: free.id,
+          reason: sub.cancelReason ?? null,
+        },
+      },
+    })
+    .catch(() => undefined);
+  await notifyOrgAdmins(
+    prisma,
+    sub,
+    'subscription_expired',
+    'Plan ended',
+    `Your ${old?.name ?? 'paid'} plan has ended as requested. You're on ${free.name} now — nothing was deleted and leads keep coming in.`,
+  );
+  return true;
+}
+
+/**
+ * Billing v2 scheduled downgrade taking effect: switch to the smaller plan /
+ * interval (amount and mrr as everywhere else) and clear the schedule. The
+ * renewal date stays — the next term is paid at the new price.
+ */
+async function applyScheduledPlan(
+  prisma: ChangeDb,
+  sub: Subscription,
+): Promise<Subscription> {
+  const plan = await prisma.plan.findUnique({
+    where: { id: sub.scheduledPlanId! },
+  });
+  if (!plan || !plan.isActive) {
+    // The plan was archived meanwhile: keep the current plan.
+    return prisma.subscription.update({
+      where: { id: sub.id },
+      data: { ...NO_SCHEDULED_CHANGE },
+    });
+  }
+  const interval = sub.scheduledInterval ?? sub.billingCycle;
+  const amount = interval === 'yearly' ? plan.priceYearly : plan.priceMonthly;
+  const updated = await prisma.subscription.update({
+    where: { id: sub.id },
+    data: {
+      planId: plan.id,
+      billingCycle: interval,
+      amount,
+      mrr: interval === 'yearly' ? Math.round(amount / 12) : amount,
+      ...NO_SCHEDULED_CHANGE,
+    },
+  });
+  await prisma.auditLog
+    ?.create({
+      data: {
+        orgId: sub.orgId,
+        action: 'subscription_downgraded',
+        entity: 'Subscription',
+        entityId: sub.id,
+        metadata: {
+          source: 'scheduled_downgrade',
+          fromPlanId: sub.planId,
+          toPlanId: plan.id,
+          billingCycle: interval,
+        },
+      },
+    })
+    .catch(() => undefined);
+  await notifyOrgAdmins(
+    prisma,
+    sub,
+    'package_change_approved',
+    'Plan changed',
+    `Your scheduled change to the "${plan.name}" plan (${interval}) has taken effect.`,
+  );
+  return updated;
 }
 
 async function ensureOrgNotified(

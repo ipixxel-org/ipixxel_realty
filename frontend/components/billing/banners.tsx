@@ -206,8 +206,14 @@ export function BillingBanner({ overview }: { overview: BillingOverview }) {
           Your {plan.name} plan renews automatically{o.paymentMethod ? ` using ${o.paymentMethod.label}` : ""}. Nothing to do.
         </Banner>
       ) : (
-        <Banner tone="amber" icon="calendar" title={`Your ${plan.name} plan renews on ${formatDate(o.periodEnd!)}`} actions={<PayNowButton overview={o} />}>
-          Pay {formatINR(o.renewalAmount ?? 0)} (incl. GST) before then to keep everything running.
+        <Banner
+          tone="amber"
+          icon="calendar"
+          title={o.downgradeTo ? `Your plan changes to ${o.downgradeTo.name} on ${formatDate(o.periodEnd!)}` : `Your ${plan.name} plan renews on ${formatDate(o.periodEnd!)}`}
+          actions={<PayNowButton overview={o} />}
+        >
+          Pay {formatINR(o.renewalAmount ?? 0)} (incl. GST) before then to keep everything running
+          {o.downgradeTo ? ` — that's ${o.downgradeTo.name} (${o.downgradeInterval ?? o.interval}) from then on` : ""}.
         </Banner>
       );
 
@@ -326,7 +332,8 @@ export function BillingBanner({ overview }: { overview: BillingOverview }) {
           }
         >
           You keep {plan.name} until then. From {formatDate(o.downgradeAt!)} you&apos;ll pay{" "}
-          {formatINR(o.interval === "yearly" ? o.downgradeTo!.priceYearly : o.downgradeTo!.priceMonthly)} + GST per {o.interval === "yearly" ? "year" : "month"}.
+          {formatINR((o.downgradeInterval ?? o.interval) === "yearly" ? o.downgradeTo!.priceYearly : o.downgradeTo!.priceMonthly)} + GST per{" "}
+          {(o.downgradeInterval ?? o.interval) === "yearly" ? "year" : "month"}.
         </Banner>
       );
 

@@ -114,11 +114,18 @@ export class OrgBillingV2Service {
         'No plan is configured for this organisation.',
       );
 
+    // A scheduled downgrade: the next term is on that plan / interval.
+    const scheduledRow = subscription?.scheduledPlanId
+      ? (activePlans.find((p) => p.id === subscription.scheduledPlanId) ?? null)
+      : null;
+    const nextInterval =
+      subscription?.scheduledInterval ?? subscription?.billingCycle;
+    const nextPlan = scheduledRow ?? planRow;
     // "Pay now · ₹X" must equal what the renewal checkout charges.
     const price = subscription
-      ? subscription.billingCycle === 'yearly'
-        ? planRow.priceYearly
-        : planRow.priceMonthly
+      ? nextInterval === 'yearly'
+        ? nextPlan.priceYearly
+        : nextPlan.priceMonthly
       : 0;
     const renewalTotalPaise =
       seller && price > 0
@@ -148,6 +155,13 @@ export class OrgBillingV2Service {
             billingCycle: subscription.billingCycle,
             renewsAt: subscription.renewsAt,
             graceEndsAt: subscription.graceEndsAt,
+            cancelAtPeriodEnd: subscription.cancelAtPeriodEnd,
+            scheduled: scheduledRow
+              ? {
+                  plan: toBillingPlan(scheduledRow, rankOf(scheduledRow.id)),
+                  interval: nextInterval ?? subscription.billingCycle,
+                }
+              : null,
           }
         : null,
       counts: { users, projects, landingPages, templates },

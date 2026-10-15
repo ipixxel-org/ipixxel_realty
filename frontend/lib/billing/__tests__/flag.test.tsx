@@ -56,6 +56,7 @@ const overview = (over: Partial<BillingOverview> = {}): BillingOverview => ({
   movedToBasicAt: null,
   cancelAt: null,
   downgradeTo: null,
+  downgradeInterval: null,
   downgradeAt: null,
   renewalAmount: null,
   usage: [
@@ -107,6 +108,10 @@ const apiFetch = vi.fn(async (path: string, init?: RequestInit): Promise<unknown
     backend.overview = { ...backend.overview, billingProfile: profile };
     return profile;
   }
+  if (path === "/org/billing/cancel" && init?.method === "POST") {
+    backend.overview = { ...backend.overview, status: "cancellation_scheduled", cancelAt: backend.overview.periodEnd, renewalAmount: null };
+    return backend.overview;
+  }
   if (path === "/org/billing/checkout" && init?.method === "POST") {
     backend.overview = {
       ...backend.overview,
@@ -156,10 +161,11 @@ async function load(flag: "true" | "false") {
   const overviewMod = await import("@/components/billing/overview");
   const plans = await import("@/components/billing/plans");
   const checkout = await import("@/components/billing/checkout");
+  const planChanges = await import("@/components/billing/plan-changes");
   const index = await import("@/lib/billing");
   // Same fresh module graph as the components (vi.resetModules), so the toast context matches.
   const { ToastProvider } = await import("@/components/ui/toast");
-  return { ...shell, ...locked, ...overviewMod, ...plans, ...checkout, ...index, ToastProvider };
+  return { ...shell, ...locked, ...overviewMod, ...plans, ...checkout, ...planChanges, ...index, ToastProvider };
 }
 
 /* ------------------------------------------------------------------- tests */
@@ -389,7 +395,60 @@ describe("billing v2 flag", () => {
     expect(errors).toEqual([]);
   });
 
-  it("the hybrid client marks exactly the step-1 and step-2 functions as real", async () => {
+  it("cancel: sends the reason, says what happens without pausing, and shows the scheduled state", async () => {
+    backend.overview = overview({ plan: GROWTH, paidPlan: GROWTH, status: "active", periodEnd: "2026-11-10", renewalAmount: 2360 });
+    const { BillingV2Root, CancelScreen, ToastProvider } = await load("true");
+    render(
+      <ToastProvider>
+        <BillingV2Root canEdit>
+          <CancelScreen />
+        </BillingV2Root>
+      </ToastProvider>,
+    );
+    await settle();
+    expect(screen.getByText(/you can't add more until you're within its limits/)).toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: /Choose what stays first/ })).toBeNull();
+    fireEvent.change(screen.getByRole("combobox"), { target: { value: "Too expensive" } });
+    fireEvent.click(screen.getByRole("button", { name: "Cancel plan" }));
+    await settle();
+    fireEvent.click(screen.getByRole("button", { name: "Yes, cancel" }));
+    await settle();
+    const call = apiFetch.mock.calls.find(([p, i]) => p === "/org/billing/cancel" && i?.method === "POST");
+    expect(JSON.parse(String(call![1]!.body))).toEqual({ reason: "Too expensive" });
+    // The toast, and the banner on the refreshed overview.
+    expect(screen.getAllByText("Cancellation scheduled").length).toBeGreaterThanOrEqual(2);
+    expect(push).toHaveBeenCalledWith("/org/settings?section=billing");
+    expect(errors).toEqual([]);
+  });
+
+  it("downgrade: over the smaller plan's limits, it can't be scheduled until the org fits", async () => {
+    backend.overview = overview({
+      plan: GROWTH,
+      paidPlan: GROWTH,
+      status: "active",
+      periodEnd: "2026-11-10",
+      usage: [
+        { key: "users", label: "Users", used: 3, limit: 5 },
+        { key: "projects", label: "Projects", used: 1, limit: null },
+        { key: "landingPages", label: "Landing pages", used: 1, limit: 1 },
+        { key: "templates", label: "Templates", used: 0, limit: null },
+      ],
+    });
+    const { BillingV2Root, DowngradeScreen, ToastProvider } = await load("true");
+    render(
+      <ToastProvider>
+        <BillingV2Root canEdit>
+          <DowngradeScreen planId="uuid-basic" />
+        </BillingV2Root>
+      </ToastProvider>,
+    );
+    await settle();
+    expect(screen.getByText(/You have 3 users; Basic allows 1/)).toBeInTheDocument();
+    expect(screen.getByText(/Remove or deactivate the extra ones first/)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Confirm downgrade/ })).toBeDisabled();
+  });
+
+  it("the hybrid client marks exactly the step 1, 2 and 4 functions as real", async () => {
     const { billingClient, REAL_FUNCTIONS } = await load("true");
     expect(billingClient.isMock).toBe(false);
     expect(Object.entries(REAL_FUNCTIONS).filter(([, v]) => v).map(([k]) => k).sort()).toEqual(
@@ -409,6 +468,11 @@ describe("billing v2 flag", () => {
         "startCheckout",
         "confirmCheckout",
         "listAdminCheckouts",
+        // step 4
+        "cancelPlan",
+        "undoCancel",
+        "scheduleDowngrade",
+        "undoDowngrade",
       ].sort(),
     );
     expect(billingClient.isReal("listInvoices")).toBe(false);

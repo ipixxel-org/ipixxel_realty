@@ -84,6 +84,8 @@ export interface BillingOverviewV2 {
   movedToBasicAt: string | null;
   cancelAt: string | null;
   downgradeTo: BillingPlanV2 | null;
+  /** Billing period after the scheduled downgrade (yearly → monthly is one too). */
+  downgradeInterval: BillingInterval | null;
   downgradeAt: string | null;
   renewalAmount: number | null;
   usage: UsageItemV2[];

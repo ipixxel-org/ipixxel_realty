@@ -168,6 +168,8 @@ export interface BillingOverview {
   movedToBasicAt: string | null;
   cancelAt: string | null;
   downgradeTo: BillingPlan | null;
+  /** Billing period after the scheduled downgrade. */
+  downgradeInterval: BillingInterval | null;
   downgradeAt: string | null;
   /** Next renewal charge incl. GST. null on the free plan with nothing to renew. */
   renewalAmount: number | null;
@@ -332,6 +334,8 @@ export interface CancelPlanRequest {
 
 export interface ScheduleDowngradeRequest {
   planId: PlanId;
+  /** Defaults to the current interval; same plan yearly → monthly is a downgrade too. */
+  interval?: BillingInterval;
 }
 
 /* ---------------------------------------------------- Choose what stays */

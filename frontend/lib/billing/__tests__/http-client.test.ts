@@ -64,6 +64,17 @@ describe("billing http client — step 2", () => {
     expect(lastCall().path).toBe("/admin/billing/checkouts?status=needs_review");
   });
 
+  it("step 4: cancel / downgrade and their undo", async () => {
+    await httpBilling.cancelPlan!({ reason: "Too expensive" });
+    expect(lastCall()).toEqual({ path: "/org/billing/cancel", method: "POST", body: { reason: "Too expensive" } });
+    await httpBilling.undoCancel!();
+    expect(lastCall()).toEqual({ path: "/org/billing/cancel", method: "DELETE", body: undefined });
+    await httpBilling.scheduleDowngrade!({ planId: "p1", interval: "monthly" });
+    expect(lastCall()).toEqual({ path: "/org/billing/downgrade", method: "POST", body: { planId: "p1", interval: "monthly" } });
+    await httpBilling.undoDowngrade!();
+    expect(lastCall()).toEqual({ path: "/org/billing/downgrade", method: "DELETE", body: undefined });
+  });
+
   it("API errors become BillingError with the message and code", async () => {
     apiFetch.mockRejectedValueOnce(new ApiError("Add your billing details first.", 400, { code: "billing_profile_required", message: "Add your billing details first." }));
     const err = await httpBilling.startCheckout!({ planId: "p1", interval: "monthly", purpose: "purchase" }).catch((e: unknown) => e);
