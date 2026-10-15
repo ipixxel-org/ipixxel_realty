@@ -106,6 +106,8 @@ export interface ApiErrorBody {
   statusCode?: number;
   message?: string | string[];
   error?: string;
+  /** Form field the error belongs to, when the backend attributes it. */
+  field?: string;
 }
 
 // --- Signup wizard (resumable, step-wise) ---
