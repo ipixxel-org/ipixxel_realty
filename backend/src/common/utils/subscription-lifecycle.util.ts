@@ -7,6 +7,7 @@ import {
 } from './plan-quota.util';
 import { orgBillingRecipientsWhere } from './notification-recipients.util';
 import { NO_SCHEDULED_CHANGE } from './plan-change.util';
+import { applyRetention, type RetentionDb } from './retention.util';
 
 // ---------------------------------------------------------------------------
 // Subscription expiry lifecycle + plan-package gates for org-owned resources.
@@ -17,7 +18,9 @@ import { NO_SCHEDULED_CHANGE } from './plan-change.util';
 //     (graceEndsAt = renewsAt + gracePeriodDays). During the grace window the
 //     org keeps working — publishing still allowed.
 //   - past_due past graceEndsAt               => `expired` (behavior
-//     'restrict') or `cancelled` (behavior 'cancel'). Publishing (and other
+//     'restrict'), `cancelled` (behavior 'cancel'), or — billing v2,
+//     'fall_back_to_basic' — the free plan with what doesn't fit paused
+//     ("choose what stays"; buying again restores it). Publishing (and other
 //     quota-gated actions) stop for `expired`.
 //   - active/trial whose renewsAt falls within `notifyDays` => an
 //     "expiring soon" popup notification is raised for the org's admins.
@@ -35,7 +38,7 @@ import { NO_SCHEDULED_CHANGE } from './plan-change.util';
 export interface BillingExpiryConfig {
   gracePeriodDays: number;
   notifyDays: number;
-  behavior: 'restrict' | 'cancel';
+  behavior: 'restrict' | 'cancel' | 'fall_back_to_basic';
   message: string;
 }
 
@@ -83,6 +86,11 @@ type PrismaLike = Pick<
   | 'organisationTemplate'
   | 'template'
   | 'plan'
+  // Billing v2 "choose what stays" (retention.util)
+  | 'project'
+  | 'refreshToken'
+  | 'retentionChoice'
+  | 'lead'
 >;
 
 /** Read the Super Admin's expiry policy, falling back to safe defaults. */
@@ -104,7 +112,10 @@ export async function getBillingExpiryConfig(
           ? row.billingExpiryNotifyDays
           : DEFAULT_BILLING_EXPIRY_CONFIG.notifyDays,
       behavior:
-        row.billingExpiryBehavior === 'cancel' ? 'cancel' : 'restrict',
+        row.billingExpiryBehavior === 'cancel' ||
+        row.billingExpiryBehavior === 'fall_back_to_basic'
+          ? row.billingExpiryBehavior
+          : 'restrict',
       message:
         row.billingExpiryMessage?.trim() ||
         DEFAULT_BILLING_EXPIRY_CONFIG.message,
@@ -215,6 +226,13 @@ export async function applyOrgSubscriptionLifecycle(
         sub.graceEndsAt &&
         sub.graceEndsAt.getTime() <= now.getTime()
       ) {
+        if (
+          cfg.behavior === 'fall_back_to_basic' &&
+          (await moveToFreePlan(prisma, sub, 'grace_ended'))
+        ) {
+          summary.movedToFreePlan++;
+          continue;
+        }
         if (cfg.behavior === 'cancel') {
           await prisma.subscription.update({
             where: { id: sub.id },
@@ -248,6 +266,7 @@ type ChangeDb = Pick<
   PrismaClient,
   'plan' | 'subscription' | 'notification' | 'user'
 > &
+  RetentionDb &
   Partial<Pick<PrismaClient, 'auditLog'>>;
 
 async function notifyOrgAdmins(
@@ -289,15 +308,17 @@ export async function findFreePlan(prisma: Pick<PrismaClient, 'plan'>) {
 }
 
 /**
- * Billing v2 cancellation taking effect: the subscription moves to the free
- * plan (no renewal date, nothing to pay). Returns false when there is no
- * free plan, so the caller falls back to the normal expiry handling.
- * Nothing is deleted; until "choose what stays" exists, anything over the
- * free plan's limits stays as it is but can't grow.
+ * Billing v2: a paid plan ends and the org moves to the free plan (no renewal
+ * date, nothing to pay) — a cancellation taking effect, or "fall back to
+ * Basic" when grace ends unpaid. What doesn't fit the free plan is paused
+ * ("choose what stays"); nothing is deleted, and buying again restores it.
+ * Returns false when there is no free plan, so the caller falls back to the
+ * normal expiry handling.
  */
 export async function moveToFreePlan(
   prisma: ChangeDb,
   sub: Subscription,
+  reason: 'cancelled' | 'grace_ended' = 'cancelled',
 ): Promise<boolean> {
   const free = await findFreePlan(prisma);
   if (!free) return false;
@@ -313,8 +334,12 @@ export async function moveToFreePlan(
       renewsAt: null,
       graceEndsAt: null,
       ...NO_SCHEDULED_CHANGE,
+      movedToBasicAt: new Date(),
+      previousPlanId: sub.planId,
+      previousInterval: sub.billingCycle,
     },
   });
+  const retention = await applyRetention(prisma, sub.orgId, free);
   await prisma.auditLog
     ?.create({
       data: {
@@ -323,7 +348,9 @@ export async function moveToFreePlan(
         entity: 'Subscription',
         entityId: sub.id,
         metadata: {
-          source: 'scheduled_cancellation',
+          source:
+            reason === 'grace_ended' ? 'grace_ended_fall_back' : 'scheduled_cancellation',
+          paused: retention.paused,
           fromPlanId: sub.planId,
           toPlanId: free.id,
           reason: sub.cancelReason ?? null,
@@ -335,8 +362,10 @@ export async function moveToFreePlan(
     prisma,
     sub,
     'subscription_expired',
-    'Plan ended',
-    `Your ${old?.name ?? 'paid'} plan has ended as requested. You're on ${free.name} now — nothing was deleted and leads keep coming in.`,
+    reason === 'grace_ended' ? 'Moved to Basic' : 'Plan ended',
+    reason === 'grace_ended'
+      ? `Your ${old?.name ?? 'paid'} plan wasn't renewed, so you're on ${free.name} now. Anything over its limits is paused, not deleted, and leads keep coming in. Buy ${old?.name ?? 'your plan'} again to bring everything back.`
+      : `Your ${old?.name ?? 'paid'} plan has ended as requested. You're on ${free.name} now — anything over its limits is paused, not deleted, and leads keep coming in.`,
   );
   return true;
 }
@@ -372,6 +401,7 @@ async function applyScheduledPlan(
       ...NO_SCHEDULED_CHANGE,
     },
   });
+  await applyRetention(prisma, sub.orgId, plan);
   await prisma.auditLog
     ?.create({
       data: {

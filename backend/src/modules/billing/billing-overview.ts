@@ -10,6 +10,7 @@ import type {
   PaymentMode,
   ManualReason,
   PendingUpgradeV2,
+  RetentionSummaryV2,
   SubscriptionStatusV2,
 } from './billing.types';
 
@@ -54,12 +55,25 @@ export interface OverviewInput {
    * (taxOn). When absent, price × 1.18.
    */
   renewalTotalPaise?: number | null;
+  /** Step 6: the paid plan the org moved down from (now on the free plan). */
+  movedToBasic?: {
+    at: Date;
+    plan: BillingPlanV2;
+    interval: BillingInterval;
+  } | null;
+  /** Step 6: what's paused / view-only / offline right now. */
+  locked?: { users: number; projects: number; landingPages: number };
+  retention?: RetentionSummaryV2 | null;
 }
 
 export function deriveStatus(
-  input: Pick<OverviewInput, 'plan' | 'subscription' | 'now' | 'notifyDays'>,
+  input: Pick<
+    OverviewInput,
+    'plan' | 'subscription' | 'now' | 'notifyDays' | 'movedToBasic'
+  >,
 ): SubscriptionStatusV2 {
   const sub = input.subscription;
+  if (input.plan.isFree && input.movedToBasic) return 'moved_to_basic';
   if (!sub || input.plan.isFree) return 'free';
   switch (sub.status) {
     case 'active':
@@ -89,7 +103,9 @@ export function buildOverview(input: OverviewInput): BillingOverviewV2 {
   const { plan, subscription: sub, now } = input;
   const status = deriveStatus(input);
   const paid = !plan.isFree;
-  const interval: BillingInterval = sub?.billingCycle ?? 'monthly';
+  const moved = input.movedToBasic ?? null;
+  const interval: BillingInterval =
+    moved?.interval ?? sub?.billingCycle ?? 'monthly';
   // renewsAt is set to now + 30 / 365 days by the existing subscription code.
   const cycleDays = interval === 'yearly' ? 365 : 30;
   const periodEnd = paid && sub?.renewsAt ? sub.renewsAt : null;
@@ -111,7 +127,8 @@ export function buildOverview(input: OverviewInput): BillingOverviewV2 {
     orgName: input.orgName,
     ownerName: input.ownerName,
     plan,
-    paidPlan: paid ? plan : null,
+    // On Basic after a paid plan: the one to "buy again".
+    paidPlan: paid ? plan : (moved?.plan ?? null),
     interval,
     status,
     paymentMode: input.mode.mode,
@@ -147,7 +164,7 @@ export function buildOverview(input: OverviewInput): BillingOverviewV2 {
       inGrace && sub?.graceEndsAt
         ? Math.max(0, daysUntil(sub.graceEndsAt, now))
         : 0,
-    movedToBasicAt: null,
+    movedToBasicAt: moved ? isoDate(moved.at) : null,
     cancelAt: cancelling
       ? sub?.status === 'past_due' && sub.graceEndsAt
         ? isoDate(sub.graceEndsAt)
@@ -190,7 +207,7 @@ export function buildOverview(input: OverviewInput): BillingOverviewV2 {
         limit: plan.limits.templates,
       },
     ],
-    locked: { users: 0, projects: 0, landingPages: 0 },
-    retention: null,
+    locked: input.locked ?? { users: 0, projects: 0, landingPages: 0 },
+    retention: input.retention ?? null,
   };
 }

@@ -108,6 +108,17 @@ const apiFetch = vi.fn(async (path: string, init?: RequestInit): Promise<unknown
     backend.overview = { ...backend.overview, billingProfile: profile };
     return profile;
   }
+  if (path.startsWith("/org/billing/retention")) {
+    const item = (id: string, name: string, selected: boolean, locked = false) => ({ id, name, detail: "", reason: "", defaultPicked: selected, selected, locked });
+    return {
+      targetPlan: BASIC,
+      appliesOn: "2026-11-10",
+      isDefault: true,
+      users: [item("u1", "Asha Rao", true, true), item("u2", "Ravi", false), item("u3", "Meena", false)],
+      projects: [item("p1", "Tower A", true)],
+      landingPages: [item("lp1", "Launch", true)],
+    };
+  }
   if (path === "/org/billing/cancel" && init?.method === "POST") {
     backend.overview = { ...backend.overview, status: "cancellation_scheduled", cancelAt: backend.overview.periodEnd, renewalAmount: null };
     return backend.overview;
@@ -395,7 +406,7 @@ describe("billing v2 flag", () => {
     expect(errors).toEqual([]);
   });
 
-  it("cancel: sends the reason, says what happens without pausing, and shows the scheduled state", async () => {
+  it("cancel: sends the reason, explains pausing, and shows the scheduled state", async () => {
     backend.overview = overview({ plan: GROWTH, paidPlan: GROWTH, status: "active", periodEnd: "2026-11-10", renewalAmount: 2360 });
     const { BillingV2Root, CancelScreen, ToastProvider } = await load("true");
     render(
@@ -406,8 +417,8 @@ describe("billing v2 flag", () => {
       </ToastProvider>,
     );
     await settle();
-    expect(screen.getByText(/you can't add more until you're within its limits/)).toBeInTheDocument();
-    expect(screen.queryByRole("link", { name: /Choose what stays first/ })).toBeNull();
+    expect(screen.getByText(/whatever doesn't fit on Basic is paused/)).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /Choose what stays first/ })).toBeInTheDocument();
     fireEvent.change(screen.getByRole("combobox"), { target: { value: "Too expensive" } });
     fireEvent.click(screen.getByRole("button", { name: "Cancel plan" }));
     await settle();
@@ -421,7 +432,7 @@ describe("billing v2 flag", () => {
     expect(errors).toEqual([]);
   });
 
-  it("downgrade: over the smaller plan's limits, it can't be scheduled until the org fits", async () => {
+  it("downgrade over the smaller plan's limits: shows what stays and can be scheduled", async () => {
     backend.overview = overview({
       plan: GROWTH,
       paidPlan: GROWTH,
@@ -444,12 +455,16 @@ describe("billing v2 flag", () => {
     );
     await settle();
     expect(screen.getByText(/You have 3 users; Basic allows 1/)).toBeInTheDocument();
-    expect(screen.getByText(/Remove or deactivate the extra ones first/)).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /Confirm downgrade/ })).toBeDisabled();
+    expect(screen.getByText(/the extra ones are paused, not deleted/)).toBeInTheDocument();
+    expect(apiFetch).toHaveBeenCalledWith("/org/billing/retention?targetPlanId=uuid-basic");
+    expect(screen.getByText(/Asha Rao/)).toBeInTheDocument(); // the default pick that stays
+    expect(screen.getByRole("link", { name: /Choose what stays/ })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Confirm downgrade/ })).toBeEnabled();
+    expect(errors).toEqual([]);
   });
 
-  it("the hybrid client marks exactly the step 1, 2, 4 and 5 functions as real", async () => {
-    const { billingClient, REAL_FUNCTIONS } = await load("true");
+  it("the hybrid client marks exactly the step 1, 2, 4, 5 and 6 functions as real", async () => {
+    const { billingClient, REAL_FUNCTIONS, BillingError } = await load("true");
     expect(billingClient.isMock).toBe(false);
     expect(Object.entries(REAL_FUNCTIONS).filter(([, v]) => v).map(([k]) => k).sort()).toEqual(
       [
@@ -478,10 +493,13 @@ describe("billing v2 flag", () => {
         "getCoupon",
         "saveCoupon",
         "listOrgOptions",
+        // step 6
+        "getRetentionChoices",
+        "saveRetentionChoices",
       ].sort(),
     );
     expect(billingClient.isReal("listInvoices")).toBe(false);
-    // A still-mock function that can't handle a real plan id says so plainly.
-    await expect(billingClient.getRetentionChoices({ targetPlanId: "uuid-growth" })).rejects.toThrow("This isn't available yet.");
+    // A still-mock function asked about a real organisation fails as a BillingError.
+    await expect(billingClient.getSubscription("uuid-org")).rejects.toBeInstanceOf(BillingError);
   });
 });

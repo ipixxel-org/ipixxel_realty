@@ -141,6 +141,7 @@ export async function assertOrgSessionActive(
       mustChangePassword: true,
       tokenInvalidBefore: true,
       onboardingStep: true,
+      billingPausedAt: true,
     },
   });
 
@@ -154,6 +155,14 @@ export async function assertOrgSessionActive(
   if (user?.status === 'disabled') {
     throw userInactive(
       'Your account access has been revoked. Please contact your administrator.',
+    );
+  }
+
+  // Billing v2 "choose what stays": paused because the organisation moved to
+  // a smaller plan — end the session (the login page then explains why).
+  if (user?.billingPausedAt) {
+    throw userInactive(
+      'Your account is paused because your organisation moved to a smaller plan. Ask the owner to bring it back.',
     );
   }
 

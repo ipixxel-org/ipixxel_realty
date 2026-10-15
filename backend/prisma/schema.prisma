@@ -225,6 +225,10 @@ model User {
   mustChangePassword  Boolean    @default(false) @map("must_change_password")
   failedLoginAttempts Int        @default(0) @map("failed_login_attempts")
   lockedUntil         DateTime?  @map("locked_until")
+  // Billing v2: paused because the organisation moved to a smaller plan
+  // ("choose what stays"). Can't sign in; doesn't take a seat. Cleared when
+  // the plan has room again.
+  billingPausedAt     DateTime?  @map("billing_paused_at")
   createdAt           DateTime   @default(now()) @map("created_at")
 
   // Set when an Organisation Admin approves a pending member. Null = still
@@ -1092,6 +1096,12 @@ model Subscription {
   // couponRenewalsLeft null = every renewal (forever).
   couponId           String?       @map("coupon_id")
   couponRenewalsLeft Int?          @map("coupon_renewals_left")
+  // Set when a paid plan ended and the org moved to the free plan
+  // (cancellation, or "fall back to Basic" after grace); kept so the UI can
+  // offer "Buy <plan> again". Cleared by any purchase.
+  movedToBasicAt     DateTime?     @map("moved_to_basic_at")
+  previousPlanId     String?       @map("previous_plan_id")
+  previousInterval   BillingCycle? @map("previous_interval")
   createdAt    DateTime           @default(now()) @map("created_at")
   updatedAt    DateTime           @updatedAt @map("updated_at")
 
@@ -1342,6 +1352,25 @@ enum CouponIntervalScope {
   @@schema("billing")
 }
 
+// "Choose what stays": what an organisation keeps active on a smaller plan.
+// One row per organisation, for one target plan; when no row matches the plan
+// the org moves to, the default picks apply (owner, admins, latest login;
+// latest-updated projects; landing pages with most leads in 30 days).
+model RetentionChoice {
+  id             String   @id @default(uuid())
+  organisationId String   @unique @map("organisation_id")
+  targetPlanId   String   @map("target_plan_id")
+  userIds        String[] @map("user_ids")
+  projectIds     String[] @map("project_ids")
+  landingPageIds String[] @map("landing_page_ids")
+  updatedById    String?  @map("updated_by_id")
+  createdAt      DateTime @default(now()) @map("created_at")
+  updatedAt      DateTime @updatedAt @map("updated_at")
+
+  @@map("retention_choices")
+  @@schema("billing")
+}
+
 // A discount code Super Admins create; entered at checkout, taken off
 // before GST. Codes are stored upper-case and never renamed.
 model Coupon {
@@ -1478,6 +1507,9 @@ model LandingPage {
   reviewedById     String?           @map("reviewed_by_id")
   rejectionReason  String?           @map("rejection_reason")
   publishedAt      DateTime?         @map("published_at")
+  // Billing v2: taken offline (status unpublished) because the organisation
+  // moved to a smaller plan; republished when there's room again.
+  billingOfflineAt DateTime?         @map("billing_offline_at")
   createdAt        DateTime          @default(now()) @map("created_at")
   updatedAt        DateTime          @updatedAt @map("updated_at")
 
@@ -2266,6 +2298,10 @@ model Project {
   // from UnitType.floorPlanUrl, which is the plan for one configuration and
   // can only exist once unit types are created after publish.
   floorPlanUrls          String[] @default([]) @map("floor_plan_urls")
+
+  // Billing v2: view-only because the organisation moved to a smaller plan;
+  // doesn't count towards the project limit. Cleared when there's room again.
+  billingViewOnlyAt DateTime? @map("billing_view_only_at")
 
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")

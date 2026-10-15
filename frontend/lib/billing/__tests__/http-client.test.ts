@@ -89,6 +89,16 @@ describe("billing http client — step 2", () => {
     expect(lastCall().path).toBe("/admin/billing/org-options");
   });
 
+  it("step 6: choose what stays", async () => {
+    await httpBilling.getRetentionChoices!({});
+    expect(lastCall().path).toBe("/org/billing/retention");
+    await httpBilling.getRetentionChoices!({ targetPlanId: "p 1" });
+    expect(lastCall().path).toBe("/org/billing/retention?targetPlanId=p%201");
+    const req = { targetPlanId: "p1", userIds: ["u1"], projectIds: [], landingPageIds: ["lp1"] };
+    await httpBilling.saveRetentionChoices!(req);
+    expect(lastCall()).toEqual({ path: "/org/billing/retention", method: "PUT", body: req });
+  });
+
   it("API errors become BillingError with the message and code", async () => {
     apiFetch.mockRejectedValueOnce(new ApiError("Add your billing details first.", 400, { code: "billing_profile_required", message: "Add your billing details first." }));
     const err = await httpBilling.startCheckout!({ planId: "p1", interval: "monthly", purpose: "purchase" }).catch((e: unknown) => e);

@@ -37,10 +37,11 @@ export const REAL_FUNCTIONS: Record<BillingFunction, boolean> = {
   getCoupon: true,
   saveCoupon: true,
   listOrgOptions: true,
+  // Step 6 — choose what stays (applied by the backend on every plan change)
+  getRetentionChoices: true,
+  saveRetentionChoices: true,
   // Still mock
   updatePaymentMethod: false, // not offered: renewals are "pay each time"
-  getRetentionChoices: false,
-  saveRetentionChoices: false,
   listInvoices: false,
   listPayments: false,
   listSubscriptions: false,

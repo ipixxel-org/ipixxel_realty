@@ -10,6 +10,7 @@ type Where = Record<string, any>;
 
 function matches(row: Row, where: Where = {}): boolean {
   return Object.entries(where).every(([key, cond]) => {
+    if (key === 'OR') return (cond as Where[]).some((w) => matches(row, w));
     const v = row[key];
     if (cond !== null && typeof cond === 'object' && !(cond instanceof Date)) {
       if ('in' in cond) return (cond.in as unknown[]).includes(v);
@@ -125,6 +126,10 @@ function table(
 export interface Seed {
   plans: Row[];
   subscription?: Row | null;
+  /** Extra org users / projects / landing pages (for choose-what-stays tests). */
+  users?: Row[];
+  projects?: Row[];
+  landingPages?: Row[];
   usage?: {
     users?: number;
     projects?: number;
@@ -183,13 +188,33 @@ export function createFakeBillingDb(seed: Seed) {
   db.payment = table([], 'pay');
   db.auditLog = table([], 'audit');
   db.notification = table([], 'note');
-  db.user = {
-    ...table([], 'user'),
-    count: async () => usage.users,
-    findMany: async () => [{ id: 'u-admin' }],
-  };
-  db.project = { count: async () => usage.projects };
-  db.landingPage = { count: async () => usage.landingPages };
+  // One org admin (the owner). Counts come from `usage`; the rows below are
+  // what "choose what stays" (retention.util) reads and pauses.
+  const users = table(
+    [
+      {
+        id: 'u-admin',
+        orgId: 'org-1',
+        status: 'active',
+        firstName: 'Asha',
+        lastName: null,
+        email: 'asha@acme.test',
+        billingPausedAt: null,
+        createdAt: new Date(0),
+        userRoles: [{ role: { key: 'admin', name: 'Admin' } }],
+      },
+      ...(seed.users ?? []),
+    ],
+    'user',
+  );
+  db.user = { ...users, count: async () => usage.users };
+  const projects = table([...(seed.projects ?? [])], 'proj');
+  db.project = { ...projects, count: async () => usage.projects };
+  const pages = table([...(seed.landingPages ?? [])], 'page');
+  db.landingPage = { ...pages, count: async () => usage.landingPages };
+  db.refreshToken = table([], 'rt');
+  db.retentionChoice = table([], 'ret');
+  db.lead = { groupBy: async () => [] };
   db.organisationTemplate = { count: async () => usage.templates };
 
   let chain = Promise.resolve();

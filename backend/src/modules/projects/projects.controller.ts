@@ -15,6 +15,7 @@ import { PermissionGuard } from '../../common/guards/permission.guard';
 import { RequirePermission } from '../../common/decorators/require-permission.decorator';
 import { PROJECT_UNIT_ACTIONS } from '../../common/utils/permissions.util';
 import { OrgApprovedGuard } from '../../common/guards/org-approved.guard';
+import { ProjectEditableGuard } from '../../common/guards/project-editable.guard';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import type { JwtPayload } from '../../common/types/jwt-payload.interface';
 import { ProjectsService } from './projects.service';
@@ -104,6 +105,8 @@ export class ProjectsController {
   }
 
   @Patch(':id')
+  // Billing v2: not on a project made view-only by a smaller plan.
+  @UseGuards(ProjectEditableGuard)
   @RequirePermission('projects', 'edit', ENFORCE)
   update(
     @CurrentUser() user: JwtPayload,
@@ -136,6 +139,8 @@ export class ProjectsController {
   }
 
   @Put(':id/sales-agents')
+  // Billing v2: not on a project made view-only by a smaller plan.
+  @UseGuards(ProjectEditableGuard)
   @RequirePermission('projects', 'edit', ENFORCE)
   setSalesAgents(
     @CurrentUser() user: JwtPayload,
@@ -148,6 +153,8 @@ export class ProjectsController {
   // --- Unit types (nested under a project) ---
 
   @Post(':projectId/unit-types')
+  // Billing v2: not on a project made view-only by a smaller plan.
+  @UseGuards(ProjectEditableGuard)
   @RequirePermission('projects', PROJECT_UNIT_ACTIONS.add, ENFORCE)
   createUnitType(
     @CurrentUser() user: JwtPayload,
@@ -177,6 +184,8 @@ export class ProjectsController {
   }
 
   @Patch(':projectId/unit-types/:id')
+  // Billing v2: not on a project made view-only by a smaller plan.
+  @UseGuards(ProjectEditableGuard)
   @RequirePermission('projects', PROJECT_UNIT_ACTIONS.edit, ENFORCE)
   updateUnitType(
     @CurrentUser() user: JwtPayload,
@@ -193,6 +202,8 @@ export class ProjectsController {
   }
 
   @Delete(':projectId/unit-types/:id')
+  // Billing v2: not on a project made view-only by a smaller plan.
+  @UseGuards(ProjectEditableGuard)
   @RequirePermission('projects', PROJECT_UNIT_ACTIONS.delete, ENFORCE)
   removeUnitType(
     @CurrentUser() user: JwtPayload,
@@ -205,6 +216,8 @@ export class ProjectsController {
   // --- Units (flat per project; the owning unit type is in the body) ---
 
   @Post(':projectId/units')
+  // Billing v2: not on a project made view-only by a smaller plan.
+  @UseGuards(ProjectEditableGuard)
   @RequirePermission('projects', PROJECT_UNIT_ACTIONS.add, ENFORCE)
   createUnit(
     @CurrentUser() user: JwtPayload,
@@ -240,6 +253,8 @@ export class ProjectsController {
   }
 
   @Patch(':projectId/units/:id')
+  // Billing v2: not on a project made view-only by a smaller plan.
+  @UseGuards(ProjectEditableGuard)
   @RequirePermission('projects', PROJECT_UNIT_ACTIONS.edit, ENFORCE)
   updateUnit(
     @CurrentUser() user: JwtPayload,
@@ -257,6 +272,8 @@ export class ProjectsController {
   }
 
   @Patch(':projectId/units/:id/status')
+  // Billing v2: not on a project made view-only by a smaller plan.
+  @UseGuards(ProjectEditableGuard)
   @RequirePermission('projects', PROJECT_UNIT_ACTIONS.edit, ENFORCE)
   updateUnitStatus(
     @CurrentUser() user: JwtPayload,
@@ -274,6 +291,8 @@ export class ProjectsController {
   }
 
   @Delete(':projectId/units/:id')
+  // Billing v2: not on a project made view-only by a smaller plan.
+  @UseGuards(ProjectEditableGuard)
   @RequirePermission('projects', PROJECT_UNIT_ACTIONS.delete, ENFORCE)
   removeUnit(
     @CurrentUser() user: JwtPayload,

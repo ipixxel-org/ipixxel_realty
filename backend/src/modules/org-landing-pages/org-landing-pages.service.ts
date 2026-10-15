@@ -680,15 +680,24 @@ export class OrgLandingPagesService {
     // on an upgrade/renewal — the gate fires exactly at publish.
     await assertOrgCanPublish(this.prisma, orgId, page.id);
 
+    // Publishing it again (within the plan's limit) ends a billing "offline".
     const updated = await this.prisma.landingPage.update({
       where: { id },
-      data: { status: 'published', publishedAt: new Date() },
+      data: {
+        status: 'published',
+        publishedAt: new Date(),
+        billingOfflineAt: null,
+      },
     });
 
     if (page.pageType === 'landing') {
       await this.prisma.landingPage.updateMany({
         where: { parentId: page.id, orgId, pageType: 'thank_you' },
-        data: { status: 'published', publishedAt: new Date() },
+        data: {
+          status: 'published',
+          publishedAt: new Date(),
+          billingOfflineAt: null,
+        },
       });
     }
 

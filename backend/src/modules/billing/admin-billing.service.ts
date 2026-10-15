@@ -195,7 +195,11 @@ export class AdminBillingService {
       notifyDaysBefore: Number(cfg.billingExpiryNotifyDays),
       graceDays: Number(cfg.billingGracePeriodDays),
       afterGrace:
-        cfg.billingExpiryBehavior === 'cancel' ? 'cancel' : 'restrict',
+        cfg.billingExpiryBehavior === 'cancel'
+          ? 'cancel'
+          : cfg.billingExpiryBehavior === 'fall_back_to_basic'
+            ? 'fall_back_to_basic'
+            : 'restrict',
       expiryMessage: String(cfg.billingExpiryMessage),
       // Fixed schedule until reminders are stored (later step).
       reminders: [
@@ -207,18 +211,13 @@ export class AdminBillingService {
       onlinePaymentsEnabled: cfg.onlinePaymentsEnabled === true,
       paymentMode: mode.mode,
       paymentModeReason: mode.reason,
-      supports: { fallBackToBasic: false, reminderSchedule: false },
+      supports: { fallBackToBasic: true, reminderSchedule: false },
       seller,
       warnings: sellerWarnings(seller),
     };
   }
 
   async saveLifecycle(dto: SaveLifecycleDto): Promise<LifecycleSettingsV2> {
-    if (dto.afterGrace === 'fall_back_to_basic') {
-      throw new BadRequestException(
-        '"Fall back to Basic" isn\'t available yet. Choose Restrict or Cancel for now.',
-      );
-    }
     const seller = dto.seller ? cleanSeller(dto.seller) : null;
     const problem = seller ? sellerProblem(seller) : null;
     if (problem) throw new BadRequestException(problem);

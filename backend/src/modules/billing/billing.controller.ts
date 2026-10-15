@@ -32,6 +32,11 @@ import {
 import { SaveBillingProfileDto } from './dto/save-billing-profile.dto';
 import { BillingPlanChangeService } from './billing-plan-change.service';
 import { CancelPlanDto, ScheduleDowngradeDto } from './dto/plan-change.dto';
+import { BillingRetentionService } from './billing-retention.service';
+import {
+  RetentionQueryDto,
+  SaveRetentionChoicesDto,
+} from './dto/retention.dto';
 import { AdminCouponsService } from './admin-coupons.service';
 import { SaveCouponDto } from './dto/coupon.dto';
 
@@ -48,7 +53,27 @@ export class OrgBillingV2Controller {
     private readonly profiles: BillingProfileService,
     private readonly checkouts: BillingCheckoutService,
     private readonly changes: BillingPlanChangeService,
+    private readonly retention: BillingRetentionService,
   ) {}
+
+  // Step 6: choose what stays on a smaller plan
+  @RequirePermission('billing', 'view')
+  @Get('retention')
+  getRetention(
+    @CurrentUser() user: JwtPayload,
+    @Query() query: RetentionQueryDto,
+  ) {
+    return this.retention.getChoices(user.orgId as string, query.targetPlanId);
+  }
+
+  @RequirePermission('billing', 'edit')
+  @Put('retention')
+  saveRetention(
+    @CurrentUser() user: JwtPayload,
+    @Body() dto: SaveRetentionChoicesDto,
+  ) {
+    return this.retention.saveChoices(user.orgId as string, user.sub, dto);
+  }
 
   @RequirePermission('billing', 'view')
   @Get('v2')

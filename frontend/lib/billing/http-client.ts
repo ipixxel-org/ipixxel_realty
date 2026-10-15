@@ -64,6 +64,11 @@ export const httpBilling: Impl = {
   saveCoupon: (req) =>
     req.isNew ? call("/admin/billing/coupons", post(req)) : call(`/admin/billing/coupons/${encodeURIComponent(req.coupon.code)}`, put(req)),
   listOrgOptions: () => call("/admin/billing/org-options"),
+
+  // Step 6 — choose what stays on a smaller plan
+  getRetentionChoices: (req) =>
+    call(`/org/billing/retention${req.targetPlanId ? `?targetPlanId=${encodeURIComponent(req.targetPlanId)}` : ""}`),
+  saveRetentionChoices: (req) => call("/org/billing/retention", put(req)),
 };
 
 export const HTTP_FUNCTIONS = Object.keys(httpBilling) as BillingFunction[];

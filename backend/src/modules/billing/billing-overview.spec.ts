@@ -247,11 +247,18 @@ describe('OrgBillingV2Service.getOverview', () => {
 
     const o = await service.getOverview('org-1', NOW);
 
-    // The agreed counting rules: active + pending users; every project; published landing pages.
+    // The agreed counting rules: active + pending users (not paused by billing);
+    // every project (not view-only); published landing pages.
     expect(userCount).toHaveBeenCalledWith({
-      where: { orgId: 'org-1', status: { in: ['active', 'pending'] } },
+      where: {
+        orgId: 'org-1',
+        status: { in: ['active', 'pending'] },
+        billingPausedAt: null,
+      },
     });
-    expect(projectCount).toHaveBeenCalledWith({ where: { orgId: 'org-1' } });
+    expect(projectCount).toHaveBeenCalledWith({
+      where: { orgId: 'org-1', billingViewOnlyAt: null },
+    });
     expect(pageCount).toHaveBeenCalledWith({
       where: { orgId: 'org-1', pageType: 'landing', status: 'published' },
     });

@@ -90,7 +90,36 @@ export interface BillingOverviewV2 {
   renewalAmount: number | null;
   usage: UsageItemV2[];
   locked: { users: number; projects: number; landingPages: number };
-  retention: null;
+  /** What stays on the plan the org is moving to (grace / cancel / downgrade / Basic). */
+  retention: RetentionSummaryV2 | null;
+}
+
+export interface RetentionSummaryV2 {
+  targetPlanId: string;
+  targetPlanName: string;
+  isDefault: boolean;
+  users: string[];
+  projects: string[];
+  landingPages: string[];
+}
+
+export interface RetentionItemV2 {
+  id: string;
+  name: string;
+  detail: string;
+  reason: string;
+  defaultPicked: boolean;
+  selected: boolean;
+  locked: boolean;
+}
+
+export interface RetentionChoicesV2 {
+  targetPlan: BillingPlanV2;
+  appliesOn: string | null;
+  isDefault: boolean;
+  users: RetentionItemV2[];
+  projects: RetentionItemV2[];
+  landingPages: RetentionItemV2[];
 }
 
 export interface AccessStatusV2 {

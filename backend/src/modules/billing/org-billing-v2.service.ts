@@ -11,6 +11,7 @@ import {
 } from '../../common/utils/subscription-lifecycle.util';
 import { PlatformConfigService } from '../platform-config/platform-config.service';
 import { BillingModeService } from './billing-mode.service';
+import { BillingRetentionService } from './billing-retention.service';
 import { buildOverview } from './billing-overview';
 import { toProfileV2 } from './billing-profile.service';
 import { expireStaleCheckouts, findPendingUpgrade } from './checkout-state';
@@ -39,6 +40,8 @@ export class OrgBillingV2Service {
     private readonly mode: BillingModeService,
     // Optional so unit tests can leave it out (then renewalAmount is price × 1.18).
     private readonly platformConfig?: PlatformConfigService,
+    // Optional for the same reason: without it nothing shows as paused.
+    private readonly retention?: BillingRetentionService,
   ) {}
 
   /** Active plans in rank order (free plan first). */
@@ -97,6 +100,19 @@ export class OrgBillingV2Service {
       }),
       findPendingUpgrade(this.prisma, orgId),
     ]);
+    // Step 6: what's paused, what will stay, and the plan moved down from.
+    const [paused, retentionSummary] = this.retention
+      ? await Promise.all([
+          this.retention.paused(orgId),
+          this.retention.summary(orgId),
+        ])
+      : [null, null];
+    const previousRow =
+      subscription?.movedToBasicAt && subscription.previousPlanId
+        ? await this.prisma.plan.findUnique({
+            where: { id: subscription.previousPlanId },
+          })
+        : null;
     const seller = this.platformConfig
       ? await this.platformConfig.getSellerSettings()
       : null;
@@ -186,6 +202,22 @@ export class OrgBillingV2Service {
       graceDays: cfg.gracePeriodDays,
       mode,
       renewalTotalPaise,
+      movedToBasic:
+        subscription?.movedToBasicAt && previousRow
+          ? {
+              at: subscription.movedToBasicAt,
+              plan: toBillingPlan(previousRow, rankOf(previousRow.id)),
+              interval: subscription.previousInterval ?? 'monthly',
+            }
+          : null,
+      locked: paused
+        ? {
+            users: paused.pausedUserIds.length,
+            projects: paused.viewOnlyProjectIds.length,
+            landingPages: paused.offlineLandingPageIds.length,
+          }
+        : undefined,
+      retention: retentionSummary,
     });
   }
 
@@ -200,9 +232,13 @@ export class OrgBillingV2Service {
       planName: o.plan.name,
       limits: o.plan.limits,
       modules: o.plan.modules,
-      pausedUserIds: [],
-      viewOnlyProjectIds: [],
-      offlineLandingPageIds: [],
+      ...(this.retention
+        ? await this.retention.paused(orgId)
+        : {
+            pausedUserIds: [],
+            viewOnlyProjectIds: [],
+            offlineLandingPageIds: [],
+          }),
     };
   }
 }

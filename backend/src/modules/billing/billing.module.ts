@@ -17,6 +17,7 @@ import { BillingProfileService } from './billing-profile.service';
 import { BillingCheckoutService } from './billing-checkout.service';
 import { BillingPlanChangeService } from './billing-plan-change.service';
 import { AdminCouponsService } from './admin-coupons.service';
+import { BillingRetentionService } from './billing-retention.service';
 
 /**
  * Billing v2 (docs/billing-ui-contract.md). Built on the existing payments
@@ -38,6 +39,7 @@ import { AdminCouponsService } from './admin-coupons.service';
     BillingCheckoutService,
     BillingPlanChangeService,
     AdminCouponsService,
+    BillingRetentionService,
     OrgApprovedGuard,
     PermissionGuard,
     SuperAdminGuard,

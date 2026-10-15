@@ -55,8 +55,9 @@ export class UpdatePlatformConfigDto {
 
   /** What happens when the grace period lapses: 'restrict' | 'cancel'. */
   @IsOptional()
-  @IsIn(['restrict', 'cancel'])
-  billingExpiryBehavior?: 'restrict' | 'cancel';
+  // fall_back_to_basic: billing v2 (set from the v2 lifecycle card).
+  @IsIn(['restrict', 'cancel', 'fall_back_to_basic'])
+  billingExpiryBehavior?: 'restrict' | 'cancel' | 'fall_back_to_basic';
 
   /** Notification body for the expiring / past-due popups. */
   @IsOptional()

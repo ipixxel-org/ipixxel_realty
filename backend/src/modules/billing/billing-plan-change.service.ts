@@ -1,6 +1,5 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../../database/prisma.service';
-import { assertPlanFitsCurrentUsage } from '../../common/utils/plan-quota.util';
 import { NO_SCHEDULED_CHANGE } from '../../common/utils/plan-change.util';
 import {
   applyOrgSubscriptionLifecycle,
@@ -190,16 +189,8 @@ export class BillingPlanChangeService {
         'You have an upgrade request waiting for approval. Cancel it first.',
       );
     }
-    // Nothing is paused yet ("choose what stays" comes later), so the org
-    // has to fit the smaller plan before it can schedule it.
-    try {
-      await assertPlanFitsCurrentUsage(this.prisma, orgId, target);
-    } catch (e) {
-      throw billingError(
-        'over_plan_limits',
-        e instanceof Error ? e.message : String(e),
-      );
-    }
+    // Over the smaller plan's limits is fine: what doesn't fit is paused
+    // when it starts ("choose what stays", retention.util).
 
     await this.prisma.subscription.update({
       where: { id: sub.id },

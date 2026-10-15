@@ -22,6 +22,7 @@ client is the reference behaviour (see `frontend/lib/billing/__tests__/mock-clie
 | 3 | Renewals through the same functions: `previewCheckout` / `startCheckout` with `purpose: "renewal"` (no new client function) | `quoteRenewal` in `checkout-quote.ts`, `renewalPeriodEnd` in `plan-change.util.ts` |
 | 4 | `cancelPlan`, `undoCancel`, `scheduleDowngrade`, `undoDowngrade` | `billing-plan-change.service.ts`; applied by the lifecycle sweep (`subscription-lifecycle.util.ts`) |
 | 5 | `listCoupons`, `getCoupon`, `saveCoupon`, `listOrgOptions`; coupons in `previewCheckout` / `startCheckout` | `coupon-rules.ts`, `coupon-settlement.ts`, `admin-coupons.service.ts` |
+| 6 | `getRetentionChoices`, `saveRetentionChoices`; pausing behind `getAccessStatus` / the overview | `common/utils/retention.util.ts`, `billing-retention.service.ts`, `common/guards/project-editable.guard.ts` |
 
 Everything else is mock. `updatePaymentMethod` stays unimplemented on purpose: renewals are
 "pay each time" through the existing Razorpay Orders + Checkout flow (no Razorpay
@@ -121,19 +122,17 @@ period rule (`applyPlanChange`).
   `nothing_scheduled`.
 - **Downgrade** (`POST /org/billing/downgrade` `{ planId, interval? }`, undo `DELETE`): a
   smaller plan, or the same plan yearly → monthly; a free target is a cancellation. Only while
-  active (not in grace: `downgrade_not_now`), not with a pending upgrade request
-  (`request_pending`), and the org must already fit the smaller plan (`over_plan_limits`) —
-  nothing can be paused until "choose what stays" is real, so the UI disables Confirm and says
-  to remove the extras first. Other codes: `same_plan`, `not_a_downgrade`, `plan_not_found`.
+  active (not in grace: `downgrade_not_now`) and not with a pending upgrade request
+  (`request_pending`). Being over the smaller plan's limits is fine since step 6 — the extras
+  are paused when it starts. Other codes: `same_plan`, `not_a_downgrade`, `plan_not_found`.
 - **When the term ends:** the renewal paid before then is charged at the smaller plan's price
-  and switches to it (usage re-checked → `needs_review` if over). Unpaid, the sweep switches the
-  plan at `renewsAt` and the term goes into grace on the smaller plan as usual.
+  and switches to it. Unpaid, the sweep switches the plan at `renewsAt` and the term goes into
+  grace on the smaller plan as usual. Either way what doesn't fit is paused (step 6).
 - **Overview:** `downgradeTo`, new `downgradeInterval`, `downgradeAt` (= period end); status
   `downgrade_scheduled`, except in the renewal window, where `renewal_due` shows first (Pay now
   at the smaller price, banner says the plan changes).
-- **Not yet:** pausing what doesn't fit (cancel to Basic leaves extra users/projects/pages as
-  they are, but nothing new can be added past Basic's limits) — that is "choose what stays".
-  The Super Admin "Renew" on a cancelling subscription doesn't clear the cancellation.
+- **Not yet:** the Super Admin "Renew" on a cancelling subscription doesn't clear the
+  cancellation.
 
 ### Step 5 notes — coupons
 
@@ -166,6 +165,44 @@ period rule (`applyPlanChange`).
   redemptions, `totalDiscount`). `GET /admin/billing/org-options` → every organisation with its
   city and current plan.
 
+### Step 6 notes — choose what stays, fall back to Basic
+
+- **What "paused" means** (nothing is ever deleted):
+  - users: `users.billing_paused_at` — can't sign in (login → 403 `{ code: "account_paused",
+    orgName, ownerName, planName, planUserLimit }`; an open session ends on its next request with
+    `USER_INACTIVE`; refresh tokens are revoked), and doesn't take a seat;
+  - projects: `projects.billing_view_only_at` — open but not editable (`ProjectEditableGuard` on
+    the project / unit-type / unit / sales-agent edit routes → 403 `project_view_only`; deleting
+    is allowed), and doesn't count towards the limit;
+  - landing pages: status `unpublished` + `landing_pages.billing_offline_at` (thank-you pages
+    follow), so the public slug route answers 404 and the publish limit sees room. Publishing a
+    page again by hand (within the limit) clears the marker.
+  The counting rules (`plan-quota.util`) skip paused users and view-only projects.
+- **What stays:** the org's saved choice for that plan (`billing.retention_choices`, one per
+  org), else the default picks — owner, then admins, then latest sign-in (newest refresh token);
+  projects by latest update; landing pages by most leads in 30 days (`retention.util.ts`, same
+  rule as `default-picks.ts`). The owner always stays.
+- **When it applies:** on every plan change — `applyPlanChange` (purchase, renewal, approval:
+  a bigger plan restores everything), a cancellation or "fall back to Basic" taking effect, a
+  scheduled downgrade taking effect — and at once when the org saves a choice for the plan it's
+  already on.
+- **Fall back to Basic:** `afterGrace: "fall_back_to_basic"` is now allowed
+  (`supports.fallBackToBasic: true`): when grace ends unpaid the org moves to the free plan with
+  the extras paused (notification "Moved to Basic"). A cancellation taking effect does the same.
+  Either way the subscription keeps `movedToBasicAt` / `previousPlanId` / `previousInterval`;
+  the overview shows `status: "moved_to_basic"`, `movedToBasicAt`, `paidPlan` = the plan to buy
+  again, and `locked` counts. Buying any plan clears them.
+- **API:** `GET /org/billing/retention?targetPlanId=` (default target: the scheduled downgrade,
+  else the free plan; `appliesOn` = renewal date, grace end, or null when already there) and
+  `PUT /org/billing/retention` → `RetentionChoices`. Refusals: `retention_over_limit` ("Basic
+  allows 2 users."), `retention_owner`, `retention_unknown`, `plan_not_found`.
+  `BillingOverview.retention` (a `RetentionSummary`) is filled while the org is heading to a
+  smaller plan (grace with fall back, cancelling, downgrading) or is on Basic after a paid plan.
+  `getAccessStatus` returns the real paused / view-only / offline ids.
+- **Not changed:** `GET /public/site/page-by-id/:id` (the builder preview) still serves any page,
+  as it does for drafts. The public slug route still falls back to unpublished pages for pages
+  unpublished by hand (existing behaviour); only billing-offline pages are excluded.
+
 ### Step 1 notes
 
 - **Unlimited:** `PlanLimits`, `UsageItem.limit` and `PlanModules.metaPages` are `number | null`;
@@ -182,12 +219,11 @@ period rule (`applyPlanChange`).
 - **Periods:** the existing subscription code sets `renewsAt` = start + 30 / 365 days, so
   `daysInPeriod` is 30 or 365. Dates are the UTC calendar date.
 - **Owner:** the org's earliest-created user (the person who signed up).
-- **Lifecycle:** `supports.fallBackToBasic` and `supports.reminderSchedule` are `false`, so the
-  UI disables those controls; saving `afterGrace: "fall_back_to_basic"` returns 400, and the
-  `reminders` array is accepted but not stored. Read-only fields (`paymentMode`,
+- **Lifecycle:** `supports.reminderSchedule` is `false`, so the UI disables that control, and
+  the `reminders` array is accepted but not stored (`fallBackToBasic` is `true` since step 6). Read-only fields (`paymentMode`,
   `paymentModeReason`, `supports`, and a plan's `id` / `rank`) may be sent back and are ignored.
-- **Access:** `getAccessStatus` returns the real plan's limits and modules; nothing is paused yet,
-  so the id lists are empty.
+- **Access:** `getAccessStatus` returns the real plan's limits and modules (and, since step 6,
+  the paused / view-only / offline ids).
 
 ## Conventions
 

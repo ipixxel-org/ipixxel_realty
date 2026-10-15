@@ -1,6 +1,7 @@
 import { ConflictException } from '@nestjs/common';
 import type { Prisma } from '@prisma/client';
 import { orgBillingRecipientsWhere } from './notification-recipients.util';
+import { applyRetention } from './retention.util';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 const CYCLE_DAYS = { monthly: 30, yearly: 365 } as const;
@@ -132,6 +133,9 @@ export async function applyPlanChange(
           // Any plan change (upgrade, renewal, approval) replaces a scheduled
           // cancellation or downgrade; a renewal has just applied it.
           ...NO_SCHEDULED_CHANGE,
+          movedToBasicAt: null,
+          previousPlanId: null,
+          previousInterval: null,
         },
       })
     : await tx.subscription.create({
@@ -146,6 +150,10 @@ export async function applyPlanChange(
           renewsAt,
         },
       });
+
+  // "Choose what stays": a bigger plan brings paused things back; a smaller
+  // one (a renewal onto a scheduled downgrade) pauses what doesn't fit.
+  await applyRetention(tx, input.organisationId, plan, now);
 
   await tx.auditLog.create({
     data: {

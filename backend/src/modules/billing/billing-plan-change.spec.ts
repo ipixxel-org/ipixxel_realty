@@ -142,7 +142,7 @@ describe('downgrade at the end of the term', () => {
     });
   });
 
-  it('refuses upgrades, the same plan, grace, over-limit usage and a pending request', async () => {
+  it('refuses upgrades, the same plan, grace and a pending request', async () => {
     const s = setup({ planId: 'growth', amount: 2000 });
     expect(
       await code(s.service.scheduleDowngrade('org-1', 'u1', { planId: 'pro' })),
@@ -172,14 +172,8 @@ describe('downgrade at the end of the term', () => {
       ),
     ).toBe('downgrade_not_now');
 
-    const over = setup();
-    over.usage.users = 8; // Growth allows 5
-    expect(
-      await code(
-        over.service.scheduleDowngrade('org-1', 'u1', { planId: 'growth' }),
-      ),
-    ).toBe('over_plan_limits');
-    expect(over.row().scheduledPlanId).toBeNull();
+    // Over the smaller plan's limits is allowed since step 6: the extras are
+    // paused when it starts (retention.spec.ts).
 
     const pending = setup();
     pending.db.packageChangeRequest.rows.push({
