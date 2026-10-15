@@ -21,6 +21,14 @@ export function mapApiFieldErrors(
   }
 
   const rawMessage = err.body?.message;
+
+  // The backend named the field outright (e.g. login's "Incorrect password")
+  // — show its message as-is under that input.
+  const field = err.body?.field;
+  if (field && fieldKeys.includes(field) && typeof rawMessage === "string") {
+    return { fieldErrors: { [field]: rawMessage }, general: null };
+  }
+
   const messages = Array.isArray(rawMessage)
     ? rawMessage
     : [rawMessage ?? err.message];

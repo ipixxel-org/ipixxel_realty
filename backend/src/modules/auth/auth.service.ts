@@ -67,6 +67,23 @@ const BCRYPT_COST_FACTOR = 12;
 
 const GOOGLE_ISSUERS = ['accounts.google.com', 'https://accounts.google.com'];
 
+const INCORRECT_EMAIL_MESSAGE = 'Incorrect email ID';
+const INCORRECT_PASSWORD_MESSAGE = 'Incorrect password';
+
+// Sign-in failure tied to one form field. `field` lets the login pages show
+// the backend's message under the right input without parsing the text.
+function loginFieldError(
+  field: 'email' | 'password',
+  message: string,
+): UnauthorizedException {
+  return new UnauthorizedException({
+    statusCode: 401,
+    error: 'Unauthorized',
+    message,
+    field,
+  });
+}
+
 type GoogleProfile = {
   email: string;
   emailVerified: boolean;
@@ -893,7 +910,7 @@ export class AuthService {
     const user = await this.findLoginUser(dto.email);
 
     if (!user) {
-      throw new UnauthorizedException('email Invalid ID or email');
+      throw loginFieldError('email', INCORRECT_EMAIL_MESSAGE);
     }
 
     let passwordMatches = false;
@@ -903,7 +920,7 @@ export class AuthService {
       passwordMatches = false;
     }
     if (!passwordMatches) {
-      throw new UnauthorizedException('password Incorrect password');
+      throw loginFieldError('password', INCORRECT_PASSWORD_MESSAGE);
     }
 
     // Account-state messaging only AFTER the password is verified, so a wrong
@@ -930,7 +947,7 @@ export class AuthService {
       (dto.portal === 'organisation' && belongsToPlatform) ||
       (dto.portal === 'platform' && !belongsToPlatform)
     ) {
-      throw new UnauthorizedException('email Invalid ID or email');
+      throw loginFieldError('email', INCORRECT_EMAIL_MESSAGE);
     }
 
     // Self-heal a draft parked on a step the simplified 2-step wizard
@@ -1717,7 +1734,7 @@ export class AuthService {
         (dto.portal === 'organisation' && belongsToPlatform) ||
         (dto.portal === 'platform' && !belongsToPlatform)
       ) {
-        throw new UnauthorizedException('email Invalid ID or email');
+        throw loginFieldError('email', INCORRECT_EMAIL_MESSAGE);
       }
 
       if (existing.orgId && isLegacyOnboardingStep(existing.onboardingStep)) {

@@ -50,6 +50,8 @@ import {
 } from "@/components/superadmin/templates/shared";
 import { TemplateCard } from "@/components/superadmin/templates/template-card";
 import { PlanFilterDropdown } from "@/components/superadmin/templates/plan-filter-dropdown";
+import { CreateTemplateModal } from "@/components/superadmin/templates/create-template-modal";
+import { TemplateCategoriesModal } from "@/components/superadmin/templates/template-categories-modal";
 import { buildTemplateSections } from "@/lib/openpage/data";
 import {
   deleteTemplate,
@@ -128,6 +130,14 @@ export default function SuperAdminTemplatesPage() {
   // Delete / Reset Confirm
   const [deleteFor, setDeleteFor] = useState<TemplateRow | null>(null);
 
+  // Create-template popup — null when closed; designId/name pre-fill it for
+  // "Edit" on a predefined design that has no saved page yet.
+  const [createFor, setCreateFor] = useState<{ designId?: string; name?: string } | null>(null);
+  // Manage-categories popup. Category edits can rename or unassign
+  // templates, so the gallery reloads once when the popup closes.
+  const [categoriesOpen, setCategoriesOpen] = useState(false);
+  const [categoriesChanged, setCategoriesChanged] = useState(false);
+
   // Quick Device Preview Modal
   const [previewRow, setPreviewRow] = useState<TemplateRow | null>(null);
   const [previewDevice, setPreviewDevice] = useState<"desktop" | "tablet" | "mobile">("desktop");
@@ -167,6 +177,34 @@ export default function SuperAdminTemplatesPage() {
       // ignore
     }
   }, [reloadCategories, reloadTemplates]);
+
+  // Old /templates/new and /templates/categories URLs redirect here with
+  // ?create / ?categories — open the matching popup, then tidy the URL.
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const wantsCreate = params.has("create");
+    const wantsCategories = params.has("categories");
+    if (!wantsCreate && !wantsCategories) return;
+    /* eslint-disable react-hooks/set-state-in-effect -- one-time read of the URL on mount */
+    if (wantsCreate) {
+      setCreateFor({
+        designId: params.get("design") || undefined,
+        name: params.get("name") || undefined,
+      });
+    } else {
+      setCategoriesOpen(true);
+    }
+    /* eslint-enable react-hooks/set-state-in-effect */
+    router.replace(TEMPLATES_PATH);
+  }, [router]);
+
+  const closeCategories = useCallback(() => {
+    setCategoriesOpen(false);
+    if (categoriesChanged) {
+      setCategoriesChanged(false);
+      reloadTemplates();
+    }
+  }, [categoriesChanged, reloadTemplates]);
 
   // Debounce search
   useEffect(() => {
@@ -361,7 +399,7 @@ export default function SuperAdminTemplatesPage() {
           <button
             type="button"
             className="btn btn-ghost"
-            onClick={() => router.push(`${TEMPLATES_PATH}/categories`)}
+            onClick={() => setCategoriesOpen(true)}
             style={{ display: "inline-flex", alignItems: "center", gap: 6, borderRadius: 10 }}
           >
             <Settings2 size={14} /> Categories ({categories.length})
@@ -370,7 +408,7 @@ export default function SuperAdminTemplatesPage() {
           <button
             type="button"
             className="btn btn-primary"
-            onClick={() => router.push(`${TEMPLATES_PATH}/new`)}
+            onClick={() => setCreateFor({})}
             style={{ display: "inline-flex", alignItems: "center", gap: 6, borderRadius: 10, fontWeight: 700 }}
           >
             <Plus size={16} /> Create Template
@@ -470,7 +508,7 @@ export default function SuperAdminTemplatesPage() {
               justifyContent: "space-between",
               cursor: "pointer",
             }}
-            onClick={() => router.push(`${TEMPLATES_PATH}/categories`)}
+            onClick={() => setCategoriesOpen(true)}
           >
             <div>
               <div style={{ fontSize: 11.5, color: "var(--muted)", fontWeight: 600 }}>Taxonomy</div>
@@ -765,7 +803,7 @@ export default function SuperAdminTemplatesPage() {
 
           <button
             type="button"
-            onClick={() => router.push(`${TEMPLATES_PATH}/categories`)}
+            onClick={() => setCategoriesOpen(true)}
             style={{
               flexShrink: 0,
               border: "1px dashed var(--line-2)",
@@ -825,7 +863,7 @@ export default function SuperAdminTemplatesPage() {
             <button
               type="button"
               className="btn btn-primary btn-sm"
-              onClick={() => router.push(`${TEMPLATES_PATH}/new`)}
+              onClick={() => setCreateFor({})}
             >
               <Plus size={14} /> Create template
             </button>
@@ -952,8 +990,7 @@ export default function SuperAdminTemplatesPage() {
                   goToBuilder(r.pageId);
                 } else {
                   // Unsaved predefined design — create it first, pre-filled.
-                  const qs = new URLSearchParams({ design: r.designId, name: r.name });
-                  router.push(`${TEMPLATES_PATH}/new?${qs.toString()}`);
+                  setCreateFor({ designId: r.designId, name: r.name });
                 }
               }}
               onPreview={() => window.open(templatePreviewPath(r.pageId || r.designId), "_blank")}
@@ -1110,6 +1147,28 @@ export default function SuperAdminTemplatesPage() {
           </div>
         </Modal>
       )}
+
+      {createFor ? (
+        <CreateTemplateModal
+          onClose={() => setCreateFor(null)}
+          categories={categories}
+          plans={plans}
+          initialDesignId={createFor.designId}
+          initialName={createFor.name}
+        />
+      ) : null}
+
+      <TemplateCategoriesModal
+        open={categoriesOpen}
+        onClose={closeCategories}
+        categories={categories}
+        rows={rows}
+        onCategoriesChanged={() => {
+          setCategoriesChanged(true);
+          reloadCategories();
+        }}
+        notify={notify}
+      />
 
       {/* Delete / Reset Confirmation Modal */}
       <ConfirmModal
