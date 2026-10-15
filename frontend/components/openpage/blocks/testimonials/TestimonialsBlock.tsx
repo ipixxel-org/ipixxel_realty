@@ -70,7 +70,7 @@ function TestimonialsCards({ props }: { props: TestimonialsProps }) {
                 <img src={item.avatar} alt={item.name} className="w-9 h-9 rounded-full object-cover border border-border-default" />
               ) : (
                 <div className="w-9 h-9 rounded-full bg-bg-4 border border-border-default flex items-center justify-center text-[11px] font-semibold text-text-2">
-                  {item.name.split(' ').map(n => n[0]).join('')}
+                  {(item.name || '').split(/\s+/).filter(Boolean).map(n => n[0]).join('') || '?'}
                 </div>
               )}
               <div>
@@ -224,7 +224,7 @@ function TestimonialsBand({ props }: { props: TestimonialsProps }) {
                   <img src={item.avatar} alt={item.name} className="w-8 h-8 rounded-full object-cover" />
                 ) : (
                   <div className="w-8 h-8 rounded-full bg-bg-4 flex items-center justify-center text-[10px] font-semibold">
-                    {item.name.split(' ').map(n => n[0]).join('')}
+                    {(item.name || '').split(/\s+/).filter(Boolean).map(n => n[0]).join('') || '?'}
                   </div>
                 )}
                 <div>
