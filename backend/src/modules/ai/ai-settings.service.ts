@@ -1,6 +1,7 @@
 import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import { PrismaService } from '../../database/prisma.service';
 import { UpdateAiSettingsDto } from './dto/update-ai-settings.dto';
+import type { AiProviderConfig } from './ai-provider';
 
 const SETTINGS_ID = 'default';
 
@@ -18,46 +19,34 @@ const ENV_KEYS = [
   'AI_GENERATE_API_KEY',
 ] as const;
 
-const DEFAULT_GEMINI_MODEL = 'gemini-3.8-flash';
-const DEFAULT_ANTHROPIC_MODEL = 'claude-sonnet-4-20250514';
-
-interface ResolvedAiSettings {
-  provider: string;
-  geminiApiKey: string;
-  geminiModel: string;
-  geminiThinkingBudget: string;
-  anthropicApiKey: string;
-  anthropicModel: string;
-  aiGenerateApiUrl: string;
-  aiGenerateApiKey: string;
-}
+export const DEFAULT_GEMINI_MODEL = 'gemini-3.8-flash';
+export const DEFAULT_ANTHROPIC_MODEL = 'claude-sonnet-4-20250514';
 
 /**
  * Platform-wide AI provider credentials, editable from the Super Admin console
  * instead of the server .env. Stored in the runtime-bootstrapped single-row
  * table "identity"."ai_settings" (same pattern as marketing_settings).
  *
- * The AI provider layer (ai-provider.ts) reads process.env, so resolved values
- * are pushed into process.env on boot and after every save — no restart needed.
- * .env values remain the fallback whenever a DB field is blank.
+ * The database row is the source of truth. The generator calls
+ * getProviderConfig() on every request, so a save applies immediately on
+ * every server process — no restart, and no reliance on process.env being
+ * patched in the one process that handled the save. .env values (captured at
+ * boot) remain the fallback whenever a DB field is blank, and the console
+ * shows exactly the values the generator will use.
  */
 @Injectable()
 export class AiSettingsService implements OnModuleInit {
   private readonly logger = new Logger(AiSettingsService.name);
   private readonly envFallback: Record<string, string> = {};
 
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(private readonly prisma: PrismaService) {
+    for (const key of ENV_KEYS) {
+      this.envFallback[key] = (process.env[key] ?? '').trim();
+    }
+  }
 
   async onModuleInit() {
-    for (const key of ENV_KEYS) {
-      this.envFallback[key] = process.env[key] ?? '';
-    }
-    try {
-      await this.ensureTable();
-      await this.loadAndApply();
-    } catch (err: unknown) {
-      this.logger.warn(`Could not load AI settings: ${err}`);
-    }
+    await this.ensureTable();
   }
 
   private async ensureTable() {
@@ -105,10 +94,9 @@ export class AiSettingsService implements OnModuleInit {
       : (this.envFallback[envKey] ?? '');
   }
 
-  /** Resolve effective settings and push them into process.env. */
-  async loadAndApply(): Promise<ResolvedAiSettings> {
-    const row = (await this.readRow()) ?? {};
-    const resolved: ResolvedAiSettings = {
+  /** Effective settings: saved DB values, .env for any blank field. */
+  private resolveRow(row: Record<string, unknown>): AiProviderConfig {
+    return {
       provider: this.pick(row.provider, 'AI_PROVIDER'),
       geminiApiKey: this.pick(row.gemini_api_key, 'GEMINI_API_KEY'),
       geminiModel:
@@ -121,47 +109,44 @@ export class AiSettingsService implements OnModuleInit {
       anthropicModel:
         this.pick(row.anthropic_model, 'ANTHROPIC_MODEL') ||
         DEFAULT_ANTHROPIC_MODEL,
-      aiGenerateApiUrl: this.pick(row.ai_generate_api_url, 'AI_GENERATE_API_URL'),
-      aiGenerateApiKey: this.pick(row.ai_generate_api_key, 'AI_GENERATE_API_KEY'),
+      aiGenerateApiUrl: this.pick(
+        row.ai_generate_api_url,
+        'AI_GENERATE_API_URL',
+      ),
+      aiGenerateApiKey: this.pick(
+        row.ai_generate_api_key,
+        'AI_GENERATE_API_KEY',
+      ),
     };
-    process.env.AI_PROVIDER = resolved.provider;
-    process.env.GEMINI_API_KEY = resolved.geminiApiKey;
-    process.env.GEMINI_MODEL = resolved.geminiModel;
-    process.env.GEMINI_THINKING_BUDGET = resolved.geminiThinkingBudget;
-    process.env.ANTHROPIC_API_KEY = resolved.anthropicApiKey;
-    process.env.ANTHROPIC_MODEL = resolved.anthropicModel;
-    process.env.AI_GENERATE_API_URL = resolved.aiGenerateApiUrl;
-    process.env.AI_GENERATE_API_KEY = resolved.aiGenerateApiKey;
-    return resolved;
+  }
+
+  /**
+   * Settings the AI generator must use for this request. Read fresh from the
+   * database each time so console saves take effect immediately.
+   */
+  async getProviderConfig(): Promise<AiProviderConfig> {
+    return this.resolveRow((await this.readRow()) ?? {});
   }
 
   /** Masked view for the Super Admin console; secrets never leave in clear. */
   async getForAdmin() {
     const row = await this.readRow();
     const r = row ?? {};
-    const geminiApiKey = this.pick(r.gemini_api_key, 'GEMINI_API_KEY');
-    const anthropicApiKey = this.pick(r.anthropic_api_key, 'ANTHROPIC_API_KEY');
-    const aiGenerateApiKey = this.pick(r.ai_generate_api_key, 'AI_GENERATE_API_KEY');
+    const resolved = this.resolveRow(r);
 
     return {
       source: row ? 'database' : 'env',
-      provider: this.pick(r.provider, 'AI_PROVIDER'),
-      geminiModel:
-        this.pick(r.gemini_model, 'GEMINI_MODEL') || DEFAULT_GEMINI_MODEL,
-      geminiThinkingBudget: this.pick(
-        r.gemini_thinking_budget,
-        'GEMINI_THINKING_BUDGET',
-      ),
-      geminiApiKey: geminiApiKey ? AI_SECRET_MASK : '',
-      hasGeminiApiKey: Boolean(geminiApiKey),
-      anthropicModel:
-        this.pick(r.anthropic_model, 'ANTHROPIC_MODEL') ||
-        DEFAULT_ANTHROPIC_MODEL,
-      anthropicApiKey: anthropicApiKey ? AI_SECRET_MASK : '',
-      hasAnthropicApiKey: Boolean(anthropicApiKey),
-      aiGenerateApiUrl: this.pick(r.ai_generate_api_url, 'AI_GENERATE_API_URL'),
-      aiGenerateApiKey: aiGenerateApiKey ? AI_SECRET_MASK : '',
-      hasAiGenerateApiKey: Boolean(aiGenerateApiKey),
+      provider: resolved.provider,
+      geminiModel: resolved.geminiModel,
+      geminiThinkingBudget: resolved.geminiThinkingBudget,
+      geminiApiKey: resolved.geminiApiKey ? AI_SECRET_MASK : '',
+      hasGeminiApiKey: Boolean(resolved.geminiApiKey),
+      anthropicModel: resolved.anthropicModel,
+      anthropicApiKey: resolved.anthropicApiKey ? AI_SECRET_MASK : '',
+      hasAnthropicApiKey: Boolean(resolved.anthropicApiKey),
+      aiGenerateApiUrl: resolved.aiGenerateApiUrl,
+      aiGenerateApiKey: resolved.aiGenerateApiKey ? AI_SECRET_MASK : '',
+      hasAiGenerateApiKey: Boolean(resolved.aiGenerateApiKey),
       updatedAt: (r.updated_at as string | undefined) ?? null,
     };
   }
@@ -236,7 +221,6 @@ export class AiSettingsService implements OnModuleInit {
       aiGenerateApiKey || null,
     );
 
-    await this.loadAndApply();
     return this.getForAdmin();
   }
 
@@ -251,19 +235,16 @@ export class AiSettingsService implements OnModuleInit {
     } catch (err: unknown) {
       this.logger.warn(`Could not clear ai_settings: ${err}`);
     }
-    await this.loadAndApply();
     return this.getForAdmin();
   }
 
   /** True when the selected (or auto-detected) agent has credentials. */
   async isConfigured(): Promise<boolean> {
-    const v = await this.loadAndApply();
+    const v = await this.getProviderConfig();
     const requested = v.provider.toLowerCase();
     if (requested === 'gemini') return Boolean(v.geminiApiKey);
     if (requested === 'anthropic') return Boolean(v.anthropicApiKey);
     if (requested === 'external') return Boolean(v.aiGenerateApiUrl);
-    return Boolean(
-      v.geminiApiKey || v.anthropicApiKey || v.aiGenerateApiUrl,
-    );
+    return Boolean(v.geminiApiKey || v.anthropicApiKey || v.aiGenerateApiUrl);
   }
 }

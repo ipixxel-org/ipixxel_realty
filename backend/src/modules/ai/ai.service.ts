@@ -1,5 +1,6 @@
 import {
   BadGatewayException,
+  HttpException,
   Injectable,
   Logger,
   ServiceUnavailableException,
@@ -14,7 +15,13 @@ import {
   normalizeDesignSystem,
   normalizeTheme,
 } from './design-tokens';
-import { AiProvider, resolveAiProvider } from './ai-provider';
+import {
+  AiProvider,
+  AiProviderError,
+  resolveAiProvider,
+  sanitizeErrorText,
+} from './ai-provider';
+import { AiSettingsService } from './ai-settings.service';
 import { applyBlockDefaults, formatWidgetCatalog } from './block-catalog';
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {
@@ -41,10 +48,14 @@ function mergeStyle(base: any, patch: any): any {
 export class AiService {
   private readonly logger = new Logger(AiService.name);
 
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly aiSettings: AiSettingsService,
+  ) {}
 
-  getStatus() {
-    const provider = resolveAiProvider();
+  /** Same provider and model the generator will call right now. */
+  async getStatus() {
+    const provider = resolveAiProvider(await this.aiSettings.getProviderConfig());
     return {
       configured: Boolean(provider),
       model: provider?.model ?? '',
@@ -53,15 +64,85 @@ export class AiService {
   }
 
   /** Resolve the active design agent or fail loudly (no static fallback). */
-  private requireProvider(): AiProvider {
-    const provider = resolveAiProvider();
+  private async requireProvider(): Promise<AiProvider> {
+    const provider = resolveAiProvider(await this.aiSettings.getProviderConfig());
     if (!provider) {
       throw new ServiceUnavailableException(
-        'No AI design agent is configured. Set AI_PROVIDER and the matching ' +
-          'credential (GEMINI_API_KEY, ANTHROPIC_API_KEY, or AI_GENERATE_API_URL).',
+        'No AI design agent is configured. A Super Admin can choose a provider ' +
+          'and add its API key in Admin Console → Integrations → AI.',
       );
     }
+    this.logger.log(
+      `AI request provider=${provider.name} model=${provider.model}`,
+    );
     return provider;
+  }
+
+  /**
+   * Turn a provider failure into an HTTP error an administrator can act on.
+   * Messages carry the provider, model and upstream status — never secrets.
+   */
+  private toHttpError(err: unknown, provider: AiProvider): HttpException {
+    if (!(err instanceof AiProviderError)) {
+      const message = sanitizeErrorText(
+        err instanceof Error ? err.message : String(err),
+      );
+      return new BadGatewayException(
+        `The AI design agent (${provider.name}) could not generate this page: ` +
+          `${message}. Please try again or refine the prompt.`,
+      );
+    }
+
+    const label = `${err.provider} model "${err.model}"`;
+    const upstream = err.status ? ` (upstream HTTP ${err.status})` : '';
+    const details = {
+      provider: err.provider,
+      model: err.model,
+      upstreamStatus: err.status,
+    };
+    switch (err.kind) {
+      case 'model_unavailable':
+        return new ServiceUnavailableException({
+          statusCode: 503,
+          error: 'Service Unavailable',
+          code: 'AI_MODEL_UNAVAILABLE',
+          message:
+            `The configured ${label} is not available for this API key${upstream}. ` +
+            'A Super Admin can choose a supported model in Admin Console → Integrations → AI.',
+          ...details,
+        });
+      case 'auth':
+        return new ServiceUnavailableException({
+          statusCode: 503,
+          error: 'Service Unavailable',
+          code: 'AI_AUTH_FAILED',
+          message:
+            `The ${err.provider} API key was rejected${upstream}. ` +
+            'A Super Admin can update it in Admin Console → Integrations → AI.',
+          ...details,
+        });
+      case 'rate_limited':
+      case 'overloaded':
+        return new ServiceUnavailableException({
+          statusCode: 503,
+          error: 'Service Unavailable',
+          code: 'AI_PROVIDER_BUSY',
+          message:
+            `The ${label} is busy right now${upstream}, still failing after ` +
+            `${err.attempts} attempt${err.attempts === 1 ? '' : 's'}. Please try again in a minute.`,
+          ...details,
+        });
+      default:
+        return new BadGatewayException({
+          statusCode: 502,
+          error: 'Bad Gateway',
+          code: 'AI_UPSTREAM_ERROR',
+          message:
+            `The AI design agent (${label}) could not generate this page${upstream}: ` +
+            `${err.message}. Please try again or refine the prompt.`,
+          ...details,
+        });
+    }
   }
 
   /**
@@ -96,7 +177,7 @@ REAL PROJECT DATA (USE THESE EXACT FACTS, DO NOT INVENT CONTRADICTORY DATA):
       }
     }
 
-    const provider = this.requireProvider();
+    const provider = await this.requireProvider();
 
     // "Improve current page" edits the design tokens of the document already on
     // the canvas instead of generating a brand-new page — the same way an
@@ -117,17 +198,11 @@ REAL PROJECT DATA (USE THESE EXACT FACTS, DO NOT INVENT CONTRADICTORY DATA):
         projectContext,
         fetchedProject,
       );
-    } catch (err: any) {
-      this.logger.error(
-        `AI design generation failed via ${provider.name}: ${err.message}`,
-        err.stack,
-      );
+    } catch (err: unknown) {
+      this.logFailure('AI design generation', provider, err);
       // No static fallback: an agent-driven builder must never silently
       // substitute a canned page. Surface the failure instead.
-      throw new BadGatewayException(
-        `The AI design agent (${provider.name}) could not generate this page: ` +
-          `${err.message}. Please try again or refine the prompt.`,
-      );
+      throw this.toHttpError(err, provider);
     }
     if (
       generated &&
@@ -212,10 +287,11 @@ Return the token patch as raw JSON only.`;
         temperature: 0.5,
       });
       return this.mergeDesignTokens(currentSite, patch);
-    } catch (err: any) {
-      this.logger.error(
-        `Design-token improve failed: ${err.message}. Returning current page unchanged.`,
-        err.stack,
+    } catch (err: unknown) {
+      this.logFailure(
+        'Design-token improve (returning current page unchanged)',
+        provider,
+        err,
       );
       return currentSite;
     }
@@ -380,7 +456,7 @@ Return raw JSON only.
    * Section-level AI operations: rewrites, improves headlines, changes tones, or regenerates a block
    */
   async regenerateSection(dto: RegenerateSectionDto) {
-    const provider = this.requireProvider();
+    const provider = await this.requireProvider();
     const block = dto.block as any;
     const action = dto.action;
 
@@ -407,8 +483,30 @@ Return RAW VALID JSON ONLY representing the updated block object:
 }
 `;
 
-    const parsed = await provider.generateJson({ prompt, temperature: 0.7 });
-    return parsed;
+    try {
+      return await provider.generateJson({ prompt, temperature: 0.7 });
+    } catch (err: unknown) {
+      this.logFailure('AI section regeneration', provider, err);
+      throw this.toHttpError(err, provider);
+    }
+  }
+
+  /** One sanitized log line: provider, model, upstream status, message. */
+  private logFailure(action: string, provider: AiProvider, err: unknown) {
+    if (err instanceof AiProviderError) {
+      this.logger.error(
+        `${action} failed provider=${err.provider} model=${err.model} ` +
+          `status=${err.status ?? 'none'} kind=${err.kind} attempts=${err.attempts} ` +
+          `message="${err.message}"`,
+      );
+      return;
+    }
+    const message = sanitizeErrorText(
+      err instanceof Error ? err.message : String(err),
+    );
+    this.logger.error(
+      `${action} failed provider=${provider.name} model=${provider.model} message="${message}"`,
+    );
   }
 
   /**
