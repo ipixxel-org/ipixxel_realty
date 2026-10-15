@@ -18,6 +18,7 @@ import {
 import { ITEM_ID_KEY } from "@/components/openpage/blocks/types";
 import type { Device } from "@/lib/openpage/types";
 import { newElementId, migrateBlocksListIds, ancestorItemIds, itemAt, listElementId, resolveList, type ListRef } from "@/lib/openpage/element-style";
+import { applyBlocksDefaults } from "@/lib/openpage/block-factory";
 
 export type { ListRef };
 
@@ -282,12 +283,14 @@ export const useConfigStore = create<ConfigState>()((set, get) => ({
       redoStack: [],
 
       setConfig: (config) => {
-        // Backfill stable ids so every dynamic list item can own its styles.
+        // Backfill stable ids so every dynamic list item can own its styles,
+        // and fill any props a producer omitted (e.g. an AI-generated footer
+        // without `links`) so renderers never iterate undefined.
         const pages = ensurePages(config).map((page) => ({
           ...page,
-          blocks: migrateBlocksListIds(page.blocks),
+          blocks: migrateBlocksListIds(applyBlocksDefaults(page.blocks)),
         }))
-        set({ config: { ...config, pages }, activePageId: pages[0]?.id ?? 'page-home', undoStack: [], redoStack: [] })
+        set({ config: { ...config, pages, blocks: applyBlocksDefaults(config.blocks) }, activePageId: pages[0]?.id ?? 'page-home', undoStack: [], redoStack: [] })
       },
 
       setActivePage: (id) => set({ activePageId: id }),

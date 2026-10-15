@@ -7,7 +7,7 @@ import type { IconName } from "@/components/icons";
  * under app/admin-console/integrations/<key>/, and (once it has settings)
  * report it from GET /admin/integrations/status.
  */
-export type IntegrationKey = "smtp" | "social-login" | "razorpay";
+export type IntegrationKey = "smtp" | "social-login" | "razorpay" | "ai";
 
 export type IntegrationDef = {
   key: IntegrationKey;
@@ -74,6 +74,18 @@ export const INTEGRATIONS: IntegrationDef[] = [
     href: `${INTEGRATIONS_HREF}/razorpay`,
     // Same module as /admin/payments. Saving keys is additionally super_admin-only.
     permission: "admin_subscriptions",
+    statusSource: "api",
+  },
+  {
+    key: "ai",
+    name: "AI Design Agent",
+    crumb: "AI",
+    description: "API keys for the OpenPage AI Template builder (Gemini, Claude or a custom agent).",
+    icon: "sparkles",
+    tone: "ic-indigo",
+    href: `${INTEGRATIONS_HREF}/ai`,
+    // Same module as the Settings page (admin_settings).
+    permission: "admin_settings",
     statusSource: "api",
   },
 ];

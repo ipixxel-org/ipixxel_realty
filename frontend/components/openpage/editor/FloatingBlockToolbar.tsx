@@ -23,6 +23,7 @@ import { useEditorStore } from "@/components/openpage/store/editorStore";
 import type { BlockConfig } from "../blocks/types";
 import { blockMetadata } from "@/lib/openpage/block-metadata";
 import type { DraggableAttributes, DraggableSyntheticListeners } from "@dnd-kit/core";
+import { SectionAiAssistant } from "./SectionAiAssistant";
 
 interface FloatingBlockToolbarProps {
   block: BlockConfig;
@@ -48,6 +49,7 @@ export function FloatingBlockToolbar({
   const { duplicateBlock, removeBlock, moveBlock, updateBlockStyle, addBlock } = useConfigStore();
   const { selectedBlockId, selectBlock, setRightSidebarTab, viewport } = useEditorStore();
   const [showVariantMenu, setShowVariantMenu] = useState(false);
+  const [showAiModal, setShowAiModal] = useState(false);
 
   const isFirst = index === 0;
   const isLast = index === totalBlocks - 1;
@@ -59,10 +61,11 @@ export function FloatingBlockToolbar({
   const variants = meta?.variants || [];
 
   return (
-    <div
-      className="absolute -top-10 left-1/2 -translate-x-1/2 z-40 flex items-center bg-[#1e222d] border border-blue-500/40 text-white rounded-lg shadow-xl shadow-black/40 backdrop-blur-md px-1 py-0.5 select-none transition-all duration-150 animate-in fade-in zoom-in-95"
-      onClick={(e) => e.stopPropagation()}
-    >
+    <>
+      <div
+        className="absolute -top-10 left-1/2 -translate-x-1/2 z-40 flex items-center bg-[#1e222d] border border-blue-500/40 text-white rounded-lg shadow-xl shadow-black/40 backdrop-blur-md px-1 py-0.5 select-none transition-all duration-150 animate-in fade-in zoom-in-95"
+        onClick={(e) => e.stopPropagation()}
+      >
       {/* Drag handle pill */}
       <div
         {...dragAttributes}
@@ -174,6 +177,19 @@ export function FloatingBlockToolbar({
         <Palette size={13} />
       </button>
 
+      {/* AI Assistant */}
+      <button
+        type="button"
+        onClick={() => {
+          onSelect();
+          setShowAiModal(true);
+        }}
+        className="p-1.5 text-purple-300 hover:text-white hover:bg-purple-500/30 rounded transition-colors"
+        title="AI Assistant (Rewrite / Tone / Regenerate)"
+      >
+        <Sparkles size={13} className="text-purple-400" />
+      </button>
+
       {/* Add Section Below */}
       <button
         type="button"
@@ -261,6 +277,12 @@ export function FloatingBlockToolbar({
           <MoreVertical size={13} />
         </button>
       )}
-    </div>
+      </div>
+      <SectionAiAssistant
+        block={block}
+        open={showAiModal}
+        onClose={() => setShowAiModal(false)}
+      />
+    </>
   );
 }

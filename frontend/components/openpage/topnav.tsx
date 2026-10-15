@@ -29,6 +29,7 @@ import {
   Eye,
   FileText,
   LoaderCircle,
+  Sparkles,
 } from "lucide-react";
 import { useEditorStore, type Viewport } from "@/components/openpage/store/editorStore";
 import type { ModuleKey } from "@/lib/openpage/types";
@@ -470,6 +471,22 @@ export function TopNav({
               className="ps-builder-actions-wide"
               style={{ display: "flex", alignItems: "center", gap: 8 }}
             >
+              <button
+                type="button"
+                onClick={() => useEditorStore.getState().openAiModal()}
+                className="ps-topnav-btn"
+                style={{
+                  background: "linear-gradient(135deg, #6d5dfc 0%, #ec4899 100%)",
+                  color: "#ffffff",
+                  border: "none",
+                  fontWeight: 600,
+                  boxShadow: "0 2px 8px rgba(109, 93, 252, 0.25)",
+                }}
+                title="Generate landing page with Google Gemini AI"
+              >
+                <Sparkles size={14} />
+                <span className="ps-btn-label">AI Generator</span>
+              </button>
               <button
                 type="button"
                 onClick={onSave}

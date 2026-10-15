@@ -8,7 +8,7 @@ export type Viewport = 'desktop' | 'tablet' | 'mobile'
 export type RightSidebarTab = 'properties' | 'style' | 'typography' | 'advanced' | 'element'
 
 /** Tabs of the left builder rail — shared so shortcuts and the command palette can drive it. */
-export type LeftTab = 'templates' | 'components' | 'globals' | 'layers' | 'forms'
+export type LeftTab = 'templates' | 'components' | 'globals' | 'layers' | 'forms' | 'ai'
 
 /** The individually-editable node currently being styled, if any. */
 export interface SelectedElement {
@@ -48,8 +48,12 @@ interface EditorState {
   isGenerating: boolean
   generationPrompt: string | null
   generationError: string | null
+  aiModalOpen: boolean
   showGrid: boolean
   spotlightOpen: boolean
+  openAiModal: () => void
+  closeAiModal: () => void
+  toggleAiModal: () => void
   toggleShowGrid: () => void
   toggleSpotlight: () => void
   selectBlock: (id: string | null) => void
@@ -107,6 +111,10 @@ export const useEditorStore = create<EditorState>()((set) => ({
   isGenerating: false,
   generationPrompt: null,
   generationError: null,
+  aiModalOpen: false,
+  openAiModal: () => set({ aiModalOpen: true }),
+  closeAiModal: () => set({ aiModalOpen: false }),
+  toggleAiModal: () => set((s) => ({ aiModalOpen: !s.aiModalOpen })),
   selectBlock: (id) => set({ selectedBlockId: id, selectedBlockIds: id ? [id] : [], selectedElement: null }),
   selectElement: (blockId, elementId) =>
     set({ selectedBlockId: blockId, selectedBlockIds: [blockId], selectedElement: { blockId, elementId }, rightSidebarTab: 'element' }),

@@ -2424,3 +2424,24 @@ export async function testRazorpaySettings(input: {
     body: JSON.stringify(input),
   });
 }
+
+// --- Super Admin AI provider settings (OpenPage AI Template builder) ---
+
+export async function getAiSettings(): Promise<import("./types").AiSettingsView> {
+  return apiFetch<import("./types").AiSettingsView>("/admin/ai-settings");
+}
+
+export async function updateAiSettings(
+  input: import("./types").UpdateAiSettingsInput,
+): Promise<import("./types").AiSettingsView> {
+  return apiFetch<import("./types").AiSettingsView>("/admin/ai-settings", {
+    method: "PUT",
+    body: JSON.stringify(input),
+  });
+}
+
+export async function clearAiSettings(): Promise<import("./types").AiSettingsView> {
+  return apiFetch<import("./types").AiSettingsView>("/admin/ai-settings", {
+    method: "DELETE",
+  });
+}

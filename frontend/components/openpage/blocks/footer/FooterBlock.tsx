@@ -4,7 +4,7 @@ interface FooterProps {
   logo: string
   logoImage?: string
   copyright: string
-  links: string[]
+  links?: string[]
   tagline?: string
   phone?: string
   email?: string
@@ -29,7 +29,7 @@ function FooterSimple({ props }: { props: FooterProps }) {
         </div>
 
         <div className="flex items-center gap-4">
-          {props.links.map((link, i) => (
+          {(props.links ?? []).map((link, i) => (
             <span
               key={i}
               className="text-[12px] text-text-3 hover:text-text-1 transition-colors cursor-pointer"
@@ -106,7 +106,7 @@ function FooterMultiColumn({ props }: { props: FooterProps }) {
       <div className="pt-6 border-t border-border-subtle flex flex-col @lg:flex-row items-center justify-between gap-3">
         <span className="text-[11px] text-text-3">{props.copyright}</span>
         <div className="flex gap-4">
-          {props.links.map((link, i) => (
+          {(props.links ?? []).map((link, i) => (
             <span
               key={i}
               className="text-[11px] text-text-3 hover:text-text-1 transition-colors cursor-pointer"
@@ -121,15 +121,16 @@ function FooterMultiColumn({ props }: { props: FooterProps }) {
 }
 
 function FooterMinimal({ props }: { props: FooterProps }) {
+  const links = props.links ?? []
   return (
     <footer className="px-6 @md:px-10 py-6">
       <div className="flex items-center justify-center gap-1.5 text-[11px] text-text-3">
         <span>{props.copyright}</span>
-        {props.links.length > 0 && <span className="mx-1">|</span>}
-        {props.links.map((link, i) => (
+        {links.length > 0 && <span className="mx-1">|</span>}
+        {links.map((link, i) => (
           <span key={i}>
             <span className="hover:text-text-1 transition-colors cursor-pointer">{link}</span>
-            {i < props.links.length - 1 && <span className="mx-1">|</span>}
+            {i < links.length - 1 && <span className="mx-1">|</span>}
           </span>
         ))}
       </div>
@@ -275,7 +276,7 @@ function FooterContact({ props }: { props: FooterProps }) {
       <div className="pt-6 border-t border-border-subtle flex flex-col @lg:flex-row items-center justify-between gap-3">
         <span className="text-[11px] text-text-3">{props.copyright}</span>
         <div className="flex gap-4">
-          {props.links.map((link, i) => (
+          {(props.links ?? []).map((link, i) => (
             <span
               key={i}
               className="text-[11px] text-text-3 hover:text-text-1 transition-colors cursor-pointer"

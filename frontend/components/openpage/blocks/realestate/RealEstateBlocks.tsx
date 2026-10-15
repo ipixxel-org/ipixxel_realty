@@ -9,6 +9,8 @@ import { DynamicLeadForm } from "@/components/openpage/dynamic-lead-form";
 import { findFormById, loadFormLibrary } from "@/lib/openpage/forms-store";
 import { mergeFormLibraries } from "@/lib/openpage/resolve-form";
 import { isMediaSrc } from "@/lib/media";
+import { useDevice } from "@/components/openpage/runtime/device";
+import { resolveBlockStyleForDevice } from "@/lib/openpage/block-style";
 
 function resolveRuntimeForms(runtimeForms: ReturnType<typeof useOpenPageRuntime>["forms"]) {
   const library = typeof window !== "undefined" ? loadFormLibrary() : [];
@@ -21,6 +23,48 @@ function str(v: unknown, fallback = ""): string {
 
 function items<T>(v: unknown): T[] {
   return Array.isArray(v) ? (v as T[]) : [];
+}
+
+/**
+ * True when a CSS colour (#rgb, #rrggbb, #rrggbbaa, rgb[a]()) is dark enough
+ * that text on it must be light. Unknown values (gradients, named colours,
+ * variables) return false so the theme's own text colours are kept.
+ */
+function isDarkColor(color: string | undefined): boolean {
+  const value = (color ?? "").trim().toLowerCase();
+  let r: number;
+  let g: number;
+  let b: number;
+  let a = 1;
+  const hex = /^#([0-9a-f]{3,8})$/.exec(value)?.[1];
+  if (hex && (hex.length === 3 || hex.length === 6 || hex.length === 8)) {
+    const full = hex.length === 3 ? hex.split("").map((c) => c + c).join("") : hex;
+    r = parseInt(full.slice(0, 2), 16);
+    g = parseInt(full.slice(2, 4), 16);
+    b = parseInt(full.slice(4, 6), 16);
+    if (full.length === 8) a = parseInt(full.slice(6, 8), 16) / 255;
+  } else {
+    const rgb = /^rgba?\(\s*([\d.]+)[\s,]+([\d.]+)[\s,]+([\d.]+)(?:[\s,/]+([\d.]+%?))?\s*\)$/.exec(value);
+    if (!rgb) return false;
+    [r, g, b] = [Number(rgb[1]), Number(rgb[2]), Number(rgb[3])];
+    if (rgb[4]) a = rgb[4].endsWith("%") ? parseFloat(rgb[4]) / 100 : Number(rgb[4]);
+  }
+  // A mostly transparent colour shows whatever is behind it — don't guess.
+  if (a < 0.5) return false;
+  const lin = (c: number) => {
+    const s = c / 255;
+    return s <= 0.03928 ? s / 12.92 : ((s + 0.055) / 1.055) ** 2.4;
+  };
+  const luminance = 0.2126 * lin(r) + 0.7152 * lin(g) + 0.0722 * lin(b);
+  return luminance < 0.4;
+}
+
+/** First non-empty string among `values`. */
+function firstText(...values: unknown[]): string {
+  for (const v of values) {
+    if (typeof v === "string" && v.trim()) return v;
+  }
+  return "";
 }
 
 function scrollToAnchor(id: string) {
@@ -64,11 +108,14 @@ function Title({
   title,
   subtitle,
   align = "center",
+  onDark = false,
 }: {
   block?: BlockConfig;
   title?: string;
   subtitle?: string;
   align?: "center" | "left";
+  /** Section background is dark — use light text so the heading stays readable. */
+  onDark?: boolean;
 }) {
   const content = (
     <>
@@ -77,13 +124,18 @@ function Title({
           block={block!}
           id={part(block!, "title")}
           as="h2"
-          className="font-display text-3xl @md:text-4xl font-semibold tracking-tight mb-2"
+          className={`font-display text-3xl @md:text-4xl font-semibold tracking-tight mb-2${onDark ? " text-white" : ""}`}
         >
           {title}
         </El>
       ) : null}
       {subtitle ? (
-        <El block={block!} id={part(block!, "subtitle")} as="p" className="text-text-2 text-sm leading-relaxed">
+        <El
+          block={block!}
+          id={part(block!, "subtitle")}
+          as="p"
+          className={`${onDark ? "text-white/75" : "text-text-2"} text-sm leading-relaxed`}
+        >
           {subtitle}
         </El>
       ) : null}
@@ -1888,16 +1940,46 @@ export function OffersBlock({ block }: { block: BlockConfig }) {
   );
 }
 
+/**
+ * One "nearby place" row. Accepts the field names AI-generated and older
+ * pages use (place/time, name/distance, text) as well as title/meta.
+ */
+function locationItem(n: Record<string, unknown>) {
+  return {
+    title: firstText(n.title, n.place, n.name, n.label),
+    meta: firstText(n.meta, n.time, n.distance, n.duration, n.text, n.description),
+  };
+}
+
 export function LocationBlock({ block }: { block: BlockConfig }) {
-  const nearby = items<{ title: string; meta: string }>(block.props.items);
+  const nearby = items<Record<string, unknown>>(block.props.items);
   const embed = str(block.props.embedUrl);
   const variant = block.variant || "split-map";
   const p = block.props;
+  const device = useDevice();
+  // A dark section background (set in Style) needs light text everywhere in
+  // the widget; per-element styles from the inspector still take priority.
+  const onDark = isDarkColor(resolveBlockStyleForDevice(block.style, device)?.backgroundColor);
+  const tone = onDark
+    ? {
+        text: "text-white",
+        muted: "text-white/70",
+        row: "border-white/15 bg-white/[0.06]",
+        tile: "border-white/15 bg-white/[0.06]",
+        rule: "border-white/15",
+      }
+    : {
+        text: "",
+        muted: "text-text-3",
+        row: "border-border-default bg-bg-2",
+        tile: "border-border-default bg-bg-1",
+        rule: "border-border-default",
+      };
 
   if (variant === "map-only") {
     return (
       <SectionShell id={str(p.anchor, "location")} className="pt-8">
-        <Title block={block} title={str(p.title, "Location")} subtitle={str(p.address)} />
+        <Title block={block} title={str(p.title, "Location")} subtitle={str(p.address)} onDark={onDark} />
         <El block={block} id={part(block, "map")} className="rounded-2xl overflow-hidden border border-border-default aspect-[16/8] bg-bg-2 max-w-6xl mx-auto">
           <MapFrame src={embed} title={str(p.title, "Google Maps")} />
         </El>
@@ -1908,18 +1990,19 @@ export function LocationBlock({ block }: { block: BlockConfig }) {
   if (variant === "list") {
     return (
       <SectionShell id={str(p.anchor, "location")}>
-        <Title block={block} title={str(p.title, "Location & Connectivity")} subtitle={str(p.address)} />
+        <Title block={block} title={str(p.title, "Location & Connectivity")} subtitle={str(p.address)} onDark={onDark} />
         <div className="max-w-2xl mx-auto space-y-3">
           {nearby.map((n) => {
             const id = itemPart("items", n);
+            const row = locationItem(n);
             return (
-              <El key={id} block={block} id={id} className="flex items-center justify-between rounded-xl border border-border-default bg-bg-2 px-4 py-3.5">
-                <El block={block} id={subElementId(id, "title")} as="div" className="flex items-center gap-2 text-sm font-medium">
-                  <MapPin size={14} className="text-green" />
-                  {n.title}
+              <El key={id} block={block} id={id} className={`flex items-center justify-between gap-4 rounded-xl border ${tone.row} px-4 py-3.5`}>
+                <El block={block} id={subElementId(id, "title")} as="div" className={`flex items-center gap-2 text-sm font-medium min-w-0 ${tone.text}`}>
+                  <MapPin size={14} className="text-green shrink-0" />
+                  <span className="min-w-0">{row.title}</span>
                 </El>
-                <El block={block} id={subElementId(id, "meta")} as="div" className="text-text-3 text-sm">
-                  {n.meta}
+                <El block={block} id={subElementId(id, "meta")} as="div" className={`${tone.muted} text-sm shrink-0 text-right`}>
+                  {row.meta}
                 </El>
               </El>
             );
@@ -1932,18 +2015,19 @@ export function LocationBlock({ block }: { block: BlockConfig }) {
   if (variant === "cards") {
     return (
       <SectionShell id={str(p.anchor, "location")} className="bg-bg-2">
-        <Title block={block} title={str(p.title, "Location Advantages")} subtitle={str(p.address)} />
+        <Title block={block} title={str(p.title, "Location Advantages")} subtitle={str(p.address)} onDark={onDark} />
         <div className="grid @md:grid-cols-2 @2xl:grid-cols-3 gap-4 max-w-5xl mx-auto mb-8">
           {nearby.map((n) => {
             const id = itemPart("items", n);
+            const row = locationItem(n);
             return (
-              <El key={id} block={block} id={id} className="rounded-2xl border border-border-default bg-bg-1 p-5 text-center">
+              <El key={id} block={block} id={id} className={`rounded-2xl border ${tone.tile} p-5 text-center`}>
                 <MapPin size={18} className="text-green mx-auto mb-3" />
-                <El block={block} id={subElementId(id, "title")} as="div" className="font-semibold mb-1">
-                  {n.title}
+                <El block={block} id={subElementId(id, "title")} as="div" className={`font-semibold mb-1 ${tone.text}`}>
+                  {row.title}
                 </El>
-                <El block={block} id={subElementId(id, "meta")} as="div" className="text-text-3 text-sm">
-                  {n.meta}
+                <El block={block} id={subElementId(id, "meta")} as="div" className={`${tone.muted} text-sm`}>
+                  {row.meta}
                 </El>
               </El>
             );
@@ -1968,7 +2052,7 @@ export function LocationBlock({ block }: { block: BlockConfig }) {
               {str(p.subtitle)}
             </El>
           ) : null}
-          <El block={block} id={part(block, "title")} as="h2" className="font-display text-3xl @md:text-5xl font-medium tracking-tight max-w-2xl">
+          <El block={block} id={part(block, "title")} as="h2" className={`font-display text-3xl @md:text-5xl font-medium tracking-tight max-w-2xl ${tone.text}`}>
             {str(p.title, "Quietly Central.")}
           </El>
         </El>
@@ -1983,16 +2067,17 @@ export function LocationBlock({ block }: { block: BlockConfig }) {
               <div className="w-full h-full min-h-[360px] bg-bg-3" />
             )}
           </El>
-          <div className="grid grid-cols-1 @sm:grid-cols-2 border-t border-l border-border-default">
+          <div className={`grid grid-cols-1 @sm:grid-cols-2 border-t border-l ${tone.rule}`}>
             {nearby.map((n) => {
               const id = itemPart("items", n);
+              const row = locationItem(n);
               return (
-                <El key={id} block={block} id={id} className="border-r border-b border-border-default px-5 py-6">
-                  <El block={block} id={subElementId(id, "title")} as="div" className="font-medium text-text-0 mb-2">
-                    {n.title}
+                <El key={id} block={block} id={id} className={`border-r border-b ${tone.rule} px-5 py-6`}>
+                  <El block={block} id={subElementId(id, "title")} as="div" className={`font-medium mb-2 ${onDark ? "text-white" : "text-text-0"}`}>
+                    {row.title}
                   </El>
-                  <El block={block} id={subElementId(id, "meta")} as="div" className="font-display text-sm text-text-2 tracking-wide">
-                    {n.meta}
+                  <El block={block} id={subElementId(id, "meta")} as="div" className={`font-display text-sm tracking-wide ${onDark ? "text-white/70" : "text-text-2"}`}>
+                    {row.meta}
                   </El>
                 </El>
               );
@@ -2005,29 +2090,30 @@ export function LocationBlock({ block }: { block: BlockConfig }) {
 
   return (
     <SectionShell id={str(p.anchor, "location")}>
-      <Title block={block} title={str(p.title, "Location & Connectivity")} subtitle={str(p.address)} />
+      <Title block={block} title={str(p.title, "Location & Connectivity")} subtitle={str(p.address)} onDark={onDark} />
       <div className="grid @lg:grid-cols-2 gap-8 max-w-6xl mx-auto items-start">
         <El block={block} id={part(block, "map")} className="rounded-2xl overflow-hidden border border-border-default aspect-[4/3] bg-bg-2">
           <MapFrame src={embed} title={str(p.title, "Google Maps")} />
         </El>
-        <div>
+        <div className="min-w-0">
           {str(p.address) ? (
-            <El block={block} id={part(block, "address")} as="p" className="flex items-start gap-2 text-sm mb-5">
-              <MapPin size={16} className="text-green mt-0.5" />
+            <El block={block} id={part(block, "address")} as="p" className={`flex items-start gap-2 text-sm mb-5 ${onDark ? "text-white/90" : ""}`}>
+              <MapPin size={16} className="text-green mt-0.5 shrink-0" />
               <span>{str(p.address)}</span>
             </El>
           ) : null}
           <div className="space-y-3">
             {nearby.map((n) => {
               const id = itemPart("items", n);
+              const row = locationItem(n);
               return (
-                <El key={id} block={block} id={id} className="flex items-center justify-between rounded-xl border border-border-default bg-bg-2 px-4 py-3">
-                  <El block={block} id={subElementId(id, "title")} as="div" className="flex items-center gap-2 text-sm font-medium">
-                    <MapPin size={14} className="text-green" />
-                    {n.title}
+                <El key={id} block={block} id={id} className={`flex items-center justify-between gap-4 rounded-xl border ${tone.row} px-4 py-3`}>
+                  <El block={block} id={subElementId(id, "title")} as="div" className={`flex items-center gap-2 text-sm font-medium min-w-0 ${tone.text}`}>
+                    <MapPin size={14} className="text-green shrink-0" />
+                    <span className="min-w-0">{row.title}</span>
                   </El>
-                  <El block={block} id={subElementId(id, "meta")} as="div" className="text-text-3 text-sm">
-                    {n.meta}
+                  <El block={block} id={subElementId(id, "meta")} as="div" className={`${tone.muted} text-sm shrink-0 text-right`}>
+                    {row.meta}
                   </El>
                 </El>
               );

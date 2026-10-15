@@ -101,6 +101,14 @@ export function CanvasEmpty() {
           <div className="flex flex-wrap items-center justify-center gap-2">
             <button
               type="button"
+              onClick={() => useEditorStore.getState().openAiModal()}
+              className="flex items-center gap-1.5 px-4 py-2 rounded-lg bg-gradient-to-r from-[#6d5dfc] to-[#ec4899] text-white text-[12px] font-semibold shadow-md shadow-[#6d5dfc]/25 hover:opacity-95 transition-all"
+            >
+              <Sparkles size={14} />
+              Generate with AI
+            </button>
+            <button
+              type="button"
               onClick={() => useEditorStore.getState().openLeftTab("templates")}
               className="flex items-center gap-1.5 px-3.5 py-2 rounded-lg bg-green text-bg-0 text-[12px] font-semibold hover:bg-green/90 transition-colors"
             >
