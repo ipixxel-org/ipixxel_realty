@@ -190,23 +190,39 @@ export interface CheckoutPreviewV2 {
     charge: number;
     credit: number;
   } | null;
-  coupon: null;
-  couponError: null;
-  couponsEnabled: false;
-  couponDiscount: 0;
+  coupon: { code: string; description: string } | null;
+  /** Why the entered coupon can't be used (shown under the field); not an error. */
+  couponError: string | null;
+  /** false for a renewal: its coupon (if any) comes from the subscription. */
+  couponsEnabled: boolean;
+  couponDiscount: number;
   taxable: number;
   billingState: string | null;
   gst: GstBreakdownV2;
   total: number;
   periodEnd: string;
   recurringPrice: number;
-  couponRenewalsLeft: 0;
+  /** Renewals the coupon still covers after this payment; 99 = every one. */
+  couponRenewalsLeft: number;
   paymentMode: PaymentMode;
   paymentModeReason: ManualReason | null;
   warnings: BillingWarning[];
 }
 
 export type StartCheckoutResultV2 =
+  /** Nothing to pay (a 100% coupon): the plan is already applied. */
+  | {
+      status: 'activated';
+      receipt: {
+        planId: string;
+        planName: string;
+        interval: BillingInterval;
+        amount: number;
+        reference: string;
+        activeUntil: string;
+        couponCode: string | null;
+      };
+    }
   | {
       status: 'payment_required';
       mode: 'online';

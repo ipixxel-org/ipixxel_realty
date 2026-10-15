@@ -3,6 +3,7 @@ import type { Prisma } from '@prisma/client';
 import { PrismaService } from '../../database/prisma.service';
 import { assertPlanFitsCurrentUsage } from '../../common/utils/plan-quota.util';
 import { applyPlanChange } from '../../common/utils/plan-change.util';
+import { settleCoupon } from '../billing/coupon-settlement';
 import { applyOrgSubscriptionLifecycle } from '../../common/utils/subscription-lifecycle.util';
 import { orgBillingRecipientsWhere } from '../../common/utils/notification-recipients.util';
 import { CreatePackageChangeRequestDto } from './dto/create-package-change-request.dto';
@@ -290,7 +291,14 @@ export class PackageChangeRequestsService {
     // a new cycle now, exactly as before.
     const checkout = await this.prisma.billingCheckout.findUnique({
       where: { packageChangeRequestId: requestId },
-      select: { id: true, kind: true },
+      select: {
+        id: true,
+        kind: true,
+        organisationId: true,
+        toPlanId: true,
+        couponId: true,
+        couponDiscountPaise: true,
+      },
     });
 
     const result = await this.prisma.$transaction(async (tx) => {
@@ -306,9 +314,17 @@ export class PackageChangeRequestsService {
         requestedById: request.requestedById,
       });
       if (checkout) {
+        // Billing v2: record its coupon and keep the renewal coupon in step.
+        await settleCoupon(tx, checkout);
         await tx.billingCheckout.update({
           where: { id: checkout.id },
           data: { status: 'approved', fulfilledAt: new Date() },
+        });
+      } else {
+        // An older request: no coupon, and a plan change drops a renewal coupon.
+        await tx.subscription.updateMany({
+          where: { orgId: request.orgId, status: { not: 'cancelled' } },
+          data: { couponId: null, couponRenewalsLeft: null },
         });
       }
       const approvedRequest = await tx.packageChangeRequest.findUniqueOrThrow({

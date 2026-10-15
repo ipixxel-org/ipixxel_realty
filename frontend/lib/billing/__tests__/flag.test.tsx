@@ -448,7 +448,7 @@ describe("billing v2 flag", () => {
     expect(screen.getByRole("button", { name: /Confirm downgrade/ })).toBeDisabled();
   });
 
-  it("the hybrid client marks exactly the step 1, 2 and 4 functions as real", async () => {
+  it("the hybrid client marks exactly the step 1, 2, 4 and 5 functions as real", async () => {
     const { billingClient, REAL_FUNCTIONS } = await load("true");
     expect(billingClient.isMock).toBe(false);
     expect(Object.entries(REAL_FUNCTIONS).filter(([, v]) => v).map(([k]) => k).sort()).toEqual(
@@ -473,6 +473,11 @@ describe("billing v2 flag", () => {
         "undoCancel",
         "scheduleDowngrade",
         "undoDowngrade",
+        // step 5
+        "listCoupons",
+        "getCoupon",
+        "saveCoupon",
+        "listOrgOptions",
       ].sort(),
     );
     expect(billingClient.isReal("listInvoices")).toBe(false);

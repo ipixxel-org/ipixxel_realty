@@ -15,6 +15,7 @@ import { buildOverview } from './billing-overview';
 import { toProfileV2 } from './billing-profile.service';
 import { expireStaleCheckouts, findPendingUpgrade } from './checkout-state';
 import { taxOn } from './checkout-quote';
+import { couponDiscountPaise } from './coupon-rules';
 import {
   isFreePlan,
   sortPlans,
@@ -127,9 +128,25 @@ export class OrgBillingV2Service {
         ? nextPlan.priceYearly
         : nextPlan.priceMonthly
       : 0;
+    // A first_n / forever coupon still on the subscription comes off first,
+    // exactly as the renewal checkout applies it.
+    const couponLeft = subscription?.couponRenewalsLeft ?? null;
+    const coupon =
+      subscription?.couponId && (couponLeft === null || couponLeft > 0)
+        ? await this.prisma.coupon.findUnique({
+            where: { id: subscription.couponId },
+          })
+        : null;
+    const couponApplies =
+      !!coupon &&
+      coupon.planIds.includes(nextPlan.id) &&
+      (coupon.interval === 'any' || coupon.interval === nextInterval);
+    const taxablePaise =
+      price * 100 -
+      (couponApplies ? couponDiscountPaise(coupon, price * 100) : 0);
     const renewalTotalPaise =
       seller && price > 0
-        ? taxOn(price * 100, {
+        ? taxOn(taxablePaise, {
             buyer: {
               state: profile?.state ?? null,
               country: profile?.country ?? 'IN',

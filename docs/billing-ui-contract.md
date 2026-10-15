@@ -21,9 +21,9 @@ client is the reference behaviour (see `frontend/lib/billing/__tests__/mock-clie
 | 2 | `getBillingProfile`, `saveBillingProfile`, `previewCheckout`, `startCheckout`, `confirmCheckout`, `listAdminCheckouts` | `billing-profile.service.ts`, `billing-checkout.service.ts`, `checkout-quote.ts`, `common/utils/plan-change.util.ts` |
 | 3 | Renewals through the same functions: `previewCheckout` / `startCheckout` with `purpose: "renewal"` (no new client function) | `quoteRenewal` in `checkout-quote.ts`, `renewalPeriodEnd` in `plan-change.util.ts` |
 | 4 | `cancelPlan`, `undoCancel`, `scheduleDowngrade`, `undoDowngrade` | `billing-plan-change.service.ts`; applied by the lifecycle sweep (`subscription-lifecycle.util.ts`) |
+| 5 | `listCoupons`, `getCoupon`, `saveCoupon`, `listOrgOptions`; coupons in `previewCheckout` / `startCheckout` | `coupon-rules.ts`, `coupon-settlement.ts`, `admin-coupons.service.ts` |
 
-Everything else is mock. Coupons are step 5: `CheckoutPreview.couponsEnabled` is `false`, which hides
-the coupon field; a sent `couponCode` is ignored. `updatePaymentMethod` stays unimplemented on purpose: renewals are
+Everything else is mock. `updatePaymentMethod` stays unimplemented on purpose: renewals are
 "pay each time" through the existing Razorpay Orders + Checkout flow (no Razorpay
 Subscriptions), and the overview says `autoRenewAvailable: false`, which hides the auto-renew UI.
 
@@ -134,6 +134,37 @@ period rule (`applyPlanChange`).
 - **Not yet:** pausing what doesn't fit (cancel to Basic leaves extra users/projects/pages as
   they are, but nothing new can be added past Basic's limits) — that is "choose what stays".
   The Super Admin "Renew" on a cancelling subscription doesn't clear the cancellation.
+
+### Step 5 notes — coupons
+
+- **Stored:** `billing.coupons` (code upper-case, unique, never renamed; percent = whole number
+  1–100, fixed = rupees stored in paise; `planIds` paid plans only; `orgIds` empty = all orgs) and
+  `billing.coupon_redemptions` (one row per discounted payment). `CouponRow.uses` = organisations
+  that used it; `status` uses `couponStatusFor`'s rule.
+- **Checks** (`coupon-rules.ts` `checkCoupon`): same order and wording as `validateCoupon` in
+  `pricing.ts` — not started, expired (valid through `validTo`), reserved for other orgs, plan,
+  billing interval, usage limit (an org that already used a reusable coupon isn't a new use),
+  once per org. Unknown code: "There's no coupon called X. Check the spelling."
+- **Maths:** taken off the taxable value after any proration credit (`proration.charge` is the
+  pre-coupon amount), percent rounded half up in paise, fixed capped at the amount; GST on what's
+  left.
+- **Preview:** a bad code is not an error — `coupon: null`, `couponError` set, full price.
+  `couponRenewalsLeft`: renewals it still covers after this payment (99 = every one).
+  **Start:** a code that doesn't apply → 400 `coupon_invalid` (the charge never differs from the
+  preview). A ₹0 total (100% coupon) activates at once in either mode → `{ status: "activated",
+  receipt }` with `reference: "free_coupon"`.
+- **Renewals:** a `first_n` / `forever` coupon is attached to the subscription
+  (`couponId`, `couponRenewalsLeft`, null = forever) when the purchase is applied (payment, ₹0,
+  or Super Admin approval of a manual request). Renewal previews apply it by themselves
+  (`couponsEnabled: false` — no field) while it covers the plan / interval of the next term, and
+  each paid renewal counts one off; `renewalAmount` includes it. Any purchase without that
+  coupon replaces it.
+- **Admin:** `POST /admin/billing/coupons` (`{ coupon, isNew: true }`), `PUT
+  /admin/billing/coupons/:code` (`{ coupon }`); validation codes `coupon_code`, `coupon_value`,
+  `coupon_plans`, `coupon_duration` (first_n needs 2+), `coupon_dates`, `coupon_uses`,
+  `coupon_orgs`, `coupon_exists`. `GET /admin/billing/coupons/:code` → `CouponDetail` (latest 200
+  redemptions, `totalDiscount`). `GET /admin/billing/org-options` → every organisation with its
+  city and current plan.
 
 ### Step 1 notes
 

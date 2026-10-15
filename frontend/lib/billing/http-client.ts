@@ -57,6 +57,13 @@ export const httpBilling: Impl = {
   undoCancel: () => call("/org/billing/cancel", del),
   scheduleDowngrade: (req) => call("/org/billing/downgrade", post(req)),
   undoDowngrade: () => call("/org/billing/downgrade", del),
+
+  // Step 5 — coupons (Super Admin) and the org picker for org-only coupons
+  listCoupons: () => call("/admin/billing/coupons"),
+  getCoupon: (code) => call(`/admin/billing/coupons/${encodeURIComponent(code)}`),
+  saveCoupon: (req) =>
+    req.isNew ? call("/admin/billing/coupons", post(req)) : call(`/admin/billing/coupons/${encodeURIComponent(req.coupon.code)}`, put(req)),
+  listOrgOptions: () => call("/admin/billing/org-options"),
 };
 
 export const HTTP_FUNCTIONS = Object.keys(httpBilling) as BillingFunction[];

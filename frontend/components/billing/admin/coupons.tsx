@@ -119,6 +119,7 @@ function validate(c: Coupon): Errors {
   if (!/^[A-Z0-9]{3,20}$/.test(c.code)) e.code = "3–20 letters or digits, no spaces.";
   if (!(c.value > 0)) e.value = "Enter a value above zero.";
   else if (c.kind === "percent" && c.value > 100) e.value = "A percentage can't be more than 100.";
+  else if (c.kind === "percent" && !Number.isInteger(c.value)) e.value = "Use a whole number (e.g. 15).";
   if (c.planIds.length === 0) e.plans = "Pick at least one plan.";
   if (c.validTo && daysBetween(c.validFrom, c.validTo) < 0) e.dates = "The end date is before the start date.";
   if (c.duration === "first_n" && !((c.durationCount ?? 0) >= 2)) e.durationCount = "Use 2 or more (1 is the same as “First payment”).";
@@ -136,18 +137,22 @@ export function CouponForm({ initial, isNew }: { initial: Coupon; isNew: boolean
   const [submitted, setSubmitted] = useState(false);
   const [busy, setBusy] = useState(false);
   const [orgSearch, setOrgSearch] = useState("");
-  const errors = validate(c);
   const set = (patch: Partial<Coupon>) => setC((prev) => ({ ...prev, ...patch }));
   const err = (k: keyof Errors) => (submitted && errors[k] ? <div className="bl-field-err">{errors[k]}</div> : null);
   const orgs = (orgOptions ?? []).filter((o) => o.name.toLowerCase().includes(orgSearch.toLowerCase()));
   const paidPlans = (plans ?? []).filter((p) => !p.isFree);
+  // The blank coupon carries the walkthrough's sample plan ids: with real plans a new coupon
+  // starts on every paid plan (until the first tick changes it).
+  const known = paidPlans.map((p) => p.id);
+  const form: Coupon = plans && isNew && c.planIds.some((id) => !known.includes(id)) ? { ...c, planIds: known } : c;
+  const errors = validate(form);
 
   async function save() {
     setSubmitted(true);
     if (Object.keys(errors).length) return;
     setBusy(true);
     try {
-      await client.saveCoupon({ coupon: c, isNew });
+      await client.saveCoupon({ coupon: form, isNew });
       toast({ variant: "success", title: isNew ? `${c.code} created` : `${c.code} saved` });
       nav.go("adminCoupons");
     } catch (e) {
@@ -201,8 +206,8 @@ export function CouponForm({ initial, isNew }: { initial: Coupon; isNew: boolean
                   <label key={p.id} className="bl-row" style={{ gap: 6, cursor: "pointer" }}>
                     <input
                       type="checkbox"
-                      checked={c.planIds.includes(p.id)}
-                      onChange={(e) => set({ planIds: e.target.checked ? [...c.planIds, p.id] : c.planIds.filter((x) => x !== p.id) })}
+                      checked={form.planIds.includes(p.id)}
+                      onChange={(e) => set({ planIds: e.target.checked ? [...form.planIds, p.id] : form.planIds.filter((x) => x !== p.id) })}
                     />
                     {p.name}
                   </label>

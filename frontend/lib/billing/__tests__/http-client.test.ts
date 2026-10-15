@@ -75,6 +75,20 @@ describe("billing http client — step 2", () => {
     expect(lastCall()).toEqual({ path: "/org/billing/downgrade", method: "DELETE", body: undefined });
   });
 
+  it("step 5: coupons — new is POST, edit is PUT on its code", async () => {
+    await httpBilling.listCoupons!();
+    expect(lastCall().path).toBe("/admin/billing/coupons");
+    await httpBilling.getCoupon!("LAUNCH20");
+    expect(lastCall().path).toBe("/admin/billing/coupons/LAUNCH20");
+    const coupon = { code: "SUMMER15", description: "", kind: "percent" as const, value: 15, planIds: ["p1"], interval: "any" as const, duration: "first_payment" as const, durationCount: null, validFrom: "2026-10-01", validTo: null, totalUses: null, oncePerOrg: true, orgIds: null };
+    await httpBilling.saveCoupon!({ coupon, isNew: true });
+    expect(lastCall()).toEqual({ path: "/admin/billing/coupons", method: "POST", body: { coupon, isNew: true } });
+    await httpBilling.saveCoupon!({ coupon, isNew: false });
+    expect(lastCall()).toMatchObject({ path: "/admin/billing/coupons/SUMMER15", method: "PUT" });
+    await httpBilling.listOrgOptions!();
+    expect(lastCall().path).toBe("/admin/billing/org-options");
+  });
+
   it("API errors become BillingError with the message and code", async () => {
     apiFetch.mockRejectedValueOnce(new ApiError("Add your billing details first.", 400, { code: "billing_profile_required", message: "Add your billing details first." }));
     const err = await httpBilling.startCheckout!({ planId: "p1", interval: "monthly", purpose: "purchase" }).catch((e: unknown) => e);

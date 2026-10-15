@@ -32,16 +32,17 @@ export const REAL_FUNCTIONS: Record<BillingFunction, boolean> = {
   undoCancel: true,
   scheduleDowngrade: true,
   undoDowngrade: true,
+  // Step 5 — coupons (the checkout applies them through previewCheckout / startCheckout)
+  listCoupons: true,
+  getCoupon: true,
+  saveCoupon: true,
+  listOrgOptions: true,
   // Still mock
   updatePaymentMethod: false, // not offered: renewals are "pay each time"
   getRetentionChoices: false,
   saveRetentionChoices: false,
   listInvoices: false,
   listPayments: false,
-  listCoupons: false,
-  getCoupon: false,
-  saveCoupon: false,
-  listOrgOptions: false,
   listSubscriptions: false,
   getSubscription: false,
   extendGrace: false,

@@ -108,6 +108,15 @@ export interface Quote {
   recurringPaise: number;
   /** Renewals: the subscription's renewsAt when quoted (null otherwise). */
   fromRenewsAt: Date | null;
+  /** Coupon taken off before GST (coupon-rules.ts withCoupon); 0 / null without. */
+  couponDiscountPaise: number;
+  coupon: {
+    id: string;
+    code: string;
+    description: string;
+    /** Renewals it still covers after this payment; null = every one. */
+    renewalsLeft: number | null;
+  } | null;
   warnings: BillingWarning[];
 }
 
@@ -247,6 +256,8 @@ export function quoteCheckout(input: QuoteInput): Quote {
     periodEnd,
     recurringPaise: subtotal,
     fromRenewsAt: null,
+    couponDiscountPaise: 0,
+    coupon: null,
   };
 }
 
@@ -374,6 +385,8 @@ export function quoteRenewal(
     periodEnd: renewalPeriodEnd(cur, next.interval, now),
     recurringPaise: subtotal,
     fromRenewsAt: cur.renewsAt,
+    couponDiscountPaise: 0,
+    coupon: null,
   };
 }
 

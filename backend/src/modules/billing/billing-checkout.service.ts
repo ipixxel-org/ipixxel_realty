@@ -32,6 +32,14 @@ import {
   type QuotePlan,
 } from './checkout-quote';
 import { expireStaleCheckouts } from './checkout-state';
+import {
+  checkCoupon,
+  normaliseCouponCode,
+  renewalsCoveredAfterFirst,
+  withCoupon,
+  type CouponRule,
+} from './coupon-rules';
+import { settleCoupon } from './coupon-settlement';
 import { isFreePlan, sortPlans } from './plan-modules';
 import type {
   CheckoutPreviewV2,
@@ -93,6 +101,8 @@ export interface QuoteContext {
   };
   seller: Awaited<ReturnType<PlatformConfigService['getSellerSettings']>>;
   hasProfile: boolean;
+  /** Why the entered coupon can't be used; null when none or it applied. */
+  couponError: string | null;
 }
 
 /** What a payment.captured did to its checkout (returned for tests / logs). */
@@ -141,6 +151,7 @@ export class BillingCheckoutService implements OnModuleInit {
       null,
       new Date(),
       renewal ? 'renewal' : 'purchase',
+      renewal ? null : dto.couponCode,
     );
     if (!ctx.hasProfile) {
       throw billingError(
@@ -155,9 +166,48 @@ export class BillingCheckoutService implements OnModuleInit {
         "Online payment isn't available for your account, so our team renews your plan. We'll contact you before it's due.",
       );
     }
+    // Never charge differently from what was shown: a bad code is refused.
+    if (ctx.couponError) throw billingError('coupon_invalid', ctx.couponError);
+    // Nothing to pay (a 100% coupon): apply it now, in either mode.
+    if (ctx.quote.totalPaise === 0)
+      return this.activateFree(orgId, userId, ctx);
     return ctx.mode.mode === 'manual'
       ? this.startManual(orgId, userId, ctx)
       : this.startOnline(orgId, userId, ctx);
+  }
+
+  /** ₹0 checkout: recorded and fulfilled like a payment of nothing. */
+  private async activateFree(
+    orgId: string,
+    userId: string,
+    ctx: QuoteContext,
+  ): Promise<StartCheckoutResultV2> {
+    const q = ctx.quote;
+    const checkout = await this.prisma.billingCheckout.create({
+      data: this.checkoutData(orgId, userId, ctx, ctx.mode.mode),
+    });
+    const outcome = await this.fulfil(checkout.id, 0);
+    if (outcome !== 'paid') {
+      throw billingError(
+        'activation_failed',
+        "We couldn't switch your plan just now. Our team has been told and will sort it out.",
+      );
+    }
+    const sub = await this.prisma.subscription.findFirst({
+      where: { orgId, status: { not: 'cancelled' } },
+    });
+    return {
+      status: 'activated',
+      receipt: {
+        planId: q.toPlan.id,
+        planName: q.toPlan.name,
+        interval: q.toInterval,
+        amount: 0,
+        reference: 'free_coupon',
+        activeUntil: sub?.renewsAt ? isoDate(sub.renewsAt) : '',
+        couponCode: q.coupon?.code ?? null,
+      },
+    };
   }
 
   private async startManual(
@@ -312,6 +362,8 @@ export class BillingCheckoutService implements OnModuleInit {
       toInterval: q.toInterval,
       kind: q.kind,
       fromRenewsAt: q.fromRenewsAt,
+      couponId: q.coupon?.id ?? null,
+      couponDiscountPaise: q.couponDiscountPaise,
       subtotalPaise: q.subtotalPaise,
       creditPaise: q.creditPaise,
       taxablePaise: q.taxablePaise,
@@ -470,6 +522,7 @@ export class BillingCheckoutService implements OnModuleInit {
           checkoutId: c.id,
           requestedById: c.createdById,
         });
+        await settleCoupon(tx, c);
         await tx.billingCheckout.update({
           where: { id: c.id },
           data: { status: 'paid', fulfilledAt: new Date() },
@@ -553,6 +606,7 @@ export class BillingCheckoutService implements OnModuleInit {
     billingState?: string | null,
     now = new Date(),
     purpose: 'purchase' | 'renewal' = 'purchase',
+    couponCode?: string | null,
   ): Promise<QuoteContext> {
     if (purpose === 'renewal') {
       // A lapsed term must read as past_due / expired before deciding.
@@ -612,16 +666,37 @@ export class BillingCheckoutService implements OnModuleInit {
       buyer: { state: buyer.state, country: buyer.country },
       seller: { state: seller.state },
     };
+    const base = { mode, buyer, seller, hasProfile: !!profile };
     try {
       if (purpose === 'renewal') {
-        const quote = quoteRenewal({
+        let quote = quoteRenewal({
           now,
           current,
           ...parties,
           notifyDays: expiry.notifyDays,
           requested: { planId, interval },
         });
-        return { quote, mode, buyer, seller, hasProfile: !!profile };
+        // A first_n / forever coupon still on the subscription discounts it,
+        // while it covers the plan the next term is on.
+        const left = sub?.couponRenewalsLeft ?? null;
+        if (sub?.couponId && (left === null || left > 0)) {
+          const coupon = await this.prisma.coupon.findUnique({
+            where: { id: sub.couponId },
+          });
+          if (
+            coupon &&
+            coupon.planIds.includes(quote.toPlan.id) &&
+            (coupon.interval === 'any' || coupon.interval === quote.toInterval)
+          ) {
+            quote = withCoupon(
+              quote,
+              coupon,
+              parties,
+              left === null ? null : left - 1,
+            );
+          }
+        }
+        return { ...base, quote, couponError: null };
       }
       const target = active.find((p) => p.id === planId);
       if (!target) {
@@ -630,38 +705,86 @@ export class BillingCheckoutService implements OnModuleInit {
           'That plan is not available. Pick another one.',
         );
       }
-      const quote = quoteCheckout({
+      let quote = quoteCheckout({
         now,
         target: asQuotePlan(target),
         interval,
         current,
         ...parties,
       });
-      return { quote, mode, buyer, seller, hasProfile: !!profile };
+      let couponError: string | null = null;
+      const code = couponCode ? normaliseCouponCode(couponCode) : '';
+      if (code) {
+        const found = await this.findCoupon(code, orgId, quote, now, active);
+        if ('error' in found) couponError = found.error;
+        else
+          quote = withCoupon(
+            quote,
+            found.coupon,
+            parties,
+            renewalsCoveredAfterFirst(found.coupon),
+          );
+      }
+      return { ...base, quote, couponError };
     } catch (e) {
       if (e instanceof QuoteError) throw billingError(e.code, e.message);
       throw e;
     }
   }
 
+  /** Look up and check an entered coupon for this org and quote. */
+  private async findCoupon(
+    code: string,
+    orgId: string,
+    quote: Quote,
+    now: Date,
+    plans: { id: string; name: string }[],
+  ): Promise<
+    { coupon: CouponRule & { description: string } } | { error: string }
+  > {
+    const coupon = await this.prisma.coupon.findUnique({ where: { code } });
+    if (!coupon) {
+      return { error: `There's no coupon called ${code}. Check the spelling.` };
+    }
+    const redeemers = await this.prisma.couponRedemption.findMany({
+      where: { couponId: coupon.id },
+      select: { organisationId: true },
+      distinct: ['organisationId'],
+    });
+    const check = checkCoupon(coupon, {
+      now,
+      orgId,
+      planId: quote.toPlan.id,
+      interval: quote.toInterval,
+      planNames: Object.fromEntries(plans.map((p) => [p.id, p.name])),
+      usesSoFar: redeemers.length,
+      orgHasUsed: redeemers.some((r) => r.organisationId === orgId),
+    });
+    return check.ok ? { coupon } : { error: check.reason };
+  }
+
   async preview(
     orgId: string,
     dto: PreviewCheckoutDto,
   ): Promise<CheckoutPreviewV2> {
-    // Coupons arrive in step 5: dto.couponCode is accepted and ignored.
+    const renewal = dto.purpose === 'renewal';
     const ctx = await this.quote(
       orgId,
       dto.planId,
       dto.interval,
       dto.billingState,
       new Date(),
-      dto.purpose ?? 'purchase',
+      renewal ? 'renewal' : 'purchase',
+      renewal ? null : dto.couponCode,
     );
-    return toPreview(ctx);
+    return toPreview(ctx, renewal);
   }
 }
 
-export function toPreview(ctx: QuoteContext): CheckoutPreviewV2 {
+export function toPreview(
+  ctx: QuoteContext,
+  renewal = false,
+): CheckoutPreviewV2 {
   const q = ctx.quote;
   return {
     planId: q.toPlan.id,
@@ -679,14 +802,18 @@ export function toPreview(ctx: QuoteContext): CheckoutPreviewV2 {
           newPrice: toRupees(q.proration.newPricePaise),
           daysLeft: q.proration.daysLeft,
           daysInPeriod: q.proration.daysInCycle,
-          charge: toRupees(q.taxablePaise),
+          // Before the coupon: the coupon line comes after the proration.
+          charge: toRupees(q.taxablePaise + q.couponDiscountPaise),
           credit: toRupees(q.creditPaise),
         }
       : null,
-    coupon: null,
-    couponError: null,
-    couponsEnabled: false,
-    couponDiscount: 0,
+    coupon: q.coupon
+      ? { code: q.coupon.code, description: q.coupon.description }
+      : null,
+    couponError: ctx.couponError,
+    // A renewal's coupon comes from the subscription, not a code.
+    couponsEnabled: !renewal,
+    couponDiscount: toRupees(q.couponDiscountPaise),
     taxable: toRupees(q.taxablePaise),
     billingState: ctx.buyer.state,
     gst: {
@@ -699,7 +826,11 @@ export function toPreview(ctx: QuoteContext): CheckoutPreviewV2 {
     total: toRupees(q.totalPaise),
     periodEnd: isoDate(q.periodEnd),
     recurringPrice: toRupees(q.recurringPaise),
-    couponRenewalsLeft: 0,
+    couponRenewalsLeft: q.coupon
+      ? q.coupon.renewalsLeft === null
+        ? 99
+        : q.coupon.renewalsLeft
+      : 0,
     paymentMode: ctx.mode.mode,
     paymentModeReason: ctx.mode.reason,
     warnings: q.warnings,

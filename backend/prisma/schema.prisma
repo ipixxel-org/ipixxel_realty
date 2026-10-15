@@ -1088,6 +1088,10 @@ model Subscription {
   scheduledPlanId    String?       @map("scheduled_plan_id")
   scheduledInterval  BillingCycle? @map("scheduled_interval")
   changeScheduledAt  DateTime?     @map("change_scheduled_at")
+  // A first_n / forever coupon still discounting renewals (step 5).
+  // couponRenewalsLeft null = every renewal (forever).
+  couponId           String?       @map("coupon_id")
+  couponRenewalsLeft Int?          @map("coupon_renewals_left")
   createdAt    DateTime           @default(now()) @map("created_at")
   updatedAt    DateTime           @updatedAt @map("updated_at")
 
@@ -1292,6 +1296,9 @@ model BillingCheckout {
   // Set exactly once when the plan is applied; the idempotency marker.
   fulfilledAt            DateTime?             @map("fulfilled_at")
   reviewReason           String?               @map("review_reason")
+  // Coupon taken off before GST (step 5); the discount is part of taxable.
+  couponId               String?               @map("coupon_id")
+  couponDiscountPaise    Int                   @default(0) @map("coupon_discount_paise")
   createdAt              DateTime              @default(now()) @map("created_at")
   updatedAt              DateTime              @updatedAt @map("updated_at")
 
@@ -1301,10 +1308,90 @@ model BillingCheckout {
   payment              Payment?              @relation(fields: [paymentId], references: [id], onDelete: SetNull)
   packageChangeRequest PackageChangeRequest? @relation(fields: [packageChangeRequestId], references: [id], onDelete: SetNull)
   createdBy            User                  @relation("BillingCheckoutCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+  coupon               Coupon?               @relation(fields: [couponId], references: [id], onDelete: Restrict)
 
   @@index([organisationId, status])
   @@index([status])
   @@map("billing_checkouts")
+  @@schema("billing")
+}
+
+enum CouponKind {
+  percent
+  fixed
+
+  @@schema("billing")
+}
+
+enum CouponDuration {
+  // Only the payment it's entered on.
+  first_payment
+  // That payment and the next (durationCount − 1) renewals.
+  first_n
+  // Every payment while the subscription keeps the plan.
+  forever
+
+  @@schema("billing")
+}
+
+enum CouponIntervalScope {
+  any
+  monthly
+  yearly
+
+  @@schema("billing")
+}
+
+// A discount code Super Admins create; entered at checkout, taken off
+// before GST. Codes are stored upper-case and never renamed.
+model Coupon {
+  id             String              @id @default(uuid())
+  code           String              @unique
+  description    String              @default("")
+  kind           CouponKind
+  // percent: 1–100. fixed: rupees off each discounted payment, in paise.
+  percentOff     Int?                @map("percent_off")
+  amountOffPaise Int?                @map("amount_off_paise")
+  // Plans it works on (ids); never empty.
+  planIds        String[]            @map("plan_ids")
+  interval       CouponIntervalScope @default(any)
+  duration       CouponDuration
+  // first_n: payments counting the first one.
+  durationCount  Int?                @map("duration_count")
+  validFrom      DateTime            @map("valid_from")
+  validTo        DateTime?           @map("valid_to")
+  // How many organisations may use it; null = no limit.
+  totalUses      Int?                @map("total_uses")
+  oncePerOrg     Boolean             @default(true) @map("once_per_org")
+  // Empty = open to every organisation.
+  orgIds         String[]            @map("org_ids")
+  createdById    String?             @map("created_by_id")
+  createdAt      DateTime            @default(now()) @map("created_at")
+  updatedAt      DateTime            @updatedAt @map("updated_at")
+
+  redemptions CouponRedemption[]
+  checkouts   BillingCheckout[]
+
+  @@map("coupons")
+  @@schema("billing")
+}
+
+// One row per discounted payment (the first one, and each renewal a
+// first_n / forever coupon still covers). "Uses" = distinct organisations.
+model CouponRedemption {
+  id             String   @id @default(uuid())
+  couponId       String   @map("coupon_id")
+  organisationId String   @map("organisation_id")
+  checkoutId     String   @unique @map("checkout_id")
+  planId         String   @map("plan_id")
+  discountPaise  Int      @map("discount_paise")
+  createdAt      DateTime @default(now()) @map("created_at")
+
+  coupon Coupon @relation(fields: [couponId], references: [id], onDelete: Restrict)
+
+  @@index([couponId])
+  @@index([organisationId])
+  @@map("coupon_redemptions")
   @@schema("billing")
 }
 

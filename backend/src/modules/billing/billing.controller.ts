@@ -32,6 +32,8 @@ import {
 import { SaveBillingProfileDto } from './dto/save-billing-profile.dto';
 import { BillingPlanChangeService } from './billing-plan-change.service';
 import { CancelPlanDto, ScheduleDowngradeDto } from './dto/plan-change.dto';
+import { AdminCouponsService } from './admin-coupons.service';
+import { SaveCouponDto } from './dto/coupon.dto';
 
 /**
  * Billing v2 — organisation side. Shares the /org/billing prefix with the
@@ -145,7 +147,40 @@ export class AdminBillingController {
   constructor(
     private readonly service: AdminBillingService,
     private readonly checkouts: BillingCheckoutService,
+    private readonly coupons: AdminCouponsService,
   ) {}
+
+  // Step 5: coupons
+  @Get('coupons')
+  listCoupons() {
+    return this.coupons.list();
+  }
+
+  @Get('coupons/:code')
+  getCoupon(@Param('code') code: string) {
+    return this.coupons.get(code);
+  }
+
+  @Post('coupons')
+  @HttpCode(200)
+  createCoupon(@CurrentUser() user: JwtPayload, @Body() dto: SaveCouponDto) {
+    return this.coupons.save(dto.coupon, true, user.sub);
+  }
+
+  @Put('coupons/:code')
+  editCoupon(
+    @CurrentUser() user: JwtPayload,
+    @Param('code') code: string,
+    @Body() dto: SaveCouponDto,
+  ) {
+    return this.coupons.save(dto.coupon, false, user.sub, code);
+  }
+
+  /** Organisations for the coupon form's "only these organisations" picker. */
+  @Get('org-options')
+  orgOptions() {
+    return this.coupons.orgOptions();
+  }
 
   /** Checkouts by status — "needs review" (paid but not applied) by default. */
   @Get('checkouts')

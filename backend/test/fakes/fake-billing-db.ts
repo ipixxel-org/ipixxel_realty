@@ -60,8 +60,20 @@ function table(
       if (!r) throw new Error(`${prefix} not found`);
       return r;
     },
-    findMany: async ({ where }: { where?: Where } = {}) =>
-      rows.filter((r) => matches(r, where)).map((r) => ({ ...r })),
+    findMany: async ({
+      where,
+      distinct,
+    }: { where?: Where; distinct?: string[] } = {}) => {
+      const hit = rows.filter((r) => matches(r, where)).map((r) => ({ ...r }));
+      if (!distinct) return hit;
+      const seen = new Set<string>();
+      return hit.filter((r) => {
+        const key = distinct.map((k) => String(r[k])).join('|');
+        if (seen.has(key)) return false;
+        seen.add(key);
+        return true;
+      });
+    },
     count: async ({ where }: { where?: Where } = {}) =>
       rows.filter((r) => matches(r, where)).length,
     create: async ({ data }: { data: Row }) => {
@@ -83,6 +95,24 @@ function table(
       if (!r) throw new Error(`${prefix} not found`);
       Object.assign(r, data, { updatedAt: new Date() });
       return { ...r };
+    },
+    upsert: async ({
+      where,
+      create,
+      update,
+    }: {
+      where: Where;
+      create: Row;
+      update: Row;
+    }) => {
+      const r = find(where);
+      if (r) {
+        Object.assign(r, update);
+        return { ...r };
+      }
+      const row = { id: id(prefix), createdAt: new Date(), ...create };
+      rows.push(row);
+      return { ...row };
     },
     updateMany: async ({ where, data }: { where: Where; data: Row }) => {
       const hit = rows.filter((r) => matches(r, where));
@@ -148,6 +178,8 @@ export function createFakeBillingDb(seed: Seed) {
     inc?.toPlan ? { ...r, toPlan: planById(r.toPlanId) } : r,
   );
   db.billingProfile = table([], 'prof');
+  db.coupon = table([], 'cpn');
+  db.couponRedemption = table([], 'red');
   db.payment = table([], 'pay');
   db.auditLog = table([], 'audit');
   db.notification = table([], 'note');
