@@ -47,10 +47,11 @@ export async function getAiStatus(): Promise<AiStatusResponse> {
   try {
     return await apiFetch<AiStatusResponse>("/ai/status");
   } catch {
+    // Status unknown — don't claim a model the backend hasn't confirmed.
     return {
       configured: false,
-      model: "gemini-3.8-flash",
-      provider: "gemini",
+      model: "",
+      provider: "",
     };
   }
 }

@@ -115,8 +115,8 @@ export function AiTemplateModal({
     provider?: string;
   }>({
     configured: true,
-    model: "gemini-2.5-flash",
-    provider: "gemini",
+    model: "",
+    provider: "",
   });
 
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -125,15 +125,8 @@ export function AiTemplateModal({
     if (!open) return;
     getAiStatus()
       .then((status) => {
-        if (status) {
-          // Clean up model name for UI display
-          const cleanModel = status.model?.includes("2.5")
-            ? "Gemini 2.5 Flash"
-            : status.model?.includes("2.0")
-              ? "Gemini 2.0 Flash"
-              : status.model || "Gemini 2.5 Flash";
-          setAiStatus({ ...status, model: cleanModel });
-        }
+        // Show the exact model id the backend will call — never a guessed label.
+        if (status) setAiStatus(status);
       })
       .catch(() => {});
 

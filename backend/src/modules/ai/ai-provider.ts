@@ -4,12 +4,19 @@ import { Logger } from '@nestjs/common';
  * Provider-agnostic agent layer.
  *
  * Every provider is an LLM/agent that can turn a prompt into a JSON design
- * document. Which one is used is decided by `AI_PROVIDER` in the environment
- * (auto-detected from whichever key is present when blank):
+ * document. The active provider, its credentials and its model come from
+ * {@link AiProviderConfig}, which AiSettingsService resolves per request from
+ * the Super Admin AI settings (database), with .env only as the fallback for
+ * blank fields:
  *
- *   gemini    -> GEMINI_API_KEY      (Google Gemini)
- *   anthropic -> ANTHROPIC_API_KEY   (Claude)
- *   external  -> AI_GENERATE_API_URL (any custom agent / hosted model)
+ *   gemini    -> geminiApiKey + geminiModel        (Google Gemini)
+ *   anthropic -> anthropicApiKey + anthropicModel  (Claude)
+ *   external  -> aiGenerateApiUrl                  (any custom agent / hosted model)
+ *
+ * The configured model is the only model ever called. A 404 from it is
+ * reported as "model unavailable" — never silently swapped for another model.
+ * Only transient upstream failures (HTTP 429 / 503) are retried, against the
+ * same model.
  */
 
 export interface AiJsonRequest {
@@ -26,10 +33,162 @@ export interface AiProvider {
   generateJson(request: AiJsonRequest): Promise<any>;
 }
 
+/** Effective AI settings for one request (see AiSettingsService). */
+export interface AiProviderConfig {
+  provider: string;
+  geminiApiKey: string;
+  geminiModel: string;
+  geminiThinkingBudget: string;
+  anthropicApiKey: string;
+  anthropicModel: string;
+  aiGenerateApiUrl: string;
+  aiGenerateApiKey: string;
+}
+
+export type AiProviderErrorKind =
+  | 'model_unavailable'
+  | 'auth'
+  | 'rate_limited'
+  | 'overloaded'
+  | 'bad_request'
+  | 'invalid_response'
+  | 'upstream';
+
+/**
+ * Upstream failure with enough context for logs and for AiService to pick an
+ * HTTP response. `message` is already sanitized — it never contains secrets.
+ */
+export class AiProviderError extends Error {
+  constructor(
+    readonly kind: AiProviderErrorKind,
+    readonly provider: string,
+    readonly model: string,
+    /** Upstream HTTP status, or null when there was no HTTP response. */
+    readonly status: number | null,
+    message: string,
+    readonly attempts = 1,
+  ) {
+    super(message);
+    this.name = 'AiProviderError';
+  }
+
+  get transient(): boolean {
+    return this.kind === 'rate_limited' || this.kind === 'overloaded';
+  }
+}
+
+export interface AiRetryOptions {
+  /** Total attempts for a transient (429 / 503) failure, including the first. */
+  maxAttempts: number;
+  /** First backoff delay; doubles per retry. */
+  baseDelayMs: number;
+  /** Upper bound for any single wait, including a server Retry-After. */
+  maxDelayMs: number;
+  sleep: (ms: number) => Promise<void>;
+}
+
+export const DEFAULT_RETRY_OPTIONS: AiRetryOptions = {
+  maxAttempts: 3,
+  baseDelayMs: 1000,
+  maxDelayMs: 8000,
+  sleep: (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
+};
+
 const logger = new Logger('AiProvider');
 
-function env(name: string): string {
-  return (process.env[name] || '').trim();
+const MAX_ERROR_LENGTH = 300;
+
+/**
+ * Strip anything credential-like from upstream text before it reaches a log
+ * line or an API response: the known secrets themselves, `key=` query
+ * parameters and Google API key shapes.
+ */
+export function sanitizeErrorText(
+  text: string,
+  secrets: string[] = [],
+): string {
+  let out = String(text ?? '');
+  for (const secret of secrets) {
+    if (secret && secret.length >= 6)
+      out = out.split(secret).join('[redacted]');
+  }
+  out = out
+    .replace(/([?&](?:key|api_key|apikey)=)[^&\s"']+/gi, '$1[redacted]')
+    .replace(/AIza[0-9A-Za-z_-]{20,}/g, '[redacted]')
+    .replace(/\bAQ\.[0-9A-Za-z_.-]{20,}/g, '[redacted]')
+    .replace(/\bsk-[0-9A-Za-z_-]{16,}/g, '[redacted]')
+    .replace(/\s+/g, ' ')
+    .trim();
+  return out.length > MAX_ERROR_LENGTH
+    ? `${out.slice(0, MAX_ERROR_LENGTH)}…`
+    : out;
+}
+
+/** Google/Anthropic error bodies carry the human message at error.message. */
+function upstreamMessage(body: string): string {
+  try {
+    const parsed = JSON.parse(body) as {
+      error?: { message?: unknown };
+      message?: unknown;
+    } | null;
+    const message = parsed?.error?.message ?? parsed?.message;
+    if (typeof message === 'string' && message.trim()) return message;
+  } catch {
+    // not JSON — fall through to the raw text
+  }
+  return body;
+}
+
+function classifyStatus(status: number, message: string): AiProviderErrorKind {
+  if (status === 404) return 'model_unavailable';
+  if (status === 401 || status === 403) return 'auth';
+  if (status === 429) return 'rate_limited';
+  if (status === 503 || status === 529) return 'overloaded';
+  // Gemini answers an invalid key with 400 "API key not valid".
+  if (status === 400 && /api[ _-]?key/i.test(message)) return 'auth';
+  if (status === 400) return 'bad_request';
+  return 'upstream';
+}
+
+function upstreamError(
+  provider: string,
+  model: string,
+  response: Response,
+  body: string,
+  secrets: string[],
+): AiProviderError {
+  const message = sanitizeErrorText(upstreamMessage(body), secrets);
+  return new AiProviderError(
+    classifyStatus(response.status, message),
+    provider,
+    model,
+    response.status,
+    message || `HTTP ${response.status}`,
+  );
+}
+
+function networkError(
+  provider: string,
+  model: string,
+  err: unknown,
+  secrets: string[],
+): AiProviderError {
+  const message = err instanceof Error ? err.message : String(err);
+  return new AiProviderError(
+    'upstream',
+    provider,
+    model,
+    null,
+    sanitizeErrorText(`Network error: ${message}`, secrets),
+  );
+}
+
+/** Seconds from a Retry-After header, when present and numeric. */
+function retryAfterMs(response: Response | undefined): number | null {
+  const raw = response?.headers?.get?.('retry-after');
+  if (!raw) return null;
+  const seconds = Number(raw);
+  return Number.isFinite(seconds) && seconds >= 0 ? seconds * 1000 : null;
 }
 
 export function stripCodeFences(text: string): string {
@@ -52,76 +211,80 @@ export function parseJsonLoose(text: string): any {
   }
 }
 
-function ok(response: Response, provider: string, body: string) {
-  if (!response.ok) {
-    throw new Error(
-      `${provider} request failed (${response.status}): ${body.slice(0, 500)}`,
+function parseJsonOrFail(text: string, provider: string, model: string): any {
+  try {
+    return parseJsonLoose(text);
+  } catch {
+    throw new AiProviderError(
+      'invalid_response',
+      provider,
+      model,
+      200,
+      `${provider} (${model}) returned a response that is not valid JSON`,
     );
   }
 }
 
-class GeminiProvider implements AiProvider {
+export class GeminiProvider implements AiProvider {
   readonly name = 'gemini';
-  readonly model = env('GEMINI_MODEL') || 'gemini-3.8-flash';
+  readonly model: string;
+
+  constructor(
+    private readonly config: AiProviderConfig,
+    private readonly retry: AiRetryOptions = DEFAULT_RETRY_OPTIONS,
+  ) {
+    this.model = config.geminiModel.trim();
+  }
 
   isConfigured(): boolean {
-    return env('GEMINI_API_KEY').length > 0;
+    return this.config.geminiApiKey.trim().length > 0 && this.model.length > 0;
   }
 
   async generateJson(request: AiJsonRequest): Promise<any> {
-    const key = env('GEMINI_API_KEY');
-    const configuredModel = this.model;
-    const candidates = Array.from(
-      new Set([
-        configuredModel,
-        'gemini-3.8-flash',
-        'gemini-3-flash',
-        'gemini-2.5-flash',
-        'gemini-2.0-flash',
-      ]),
-    );
-
-    let lastError: Error | null = null;
-    for (let i = 0; i < candidates.length; i++) {
-      const modelName = candidates[i];
+    const maxAttempts = Math.max(1, this.retry.maxAttempts);
+    for (let attempt = 1; ; attempt++) {
+      let lastResponse: Response | undefined;
       try {
-        return await this.callModel(modelName, key, request);
-      } catch (err: any) {
-        lastError = err;
-        const msg = String(err?.message || '');
-        // Retry another model when the current one is busy *or* gone (a
-        // retired/renamed model returns 404 "not found / no longer available").
-        const isRetryable =
-          msg.includes('503') ||
-          msg.includes('429') ||
-          msg.includes('404') ||
-          msg.includes('high demand') ||
-          msg.includes('UNAVAILABLE') ||
-          msg.toLowerCase().includes('not found') ||
-          msg.toLowerCase().includes('no longer available');
-
-        if (isRetryable && i < candidates.length - 1) {
-          logger.warn(
-            `Gemini model "${modelName}" unavailable (${msg.slice(0, 80)}). Retrying with "${candidates[i + 1]}"...`,
+        return await this.callModel(request, (res) => {
+          lastResponse = res;
+        });
+      } catch (err: unknown) {
+        if (!(err instanceof AiProviderError)) throw err;
+        logger.warn(
+          `AI request failed provider=${this.name} model=${this.model} ` +
+            `status=${err.status ?? 'none'} kind=${err.kind} ` +
+            `attempt=${attempt}/${maxAttempts} message="${err.message}"`,
+        );
+        if (!err.transient || attempt >= maxAttempts) {
+          throw new AiProviderError(
+            err.kind,
+            err.provider,
+            err.model,
+            err.status,
+            err.message,
+            attempt,
           );
-          await new Promise((res) => setTimeout(res, 800));
-          continue;
         }
-        throw err;
+        const backoff = this.retry.baseDelayMs * 2 ** (attempt - 1);
+        const wait = Math.min(
+          retryAfterMs(lastResponse) ?? backoff,
+          this.retry.maxDelayMs,
+        );
+        await this.retry.sleep(wait);
       }
     }
-
-    throw lastError || new Error('All Gemini candidate models failed');
   }
 
   private async callModel(
-    modelName: string,
-    key: string,
     request: AiJsonRequest,
+    onResponse: (res: Response) => void,
   ): Promise<any> {
+    const key = this.config.geminiApiKey.trim();
+    const secrets = [key];
+    // Key goes in a header, not the URL, so it can't leak via URL logging.
     const url =
       `https://generativelanguage.googleapis.com/v1beta/models/` +
-      `${modelName}:generateContent?key=${key}`;
+      `${encodeURIComponent(this.model)}:generateContent`;
 
     const generationConfig: Record<string, unknown> = {
       response_mime_type: 'application/json',
@@ -129,141 +292,192 @@ class GeminiProvider implements AiProvider {
       maxOutputTokens: request.maxTokens ?? 8192,
     };
 
-    const budgetRaw = env('GEMINI_THINKING_BUDGET');
-    if (budgetRaw !== '' && modelName.includes('2.5')) {
+    const budgetRaw = this.config.geminiThinkingBudget.trim();
+    if (budgetRaw !== '' && this.model.includes('2.5')) {
       const budget = Number(budgetRaw);
       if (Number.isFinite(budget)) {
         generationConfig.thinkingConfig = { thinkingBudget: budget };
       }
     }
 
-    const response = await fetch(url, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        ...(request.system
-          ? { systemInstruction: { parts: [{ text: request.system }] } }
-          : {}),
-        contents: [{ role: 'user', parts: [{ text: request.prompt }] }],
-        generationConfig,
-      }),
-    });
+    let response: Response;
+    try {
+      response = await fetch(url, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-goog-api-key': key,
+        },
+        body: JSON.stringify({
+          ...(request.system
+            ? { systemInstruction: { parts: [{ text: request.system }] } }
+            : {}),
+          contents: [{ role: 'user', parts: [{ text: request.prompt }] }],
+          generationConfig,
+        }),
+      });
+    } catch (err: unknown) {
+      throw networkError(this.name, this.model, err, secrets);
+    }
+    onResponse(response);
 
     const body = await response.text();
-    ok(response, `Gemini (${modelName})`, body);
+    if (!response.ok) {
+      throw upstreamError(this.name, this.model, response, body, secrets);
+    }
 
-    const data = JSON.parse(body);
+    const data = parseJsonOrFail(body, this.name, this.model);
     const text: string = (data?.candidates?.[0]?.content?.parts || [])
       .map((part: { text?: string }) => part?.text || '')
       .join('');
     if (!text) {
-      throw new Error(`Gemini (${modelName}) returned no content`);
+      throw new AiProviderError(
+        'invalid_response',
+        this.name,
+        this.model,
+        response.status,
+        `Gemini (${this.model}) returned no content`,
+      );
     }
-    return parseJsonLoose(text);
+    return parseJsonOrFail(text, this.name, this.model);
   }
 }
 
-class AnthropicProvider implements AiProvider {
+export class AnthropicProvider implements AiProvider {
   readonly name = 'anthropic';
-  readonly model = env('ANTHROPIC_MODEL') || 'claude-sonnet-4-20250514';
+  readonly model: string;
+
+  constructor(private readonly config: AiProviderConfig) {
+    this.model = config.anthropicModel.trim();
+  }
 
   isConfigured(): boolean {
-    return env('ANTHROPIC_API_KEY').length > 0;
+    return (
+      this.config.anthropicApiKey.trim().length > 0 && this.model.length > 0
+    );
   }
 
   async generateJson(request: AiJsonRequest): Promise<any> {
-    const response = await fetch('https://api.anthropic.com/v1/messages', {
-      method: 'POST',
-      headers: {
-        'content-type': 'application/json',
-        'x-api-key': env('ANTHROPIC_API_KEY'),
-        'anthropic-version': '2023-06-01',
-      },
-      body: JSON.stringify({
-        model: this.model,
-        max_tokens: request.maxTokens ?? 8192,
-        temperature: request.temperature ?? 0.7,
-        ...(request.system ? { system: request.system } : {}),
-        messages: [{ role: 'user', content: request.prompt }],
-      }),
-    });
+    const key = this.config.anthropicApiKey.trim();
+    let response: Response;
+    try {
+      response = await fetch('https://api.anthropic.com/v1/messages', {
+        method: 'POST',
+        headers: {
+          'content-type': 'application/json',
+          'x-api-key': key,
+          'anthropic-version': '2023-06-01',
+        },
+        body: JSON.stringify({
+          model: this.model,
+          max_tokens: request.maxTokens ?? 8192,
+          temperature: request.temperature ?? 0.7,
+          ...(request.system ? { system: request.system } : {}),
+          messages: [{ role: 'user', content: request.prompt }],
+        }),
+      });
+    } catch (err: unknown) {
+      throw networkError(this.name, this.model, err, [key]);
+    }
 
     const body = await response.text();
-    ok(response, 'Anthropic', body);
+    if (!response.ok) {
+      throw upstreamError(this.name, this.model, response, body, [key]);
+    }
 
-    const data = JSON.parse(body);
+    const data = parseJsonOrFail(body, this.name, this.model);
     const text: string = (data?.content || [])
       .filter((block: { type?: string }) => block?.type === 'text')
       .map((block: { text?: string }) => block?.text || '')
       .join('\n');
     if (!text) {
-      throw new Error('Anthropic returned no content');
+      throw new AiProviderError(
+        'invalid_response',
+        this.name,
+        this.model,
+        response.status,
+        'Anthropic returned no content',
+      );
     }
-    return parseJsonLoose(text);
+    return parseJsonOrFail(text, this.name, this.model);
   }
 }
 
-class CustomProvider implements AiProvider {
+export class CustomProvider implements AiProvider {
   readonly name = 'external';
   readonly model = 'custom-agent';
 
+  constructor(private readonly config: AiProviderConfig) {}
+
   isConfigured(): boolean {
-    return env('AI_GENERATE_API_URL').length > 0;
+    return this.config.aiGenerateApiUrl.trim().length > 0;
   }
 
   async generateJson(request: AiJsonRequest): Promise<any> {
     const headers: Record<string, string> = {
       'content-type': 'application/json',
     };
-    const key = env('AI_GENERATE_API_KEY');
+    const key = this.config.aiGenerateApiKey.trim();
     if (key) {
       headers.Authorization = `Bearer ${key}`;
     }
 
-    const response = await fetch(env('AI_GENERATE_API_URL'), {
-      method: 'POST',
-      headers,
-      body: JSON.stringify({
-        system: request.system ?? '',
-        prompt: request.prompt,
-        response_format: 'json',
-      }),
-    });
+    let response: Response;
+    try {
+      response = await fetch(this.config.aiGenerateApiUrl.trim(), {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({
+          system: request.system ?? '',
+          prompt: request.prompt,
+          response_format: 'json',
+        }),
+      });
+    } catch (err: unknown) {
+      throw networkError(this.name, this.model, err, [key]);
+    }
 
     const body = await response.text();
-    ok(response, 'External agent', body);
+    if (!response.ok) {
+      throw upstreamError(this.name, this.model, response, body, [key]);
+    }
 
-    const data = parseJsonLoose(body);
+    const data = parseJsonOrFail(body, this.name, this.model);
     const unwrapped =
       data?.site ?? data?.data ?? data?.result ?? data?.content ?? data;
-    return typeof unwrapped === 'string' ? parseJsonLoose(unwrapped) : unwrapped;
+    return typeof unwrapped === 'string'
+      ? parseJsonOrFail(unwrapped, this.name, this.model)
+      : unwrapped;
   }
 }
 
 /**
- * Resolves the active agent from `AI_PROVIDER`, falling back to whichever
- * provider actually has credentials configured. Returns null when no agent is
+ * Picks the agent named by `config.provider`, or — when that is blank —
+ * whichever provider actually has credentials. Returns null when no agent is
  * available so callers can surface a real error instead of a static page.
  */
-export function resolveAiProvider(): AiProvider | null {
+export function resolveAiProvider(
+  config: AiProviderConfig,
+  retry: AiRetryOptions = DEFAULT_RETRY_OPTIONS,
+): AiProvider | null {
   const registry: Record<string, AiProvider> = {
-    gemini: new GeminiProvider(),
-    anthropic: new AnthropicProvider(),
-    external: new CustomProvider(),
-    custom: new CustomProvider(),
+    gemini: new GeminiProvider(config, retry),
+    anthropic: new AnthropicProvider(config),
+    external: new CustomProvider(config),
+    custom: new CustomProvider(config),
   };
 
-  const requested = env('AI_PROVIDER').toLowerCase();
+  const requested = config.provider.trim().toLowerCase();
   if (requested) {
     const provider = registry[requested];
     if (!provider) {
       logger.warn(
-        `Unknown AI_PROVIDER "${requested}". Falling back to auto-detect.`,
+        `Unknown AI provider "${requested}". Falling back to auto-detect.`,
       );
     } else if (provider.isConfigured()) {
       return provider;
     } else {
-      logger.warn(`AI_PROVIDER "${requested}" is not configured.`);
+      logger.warn(`AI provider "${requested}" is not configured.`);
       return null;
     }
   }
