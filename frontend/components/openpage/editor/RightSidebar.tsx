@@ -1,7 +1,7 @@
 "use client";
 
-import { useEffect } from "react";
-import { MousePointer2, SlidersHorizontal, PanelRightClose, AlignLeft, Palette, Type, Settings2 } from "lucide-react";
+import { useEffect, useState } from "react";
+import { MousePointer2, SlidersHorizontal, PanelRightClose, AlignLeft, Palette, Type, Settings2, Sparkles } from "lucide-react";
 import { useEditorStore, type RightSidebarTab } from "@/components/openpage/store/editorStore";
 import { useConfigStore } from "@/components/openpage/store/configStore";
 import { blockMetadata } from "@/lib/openpage/block-metadata";
@@ -11,6 +11,7 @@ import { StylePanel } from './StylePanel'
 import { TypographyPanel } from './TypographyPanel'
 import { AdvancedPanel } from './AdvancedPanel'
 import { ElementStylePanel } from './ElementStylePanel'
+import { SectionAiAssistant } from './SectionAiAssistant'
 
 const tabs: { id: RightSidebarTab; label: string; icon: typeof AlignLeft; color: string }[] = [
   { id: 'properties', label: 'Content', icon: AlignLeft, color: "#38bdf8" },
@@ -40,6 +41,7 @@ export function RightSidebar() {
 
   const selectedElement = useEditorStore((s) => s.selectedElement)
   const selectedElementId = selectedElement?.elementId ?? null
+  const [aiAssistantOpen, setAiAssistantOpen] = useState(false)
 
   // Switching blocks should land on Content, but keep the Element tab while the
   // user is working inside an element of the block they just selected.
@@ -73,6 +75,27 @@ export function RightSidebar() {
           <PanelRightClose size={14} />
         </button>
       </div>
+
+      {selectedBlock && (
+        <div className="px-3 pb-2.5">
+          <button
+            type="button"
+            onClick={() => setAiAssistantOpen(true)}
+            className="w-full flex items-center justify-center gap-1.5 py-1.5 px-3 rounded-lg bg-gradient-to-r from-[#6d5dfc]/10 to-[#ec4899]/10 hover:from-[#6d5dfc]/20 hover:to-[#ec4899]/20 border border-[#6d5dfc]/30 text-[#6d5dfc] text-[11px] font-semibold transition-all shadow-2xs"
+          >
+            <Sparkles size={12} className="text-[#ec4899]" />
+            AI Copilot (Rewrite / Tone)
+          </button>
+        </div>
+      )}
+
+      {selectedBlock && (
+        <SectionAiAssistant
+          block={selectedBlock}
+          open={aiAssistantOpen}
+          onClose={() => setAiAssistantOpen(false)}
+        />
+      )}
 
       {/* Icon tabs */}
       <div className="px-3 pb-3 border-b border-border-default shrink-0">

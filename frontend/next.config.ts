@@ -5,6 +5,10 @@ const nextConfig: NextConfig = {
   typescript: { ignoreBuildErrors: true },
   experimental: {
     webpackMemoryOptimizations: true,
+    // Long-running backend routes proxied via rewrites (the AI builder's
+    // /ai/generate-template can take a minute or more) exceed the 30s default,
+    // which Next aborts with "Failed to proxy ... socket hang up".
+    proxyTimeout: 300000,
   },
   async redirects() {
     return [

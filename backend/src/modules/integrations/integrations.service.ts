@@ -3,6 +3,7 @@ import { EmailService } from '../email/email.service';
 import { MarketingService } from '../marketing/marketing.service';
 import { AdminRolesService } from '../admin-roles/admin-roles.service';
 import { RazorpaySettingsService } from '../payments/razorpay-settings.service';
+import { AiSettingsService } from '../ai/ai-settings.service';
 import type { JwtPayload } from '../../common/types/jwt-payload.interface';
 
 export type IntegrationStatus = {
@@ -22,6 +23,7 @@ const INTEGRATION_MODULES: Record<string, string> = {
   smtp: 'admin_email',
   'social-login': 'admin_settings',
   razorpay: 'admin_subscriptions',
+  ai: 'admin_settings',
 };
 
 @Injectable()
@@ -31,6 +33,7 @@ export class IntegrationsService {
     private readonly marketing: MarketingService,
     private readonly adminRoles: AdminRolesService,
     private readonly razorpay: RazorpaySettingsService,
+    private readonly aiSettings: AiSettingsService,
   ) {}
 
   /**
@@ -61,6 +64,11 @@ export class IntegrationsService {
         configured: rzp.configured,
         active: rzp.ready,
       });
+    }
+
+    if (canView(INTEGRATION_MODULES.ai)) {
+      const configured = await this.aiSettings.isConfigured();
+      out.push({ key: 'ai', configured, active: configured });
     }
 
     return out;

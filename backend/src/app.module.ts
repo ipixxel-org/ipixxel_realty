@@ -53,9 +53,11 @@ import { MetaLeadsModule } from './modules/meta-leads/meta-leads.module';
 import { MarketingModule } from './modules/marketing/marketing.module';
 import { IntegrationsModule } from './modules/integrations/integrations.module';
 import { PaymentsModule } from './modules/payments/payments.module';
+import { AiModule } from './modules/ai/ai.module';
 
 @Module({
   imports: [
+    AiModule,
     UploadsModule,
     OrgReportsModule,
     PrismaModule,

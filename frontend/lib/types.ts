@@ -3155,3 +3155,37 @@ export interface UpdateRazorpaySettingsInput {
   webhookSecret?: string;
   isActive?: boolean;
 }
+
+// --- Super Admin AI provider (OpenPage AI Template builder) ----------------
+// Secrets come back masked; posting the mask (or blank) keeps the stored value.
+
+export type AiProviderName = "gemini" | "anthropic" | "external";
+
+/** GET/PUT /admin/ai-settings — secrets are never returned in clear. */
+export interface AiSettingsView {
+  /** Where the active credentials come from: saved in the console, or .env. */
+  source: "database" | "env";
+  provider: AiProviderName | "";
+  geminiModel: string;
+  geminiThinkingBudget: string;
+  geminiApiKey: string;
+  hasGeminiApiKey: boolean;
+  anthropicModel: string;
+  anthropicApiKey: string;
+  hasAnthropicApiKey: boolean;
+  aiGenerateApiUrl: string;
+  aiGenerateApiKey: string;
+  hasAiGenerateApiKey: boolean;
+  updatedAt: string | null;
+}
+
+export interface UpdateAiSettingsInput {
+  provider?: AiProviderName | "";
+  geminiApiKey?: string;
+  geminiModel?: string;
+  geminiThinkingBudget?: string;
+  anthropicApiKey?: string;
+  anthropicModel?: string;
+  aiGenerateApiUrl?: string;
+  aiGenerateApiKey?: string;
+}

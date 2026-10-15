@@ -10,6 +10,7 @@ import {
   Building2, MapPin, Home, Trees, FileText, Download, Mail, Save, Layers,
   ChevronDown, ChevronRight, Type, Box, Code2,
   LayoutTemplate, Blocks, Globe, PanelLeftClose, X, ClipboardList,
+  Sparkles,
 } from "lucide-react";
 import {
   DndContext,
@@ -280,11 +281,10 @@ function SortableLayer({ block, isSelected, onSelect, onDuplicate, onRemove, onH
       ref={setNodeRef}
       style={style}
       onClick={onSelect}
-      className={`group px-2.5 py-2 my-1 rounded-xl text-[12px] flex items-center gap-2 transition-all cursor-pointer select-none relative border ${
-        isSelected
+      className={`group px-2.5 py-2 my-1 rounded-xl text-[12px] flex items-center gap-2 transition-all cursor-pointer select-none relative border ${isSelected
           ? 'bg-green/10 text-green border-green/40 shadow-sm'
           : 'border-border-subtle/60 bg-bg-2/40 text-text-1 hover:bg-bg-3/80 hover:text-text-0 hover:border-border-hover'
-      } ${isHidden ? 'opacity-40' : ''}`}
+        } ${isHidden ? 'opacity-40' : ''}`}
     >
       <div
         {...attributes}
@@ -296,9 +296,8 @@ function SortableLayer({ block, isSelected, onSelect, onDuplicate, onRemove, onH
       </div>
 
       <div
-        className={`w-[22px] h-[22px] rounded flex items-center justify-center text-[10px] shrink-0 border transition-colors ${
-          isSelected ? 'border-green/30 bg-green-glow' : 'bg-bg-3'
-        }`}
+        className={`w-[22px] h-[22px] rounded flex items-center justify-center text-[10px] shrink-0 border transition-colors ${isSelected ? 'border-green/30 bg-green-glow' : 'bg-bg-3'
+          }`}
         style={{ color: widgetColor(block.type), borderColor: `${widgetColor(block.type)}${isSelected ? "66" : "40"}`, backgroundColor: `${widgetColor(block.type)}${isSelected ? "1f" : "14"}` }}
       >
         <Icon size={11} strokeWidth={2} />
@@ -377,14 +376,12 @@ function WidgetTile({
         }
       }}
       title={`${label} (click to add, or drag to column/canvas)`}
-      className={`flex flex-col items-center justify-center rounded-xl border border-border-default bg-bg-1 hover:border-[#6d5dfc]/40 hover:bg-[#6d5dfc]/[0.04] transition-all duration-150 cursor-grab active:cursor-grabbing select-none group/tile hover:shadow-[0_4px_12px_rgba(109,93,252,0.1)] ${
-        compact ? "p-2 gap-1.5" : "p-2.5 gap-1.5"
-      }`}
+      className={`flex flex-col items-center justify-center rounded-xl border border-border-default bg-bg-1 hover:border-[#6d5dfc]/40 hover:bg-[#6d5dfc]/[0.04] transition-all duration-150 cursor-grab active:cursor-grabbing select-none group/tile hover:shadow-[0_4px_12px_rgba(109,93,252,0.1)] ${compact ? "p-2 gap-1.5" : "p-2.5 gap-1.5"
+        }`}
     >
       <div
-        className={`rounded-lg flex items-center justify-center transition-colors bg-[#6d5dfc]/[0.08] text-[#6d5dfc] group-hover/tile:bg-[#6d5dfc]/[0.14] ${
-          compact ? "w-8 h-8" : "w-9 h-9"
-        }`}
+        className={`rounded-lg flex items-center justify-center transition-colors bg-[#6d5dfc]/[0.08] text-[#6d5dfc] group-hover/tile:bg-[#6d5dfc]/[0.14] ${compact ? "w-8 h-8" : "w-9 h-9"
+          }`}
       >
         <Icon size={compact ? 15 : 17} strokeWidth={1.9} />
       </div>
@@ -574,11 +571,63 @@ function GlobalWidgetsPanel() {
   )
 }
 
-type Tab = 'layers' | 'components' | 'templates' | 'globals' | 'forms'
+function AiGeneratorPanel() {
+  const openAiModal = useEditorStore((s) => s.openAiModal);
+  return (
+    <div className="flex flex-col flex-1 min-h-0 overflow-y-auto p-4 space-y-4 text-xs">
+      <div className="p-4 rounded-xl border border-[#6d5dfc]/30 bg-gradient-to-br from-[#6d5dfc]/10 via-[#ec4899]/5 to-transparent text-center space-y-2.5">
+        <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-[#6d5dfc] to-[#ec4899] text-white flex items-center justify-center mx-auto shadow-md shadow-[#6d5dfc]/25">
+          <Sparkles size={20} />
+        </div>
+        <div>
+          <h4 className="font-semibold text-text-0 text-sm">AI Template Architect</h4>
+          <p className="text-[11px] text-text-3 mt-1 leading-relaxed">
+            Create high-converting real estate landing pages tailored to your project using Google Gemini.
+          </p>
+        </div>
+        <button
+          type="button"
+          onClick={openAiModal}
+          className="w-full py-2.5 px-3 rounded-xl bg-gradient-to-r from-[#6d5dfc] to-[#ec4899] text-white text-xs font-semibold shadow-md shadow-[#6d5dfc]/20 hover:opacity-95 active:scale-98 transition-all flex items-center justify-center gap-2"
+        >
+          <Sparkles size={14} />
+          Launch AI Architect
+        </button>
+      </div>
+
+      <div className="space-y-2">
+        <span className="text-[11px] font-semibold text-text-2 uppercase tracking-wider block">
+          Capabilities
+        </span>
+        <div className="space-y-1.5 text-text-2 text-[11px]">
+          <div className="flex items-center gap-2 p-2 rounded-lg bg-bg-2/50 border border-border-subtle">
+            <span className="w-1.5 h-1.5 rounded-full bg-[#6d5dfc]" />
+            Generate from natural prompt or specs
+          </div>
+          <div className="flex items-center gap-2 p-2 rounded-lg bg-bg-2/50 border border-border-subtle">
+            <span className="w-1.5 h-1.5 rounded-full bg-[#ec4899]" />
+            Import facts from organization projects
+          </div>
+          <div className="flex items-center gap-2 p-2 rounded-lg bg-bg-2/50 border border-border-subtle">
+            <span className="w-1.5 h-1.5 rounded-full bg-green" />
+            Full OpenPage blocks & theme customization
+          </div>
+          <div className="flex items-center gap-2 p-2 rounded-lg bg-bg-2/50 border border-border-subtle">
+            <span className="w-1.5 h-1.5 rounded-full bg-amber-500" />
+            Section-level AI copy & headline rewriting
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+type Tab = 'layers' | 'components' | 'templates' | 'globals' | 'forms' | 'ai'
 
 const TAB_DEFS: { id: Tab; label: string; hint: string; icon: typeof Layout; color: string }[] = [
   { id: 'components', label: 'Blocks', hint: 'Drag widgets onto the canvas', icon: Blocks, color: "#38bdf8" },
   { id: 'templates', label: 'Templates', hint: 'Ready-made sections', icon: LayoutTemplate, color: "#f59e0b" },
+  { id: 'ai', label: 'AI Gen', hint: 'Generate landing page with Gemini AI', icon: Sparkles, color: "#ec4899" },
   { id: 'layers', label: 'Layers', hint: 'Page structure & reorder', icon: Layers, color: "#34d399" },
   { id: 'globals', label: 'Globals', hint: 'Reusable saved widgets', icon: Globe, color: "#a78bfa" },
   { id: 'forms', label: 'Forms', hint: 'Build the forms used on this page', icon: ClipboardList, color: "#fb7185" },
@@ -638,9 +687,8 @@ export function LayersPanel() {
               key={id}
               type="button"
               onClick={() => setTab(id)}
-              className={`w-[50px] flex flex-col items-center gap-1 py-2 rounded-xl transition-colors duration-150 ${
-                isActive ? 'bg-[#6d5dfc] text-white shadow-[0_4px_12px_rgba(109,93,252,0.3)]' : 'text-text-2 hover:text-[#6d5dfc] hover:bg-[#6d5dfc]/[0.07]'
-              }`}
+              className={`w-[50px] flex flex-col items-center gap-1 py-2 rounded-xl transition-colors duration-150 ${isActive ? 'bg-[#6d5dfc] text-white shadow-[0_4px_12px_rgba(109,93,252,0.3)]' : 'text-text-2 hover:text-[#6d5dfc] hover:bg-[#6d5dfc]/[0.07]'
+                }`}
               title={label}
               aria-pressed={isActive}
             >
@@ -761,6 +809,8 @@ export function LayersPanel() {
           <ComponentsPanel />
         ) : tab === 'templates' ? (
           <SectionTemplatesPanel />
+        ) : tab === 'ai' ? (
+          <AiGeneratorPanel />
         ) : tab === 'forms' ? (
           <div className="flex flex-col flex-1 min-h-0 overflow-hidden">
             <FormBuilder onClose={() => setTab('components')} />

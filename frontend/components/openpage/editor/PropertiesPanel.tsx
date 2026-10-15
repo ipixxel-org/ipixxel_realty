@@ -839,7 +839,7 @@ function PropertyField({ field, block }: { field: FieldDef; block: BlockConfig }
   const updateBlockProps = useConfigStore((s) => s.updateBlockProps)
   const updateBlock = useConfigStore((s) => s.updateBlock)
   const patchSite = useConfigStore((s) => s.patchSite)
-  const forms = useConfigStore((s) => s.config.forms ?? [])
+  const forms = useConfigStore((s) => s.config.forms) ?? []
   const pageBlocks = useConfigStore((s) => {
     const pages = s.config.pages
     if (!pages || pages.length === 0) return s.config.blocks

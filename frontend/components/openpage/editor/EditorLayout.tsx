@@ -8,6 +8,7 @@ import { VersionHistory } from "./VersionHistory";
 import { CanvasToolbar } from "./CanvasToolbar";
 import { ShortcutsModal } from "./ShortcutsModal";
 import { OnboardingTour } from "./OnboardingTour";
+import { AiTemplateModal } from "./AiTemplateModal";
 import { useEditorStore } from "@/components/openpage/store/editorStore";
 import { OpenPageRuntimeProvider } from "@/components/openpage/runtime/OpenPageRuntime";
 import { useConfigStore } from "@/components/openpage/store/configStore";
@@ -105,6 +106,10 @@ export function EditorLayout({
         <VersionHistory pageId={pageId} resource={resource} />
         <ShortcutsModal />
         <OnboardingTour />
+        <AiTemplateModal
+          open={useEditorStore((s) => s.aiModalOpen)}
+          onClose={() => useEditorStore.getState().closeAiModal()}
+        />
       </div>
     </OpenPageRuntimeProvider>
   );

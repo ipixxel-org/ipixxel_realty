@@ -303,6 +303,7 @@ export const PLATFORM_ROUTE_MODULES: Array<{ prefix: string; module: string }> =
   { prefix: '/admin/platform-roles', module: 'admin_platform_team' },
   { prefix: '/admin/platform-team', module: 'admin_platform_team' },
   { prefix: '/admin/platform-config', module: 'admin_settings' },
+  { prefix: '/admin/ai-settings', module: 'admin_settings' },
   { prefix: '/admin/organisations', module: 'admin_organisations' },
   { prefix: '/admin/org-domain-requests', module: 'admin_domains' },
   { prefix: '/admin/landing-pages', module: 'admin_templates' },
