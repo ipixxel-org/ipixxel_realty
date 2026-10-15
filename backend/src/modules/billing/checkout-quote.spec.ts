@@ -1,6 +1,7 @@
 import {
   quoteCheckout,
   QuoteError,
+  quoteRenewal,
   roundHalfUp,
   splitGstPaise,
   type QuoteInput,
@@ -269,7 +270,7 @@ describe('quoteCheckout — rejections', () => {
     ).toBe('yearly_to_monthly');
   });
 
-  it('rejects buying the same plan again while it is lapsed (renewal is step 3)', () => {
+  it('rejects buying the same plan again while it is lapsed (that is a renewal)', () => {
     expect(
       code(() =>
         quoteCheckout(
@@ -285,5 +286,98 @@ describe('quoteCheckout — rejections', () => {
         ),
       ),
     ).toBe('same_plan');
+  });
+});
+
+describe('quoteRenewal', () => {
+  const renewal = (
+    current: QuoteInput['current'],
+    over: Record<string, unknown> = {},
+  ) =>
+    quoteRenewal({
+      now: NOW,
+      current,
+      buyer: { state: '27', country: 'IN' },
+      seller: { state: '29' },
+      notifyDays: 3,
+      requested: { planId: 'growth', interval: 'monthly' },
+      ...over,
+    });
+  const growth = (
+    status: string,
+    renewsAt: Date | null,
+    interval: 'monthly' | 'yearly' = 'monthly',
+  ) => ({
+    plan: GROWTH,
+    interval,
+    status,
+    renewsAt,
+  });
+
+  it('full price of the current plan, GST by state, kind renewal, no credit', () => {
+    const q = renewal(growth('active', at(2)));
+    expect(q).toMatchObject({
+      kind: 'renewal',
+      subtotalPaise: 200000,
+      creditPaise: 0,
+      taxablePaise: 200000,
+      gstKind: 'inter',
+      igstPaise: 36000,
+      totalPaise: 236000,
+      proration: null,
+      fromRenewsAt: at(2),
+    });
+    expect(q.toPlan.id).toBe('growth');
+  });
+
+  it('term: continues from renewsAt before it and in grace; starts now once expired', () => {
+    expect(renewal(growth('active', at(2))).periodEnd).toEqual(at(32));
+    expect(renewal(growth('past_due', at(-5))).periodEnd).toEqual(at(25));
+    expect(renewal(growth('expired', at(-40))).periodEnd).toEqual(at(30));
+    // Grace longer than the term: never a term that's already over.
+    expect(renewal(growth('past_due', at(-45))).periodEnd).toEqual(at(30));
+    expect(
+      renewal(growth('active', at(1), 'yearly'), {
+        requested: { planId: 'growth', interval: 'yearly' },
+      }).periodEnd,
+    ).toEqual(at(366));
+  });
+
+  it('opens with the reminder (notifyDays before), not earlier', () => {
+    expect(code(() => renewal(growth('active', at(3))))).toBe('no error');
+    expect(code(() => renewal(growth('active', at(4))))).toBe(
+      'renewal_not_due',
+    );
+  });
+
+  it('refuses the free plan, a cancelled subscription, or another plan / interval', () => {
+    expect(code(() => renewal(null))).toBe('nothing_to_renew');
+    expect(
+      code(() =>
+        renewal({
+          plan: BASIC,
+          interval: 'monthly',
+          status: 'active',
+          renewsAt: at(1),
+        }),
+      ),
+    ).toBe('nothing_to_renew');
+    expect(code(() => renewal(growth('cancelled', at(-1))))).toBe(
+      'nothing_to_renew',
+    );
+    expect(
+      code(() =>
+        renewal(growth('past_due', at(-1)), {
+          requested: { planId: 'pro', interval: 'monthly' },
+        }),
+      ),
+    ).toBe('renewal_plan_mismatch');
+    expect(
+      code(() =>
+        renewal(growth('past_due', at(-1)), {
+          requested: { planId: 'growth', interval: 'yearly' },
+        }),
+      ),
+    ).toBe('renewal_plan_mismatch');
   });
 });

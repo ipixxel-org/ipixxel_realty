@@ -157,7 +157,8 @@ export interface BillingWarning {
   message: string;
 }
 
-export type CheckoutKind = 'new' | 'upgrade_same_interval' | 'interval_change';
+export type CheckoutKind =
+  'new' | 'upgrade_same_interval' | 'interval_change' | 'renewal';
 
 export interface GstBreakdownV2 {
   kind: 'intra' | 'inter';

@@ -218,7 +218,7 @@ describe('startCheckout (online)', () => {
     ]);
   });
 
-  it('refuses while a manual request is pending, and rejects renewals for now', async () => {
+  it('refuses while a manual request is pending', async () => {
     const { service, db } = setup();
     db.packageChangeRequest.rows.push({
       id: 'pcr-old',
@@ -230,13 +230,179 @@ describe('startCheckout (online)', () => {
     await expect(
       service.start('org-1', 'u1', { planId: 'growth', interval: 'monthly' }),
     ).rejects.toMatchObject({ response: { code: 'request_pending' } });
-    await expect(
-      service.start('org-1', 'u1', {
-        planId: 'growth',
-        interval: 'monthly',
-        purpose: 'renewal',
+  });
+});
+
+describe('renewal (pay each time)', () => {
+  const renew = {
+    planId: 'growth',
+    interval: 'monthly',
+    purpose: 'renewal',
+  } as const;
+
+  it('quotes the current plan at full price, with the term continuing from renewsAt', async () => {
+    const renewsAt = new Date(Date.now() + 2 * DAY);
+    const { service, db, payments } = setup({
+      sub: { planId: 'growth', renewsAt },
+    });
+    const pv = await service.preview('org-1', renew);
+    expect(pv).toMatchObject({
+      kind: 'renewal',
+      planPrice: 2000,
+      taxable: 2000,
+      total: 2360,
+      proration: null,
+    });
+    expect(pv.periodEnd).toBe(
+      new Date(renewsAt.getTime() + 30 * DAY).toISOString().slice(0, 10),
+    );
+
+    const res = await service.start('org-1', 'u1', renew);
+    expect(res).toMatchObject({ status: 'payment_required', amount: 2360 });
+    expect(payments.createOrder).toHaveBeenCalledWith(
+      expect.objectContaining({
+        amountPaise: 236000,
+        purpose: 'plan_purchase',
       }),
-    ).rejects.toMatchObject({ response: { code: 'renewal_not_available' } });
+    );
+    expect(db.billingCheckout.rows[0]).toMatchObject({
+      kind: 'renewal',
+      fromRenewsAt: renewsAt,
+      fromPlanId: 'growth',
+    });
+  });
+
+  it('is not open before the reminder window, nor for another plan or the free plan', async () => {
+    const early = setup({
+      sub: { planId: 'growth', renewsAt: new Date(Date.now() + 10 * DAY) },
+    });
+    await expect(early.service.preview('org-1', renew)).rejects.toMatchObject({
+      response: { code: 'renewal_not_due' },
+    });
+    await expect(
+      early.service.preview('org-1', { ...renew, planId: 'pro' }),
+    ).rejects.toMatchObject({
+      response: { code: 'renewal_plan_mismatch' },
+    });
+    const free = setup();
+    await expect(
+      free.service.preview('org-1', { ...renew, planId: 'basic' }),
+    ).rejects.toMatchObject({
+      response: { code: 'nothing_to_renew' },
+    });
+  });
+
+  it('manual mode: the team renews it — no checkout is created', async () => {
+    const { service, db } = setup({
+      mode: 'manual',
+      sub: {
+        planId: 'growth',
+        status: 'past_due',
+        renewsAt: new Date(Date.now() - DAY),
+      },
+    });
+    await expect(service.start('org-1', 'u1', renew)).rejects.toMatchObject({
+      response: { code: 'renewal_manual' },
+    });
+    expect(db.billingCheckout.rows).toHaveLength(0);
+    expect(db.packageChangeRequest.rows).toHaveLength(0);
+  });
+
+  it('a pending upgrade request does not block paying the renewal', async () => {
+    const { service, db } = setup({
+      sub: {
+        planId: 'growth',
+        status: 'past_due',
+        renewsAt: new Date(Date.now() - DAY),
+      },
+    });
+    db.packageChangeRequest.rows.push({
+      id: 'pcr-1',
+      orgId: 'org-1',
+      status: 'pending',
+      targetPlanId: 'pro',
+      billingCycle: 'monthly',
+    });
+    await expect(service.start('org-1', 'u1', renew)).resolves.toMatchObject({
+      status: 'payment_required',
+    });
+  });
+
+  it('payment in grace: active again, the term continues from the old renewsAt, applied once', async () => {
+    const renewsAt = new Date(Date.now() - 3 * DAY);
+    const { service, db } = setup({
+      sub: {
+        planId: 'growth',
+        status: 'past_due',
+        renewsAt,
+        graceEndsAt: new Date(Date.now() + 4 * DAY),
+      },
+    });
+    await service.start('org-1', 'u1', renew);
+    const c = db.billingCheckout.rows[0];
+    const outcomes = await Promise.all([
+      service.fulfil(c.id, c.totalPaise),
+      service.fulfil(c.id, c.totalPaise),
+    ]);
+    expect(outcomes.sort()).toEqual(['already_done', 'paid']);
+    expect(db.subscription.rows[0]).toMatchObject({
+      planId: 'growth',
+      status: 'active',
+      graceEndsAt: null,
+      renewsAt: new Date(renewsAt.getTime() + 30 * DAY),
+    });
+    expect(
+      db.auditLog.rows.filter((a: any) => a.action === 'subscription_renewed'),
+    ).toHaveLength(1);
+    expect(
+      db.notification.rows.some((n: any) => n.title === 'Plan Renewed'),
+    ).toBe(true);
+  });
+
+  it('after expiry the new term starts on the day of payment', async () => {
+    const { service, db } = setup({
+      sub: {
+        planId: 'growth',
+        status: 'expired',
+        renewsAt: new Date(Date.now() - 40 * DAY),
+      },
+    });
+    await service.start('org-1', 'u1', renew);
+    const c = db.billingCheckout.rows[0];
+    await service.fulfil(c.id, c.totalPaise);
+    const end = db.subscription.rows[0].renewsAt.getTime();
+    expect(Math.abs(end - (Date.now() + 30 * DAY))).toBeLessThan(60_000);
+    expect(db.subscription.rows[0].status).toBe('active');
+  });
+
+  it('a second paid renewal (e.g. an old tab) goes to review instead of extending twice', async () => {
+    const renewsAt = new Date(Date.now() + 2 * DAY);
+    const { service, db } = setup({ sub: { planId: 'growth', renewsAt } });
+    await service.start('org-1', 'u1', renew);
+    await service.start('org-1', 'u1', renew);
+    const [first, second] = db.billingCheckout.rows;
+    expect(first.status).toBe('cancelled'); // one open checkout per org
+    await expect(service.fulfil(second.id, second.totalPaise)).resolves.toBe(
+      'paid',
+    );
+    // The cancelled one's payment still arrives:
+    await expect(service.fulfil(first.id, first.totalPaise)).resolves.toBe(
+      'needs_review',
+    );
+    expect(db.billingCheckout.rows[0].reviewReason).toMatch(/already renewed/);
+    expect(db.subscription.rows[0].renewsAt).toEqual(
+      new Date(renewsAt.getTime() + 30 * DAY),
+    );
+  });
+
+  it('usage over the plan does not stop a renewal (it is the plan they already have)', async () => {
+    const { service, db, usage } = setup({
+      sub: { planId: 'growth', renewsAt: new Date(Date.now() + DAY) },
+    });
+    usage.users = 9; // Growth allows 5
+    await service.start('org-1', 'u1', renew);
+    const c = db.billingCheckout.rows[0];
+    await expect(service.fulfil(c.id, c.totalPaise)).resolves.toBe('paid');
   });
 });
 

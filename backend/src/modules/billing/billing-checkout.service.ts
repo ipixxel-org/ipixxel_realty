@@ -9,6 +9,10 @@ import type { BillingCheckoutStatus, Prisma } from '@prisma/client';
 import { PrismaService } from '../../database/prisma.service';
 import { applyPlanChange } from '../../common/utils/plan-change.util';
 import { assertPlanFitsCurrentUsage } from '../../common/utils/plan-quota.util';
+import {
+  applyOrgSubscriptionLifecycle,
+  getBillingExpiryConfig,
+} from '../../common/utils/subscription-lifecycle.util';
 import { PlatformConfigService } from '../platform-config/platform-config.service';
 import { PaymentsService } from '../payments/payments.service';
 import {
@@ -21,6 +25,7 @@ import {
   MIN_ONLINE_PAISE,
   quoteCheckout,
   QuoteError,
+  quoteRenewal,
   toRupees,
   type Interval,
   type Quote,
@@ -127,18 +132,27 @@ export class BillingCheckoutService implements OnModuleInit {
     userId: string,
     dto: StartCheckoutDto,
   ): Promise<StartCheckoutResultV2> {
-    if (dto.purpose === 'renewal') {
-      throw billingError(
-        'renewal_not_available',
-        'Renewing online is coming soon. Our team will contact you to renew.',
-      );
-    }
     await expireStaleCheckouts(this.prisma, orgId);
-    const ctx = await this.quote(orgId, dto.planId, dto.interval);
+    const renewal = dto.purpose === 'renewal';
+    const ctx = await this.quote(
+      orgId,
+      dto.planId,
+      dto.interval,
+      null,
+      new Date(),
+      renewal ? 'renewal' : 'purchase',
+    );
     if (!ctx.hasProfile) {
       throw billingError(
         'billing_profile_required',
         'Add your billing details first — they go on your GST invoice.',
+      );
+    }
+    if (renewal && ctx.mode.mode === 'manual') {
+      // No online payment: a Super Admin renews it (Subscriptions → Renew).
+      throw billingError(
+        'renewal_manual',
+        "Online payment isn't available for your account, so our team renews your plan. We'll contact you before it's due.",
       );
     }
     return ctx.mode.mode === 'manual'
@@ -211,7 +225,8 @@ export class BillingCheckoutService implements OnModuleInit {
         "This change costs less than ₹1, so it can't be paid online. Contact us and we'll switch it for you.",
       );
     }
-    if (await this.pendingRequest(orgId)) {
+    // A waiting upgrade request doesn't stop a renewal: it keeps the org running.
+    if (q.kind !== 'renewal' && (await this.pendingRequest(orgId))) {
       throw billingError(
         'request_pending',
         'You already have an upgrade request waiting for approval. Cancel it first to pay online instead.',
@@ -263,7 +278,10 @@ export class BillingCheckoutService implements OnModuleInit {
           amountPaise: order.amount,
           currency: 'INR',
           name: order.name,
-          description: `${q.toPlan.name} plan (${q.toInterval})`,
+          description:
+            q.kind === 'renewal'
+              ? `${q.toPlan.name} plan renewal (${q.toInterval})`
+              : `${q.toPlan.name} plan (${q.toInterval})`,
           prefill: order.prefill,
         },
       };
@@ -293,6 +311,7 @@ export class BillingCheckoutService implements OnModuleInit {
       fromInterval: q.fromInterval,
       toInterval: q.toInterval,
       kind: q.kind,
+      fromRenewsAt: q.fromRenewsAt,
       subtotalPaise: q.subtotalPaise,
       creditPaise: q.creditPaise,
       taxablePaise: q.taxablePaise,
@@ -419,10 +438,24 @@ export class BillingCheckoutService implements OnModuleInit {
         ) {
           return review('The plan changed after this price was quoted.');
         }
-        try {
-          await assertPlanFitsCurrentUsage(tx, c.organisationId, c.toPlan);
-        } catch (err) {
-          return review(err instanceof Error ? err.message : String(err));
+        if (c.kind === 'renewal') {
+          // Two paid renewals (two tabs, or a Super Admin renewed meanwhile)
+          // must not extend twice: only the one quoted on today's renewsAt applies.
+          if (
+            (sub?.renewsAt?.getTime() ?? null) !==
+            (c.fromRenewsAt?.getTime() ?? null)
+          ) {
+            return review(
+              'The subscription was already renewed after this price was quoted.',
+            );
+          }
+        } else {
+          // A renewal keeps the plan the org already has, so only changes check usage.
+          try {
+            await assertPlanFitsCurrentUsage(tx, c.organisationId, c.toPlan);
+          } catch (err) {
+            return review(err instanceof Error ? err.message : String(err));
+          }
         }
 
         await applyPlanChange(tx, {
@@ -517,8 +550,13 @@ export class BillingCheckoutService implements OnModuleInit {
     interval: Interval,
     billingState?: string | null,
     now = new Date(),
+    purpose: 'purchase' | 'renewal' = 'purchase',
   ): Promise<QuoteContext> {
-    const [active, sub, profile, seller, mode] = await Promise.all([
+    if (purpose === 'renewal') {
+      // A lapsed term must read as past_due / expired before deciding.
+      await applyOrgSubscriptionLifecycle(this.prisma, orgId);
+    }
+    const [active, sub, profile, seller, mode, expiry] = await Promise.all([
       this.prisma.plan.findMany({ where: { isActive: true } }),
       this.prisma.subscription.findFirst({
         where: { orgId, status: { not: 'cancelled' } },
@@ -529,6 +567,7 @@ export class BillingCheckoutService implements OnModuleInit {
       }),
       this.platformConfig.getSellerSettings(),
       this.mode.getMode(),
+      getBillingExpiryConfig(this.prisma),
     ]);
 
     const ranked = sortPlans(active);
@@ -543,35 +582,48 @@ export class BillingCheckoutService implements OnModuleInit {
         isFree: isFreePlan(p),
       };
     };
-    const target = active.find((p) => p.id === planId);
-    if (!target) {
-      throw billingError(
-        'plan_not_found',
-        'That plan is not available. Pick another one.',
-      );
-    }
-
     const buyer = {
       legalName: profile?.legalName ?? null,
       state: billingState?.trim() || profile?.state || null,
       country: profile?.country ?? 'IN',
       gstin: profile?.gstin ?? null,
     };
+    const current = sub
+      ? {
+          plan: asQuotePlan(sub.plan),
+          interval: sub.billingCycle,
+          status: sub.status,
+          renewsAt: sub.renewsAt,
+        }
+      : null;
+    const parties = {
+      buyer: { state: buyer.state, country: buyer.country },
+      seller: { state: seller.state },
+    };
     try {
+      if (purpose === 'renewal') {
+        const quote = quoteRenewal({
+          now,
+          current,
+          ...parties,
+          notifyDays: expiry.notifyDays,
+          requested: { planId, interval },
+        });
+        return { quote, mode, buyer, seller, hasProfile: !!profile };
+      }
+      const target = active.find((p) => p.id === planId);
+      if (!target) {
+        throw billingError(
+          'plan_not_found',
+          'That plan is not available. Pick another one.',
+        );
+      }
       const quote = quoteCheckout({
         now,
         target: asQuotePlan(target),
         interval,
-        current: sub
-          ? {
-              plan: asQuotePlan(sub.plan),
-              interval: sub.billingCycle,
-              status: sub.status,
-              renewsAt: sub.renewsAt,
-            }
-          : null,
-        buyer: { state: buyer.state, country: buyer.country },
-        seller: { state: seller.state },
+        current,
+        ...parties,
       });
       return { quote, mode, buyer, seller, hasProfile: !!profile };
     } catch (e) {
@@ -590,6 +642,8 @@ export class BillingCheckoutService implements OnModuleInit {
       dto.planId,
       dto.interval,
       dto.billingState,
+      new Date(),
+      dto.purpose ?? 'purchase',
     );
     return toPreview(ctx);
   }

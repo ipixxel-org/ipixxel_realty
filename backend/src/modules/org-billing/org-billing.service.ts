@@ -139,6 +139,27 @@ export class OrgBillingService {
    */
   async renew(orgId: string) {
     await applyOrgSubscriptionLifecycle(this.prisma, orgId);
+    // Closed loophole (billing v2 step 3): this extended a paid plan for
+    // free. Paid renewals go through checkout (billing v2 "Pay now") or a
+    // Super Admin renewal; a free plan can still be renewed here.
+    const current = await this.prisma.subscription.findFirst({
+      where: { orgId, status: { not: 'cancelled' } },
+      include: { plan: { select: { priceMonthly: true, priceYearly: true } } },
+    });
+    if (
+      current &&
+      (current.billingCycle === 'yearly'
+        ? current.plan.priceYearly
+        : current.plan.priceMonthly) > 0
+    ) {
+      throw new BadRequestException({
+        statusCode: 400,
+        error: 'Bad Request',
+        code: 'paid_renewal_requires_checkout',
+        message:
+          'Renewing a paid plan needs a payment. Contact our team and we will renew it for you.',
+      });
+    }
     const renewed = await renewOrgSubscription(this.prisma, orgId);
 
     await this.prisma.auditLog

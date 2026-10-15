@@ -19,10 +19,9 @@ client is the reference behaviour (see `frontend/lib/billing/__tests__/mock-clie
 |---|---|---|
 | 1 | `getBillingOverview`, `listPlans`, `getAccessStatus`, `listAdminPlans`, `saveAdminPlan`, `getLifecycleSettings`, `saveLifecycleSettings` | `backend/src/modules/billing/` |
 | 2 | `getBillingProfile`, `saveBillingProfile`, `previewCheckout`, `startCheckout`, `confirmCheckout`, `listAdminCheckouts` | `billing-profile.service.ts`, `billing-checkout.service.ts`, `checkout-quote.ts`, `common/utils/plan-change.util.ts` |
+| 3 | Renewals through the same functions: `previewCheckout` / `startCheckout` with `purpose: "renewal"` (no new client function) | `quoteRenewal` in `checkout-quote.ts`, `renewalPeriodEnd` in `plan-change.util.ts` |
 
-Everything else is mock. Renewals (`startCheckout` with `purpose: "renewal"`) are step 3: the API
-answers `renewal_not_available`, and the UI keeps "Pay now" disabled on the real client
-(`useRenewalLive`). Coupons are step 5: `CheckoutPreview.couponsEnabled` is `false`, which hides
+Everything else is mock. Coupons are step 5: `CheckoutPreview.couponsEnabled` is `false`, which hides
 the coupon field; a sent `couponCode` is ignored. `updatePaymentMethod` stays unimplemented on purpose: renewals are
 "pay each time" through the existing Razorpay Orders + Checkout flow (no Razorpay
 Subscriptions), and the overview says `autoRenewAvailable: false`, which hides the auto-renew UI.
@@ -61,9 +60,9 @@ period rule (`applyPlanChange`).
 - **Refusals** (400 `{ code, message }` → `BillingError.code`): `plan_not_found`, `free_plan`,
   `same_plan` (same plan + interval, even when lapsed), `lower_plan` (only while a paid plan is
   active — that's a downgrade), `yearly_to_monthly`, `billing_profile_required`,
-  `renewal_not_available`, `request_pending` (online start while a manual request waits),
-  `amount_too_small` (online total under ₹1), and on the old endpoint
-  `paid_plan_requires_checkout`.
+  `request_pending` (online start while a manual request waits), `amount_too_small` (online
+  total under ₹1), renewal codes (step 3 notes), and on the old endpoints
+  `paid_plan_requires_checkout` / `paid_renewal_requires_checkout`.
 - **One open order per org:** starting a new online checkout cancels the org's older pending
   ones (advisory lock). Pending online checkouts expire after 30 minutes (sweeper). Manual mode
   returns the existing pending request instead of creating a second one.
@@ -75,8 +74,36 @@ period rule (`applyPlanChange`).
   checkout becomes `needs_review` and Super Admins get a notification — nothing is applied
   automatically. `GET /admin/billing/checkouts` lists them (Package Requests tab, flag on).
 - **Loophole:** `PATCH /org/billing/plan` now refuses paid targets (`paid_plan_requires_checkout`).
-  `POST /org/billing/renew` is still open (legacy Settings → Billing "Renew" button) — close it
-  in step 3 with paid renewals.
+
+### Step 3 notes — renewals ("pay each time")
+
+- **Request:** `PreviewCheckoutRequest` / `StartCheckoutRequest` with `purpose: "renewal"`;
+  `planId` + `interval` must be the current ones (else `renewal_plan_mismatch` — changing plan
+  is a purchase or, later, a downgrade). `CheckoutPreview.kind` is `"renewal"`.
+- **Price:** today's full price of the current plan + interval (a price change applies from the
+  next renewal), GST as usual, no proration. The plan comes from the subscription, so an
+  archived plan can still be renewed. `BillingOverview.renewalAmount` uses the same paise maths,
+  so "Pay now · ₹X" equals the charge.
+- **When:** from `notifyDays` before `renewsAt` (when the reminder fires), through grace, and
+  after expiry; earlier → `renewal_not_due`. Free plan / no subscription → `nothing_to_renew`.
+- **New term** (`renewalPeriodEnd`, shared by quote and fulfilment): while the term or its grace
+  is running (active / trial / past_due) it continues from `renewsAt` — paying early loses no
+  days, paying in grace covers the days used; once expired it starts on the payment day. Status
+  goes back to `active`, grace cleared.
+- **Online only:** manual mode answers `renewal_manual` — our team renews it with the existing
+  Subscriptions → Renew action. A pending upgrade request doesn't block a renewal.
+- **Applied once:** the checkout stores `fromRenewsAt` (the subscription's `renewsAt` when
+  quoted); fulfilment applies only while it still matches, so a second paid renewal (an old tab,
+  or a Super Admin renewal meanwhile) goes to `needs_review` instead of extending twice. Usage
+  isn't re-checked (it's the plan the org already has). Audit `subscription_renewed`;
+  notification "Plan Renewed".
+- **UI:** "Pay now" (banners, overview, 3-day popup) is live in online mode. With saved billing
+  details it opens Razorpay straight away; without, it opens the renewal checkout
+  (`/org/settings/billing/checkout?plan=…&interval=…&renew=1`), which collects them. After
+  payment the UI waits for a new `periodEnd` (`waitForPlan` with `isApplied`).
+- **Loophole closed:** `POST /org/billing/renew` refuses paid plans
+  (`paid_renewal_requires_checkout`); a free plan still renews there. With the flag off, the
+  legacy Settings → Billing "Renew now" button now shows that message for paid plans.
 
 ### Step 1 notes
 
@@ -129,7 +156,7 @@ period rule (`applyPlanChange`).
 |---|---|---|---|
 | `getBillingOverview()` | `GET /org/billing/v2` | — | `BillingOverview` |
 | `listPlans()` | `GET /org/billing/plans` | — | `BillingPlan[]` (sorted by `rank`) |
-| `previewCheckout(req)` | `POST /org/billing/checkout/preview` (`billing:view`) | `PreviewCheckoutRequest` (`billingState` = the unsaved form's state code) | `CheckoutPreview` (an invalid coupon is **not** an error: return `couponError`) |
+| `previewCheckout(req)` | `POST /org/billing/checkout/preview` (`billing:view`) | `PreviewCheckoutRequest` (`billingState` = the unsaved form's state code; `purpose: "renewal"` for a renewal) | `CheckoutPreview` (an invalid coupon is **not** an error: return `couponError`) |
 | `getBillingProfile()` | `GET /org/billing/profile` | — | `BillingProfile \| null` |
 | `saveBillingProfile(p)` | `PUT /org/billing/profile` | `BillingProfile` | `BillingProfile` |
 | `startCheckout(req)` | `POST /org/billing/checkout` (`billing:edit`) | `StartCheckoutRequest` | `StartCheckoutResponse` — online: `payment_required` with a Razorpay order (`keyId`, `orderId`, `amountPaise`, `name`, `description`, `prefill`); manual: `pending_approval` with `requestId`; `activated` when the total is ₹0 (coupons, later) |
@@ -191,8 +218,8 @@ purpose `plan_purchase`, reference `billing_checkout`); the plan is applied from
 `payment.captured` event (handoff §4.13). For local online testing: switch on in
 Settings → Subscription Expiry, `rzp_test_…` keys in Integrations → Razorpay, and a tunnel
 (e.g. `ngrok http 4000`) with the Razorpay webhook pointed at `<tunnel>/webhooks/razorpay`
-(verify alone also applies the plan, so the webhook is a backup). `POST /org/billing/renew` is
-still free — close it (step 3) before turning the flag on in production.
+(verify alone also applies the plan, so the webhook is a backup). Renewals use the same path
+(`purpose: "renewal"`, order description "<plan> plan renewal (<interval>)").
 
 ## Where the UI lives
 

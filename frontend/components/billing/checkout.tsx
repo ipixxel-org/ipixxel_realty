@@ -251,9 +251,12 @@ export function CheckoutScreen({
   parts = ["details", "coupon", "summary"],
   initialCoupon,
   autoPay = false,
+  renewal = false,
 }: {
   planId: string;
   interval: BillingInterval;
+  /** Pay for the next term of the current plan (Pay now without saved billing details). */
+  renewal?: boolean;
   /** Walkthrough steps show one part at a time. */
   parts?: Part[];
   initialCoupon?: string;
@@ -274,6 +277,7 @@ export function CheckoutScreen({
   const [checking, setChecking] = useState(false);
   const [saving, setSaving] = useState(false);
   const autoDone = useRef(false);
+  const purpose = renewal ? "renewal" : "purchase";
   // Online = Razorpay Checkout; otherwise the order is a request our team approves.
   const online = useCheckoutLive(overview);
 
@@ -285,7 +289,7 @@ export function CheckoutScreen({
   useEffect(() => {
     let active = true;
     client
-      .previewCheckout({ planId, interval, couponCode: coupon ?? undefined, billingState })
+      .previewCheckout({ planId, interval, couponCode: coupon ?? undefined, billingState, purpose })
       .then((p) => {
         if (!active) return;
         setPreview(p);
@@ -297,14 +301,20 @@ export function CheckoutScreen({
     return () => {
       active = false;
     };
-  }, [client, planId, interval, coupon, billingState]);
+  }, [client, planId, interval, coupon, billingState, purpose]);
 
   const target = plans?.find((p) => p.id === planId);
 
   const payment = usePayment({
     renewalMode: overview?.renewalMode ?? "auto",
     title: `${target?.name ?? ""} · ${interval}`,
-    subtitle: preview?.kind === "upgrade_same_interval" || preview?.kind === "interval_change" ? `Upgrade ${overview?.plan.name} → ${target?.name}` : `Buy ${target?.name}`,
+    subtitle: renewal
+      ? `Renew ${target?.name}`
+      : preview?.kind === "upgrade_same_interval" || preview?.kind === "interval_change"
+        ? `Upgrade ${overview?.plan.name} → ${target?.name}`
+        : `Buy ${target?.name}`,
+    // A renewal keeps the plan: it's applied when the period end moves on.
+    isApplied: renewal ? (ov) => ov.periodEnd !== overview?.periodEnd : undefined,
     onActive: (r) => {
       void refresh();
       nav.go("checkoutSuccess", {
@@ -369,7 +379,7 @@ export function CheckoutScreen({
         setSaving(false);
       }
     }
-    await payment.start({ planId, interval, couponCode: coupon ?? undefined, purpose: "purchase" });
+    await payment.start({ planId, interval, couponCode: coupon ?? undefined, purpose });
   }
 
   // Walkthrough: open the payment popup on arrival.
@@ -411,7 +421,7 @@ export function CheckoutScreen({
     !onFree &&
     !inGrace &&
     (target.rank < overview.plan.rank || (target.rank === overview.plan.rank && !samePlan) || (samePlan && (interval === overview.interval || interval === "monthly")));
-  if (target.isFree || notAnUpgrade) {
+  if (!renewal && (target.isFree || notAnUpgrade)) {
     return (
       <Banner
         tone="amber"
@@ -428,11 +438,14 @@ export function CheckoutScreen({
     );
   }
 
-  const pendingUpgrade = overview.pendingUpgrade;
+  // A waiting upgrade request doesn't block paying a renewal.
+  const pendingUpgrade = renewal ? null : overview.pendingUpgrade;
+  // Manual mode has no online renewal: our team renews the plan.
+  const manualRenewal = renewal && !online;
   const showCoupon = parts.includes("coupon") && preview?.couponsEnabled !== false;
   const left = parts.includes("details") || showCoupon;
   const right = parts.includes("summary");
-  const disabled = !canEdit || saving || payment.busy || !!pendingUpgrade;
+  const disabled = !canEdit || saving || payment.busy || !!pendingUpgrade || manualRenewal;
 
   return (
     <div className="bl-stack">
@@ -474,13 +487,17 @@ export function CheckoutScreen({
         ) : null}
         {right ? (
           <Section
-            title={online ? "Order summary" : `Request an upgrade to ${target.name}`}
-            sub={online ? `${target.name} · ${interval === "yearly" ? "billed yearly" : "billed monthly"}` : "Approved by our team"}
+            title={renewal ? `Renew ${target.name}` : online ? "Order summary" : `Request an upgrade to ${target.name}`}
+            sub={online || renewal ? `${target.name} · ${interval === "yearly" ? "billed yearly" : "billed monthly"}` : "Approved by our team"}
           >
             {preview ? (
               <>
                 <PriceSummary preview={preview} renewalMode={overview.renewalMode} />
-                {!online ? (
+                {manualRenewal ? (
+                  <div className="bl-muted" style={{ marginTop: 10, padding: "10px 12px", background: "var(--bg)", borderRadius: 10, lineHeight: 1.55 }}>
+                    Online payment isn&apos;t available for your account, so our team renews your plan. We&apos;ll contact you before it&apos;s due.
+                  </div>
+                ) : !online ? (
                   <div className="bl-muted" style={{ marginTop: 10, padding: "10px 12px", background: "var(--bg)", borderRadius: 10, lineHeight: 1.55 }}>
                     Online payment isn&apos;t available for your account, so upgrades are approved by our team. Send a request and we&apos;ll confirm the plan and how to
                     pay. You stay on {overview.plan.name} with everything working until the upgrade is approved.
@@ -498,6 +515,10 @@ export function CheckoutScreen({
                     <>
                       <Icon name="clock" size={15} /> Request pending
                     </>
+                  ) : manualRenewal ? (
+                    <>
+                      <Icon name="clock" size={15} /> Renewed by our team
+                    </>
                   ) : !online ? (
                     <>
                       <Icon name="arrow-up" size={15} /> Send upgrade request
@@ -513,7 +534,7 @@ export function CheckoutScreen({
                   )}
                 </button>
                 <div className="bl-muted bl-small" style={{ textAlign: "center", marginTop: 8 }}>
-                  {online ? "Secure payment by Razorpay. GST invoice by email." : "No payment is taken now."}
+                  {online ? "Secure payment by Razorpay. GST invoice by email." : manualRenewal ? "Nothing to pay here." : "No payment is taken now."}
                 </div>
               </>
             ) : previewError ? (

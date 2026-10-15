@@ -315,7 +315,7 @@ export function createMockBillingClient(opts: { initial?: Partial<MockState>; pe
     getBillingProfile: () => ok(get().billingProfile),
     listAdminCheckouts: () => ok([]),
 
-    previewCheckout: (req) => ok(preview(req.planId, req.interval, req.couponCode, req.billingState, "purchase")),
+    previewCheckout: (req) => ok(preview(req.planId, req.interval, req.couponCode, req.billingState, req.purpose ?? "purchase")),
 
     saveBillingProfile(profile) {
       const required: [keyof typeof profile, string][] = [

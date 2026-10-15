@@ -1221,6 +1221,8 @@ enum BillingCheckoutKind {
   upgrade_same_interval
   // Monthly → yearly: yearly price − unused credit; new yearly cycle starts now.
   interval_change
+  // Same plan + interval, full price for the next term ("pay each time").
+  renewal
 
   @@schema("billing")
 }
@@ -1257,6 +1259,9 @@ model BillingCheckout {
   fromInterval           BillingCycle?         @map("from_interval")
   toInterval             BillingCycle          @map("to_interval")
   kind                   BillingCheckoutKind
+  // Renewals: the subscription's renewsAt when quoted. A payment applies only
+  // while it still matches, so a second payment can't renew twice.
+  fromRenewsAt           DateTime?             @map("from_renews_at")
   subtotalPaise          Int                   @map("subtotal_paise")
   creditPaise            Int                   @map("credit_paise")
   taxablePaise           Int                   @map("taxable_paise")

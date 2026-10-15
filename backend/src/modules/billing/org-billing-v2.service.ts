@@ -9,10 +9,12 @@ import {
   applyOrgSubscriptionLifecycle,
   getBillingExpiryConfig,
 } from '../../common/utils/subscription-lifecycle.util';
+import { PlatformConfigService } from '../platform-config/platform-config.service';
 import { BillingModeService } from './billing-mode.service';
 import { buildOverview } from './billing-overview';
 import { toProfileV2 } from './billing-profile.service';
 import { expireStaleCheckouts, findPendingUpgrade } from './checkout-state';
+import { taxOn } from './checkout-quote';
 import {
   isFreePlan,
   sortPlans,
@@ -34,6 +36,8 @@ export class OrgBillingV2Service {
   constructor(
     private readonly prisma: PrismaService,
     private readonly mode: BillingModeService,
+    // Optional so unit tests can leave it out (then renewalAmount is price × 1.18).
+    private readonly platformConfig?: PlatformConfigService,
   ) {}
 
   /** Active plans in rank order (free plan first). */
@@ -92,6 +96,9 @@ export class OrgBillingV2Service {
       }),
       findPendingUpgrade(this.prisma, orgId),
     ]);
+    const seller = this.platformConfig
+      ? await this.platformConfig.getSellerSettings()
+      : null;
     if (!org) throw new NotFoundException('Organisation not found');
 
     // Rank comes from the active catalogue; a subscription on a since-archived
@@ -106,6 +113,23 @@ export class OrgBillingV2Service {
       throw new NotFoundException(
         'No plan is configured for this organisation.',
       );
+
+    // "Pay now · ₹X" must equal what the renewal checkout charges.
+    const price = subscription
+      ? subscription.billingCycle === 'yearly'
+        ? planRow.priceYearly
+        : planRow.priceMonthly
+      : 0;
+    const renewalTotalPaise =
+      seller && price > 0
+        ? taxOn(price * 100, {
+            buyer: {
+              state: profile?.state ?? null,
+              country: profile?.country ?? 'IN',
+            },
+            seller: { state: seller.state },
+          }).totalPaise
+        : null;
 
     const ownerName = owner
       ? [owner.firstName, owner.lastName].filter(Boolean).join(' ') ||
@@ -130,6 +154,7 @@ export class OrgBillingV2Service {
       notifyDays: cfg.notifyDays,
       graceDays: cfg.gracePeriodDays,
       mode,
+      renewalTotalPaise,
     });
   }
 

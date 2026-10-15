@@ -46,6 +46,11 @@ export interface OverviewInput {
   notifyDays: number;
   graceDays: number;
   mode: { mode: PaymentMode; reason: ManualReason | null };
+  /**
+   * Next renewal incl. GST in paise, worked out like the renewal checkout
+   * (taxOn). When absent, price × 1.18.
+   */
+  renewalTotalPaise?: number | null;
 }
 
 export function deriveStatus(
@@ -128,7 +133,11 @@ export function buildOverview(input: OverviewInput): BillingOverviewV2 {
     cancelAt: null,
     downgradeTo: null,
     downgradeAt: null,
-    renewalAmount: paid ? round2(price * (1 + GST_RATE)) : null,
+    renewalAmount: !paid
+      ? null
+      : input.renewalTotalPaise != null
+        ? input.renewalTotalPaise / 100
+        : round2(price * (1 + GST_RATE)),
     usage: [
       {
         key: 'users',

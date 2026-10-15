@@ -47,11 +47,19 @@ export function PlansPage() {
   );
 }
 
-export function CheckoutPage({ plan, interval }: { plan?: string; interval?: string }) {
+export function CheckoutPage({ plan, interval, renew }: { plan?: string; interval?: string; renew?: string }) {
+  const renewal = renew === "1";
   return (
     <Guard>
-      <PageHead eyebrow={EYEBROW} icon="tag" title="Checkout" sub="Billing details, coupon and the full price before you pay." back={{ to: "plans", label: "Plans" }} sampleFns={["listPlans", "getBillingOverview"]} />
-      <CheckoutScreen planId={plan ?? "growth"} interval={toInterval(interval)} />
+      <PageHead
+        eyebrow={EYEBROW}
+        icon="tag"
+        title={renewal ? "Renew your plan" : "Checkout"}
+        sub={renewal ? "Billing details and the full price for your next term." : "Billing details, coupon and the full price before you pay."}
+        back={renewal ? { to: "overview", label: "Billing" } : { to: "plans", label: "Plans" }}
+        sampleFns={["listPlans", "getBillingOverview"]}
+      />
+      <CheckoutScreen planId={plan ?? "growth"} interval={toInterval(interval)} renewal={renewal} />
     </Guard>
   );
 }

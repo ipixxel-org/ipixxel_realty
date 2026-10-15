@@ -6,9 +6,8 @@ import { OrgBillingService } from './org-billing.service';
  * to switch an org onto any plan for free. Paid targets are now refused;
  * free ones still work.
  *
- * POST /org/billing/renew is deliberately still open: the existing Settings →
- * Billing "Renew" button (app/org/settings/page.tsx → renewSubscription()
- * in lib/api.ts) calls it. It is closed in step 3 with paid renewals.
+ * POST /org/billing/renew (step 3) extended a paid plan for free. Paid plans
+ * now renew through checkout; a free plan still renews here.
  */
 describe('OrgBillingService.changePlan — paid plans need checkout', () => {
   const plans = {
@@ -90,5 +89,51 @@ describe('OrgBillingService.changePlan — paid plans need checkout', () => {
       planId: 'basic',
       amount: 0,
     });
+  });
+});
+
+describe('OrgBillingService.renew — paid plans need checkout', () => {
+  const make = (sub: Record<string, unknown> | null) => {
+    const update = jest.fn(({ data }: { data: Record<string, unknown> }) =>
+      Promise.resolve({ id: 'sub-1', ...data }),
+    );
+    const prisma = {
+      platformConfig: { findUnique: jest.fn(() => Promise.resolve(null)) },
+      subscription: {
+        findMany: jest.fn(() => Promise.resolve([])),
+        findFirst: jest.fn(() => Promise.resolve(sub)),
+        update,
+      },
+      auditLog: { create: jest.fn(() => Promise.resolve({})) },
+    };
+    return { service: new OrgBillingService(prisma as never), update };
+  };
+
+  it('refuses to extend a paid plan', async () => {
+    const { service, update } = make({
+      id: 'sub-1',
+      status: 'past_due',
+      billingCycle: 'monthly',
+      plan: { priceMonthly: 2000, priceYearly: 20000 },
+    });
+    const err = await service.renew('org-1').catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(BadRequestException);
+    expect((err as BadRequestException).getResponse()).toMatchObject({
+      code: 'paid_renewal_requires_checkout',
+    });
+    expect(update).not.toHaveBeenCalled();
+  });
+
+  it('still renews a free plan', async () => {
+    const { service, update } = make({
+      id: 'sub-1',
+      orgId: 'org-1',
+      status: 'past_due',
+      billingCycle: 'monthly',
+      plan: { priceMonthly: 0, priceYearly: 0 },
+    });
+    const res = await service.renew('org-1');
+    expect(update).toHaveBeenCalledTimes(1);
+    expect(res.status).toBe('active');
   });
 });

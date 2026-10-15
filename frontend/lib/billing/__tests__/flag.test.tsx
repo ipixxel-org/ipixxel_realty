@@ -317,6 +317,78 @@ describe("billing v2 flag", () => {
     expect(errors).toEqual([]);
   });
 
+  it("on, online mode: Pay now is live; without saved billing details it opens the renewal checkout", async () => {
+    backend.overview = overview({
+      plan: GROWTH,
+      paidPlan: GROWTH,
+      status: "renewal_due",
+      periodEnd: "2026-10-16",
+      renewalAmount: 2360,
+      paymentMode: "online",
+      paymentModeReason: null,
+    });
+    const { BillingV2Root, BillingOverviewPanel, ToastProvider } = await load("true");
+    render(
+      <ToastProvider>
+        <BillingV2Root canEdit>
+          <BillingOverviewPanel showInvoices={false} />
+        </BillingV2Root>
+      </ToastProvider>,
+    );
+    await settle();
+    const pay = screen.getAllByRole("button", { name: /Pay now · ₹2,360/ })[0];
+    expect(pay).toBeEnabled();
+    fireEvent.click(pay);
+    await settle();
+    expect(push).toHaveBeenCalledWith("/org/settings/billing/checkout?plan=uuid-growth&interval=monthly&renew=1");
+    expect(apiFetch.mock.calls.some(([p]) => p === "/org/billing/checkout")).toBe(false);
+  });
+
+  it("renewal checkout: previews with purpose renewal and pays the full term; manual mode says our team renews it", async () => {
+    const renewing = overview({
+      plan: GROWTH,
+      paidPlan: GROWTH,
+      status: "past_due",
+      periodEnd: "2026-10-10",
+      dueDate: "2026-10-10",
+      graceEndsAt: "2026-10-17",
+      graceDay: 5,
+      graceDaysLeft: 3,
+      renewalAmount: 2360,
+      paymentMode: "online",
+      paymentModeReason: null,
+    });
+    backend.overview = renewing;
+    const { BillingV2Root, CheckoutScreen, ToastProvider } = await load("true");
+    const view = render(
+      <ToastProvider>
+        <BillingV2Root canEdit>
+          <CheckoutScreen planId="uuid-growth" interval="monthly" renewal />
+        </BillingV2Root>
+      </ToastProvider>,
+    );
+    await settle();
+    const previewCall = apiFetch.mock.calls.find(([p]) => p === "/org/billing/checkout/preview");
+    expect(JSON.parse(String(previewCall![1]!.body))).toMatchObject({ planId: "uuid-growth", interval: "monthly", purpose: "renewal" });
+    expect(screen.getByText("Renew Growth")).toBeInTheDocument();
+    expect(screen.queryByText(/You're already on/)).toBeNull();
+    expect(screen.getByRole("button", { name: /Pay ₹2,360/ })).toBeEnabled();
+    view.unmount();
+
+    backend.overview = { ...renewing, paymentMode: "manual", paymentModeReason: "switched_off" };
+    render(
+      <ToastProvider>
+        <BillingV2Root canEdit>
+          <CheckoutScreen planId="uuid-growth" interval="monthly" renewal />
+        </BillingV2Root>
+      </ToastProvider>,
+    );
+    await settle();
+    expect(screen.getByRole("button", { name: /Renewed by our team/ })).toBeDisabled();
+    expect(screen.getByText(/our team renews your plan/)).toBeInTheDocument();
+    expect(errors).toEqual([]);
+  });
+
   it("the hybrid client marks exactly the step-1 and step-2 functions as real", async () => {
     const { billingClient, REAL_FUNCTIONS } = await load("true");
     expect(billingClient.isMock).toBe(false);

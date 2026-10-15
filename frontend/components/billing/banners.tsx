@@ -18,12 +18,20 @@ function useRefresh() {
 
 /* ------------------------------------------------------------- Pay now */
 
+/**
+ * Pay the renewal. With saved billing details it opens the payment straight
+ * away; without them (first online payment) it goes to the renewal checkout,
+ * which collects them and shows the GST invoice summary.
+ */
 export function usePayNow(overview: BillingOverview) {
   const { toast } = useToast();
   const refresh = useRefresh();
+  const { nav } = useBillingEnv();
   const plan = overview.paidPlan ?? overview.plan;
-  return usePayment({
+  const payment = usePayment({
     renewalMode: overview.renewalMode,
+    // Same plan before and after: wait for the new period end instead.
+    isApplied: (ov) => ov.periodEnd !== overview.periodEnd,
     title: `${plan.name} renewal`,
     subtitle: `${plan.name} · ${overview.interval} · incl. 18% GST · ${overview.orgName}`,
     onActive: (r) => {
@@ -33,21 +41,25 @@ export function usePayNow(overview: BillingOverview) {
     onFailed: (reason) => toast({ variant: "error", title: "Payment failed", description: reason }),
     onClosed: () => toast({ variant: "info", title: "Payment cancelled", description: "The payment window was closed. Nothing was charged." }),
   });
+  const renew = () =>
+    overview.billingProfile
+      ? payment.start({ planId: plan.id, interval: overview.interval, purpose: "renewal" })
+      : Promise.resolve(nav.go("checkout", { plan: plan.id, interval: overview.interval, renew: 1 }));
+  return { ...payment, renew };
 }
 
 export function PayNowButton({ overview, className = "btn btn-primary btn-sm" }: { overview: BillingOverview; className?: string }) {
   const { canEdit } = useBillingEnv();
   const pay = usePayNow(overview);
   const live = useRenewalLive(overview);
-  const plan = overview.paidPlan ?? overview.plan;
   return (
     <>
       <button
         type="button"
         className={className}
         disabled={!canEdit || pay.busy || !live}
-        title={!live ? "Online payment isn't available yet — our team will contact you to renew." : canEdit ? undefined : "Ask an admin with billing access to pay"}
-        onClick={() => void pay.start({ planId: plan.id, interval: overview.interval, purpose: "renewal" })}
+        title={!live ? "Online payment isn't available for your account — our team will contact you to renew." : canEdit ? undefined : "Ask an admin with billing access to pay"}
+        onClick={() => void pay.renew()}
       >
         Pay now · {formatINR(overview.renewalAmount ?? 0)}
       </button>
@@ -366,7 +378,7 @@ export function RenewalReminderPopup({ overview, alwaysOpen = false }: { overvie
               className="btn btn-primary btn-sm"
               onClick={() => {
                 dismiss();
-                void pay.start({ planId: plan.id, interval: overview.interval, purpose: "renewal" });
+                void pay.renew();
               }}
             >
               Pay now · {formatINR(overview.renewalAmount ?? 0)}

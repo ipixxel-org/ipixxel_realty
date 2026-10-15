@@ -186,6 +186,8 @@ export interface PreviewCheckoutRequest {
   couponCode?: string;
   /** Billing state typed in the (unsaved) billing form; defaults to the saved profile. */
   billingState?: string;
+  /** "renewal": one more term of the current plan (planId + interval must be the current ones). */
+  purpose?: "purchase" | "renewal";
 }
 
 export interface GstBreakdown {

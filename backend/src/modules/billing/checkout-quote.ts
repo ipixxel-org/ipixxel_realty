@@ -15,7 +15,10 @@
  *  - interval_change        monthly → yearly: yearly price − unused credit of the
  *                           current monthly cycle (oldPrice × daysLeft ÷ daysInCycle);
  *                           a new yearly cycle starts now
+ *  - renewal                same plan + interval, today's full price for one more
+ *                           term (quoteRenewal; the term rule is renewalPeriodEnd)
  */
+import { renewalPeriodEnd } from '../../common/utils/plan-change.util';
 import type { BillingWarning, CheckoutKind } from './billing.types';
 
 export type Interval = 'monthly' | 'yearly';
@@ -34,7 +37,10 @@ export type QuoteErrorCode =
   | 'free_plan'
   | 'same_plan'
   | 'lower_plan'
-  | 'yearly_to_monthly';
+  | 'yearly_to_monthly'
+  | 'nothing_to_renew'
+  | 'renewal_not_due'
+  | 'renewal_plan_mismatch';
 
 export class QuoteError extends Error {
   constructor(
@@ -96,6 +102,8 @@ export interface Quote {
   periodEnd: Date;
   /** Pre-GST price of each later renewal. */
   recurringPaise: number;
+  /** Renewals: the subscription's renewsAt when quoted (null otherwise). */
+  fromRenewsAt: Date | null;
   warnings: BillingWarning[];
 }
 
@@ -219,6 +227,42 @@ export function quoteCheckout(input: QuoteInput): Quote {
     };
   }
 
+  return {
+    kind,
+    // The plan the org is on when quoted (free or not) — fulfilment checks
+    // it is still the same before applying the change.
+    fromPlan: cur ? cur.plan : null,
+    fromInterval: cur ? cur.interval : null,
+    toPlan: target,
+    toInterval: interval,
+    subtotalPaise: subtotal,
+    creditPaise: credit,
+    taxablePaise: taxable,
+    ...taxOn(taxable, input),
+    proration,
+    periodEnd,
+    recurringPaise: subtotal,
+    fromRenewsAt: null,
+  };
+}
+
+/**
+ * GST on a taxable value: CGST 9% + SGST 9% when the buyer is in the seller's
+ * state, else IGST 18%. No seller state, or a buyer outside India, is IGST
+ * with a warning.
+ */
+export function taxOn(
+  taxablePaise: number,
+  input: Pick<QuoteInput, 'buyer' | 'seller'>,
+): Pick<
+  Quote,
+  | 'gstKind'
+  | 'cgstPaise'
+  | 'sgstPaise'
+  | 'igstPaise'
+  | 'totalPaise'
+  | 'warnings'
+> {
   const warnings: BillingWarning[] = [];
   if (!input.seller.state) {
     warnings.push({
@@ -239,28 +283,84 @@ export function quoteCheckout(input: QuoteInput): Quote {
     !!input.seller.state &&
     !!input.buyer.state &&
     input.buyer.state === input.seller.state;
-  const gst = splitGstPaise(taxable, intra);
-
+  const gst = splitGstPaise(taxablePaise, intra);
   return {
-    kind,
-    // The plan the org is on when quoted (free or not) — fulfilment checks
-    // it is still the same before applying the change.
-    fromPlan: cur ? cur.plan : null,
-    fromInterval: cur ? cur.interval : null,
-    toPlan: target,
-    toInterval: interval,
-    subtotalPaise: subtotal,
-    creditPaise: credit,
-    taxablePaise: taxable,
     gstKind: intra ? 'intra' : 'inter',
     cgstPaise: gst.cgst,
     sgstPaise: gst.sgst,
     igstPaise: gst.igst,
-    totalPaise: taxable + gst.cgst + gst.sgst + gst.igst,
-    proration,
-    periodEnd,
-    recurringPaise: subtotal,
+    totalPaise: taxablePaise + gst.cgst + gst.sgst + gst.igst,
     warnings,
+  };
+}
+
+const dateLabel = (d: Date) =>
+  d.toLocaleDateString('en-IN', {
+    day: 'numeric',
+    month: 'short',
+    year: 'numeric',
+    timeZone: 'UTC',
+  });
+
+/**
+ * Renewal ("pay each time"): the current plan and interval at today's price,
+ * for one more term. Open from `notifyDays` before renewsAt (when the
+ * reminder goes out), through the grace window, and after expiry. The plan
+ * comes from the subscription, so an archived plan can still be renewed.
+ */
+export function quoteRenewal(
+  input: Omit<QuoteInput, 'target' | 'interval'> & {
+    notifyDays: number;
+    /** What the UI asked to renew — must be the current plan + interval. */
+    requested: { planId: string; interval: Interval };
+  },
+): Quote {
+  const { current: cur, now } = input;
+  if (
+    !cur ||
+    cur.plan.isFree ||
+    !['active', 'trial', 'past_due', 'expired'].includes(cur.status)
+  ) {
+    throw new QuoteError(
+      'nothing_to_renew',
+      "There's no paid plan to renew. Pick a plan to buy instead.",
+    );
+  }
+  if (
+    input.requested.planId !== cur.plan.id ||
+    input.requested.interval !== cur.interval
+  ) {
+    throw new QuoteError(
+      'renewal_plan_mismatch',
+      `Renewing keeps your ${cur.plan.name} plan (${cur.interval}). To change plan, use Change plan.`,
+    );
+  }
+  if (
+    (cur.status === 'active' || cur.status === 'trial') &&
+    cur.renewsAt &&
+    cur.renewsAt.getTime() - now.getTime() > input.notifyDays * DAY_MS
+  ) {
+    throw new QuoteError(
+      'renewal_not_due',
+      `Your plan renews on ${dateLabel(cur.renewsAt)}. You can pay for it from ${input.notifyDays} days before.`,
+    );
+  }
+
+  const subtotal = pricePaise(cur.plan, cur.interval);
+  return {
+    kind: 'renewal',
+    fromPlan: cur.plan,
+    fromInterval: cur.interval,
+    toPlan: cur.plan,
+    toInterval: cur.interval,
+    subtotalPaise: subtotal,
+    creditPaise: 0,
+    taxablePaise: subtotal,
+    ...taxOn(subtotal, input),
+    proration: null,
+    periodEnd: renewalPeriodEnd(cur, cur.interval, now),
+    recurringPaise: subtotal,
+    fromRenewsAt: cur.renewsAt,
   };
 }
 

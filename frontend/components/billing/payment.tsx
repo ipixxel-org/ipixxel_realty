@@ -5,7 +5,7 @@ import { createPortal } from "react-dom";
 import { Icon } from "@/components/icons";
 import type { BillingClient } from "@/lib/billing/client";
 import { formatINR } from "@/lib/billing/pricing";
-import type { BillingInterval, CheckoutReceipt, ConfirmCheckoutResponse, RenewalMode, StartCheckoutRequest } from "@/lib/billing/types";
+import type { BillingInterval, BillingOverview, CheckoutReceipt, ConfirmCheckoutResponse, RenewalMode, StartCheckoutRequest } from "@/lib/billing/types";
 import { openCheckout } from "@/lib/razorpay";
 import { useBillingEnv } from "./context";
 
@@ -127,20 +127,26 @@ export function SimulatedPaymentPopup({
 
 /**
  * After a verified payment the server applies the plan (on verify or on the
- * webhook, whichever is first). Poll the overview until it shows the new plan.
+ * webhook, whichever is first). Poll the overview until it shows the new plan
+ * — or, for a renewal (same plan), until `isApplied` says so (a new period end).
  * Resolves the overview's period end, or null on timeout.
  */
 export async function waitForPlan(
   client: Pick<BillingClient, "getBillingOverview">,
   planId: string,
   interval: BillingInterval,
-  { everyMs = 1500, timeoutMs = 30000 }: { everyMs?: number; timeoutMs?: number } = {},
+  {
+    everyMs = 1500,
+    timeoutMs = 30000,
+    isApplied,
+  }: { everyMs?: number; timeoutMs?: number; isApplied?: (ov: BillingOverview) => boolean } = {},
 ): Promise<{ applied: boolean; periodEnd: string | null; planName: string | null }> {
   const until = Date.now() + timeoutMs;
   for (;;) {
     try {
       const ov = await client.getBillingOverview();
-      if (ov.plan.id === planId && ov.interval === interval && ov.status !== "free") return { applied: true, periodEnd: ov.periodEnd, planName: ov.plan.name };
+      const onPlan = ov.plan.id === planId && ov.interval === interval && ov.status !== "free";
+      if (onPlan && (!isApplied || isApplied(ov))) return { applied: true, periodEnd: ov.periodEnd, planName: ov.plan.name };
     } catch {
       // keep polling — a blip shouldn't turn a paid order into an error
     }
@@ -167,6 +173,8 @@ export function usePayment(handlers: {
   onClosed: () => void;
   /** Manual mode: the upgrade request was sent (or one was already pending). */
   onRequested?: (r: { requestId: string; checkoutId: string | null }) => void;
+  /** Renewals: the plan doesn't change, so say what "applied" looks like (e.g. a new period end). */
+  isApplied?: (ov: BillingOverview) => boolean;
 }): { start: (req: StartCheckoutRequest) => Promise<void>; busy: boolean; popup: ReactNode } {
   const { client } = useBillingEnv();
   const [busy, setBusy] = useState(false);
@@ -174,7 +182,7 @@ export function usePayment(handlers: {
 
   async function settlePaid(res: ConfirmCheckoutResponse, amount: number, req: StartCheckoutRequest) {
     const reviewing = res.checkoutStatus === "needs_review";
-    const { applied, periodEnd, planName } = reviewing ? { applied: false, periodEnd: null, planName: null } : await waitForPlan(client, res.toPlanId, res.toInterval);
+    const { applied, periodEnd, planName } = reviewing ? { applied: false, periodEnd: null, planName: null } : await waitForPlan(client, res.toPlanId, res.toInterval, { isApplied: handlers.isApplied });
     handlers.onActive({
       planId: res.toPlanId,
       planName: planName ?? "",

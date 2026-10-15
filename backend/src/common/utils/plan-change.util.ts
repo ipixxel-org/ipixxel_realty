@@ -6,7 +6,31 @@ const DAY_MS = 24 * 60 * 60 * 1000;
 const CYCLE_DAYS = { monthly: 30, yearly: 365 } as const;
 
 export type PlanChangeKind =
-  'new' | 'upgrade_same_interval' | 'interval_change';
+  'new' | 'upgrade_same_interval' | 'interval_change' | 'renewal';
+
+/**
+ * The next term when a subscription is renewed ("pay each time"). While the
+ * term or its grace window is still running (active / trial / past_due) the
+ * new term continues from renewsAt, so paying early loses no days and paying
+ * in grace covers the days already used. Once expired — or if that term
+ * would already be over — it starts now. Shared by the renewal quote and by
+ * applyPlanChange so the preview and the applied date always agree.
+ */
+export function renewalPeriodEnd(
+  sub: { status: string; renewsAt: Date | null },
+  interval: 'monthly' | 'yearly',
+  now: Date,
+): Date {
+  const cycleMs = CYCLE_DAYS[interval] * DAY_MS;
+  const continues =
+    !!sub.renewsAt && ['active', 'trial', 'past_due'].includes(sub.status);
+  const end = new Date(
+    (continues ? sub.renewsAt!.getTime() : now.getTime()) + cycleMs,
+  );
+  return end.getTime() > now.getTime()
+    ? end
+    : new Date(now.getTime() + cycleMs);
+}
 
 export interface ApplyPlanChangeInput {
   organisationId: string;
@@ -14,7 +38,8 @@ export interface ApplyPlanChangeInput {
   toInterval: 'monthly' | 'yearly';
   /**
    * Period rule: 'new' and 'interval_change' start a fresh cycle now;
-   * 'upgrade_same_interval' keeps the current renewsAt.
+   * 'upgrade_same_interval' keeps the current renewsAt; 'renewal' adds one
+   * term (renewalPeriodEnd).
    */
   kind: PlanChangeKind;
   source: 'payment' | 'super_admin';
@@ -77,7 +102,10 @@ export async function applyPlanChange(
   const renewsAt =
     input.kind === 'upgrade_same_interval' && activeSub?.renewsAt
       ? activeSub.renewsAt
-      : freshRenewsAt;
+      : input.kind === 'renewal' && activeSub
+        ? renewalPeriodEnd(activeSub, input.toInterval, now)
+        : freshRenewsAt;
+  const renewed = input.kind === 'renewal';
 
   const subscription = activeSub
     ? await tx.subscription.update({
@@ -113,7 +141,9 @@ export async function applyPlanChange(
       // Approvals keep the action they always had; payments get their own.
       action: input.requestId
         ? 'package_change_request_approved'
-        : 'plan_purchased',
+        : renewed
+          ? 'subscription_renewed'
+          : 'plan_purchased',
       entity: input.requestId ? 'PackageChangeRequest' : 'Subscription',
       entityId: input.requestId ?? subscription.id,
       metadata: {
@@ -144,10 +174,16 @@ export async function applyPlanChange(
         recipientId: u.id,
         // Same notification type for both (no enum change); the text differs.
         type: 'package_change_approved' as const,
-        title: approved ? 'Package Change Approved' : 'Plan Activated',
+        title: approved
+          ? 'Package Change Approved'
+          : renewed
+            ? 'Plan Renewed'
+            : 'Plan Activated',
         body: approved
           ? `Your request to change package to "${plan.name}" has been approved by Super Admin. Your new plan is now active.`
-          : `Payment received. Your organisation is now on the "${plan.name}" plan.`,
+          : renewed
+            ? `Payment received. Your "${plan.name}" plan is renewed until ${renewsAt.toISOString().slice(0, 10)}.`
+            : `Payment received. Your organisation is now on the "${plan.name}" plan.`,
         entity: 'Subscription',
         entityId: subscription.id,
       })),

@@ -16,13 +16,15 @@ export class PreviewCheckoutDto {
   @IsOptional() @IsString() @MaxLength(40) couponCode?: string;
   /** GST state code typed in the (unsaved) billing form. */
   @IsOptional() @IsString() @MaxLength(50) billingState?: string;
+  /** 'renewal' quotes one more term of the current plan. */
+  @IsOptional() @IsIn(['purchase', 'renewal']) purpose?: 'purchase' | 'renewal';
 }
 
 /** POST /org/billing/checkout */
 export class StartCheckoutDto {
   @IsString() @IsNotEmpty() planId!: string;
   @IsIn(['monthly', 'yearly']) interval!: 'monthly' | 'yearly';
-  /** Only 'purchase' in step 2 (renewals are step 3). */
+  /** 'renewal' pays for one more term of the current plan (planId + interval must match it). */
   @IsOptional() @IsIn(['purchase', 'renewal']) purpose?: 'purchase' | 'renewal';
   @IsOptional() @IsString() @MaxLength(40) couponCode?: string;
 }
