@@ -1352,6 +1352,86 @@ enum CouponIntervalScope {
   @@schema("billing")
 }
 
+enum InvoiceKind {
+  invoice
+  // Issued when a paid invoice is refunded; refers to it (creditForId).
+  credit_note
+
+  @@schema("billing")
+}
+
+enum InvoiceStatus {
+  paid
+  refunded
+  void
+
+  @@schema("billing")
+}
+
+// GST tax invoices and credit notes for plan payments (billing v2 step 7).
+// Numbers run per Indian financial year: INV/26-27/0001, CN/26-27/0001.
+// Amounts are integer paise; seller and buyer are snapshots at issue time.
+model Invoice {
+  id               String        @id @default(uuid())
+  number           String        @unique
+  kind             InvoiceKind   @default(invoice)
+  status           InvoiceStatus @default(paid)
+  organisationId   String        @map("organisation_id")
+  checkoutId       String?       @map("checkout_id")
+  paymentId        String?       @map("payment_id")
+  offlinePaymentId String?       @map("offline_payment_id")
+  // Credit notes: the invoice they cancel.
+  creditForId      String?       @map("credit_for_id")
+  issuedAt         DateTime      @default(now()) @map("issued_at")
+  description      String
+  seller           Json
+  buyer            Json
+  // Before discounts / credits, the discounts, then the taxable value.
+  subtotalPaise    Int           @map("subtotal_paise")
+  discountPaise    Int           @default(0) @map("discount_paise")
+  taxablePaise     Int           @map("taxable_paise")
+  cgstPaise        Int           @map("cgst_paise")
+  sgstPaise        Int           @map("sgst_paise")
+  igstPaise        Int           @map("igst_paise")
+  totalPaise       Int           @map("total_paise")
+  createdAt        DateTime      @default(now()) @map("created_at")
+
+  @@index([organisationId])
+  @@index([checkoutId])
+  @@index([paymentId])
+  @@map("invoices")
+  @@schema("billing")
+}
+
+// Next number per series ("INV/26-27", "CN/26-27").
+model InvoiceCounter {
+  series String @id
+  next   Int
+
+  @@map("invoice_counters")
+  @@schema("billing")
+}
+
+// A plan payment received outside Razorpay, recorded by a Super Admin
+// ("Mark paid offline"). Shows in payment history; can be refunded.
+model OfflinePayment {
+  id             String   @id @default(uuid())
+  organisationId String   @map("organisation_id")
+  amountPaise    Int      @map("amount_paise")
+  method         String
+  reference      String   @default("")
+  receivedOn     DateTime @map("received_on")
+  note           String?
+  // received | refunded
+  status         String   @default("received")
+  recordedById   String?  @map("recorded_by_id")
+  createdAt      DateTime @default(now()) @map("created_at")
+
+  @@index([organisationId])
+  @@map("offline_payments")
+  @@schema("billing")
+}
+
 // "Choose what stays": what an organisation keeps active on a smaller plan.
 // One row per organisation, for one target plan; when no row matches the plan
 // the org moves to, the default picks apply (owner, admins, latest login;

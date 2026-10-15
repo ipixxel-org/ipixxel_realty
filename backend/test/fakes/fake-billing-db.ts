@@ -108,7 +108,13 @@ function table(
     }) => {
       const r = find(where);
       if (r) {
-        Object.assign(r, update);
+        // Supports { field: { increment: n } } (invoice counters).
+        for (const [k, v] of Object.entries(update)) {
+          r[k] =
+            v !== null && typeof v === 'object' && 'increment' in v
+              ? (r[k] as number) + (v as { increment: number }).increment
+              : v;
+        }
         return { ...r };
       }
       const row = { id: id(prefix), createdAt: new Date(), ...create };
@@ -184,6 +190,9 @@ export function createFakeBillingDb(seed: Seed) {
   );
   db.billingProfile = table([], 'prof');
   db.coupon = table([], 'cpn');
+  db.invoice = table([], 'inv');
+  db.invoiceCounter = table([], 'ctr');
+  db.offlinePayment = table([], 'off');
   db.couponRedemption = table([], 'red');
   db.payment = table([], 'pay');
   db.auditLog = table([], 'audit');

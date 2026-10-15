@@ -188,7 +188,9 @@ export async function applyPlanChange(
     select: { id: true },
   });
   if (recipients.length > 0) {
-    const approved = input.source === 'super_admin';
+    // An approved request reads as an approval; a renewal (paid online, or
+    // recorded offline by a Super Admin) reads as a renewal.
+    const approved = input.source === 'super_admin' && !renewed;
     await tx.notification.createMany({
       data: recipients.map((u) => ({
         orgId: input.organisationId,

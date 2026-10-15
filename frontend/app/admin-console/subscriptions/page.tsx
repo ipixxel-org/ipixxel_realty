@@ -23,7 +23,7 @@ import { useFlash } from "@/lib/flash";
 import { LIST_PAGE_SIZE, ListPager } from "@/components/ui/list-pager";
 import { ORG_SUBS_TAB, SUBS_FLASH_KEY, SUBS_PATH } from "./subscriptions-shared";
 import { ChangeSubscriptionModal } from "./change-subscription-modal";
-import { AdminCheckoutsNeedingReview, AdminLifecycleSettings, AdminPlansV2 } from "@/components/billing/admin/admin-pages";
+import { AdminCheckoutsNeedingReview, AdminLifecycleSettings, AdminPaymentsV2, AdminPlansV2, AdminSubscriptionsV2 } from "@/components/billing/admin/admin-pages";
 import { BILLING_V2 } from "@/lib/billing/flag";
 import { formatPaise } from "@/lib/razorpay";
 import type {
@@ -1026,8 +1026,14 @@ export default function SuperAdminSubscriptionsPage() {
           </div>
         )}
 
-        {/* Tab 2: Organisation Subscriptions */}
-        {tab === 2 && (
+        {/* Tab 2: Organisation Subscriptions — billing v2 swaps in the real v2 list (statuses,
+            grace, coupons, the org billing page); the live one below is unchanged when off. */}
+        {tab === 2 && BILLING_V2 && (
+          <div style={{ padding: 24 }}>
+            <AdminSubscriptionsV2 />
+          </div>
+        )}
+        {tab === 2 && !BILLING_V2 && (
           <div style={{ padding: 24 }}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, flexWrap: "wrap", marginBottom: 16 }}>
               <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
@@ -1380,6 +1386,13 @@ export default function SuperAdminSubscriptionsPage() {
 
         {/* Tab 5: Subscription Expiry Policy — billing v2: the new lifecycle card (incl. the
             Online payments switch), the same one as Settings → Subscription Expiry & Lifecycle. */}
+        {/* Tab 4: Payments & Invoicing — billing v2: plan payments, offline payments and refunds. */}
+        {tab === 4 && BILLING_V2 && (
+          <div style={{ padding: 24 }}>
+            <AdminPaymentsV2 />
+          </div>
+        )}
+
         {tab === 5 && BILLING_V2 && (
           <div style={{ padding: 24 }}>
             <AdminLifecycleSettings />

@@ -1,4 +1,5 @@
 import {
+  BadGatewayException,
   BadRequestException,
   ForbiddenException,
   Injectable,
@@ -360,6 +361,52 @@ export class PaymentsService {
     });
     if (payment) await this.emit('payment.failed', payment);
     return payment;
+  }
+
+  /**
+   * Refund a captured payment in full through Razorpay (Super Admin action,
+   * billing v2). The payment is marked `refunded` here; the refund.processed
+   * webhook that follows is then a no-op.
+   */
+  async refundInFull(paymentId: string, notes: Record<string, string> = {}) {
+    const payment = await this.prisma.payment.findUnique({
+      where: { id: paymentId },
+    });
+    if (!payment) throw new NotFoundException('Payment not found');
+    if (payment.status !== 'captured' || !payment.razorpayPaymentId) {
+      throw new BadRequestException('Only a captured payment can be refunded.');
+    }
+    let refund: { id: string; amount: number };
+    try {
+      refund = await this.gateway.refundPayment(
+        payment.razorpayPaymentId,
+        payment.amount,
+        notes,
+      );
+    } catch (err) {
+      // The SDK rejects with { statusCode, error: { description } }; say what
+      // Razorpay said instead of a bare 500. Nothing has changed here.
+      const e = err as {
+        error?: { description?: string };
+        message?: string;
+        statusCode?: number;
+      };
+      const why =
+        e?.error?.description ||
+        e?.message ||
+        (e?.statusCode
+          ? `Razorpay answered ${e.statusCode}`
+          : 'no reason given');
+      this.logger.warn(`Refund of ${payment.id} refused by Razorpay: ${why}`);
+      throw new BadGatewayException(
+        `Razorpay didn't refund this payment: ${why}`,
+      );
+    }
+    await this.recordRefund(payment.razorpayPaymentId, {
+      id: payment.razorpayPaymentId,
+      amount_refunded: refund.amount,
+    });
+    return { refundId: refund.id, amount: refund.amount };
   }
 
   /** Full refund -> `refunded`. Partial refunds are not tracked yet (TODO). */

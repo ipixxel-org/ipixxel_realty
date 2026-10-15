@@ -25,6 +25,14 @@ const put = (body: unknown): RequestInit => ({ method: "PUT", body: JSON.stringi
 const post = (body: unknown): RequestInit => ({ method: "POST", body: JSON.stringify(body) });
 const del: RequestInit = { method: "DELETE" };
 
+/** "?a=1&b=x" from the defined values, or "". */
+function qs(params: Record<string, string | number | undefined | null>): string {
+  const s = new URLSearchParams();
+  for (const [k, v] of Object.entries(params)) if (v !== undefined && v !== null && v !== "") s.set(k, String(v));
+  const out = s.toString();
+  return out ? `?${out}` : "";
+}
+
 export const httpBilling: Impl = {
   getBillingOverview: () => call("/org/billing/v2"),
   listPlans: () => call("/org/billing/plans"),
@@ -69,6 +77,21 @@ export const httpBilling: Impl = {
   getRetentionChoices: (req) =>
     call(`/org/billing/retention${req.targetPlanId ? `?targetPlanId=${encodeURIComponent(req.targetPlanId)}` : ""}`),
   saveRetentionChoices: (req) => call("/org/billing/retention", put(req)),
+
+  // Step 7 — invoices, payment history, Super Admin subscriptions and payments.
+  // (Org lists are under /org/billing/v2/: /org/billing/invoices is the legacy list.)
+  listInvoices: (req) => call(`/org/billing/v2/invoices${qs({ page: req.page, pageSize: req.pageSize })}`),
+  listPayments: (req) => call(`/org/billing/v2/payments${qs({ page: req.page, pageSize: req.pageSize })}`),
+  listSubscriptions: (req) =>
+    call(`/admin/billing/subscriptions${qs({ status: req.status, planId: req.planId, q: req.q, page: req.page, pageSize: req.pageSize })}`),
+  getSubscription: (orgId) => call(`/admin/billing/subscriptions/${encodeURIComponent(orgId)}`),
+  extendGrace: ({ orgId, ...body }) => call(`/admin/billing/subscriptions/${encodeURIComponent(orgId)}/extend-grace`, post(body)),
+  markPaidOffline: ({ orgId, ...body }) => call(`/admin/billing/subscriptions/${encodeURIComponent(orgId)}/offline-payment`, post(body)),
+  applyCoupon: ({ orgId, ...body }) => call(`/admin/billing/subscriptions/${encodeURIComponent(orgId)}/coupon`, post(body)),
+  cancelSubscription: ({ orgId, ...body }) => call(`/admin/billing/subscriptions/${encodeURIComponent(orgId)}/cancel`, post(body)),
+  listAdminPayments: (req) =>
+    call(`/admin/billing/payments${qs({ status: req.status, orgId: req.orgId, page: req.page, pageSize: req.pageSize })}`),
+  refundPayment: ({ paymentId, ...body }) => call(`/admin/billing/payments/${encodeURIComponent(paymentId)}/refund`, post(body)),
 };
 
 export const HTTP_FUNCTIONS = Object.keys(httpBilling) as BillingFunction[];

@@ -99,6 +99,29 @@ describe("billing http client — step 2", () => {
     expect(lastCall()).toEqual({ path: "/org/billing/retention", method: "PUT", body: req });
   });
 
+  it("step 7: invoices, payments, admin subscriptions and refunds", async () => {
+    await httpBilling.listInvoices!({ page: 2, pageSize: 5 });
+    expect(lastCall().path).toBe("/org/billing/v2/invoices?page=2&pageSize=5");
+    await httpBilling.listPayments!({});
+    expect(lastCall().path).toBe("/org/billing/v2/payments");
+    await httpBilling.listSubscriptions!({ status: "past_due", q: "sky line" });
+    expect(lastCall().path).toBe("/admin/billing/subscriptions?status=past_due&q=sky+line");
+    await httpBilling.getSubscription!("org-1");
+    expect(lastCall().path).toBe("/admin/billing/subscriptions/org-1");
+    await httpBilling.extendGrace!({ orgId: "org-1", days: 5, note: "x" });
+    expect(lastCall()).toEqual({ path: "/admin/billing/subscriptions/org-1/extend-grace", method: "POST", body: { days: 5, note: "x" } });
+    await httpBilling.markPaidOffline!({ orgId: "org-1", amount: 2360, method: "UPI", reference: "r", receivedOn: "2026-10-14" });
+    expect(lastCall()).toMatchObject({ path: "/admin/billing/subscriptions/org-1/offline-payment", body: { amount: 2360, method: "UPI" } });
+    await httpBilling.applyCoupon!({ orgId: "org-1", code: "SAVE10" });
+    expect(lastCall()).toEqual({ path: "/admin/billing/subscriptions/org-1/coupon", method: "POST", body: { code: "SAVE10" } });
+    await httpBilling.cancelSubscription!({ orgId: "org-1", when: "now" });
+    expect(lastCall()).toEqual({ path: "/admin/billing/subscriptions/org-1/cancel", method: "POST", body: { when: "now" } });
+    await httpBilling.listAdminPayments!({ status: "refunded" });
+    expect(lastCall().path).toBe("/admin/billing/payments?status=refunded");
+    await httpBilling.refundPayment!({ paymentId: "pay-1", reason: "dup" });
+    expect(lastCall()).toEqual({ path: "/admin/billing/payments/pay-1/refund", method: "POST", body: { reason: "dup" } });
+  });
+
   it("API errors become BillingError with the message and code", async () => {
     apiFetch.mockRejectedValueOnce(new ApiError("Add your billing details first.", 400, { code: "billing_profile_required", message: "Add your billing details first." }));
     const err = await httpBilling.startCheckout!({ planId: "p1", interval: "monthly", purpose: "purchase" }).catch((e: unknown) => e);

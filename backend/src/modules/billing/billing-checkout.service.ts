@@ -40,6 +40,7 @@ import {
   type CouponRule,
 } from './coupon-rules';
 import { settleCoupon } from './coupon-settlement';
+import { issueCheckoutInvoice } from './invoice.util';
 import { isFreePlan, sortPlans } from './plan-modules';
 import type {
   CheckoutPreviewV2,
@@ -523,6 +524,8 @@ export class BillingCheckoutService implements OnModuleInit {
           requestedById: c.createdById,
         });
         await settleCoupon(tx, c);
+        // GST tax invoice for what was paid (none for a ₹0 checkout).
+        await issueCheckoutInvoice(tx, c);
         await tx.billingCheckout.update({
           where: { id: c.id },
           data: { status: 'paid', fulfilledAt: new Date() },

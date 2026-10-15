@@ -23,8 +23,9 @@ client is the reference behaviour (see `frontend/lib/billing/__tests__/mock-clie
 | 4 | `cancelPlan`, `undoCancel`, `scheduleDowngrade`, `undoDowngrade` | `billing-plan-change.service.ts`; applied by the lifecycle sweep (`subscription-lifecycle.util.ts`) |
 | 5 | `listCoupons`, `getCoupon`, `saveCoupon`, `listOrgOptions`; coupons in `previewCheckout` / `startCheckout` | `coupon-rules.ts`, `coupon-settlement.ts`, `admin-coupons.service.ts` |
 | 6 | `getRetentionChoices`, `saveRetentionChoices`; pausing behind `getAccessStatus` / the overview | `common/utils/retention.util.ts`, `billing-retention.service.ts`, `common/guards/project-editable.guard.ts` |
+| 7 | `listInvoices`, `listPayments`, `listSubscriptions`, `getSubscription`, `extendGrace`, `markPaidOffline`, `applyCoupon`, `cancelSubscription`, `listAdminPayments`, `refundPayment` | `invoice.util.ts`, `billing-ledger.service.ts`, `admin-subscriptions.service.ts`, `invoice-document.controller.ts`; `PaymentsService.refundInFull` |
 
-Everything else is mock. `updatePaymentMethod` stays unimplemented on purpose: renewals are
+Every function is real except `updatePaymentMethod`, which stays unimplemented on purpose: renewals are
 "pay each time" through the existing Razorpay Orders + Checkout flow (no Razorpay
 Subscriptions), and the overview says `autoRenewAvailable: false`, which hides the auto-renew UI.
 
@@ -203,6 +204,37 @@ period rule (`applyPlanChange`).
   as it does for drafts. The public slug route still falls back to unpublished pages for pages
   unpublished by hand (existing behaviour); only billing-offline pages are excluded.
 
+### Step 7 notes — invoices, payments, Super Admin tools
+
+- **Invoices** (`billing.invoices`): a GST tax invoice for every paid plan payment — issued in
+  the same transaction that applies the plan (online), or when a Super Admin records an offline
+  payment. ₹0 checkouts and `needs_review` payments get none. Amounts come from the checkout
+  (offline: the amount is GST-inclusive, taxable = total ÷ 1.18 rounded half up). Seller and
+  buyer are snapshots (seller settings; billing profile). Numbers run per Indian financial year
+  (April–March): `INV/26-27/0001`; credit notes `CN/26-27/0001` (`billing.invoice_counters`).
+- **Document:** `pdfUrl` / `receiptUrl` is a signed link valid for an hour,
+  `/api/billing/invoices/:id/document?exp=&sig=` (through the frontend's /api proxy): a
+  print-ready HTML invoice the browser saves as PDF. No PDF library was added. No SAC code is
+  printed yet — add the right one with your accountant.
+- **Payments:** `PaymentRecord` rows are Razorpay payments for billing checkouts (captured,
+  failed, refunded) plus `billing.offline_payments` (`status: "offline"`, or refunded).
+- **Super Admin:**
+  - `GET /admin/billing/subscriptions` — every organisation, `countsByStatus`, filters
+    status / planId / q, paged;
+  - `GET /admin/billing/subscriptions/:orgId` — timeline (audit log + failed payments),
+    payments, coupon;
+  - `POST …/:orgId/extend-grace` `{ days: 1–60, note? }` — only in grace (`not_in_grace`);
+  - `POST …/:orgId/offline-payment` — records and invoices the payment, then renews the plan
+    (on Basic after a paid plan: buys it back);
+  - `POST …/:orgId/coupon` `{ code }` — checked like at checkout, then attached for the next
+    renewals (first payment = 1, first N = N, forever = all);
+  - `POST …/:orgId/cancel` `{ when: "period_end" | "now", note? }`;
+  - `GET /admin/billing/payments` (with totals) and `POST /admin/billing/payments/:id/refund`.
+- **Refunds:** full amount only. Online → Razorpay refund API (`PaymentsService.refundInFull`;
+  if Razorpay refuses, 502 with its reason and nothing changes); offline → marked refunded.
+  Either way the invoice becomes `refunded` and a credit note is issued. The plan is not
+  changed — cancel it separately if needed.
+
 ### Step 1 notes
 
 - **Unlimited:** `PlanLimits`, `UsageItem.limit` and `PlanModules.metaPages` are `number | null`;
@@ -266,8 +298,8 @@ period rule (`applyPlanChange`).
 | `getRetentionChoices(req)` | `GET /org/billing/retention?targetPlanId=` | `GetRetentionChoicesRequest` | `RetentionChoices` |
 | `saveRetentionChoices(req)` | `PUT /org/billing/retention` | `SaveRetentionChoicesRequest` | `RetentionChoices` (reject over-limit picks or a missing owner) |
 | `getAccessStatus()` | `GET /org/billing/access` | — | `AccessStatus` (paused users, view-only projects, offline landing pages, limits, modules) |
-| `listInvoices(req)` | `GET /org/billing/invoices?page=&pageSize=` | `PageRequest` | `Paged<Invoice>` (`pdfUrl` = signed URL) |
-| `listPayments(req)` | `GET /org/billing/payments?page=&pageSize=` | `PageRequest` | `Paged<PaymentRecord>` |
+| `listInvoices(req)` | `GET /org/billing/v2/invoices?page=&pageSize=` (`/org/billing/invoices` is the legacy list) | `PageRequest` | `Paged<Invoice>` (invoices and credit notes; `pdfUrl` = signed link to the printable document) |
+| `listPayments(req)` | `GET /org/billing/v2/payments?page=&pageSize=` | `PageRequest` | `Paged<PaymentRecord>` (plan payments: Razorpay + offline) |
 
 **Login refusal for a paused user** (not part of `BillingClient`): `POST /auth/login` returns
 403 with `{ code: "account_paused", orgName, ownerName, planName, planUserLimit }`. The login
@@ -327,7 +359,7 @@ Settings → Subscription Expiry, `rzp_test_…` keys in Integrations → Razorp
 | Banners + renewal popup | org shell (`components/org/shell.tsx` → `BillingV2Root`) | `components/billing/banners.tsx` |
 | Locked states | login, project detail, landing pages list, team chat composer, Users "Create user" | `components/billing/locked.tsx` |
 | Admin plans | `/admin-console/subscriptions` → "Plans & Pricing Matrices" tab (the existing page keeps all its tabs; with the flag on only this tab and "Expiry & Grace Policy" are swapped) | `components/billing/admin/plans-editor.tsx` |
-| Admin subscriptions · payments (not real yet) | Will replace the existing "Organisation Subscriptions" and "Payments & Invoicing" tabs when real; org detail at `/admin-console/subscriptions/org/:orgId` | `components/billing/admin/{subscriptions,payments}.tsx` |
+| Admin subscriptions · payments | `/admin-console/subscriptions` → "Organisation Subscriptions" and "Payments & Invoicing" tabs (flag on; the tabs stay); org detail at `/admin-console/subscriptions/org/:orgId` | `components/billing/admin/{subscriptions,payments}.tsx` |
 | Admin coupons | `/admin-console/coupons` (+ `new`, `:code`, `:code/edit`) | `components/billing/admin/coupons.tsx` |
 | Admin lifecycle + company tax details | `/admin-console/settings` and the Subscriptions "Expiry & Grace Policy" tab | `components/billing/admin/lifecycle.tsx` |
 | Admin "Paid — needs review" + checkout amounts on requests | `/admin-console/subscriptions` → Package Requests tab (flag on) | `components/billing/admin/checkouts-review.tsx` |

@@ -87,6 +87,21 @@ export class RazorpayGateway {
     };
   }
 
+  /** Full refund of a captured payment (billing v2 Super Admin refunds). */
+  async refundPayment(
+    paymentId: string,
+    amount: number,
+    notes: Record<string, string> = {},
+  ): Promise<{ id: string; amount: number; status: string }> {
+    const r = await (
+      await this.sdk()
+    ).payments.refund(paymentId, {
+      amount,
+      notes,
+    });
+    return { id: r.id, amount: Number(r.amount), status: String(r.status) };
+  }
+
   async fetchPayment(paymentId: string): Promise<GatewayPayment> {
     const p = await (await this.sdk()).payments.fetch(paymentId);
     return {

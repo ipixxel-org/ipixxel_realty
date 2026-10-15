@@ -39,6 +39,18 @@ import {
 } from './dto/retention.dto';
 import { AdminCouponsService } from './admin-coupons.service';
 import { SaveCouponDto } from './dto/coupon.dto';
+import { AdminSubscriptionsService } from './admin-subscriptions.service';
+import { BillingLedgerService } from './billing-ledger.service';
+import {
+  AdminCancelDto,
+  ApplyCouponDto,
+  ExtendGraceDto,
+  ListAdminPaymentsQueryDto,
+  ListSubscriptionsQueryDto,
+  MarkPaidOfflineDto,
+  PageQueryDto,
+  RefundPaymentDto,
+} from './dto/admin-subscriptions.dto';
 
 /**
  * Billing v2 — organisation side. Shares the /org/billing prefix with the
@@ -54,7 +66,22 @@ export class OrgBillingV2Controller {
     private readonly checkouts: BillingCheckoutService,
     private readonly changes: BillingPlanChangeService,
     private readonly retention: BillingRetentionService,
+    private readonly ledger: BillingLedgerService,
   ) {}
+
+  // Step 7: invoices and payment history. Under v2/ because GET
+  // /org/billing/invoices is the legacy (flag-off) list.
+  @RequirePermission('billing', 'view')
+  @Get('v2/invoices')
+  invoices(@CurrentUser() user: JwtPayload, @Query() q: PageQueryDto) {
+    return this.ledger.listInvoices(user.orgId as string, q.page, q.pageSize);
+  }
+
+  @RequirePermission('billing', 'view')
+  @Get('v2/payments')
+  payments(@CurrentUser() user: JwtPayload, @Query() q: PageQueryDto) {
+    return this.ledger.listPayments(user.orgId as string, q.page, q.pageSize);
+  }
 
   // Step 6: choose what stays on a smaller plan
   @RequirePermission('billing', 'view')
@@ -173,7 +200,75 @@ export class AdminBillingController {
     private readonly service: AdminBillingService,
     private readonly checkouts: BillingCheckoutService,
     private readonly coupons: AdminCouponsService,
+    private readonly subscriptions: AdminSubscriptionsService,
+    private readonly ledger: BillingLedgerService,
   ) {}
+
+  // Step 7: subscriptions, payments, refunds
+  @Get('subscriptions')
+  listSubscriptions(@Query() q: ListSubscriptionsQueryDto) {
+    return this.subscriptions.list(q);
+  }
+
+  @Get('subscriptions/:orgId')
+  getSubscription(@Param('orgId') orgId: string) {
+    return this.subscriptions.detail(orgId);
+  }
+
+  @Post('subscriptions/:orgId/extend-grace')
+  @HttpCode(200)
+  extendGrace(
+    @CurrentUser() user: JwtPayload,
+    @Param('orgId') orgId: string,
+    @Body() dto: ExtendGraceDto,
+  ) {
+    return this.subscriptions.extendGrace(orgId, user.sub, dto.days, dto.note);
+  }
+
+  @Post('subscriptions/:orgId/offline-payment')
+  @HttpCode(200)
+  markPaidOffline(
+    @CurrentUser() user: JwtPayload,
+    @Param('orgId') orgId: string,
+    @Body() dto: MarkPaidOfflineDto,
+  ) {
+    return this.subscriptions.markPaidOffline(orgId, user.sub, dto);
+  }
+
+  @Post('subscriptions/:orgId/coupon')
+  @HttpCode(200)
+  applyCoupon(
+    @CurrentUser() user: JwtPayload,
+    @Param('orgId') orgId: string,
+    @Body() dto: ApplyCouponDto,
+  ) {
+    return this.subscriptions.applyCoupon(orgId, user.sub, dto.code);
+  }
+
+  @Post('subscriptions/:orgId/cancel')
+  @HttpCode(200)
+  cancelSubscription(
+    @CurrentUser() user: JwtPayload,
+    @Param('orgId') orgId: string,
+    @Body() dto: AdminCancelDto,
+  ) {
+    return this.subscriptions.cancel(orgId, user.sub, dto.when, dto.note);
+  }
+
+  @Get('payments')
+  listPayments(@Query() q: ListAdminPaymentsQueryDto) {
+    return this.ledger.adminListPayments(q);
+  }
+
+  @Post('payments/:id/refund')
+  @HttpCode(200)
+  refund(
+    @CurrentUser() user: JwtPayload,
+    @Param('id') id: string,
+    @Body() dto: RefundPaymentDto,
+  ) {
+    return this.subscriptions.refund(id, user.sub, dto.reason);
+  }
 
   // Step 5: coupons
   @Get('coupons')

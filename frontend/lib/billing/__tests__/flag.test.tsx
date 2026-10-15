@@ -108,6 +108,9 @@ const apiFetch = vi.fn(async (path: string, init?: RequestInit): Promise<unknown
     backend.overview = { ...backend.overview, billingProfile: profile };
     return profile;
   }
+  if (path.startsWith("/org/billing/v2/invoices") || path.startsWith("/org/billing/v2/payments")) {
+    return { data: [], total: 0, page: 1, pageSize: 5 };
+  }
   if (path.startsWith("/org/billing/retention")) {
     const item = (id: string, name: string, selected: boolean, locked = false) => ({ id, name, detail: "", reason: "", defaultPicked: selected, selected, locked });
     return {
@@ -225,7 +228,7 @@ describe("billing v2 flag", () => {
     expect(errors).toEqual([]);
   });
 
-  it("on: Settings → Billing shows real plan data without a sample tag; still-mock invoices keep theirs", async () => {
+  it("on: Settings → Billing is all real data — no sample tags, invoices from the API", async () => {
     const { BillingV2Root, BillingOverviewPanel, ToastProvider } = await load("true");
     render(
       <ToastProvider>
@@ -237,7 +240,8 @@ describe("billing v2 flag", () => {
     await settle();
     expect(screen.getByText("Current plan")).toBeInTheDocument();
     expect(screen.getByText("3 · unlimited")).toBeInTheDocument();
-    expect(screen.getAllByText("Sample data")).toHaveLength(1); // the Invoices section only
+    expect(screen.queryByText("Sample data")).toBeNull();
+    expect(apiFetch.mock.calls.some(([p]) => String(p).startsWith("/org/billing/v2/invoices"))).toBe(true);
     expect(screen.queryByText(/Update payment method/)).toBeNull();
     expect(errors).toEqual([]);
   });
@@ -463,7 +467,7 @@ describe("billing v2 flag", () => {
     expect(errors).toEqual([]);
   });
 
-  it("the hybrid client marks exactly the step 1, 2, 4, 5 and 6 functions as real", async () => {
+  it("the hybrid client: every function is real except updatePaymentMethod", async () => {
     const { billingClient, REAL_FUNCTIONS, BillingError } = await load("true");
     expect(billingClient.isMock).toBe(false);
     expect(Object.entries(REAL_FUNCTIONS).filter(([, v]) => v).map(([k]) => k).sort()).toEqual(
@@ -496,10 +500,21 @@ describe("billing v2 flag", () => {
         // step 6
         "getRetentionChoices",
         "saveRetentionChoices",
+        // step 7
+        "listInvoices",
+        "listPayments",
+        "listSubscriptions",
+        "getSubscription",
+        "extendGrace",
+        "markPaidOffline",
+        "applyCoupon",
+        "cancelSubscription",
+        "listAdminPayments",
+        "refundPayment",
       ].sort(),
     );
-    expect(billingClient.isReal("listInvoices")).toBe(false);
-    // A still-mock function asked about a real organisation fails as a BillingError.
-    await expect(billingClient.getSubscription("uuid-org")).rejects.toBeInstanceOf(BillingError);
+    // Only the saved-payment-method flow stays unimplemented (renewals are "pay each time").
+    expect(billingClient.isReal("updatePaymentMethod")).toBe(false);
+    expect(BillingError).toBeDefined();
   });
 });

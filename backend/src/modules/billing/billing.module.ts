@@ -18,6 +18,9 @@ import { BillingCheckoutService } from './billing-checkout.service';
 import { BillingPlanChangeService } from './billing-plan-change.service';
 import { AdminCouponsService } from './admin-coupons.service';
 import { BillingRetentionService } from './billing-retention.service';
+import { BillingLedgerService } from './billing-ledger.service';
+import { AdminSubscriptionsService } from './admin-subscriptions.service';
+import { InvoiceDocumentController } from './invoice-document.controller';
 
 /**
  * Billing v2 (docs/billing-ui-contract.md). Built on the existing payments
@@ -30,7 +33,11 @@ import { BillingRetentionService } from './billing-retention.service';
     PaymentsModule,
     PackageChangeRequestsModule,
   ],
-  controllers: [OrgBillingV2Controller, AdminBillingController],
+  controllers: [
+    OrgBillingV2Controller,
+    AdminBillingController,
+    InvoiceDocumentController,
+  ],
   providers: [
     BillingModeService,
     OrgBillingV2Service,
@@ -40,6 +47,8 @@ import { BillingRetentionService } from './billing-retention.service';
     BillingPlanChangeService,
     AdminCouponsService,
     BillingRetentionService,
+    BillingLedgerService,
+    AdminSubscriptionsService,
     OrgApprovedGuard,
     PermissionGuard,
     SuperAdminGuard,

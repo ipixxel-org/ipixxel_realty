@@ -40,18 +40,19 @@ export const REAL_FUNCTIONS: Record<BillingFunction, boolean> = {
   // Step 6 — choose what stays (applied by the backend on every plan change)
   getRetentionChoices: true,
   saveRetentionChoices: true,
-  // Still mock
-  updatePaymentMethod: false, // not offered: renewals are "pay each time"
-  listInvoices: false,
-  listPayments: false,
-  listSubscriptions: false,
-  getSubscription: false,
-  extendGrace: false,
-  markPaidOffline: false,
-  applyCoupon: false,
-  cancelSubscription: false,
-  listAdminPayments: false,
-  refundPayment: false,
+  // Step 7 — invoices, payments, Super Admin subscriptions and refunds
+  listInvoices: true,
+  listPayments: true,
+  listSubscriptions: true,
+  getSubscription: true,
+  extendGrace: true,
+  markPaidOffline: true,
+  applyCoupon: true,
+  cancelSubscription: true,
+  listAdminPayments: true,
+  refundPayment: true,
+  // Never real: renewals are "pay each time" (no saved payment method).
+  updatePaymentMethod: false,
 };
 
 export function createHybridBillingClient(): BillingClient {

@@ -9,7 +9,8 @@ import { CheckoutsNeedingReview } from "./checkouts-review";
 import { BLANK_COUPON, CouponForm, CouponsList, CouponUsage, EditCoupon } from "./coupons";
 import { LifecycleSettingsCard } from "./lifecycle";
 import { AdminPlansEditor } from "./plans-editor";
-import { SubscriptionDetailView } from "./subscriptions";
+import { AdminPaymentsView } from "./payments";
+import { SubscriptionDetailView, SubscriptionsList } from "./subscriptions";
 
 /** Super Admin billing pages (v2). Mounted only with NEXT_PUBLIC_BILLING_V2=true. */
 
@@ -40,6 +41,24 @@ export function AdminPlansV2() {
         </div>
         <AdminPlansEditor />
       </div>
+    </Guard>
+  );
+}
+
+/** The "Organisation Subscriptions" tab of the existing Subscriptions page, with billing v2 on. */
+export function AdminSubscriptionsV2() {
+  return (
+    <Guard>
+      <SubscriptionsList />
+    </Guard>
+  );
+}
+
+/** The "Payments & Invoicing" tab of the existing Subscriptions page, with billing v2 on. */
+export function AdminPaymentsV2() {
+  return (
+    <Guard>
+      <AdminPaymentsView />
     </Guard>
   );
 }
