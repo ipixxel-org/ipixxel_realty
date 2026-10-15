@@ -62,7 +62,7 @@ function ok(response: Response, provider: string, body: string) {
 
 class GeminiProvider implements AiProvider {
   readonly name = 'gemini';
-  readonly model = env('GEMINI_MODEL') || 'gemini-2.5-flash';
+  readonly model = env('GEMINI_MODEL') || 'gemini-3.8-flash';
 
   isConfigured(): boolean {
     return env('GEMINI_API_KEY').length > 0;
@@ -74,9 +74,10 @@ class GeminiProvider implements AiProvider {
     const candidates = Array.from(
       new Set([
         configuredModel,
+        'gemini-3.8-flash',
+        'gemini-3-flash',
         'gemini-2.5-flash',
         'gemini-2.0-flash',
-        'gemini-1.5-flash',
       ]),
     );
 
@@ -88,15 +89,20 @@ class GeminiProvider implements AiProvider {
       } catch (err: any) {
         lastError = err;
         const msg = String(err?.message || '');
-        const isTemporary =
+        // Retry another model when the current one is busy *or* gone (a
+        // retired/renamed model returns 404 "not found / no longer available").
+        const isRetryable =
           msg.includes('503') ||
           msg.includes('429') ||
+          msg.includes('404') ||
           msg.includes('high demand') ||
-          msg.includes('UNAVAILABLE');
+          msg.includes('UNAVAILABLE') ||
+          msg.toLowerCase().includes('not found') ||
+          msg.toLowerCase().includes('no longer available');
 
-        if (isTemporary && i < candidates.length - 1) {
+        if (isRetryable && i < candidates.length - 1) {
           logger.warn(
-            `Gemini model "${modelName}" busy (503/429). Retrying with backup model "${candidates[i + 1]}"...`,
+            `Gemini model "${modelName}" unavailable (${msg.slice(0, 80)}). Retrying with "${candidates[i + 1]}"...`,
           );
           await new Promise((res) => setTimeout(res, 800));
           continue;

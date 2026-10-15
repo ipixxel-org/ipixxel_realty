@@ -1,4 +1,9 @@
-import { Injectable, Logger, ServiceUnavailableException } from '@nestjs/common';
+import {
+  BadGatewayException,
+  Injectable,
+  Logger,
+  ServiceUnavailableException,
+} from '@nestjs/common';
 import { PrismaService } from '../../database/prisma.service';
 import { GenerateTemplateDto } from './dto/generate-template.dto';
 import { RegenerateSectionDto } from './dto/regenerate-section.dto';
@@ -10,6 +15,27 @@ import {
   normalizeTheme,
 } from './design-tokens';
 import { AiProvider, resolveAiProvider } from './ai-provider';
+import { applyBlockDefaults, formatWidgetCatalog } from './block-catalog';
+
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
+}
+
+/**
+ * Deep-merge a style patch so nested groups (responsive.tablet/mobile, hover,
+ * active, typography) merge key-by-key instead of being replaced wholesale.
+ */
+function mergeStyle(base: any, patch: any): any {
+  const out: any = { ...(isPlainObject(base) ? base : {}) };
+  for (const [key, value] of Object.entries(patch ?? {})) {
+    if (isPlainObject(value) && isPlainObject(out[key])) {
+      out[key] = mergeStyle(out[key], value);
+    } else {
+      out[key] = value;
+    }
+  }
+  return out;
+}
 
 @Injectable()
 export class AiService {
@@ -96,10 +122,12 @@ REAL PROJECT DATA (USE THESE EXACT FACTS, DO NOT INVENT CONTRADICTORY DATA):
         `AI design generation failed via ${provider.name}: ${err.message}`,
         err.stack,
       );
-      this.logger.warn(
-        `Generating high-fidelity fallback layout for prompt: "${dto.prompt}"`,
+      // No static fallback: an agent-driven builder must never silently
+      // substitute a canned page. Surface the failure instead.
+      throw new BadGatewayException(
+        `The AI design agent (${provider.name}) could not generate this page: ` +
+          `${err.message}. Please try again or refine the prompt.`,
       );
-      generated = this.buildEngineeredFallback(dto, fetchedProject);
     }
     if (
       generated &&
@@ -108,7 +136,7 @@ REAL PROJECT DATA (USE THESE EXACT FACTS, DO NOT INVENT CONTRADICTORY DATA):
     ) {
       return this.normalizeSiteConfig(generated, dto, fetchedProject);
     }
-    throw new ServiceUnavailableException(
+    throw new BadGatewayException(
       `${provider.name} returned no usable sections. Please refine the prompt and try again.`,
     );
   }
@@ -148,12 +176,17 @@ Patch schema (all keys optional):
     ...one entry per key in h1,h2,h3,h4,h5,h6,p...
   },
   "blockStyles": {
-    "<block-id>": { "paddingTop": "80px", "paddingBottom": "80px", "backgroundColor": "#...", "textAlign": "center", "borderRadius": "16px" }
+    "<block-id>": {
+      "paddingTop": "80px", "paddingBottom": "80px", "backgroundColor": "#...", "textAlign": "center", "borderRadius": "16px",
+      "responsive": { "tablet": { ...partial... }, "mobile": { "paddingTop": "48px", "textAlign": "center" } },
+      "elementStyles": { "<elementKey>": { ...partial style... } }
+    }
   }
 }
 
 Token = { "fontFamily": string, "fontSize": number|string, "fontWeight": number, "lineHeight": number, "letterSpacing": number, "textTransform": string, "textColor": string }
-Theme colors must be hex strings. Typography sizes are px numbers. Only include keys you are changing.`;
+Theme colors must be hex strings. Typography sizes are px numbers. Only include keys you are changing.
+Per-block styles support per-device overrides via "responsive.tablet"/"responsive.mobile" and per-element overrides via "elementStyles". Keep the page responsive on every screen.`;
 
       const userPrompt = `Instruction: ${dto.prompt}
 Design Style: ${dto.designStyle || 'keep current'}
@@ -217,7 +250,11 @@ Return the token patch as raw JSON only.`;
       for (const block of site.blocks) {
         const stylePatch = p.blockStyles[block.id];
         if (stylePatch && typeof stylePatch === 'object') {
-          block.style = { ...(block.style ?? {}), ...stylePatch };
+          const { elementStyles, ...styleOnly } = stylePatch;
+          block.style = mergeStyle(block.style, styleOnly);
+          if (isPlainObject(elementStyles)) {
+            block.elementStyles = mergeStyle(block.elementStyles, elementStyles);
+          }
         }
       }
     }
@@ -234,12 +271,13 @@ Return the token patch as raw JSON only.`;
     projectContext: string,
     project: any,
   ) {
-    const systemInstruction = `You are an elite real estate conversion rate optimization (CRO) landing page architect AND brand art director.
-You invent every part of the design yourself: the colour system, typography scale, section composition, order and layout. Never reuse a fixed template.
-You generate valid JSON documents for the OpenPage builder.
-Output MUST BE RAW VALID JSON ONLY with no markdown ticks, no backticks, and no wrapper text.
+    const systemInstruction = `You are an elite landing-page designer and brand art director.
+You invent every part of the design yourself: the colour system, typography scale, section composition, order, spacing and responsive behaviour. Never reuse a fixed template, and never emit a placeholder or lorem-ipsum page.
+You are industry-agnostic: the brief may describe real estate, a restaurant, a SaaS product, a clinic, an event, a portfolio, an agency, an online store, a personal brand or anything else. Design for whatever the brief actually describes.
+You generate valid OpenPage documents.
+Output MUST BE RAW VALID JSON ONLY, with no markdown ticks, no backticks and no wrapper text.
 
-The JSON schema must adhere strictly to:
+Schema:
 {
   "name": string,
   "theme": {
@@ -262,52 +300,58 @@ The JSON schema must adhere strictly to:
       "p":  { "desktop": TypeToken, "tablet": PartialTypeToken, "mobile": PartialTypeToken }
     }
   },
+  "seo": { "metaTitle": string, "metaDescription": string },
   "blocks": [
     {
-      "id": string (unique like "block-hero-1"),
+      "id": string (unique, e.g. "block-hero-1"),
       "type": string (one of the widget types listed below),
-      "variant": string,
+      "variant": string (one of that type's variants),
       "props": { ... relevant widget props ... },
       "style": {
         "paddingTop": string, "paddingBottom": string,
         "backgroundColor": string, "textAlign": string,
-        "borderRadius": string
-      }
+        "borderRadius": string, "maxWidth": string, "gap": string,
+        "responsive": {
+          "tablet": { "paddingTop": string, "paddingBottom": string, "textAlign": string, ... },
+          "mobile": { "paddingTop": string, "paddingBottom": string, "textAlign": string, ... }
+        }
+      },
+      "elementStyles": { "<elementKey>": { ...partial style... } }
     }
   ]
 }
 
-Design token rules — treat these as the page's global design system:
-- "theme" MUST define ALL keys above (never omit a color/font/radius).
+Design-token rules — treat these as the page's global design system:
+- "theme" MUST define ALL keys above (never omit a colour/font/radius).
 - TypeToken = { "fontFamily": string, "fontSize": number (px), "fontWeight": number, "lineHeight": number, "letterSpacing": number (px), "textTransform": string, "textColor": string, "paragraphSpacing": number|string (p only) }.
-- Every typography key MUST include "desktop"; include "tablet" and "mobile" overrides with smaller sizes.
-- Use the Design Style + brand colors to pick a coherent palette: bg0→bg5 go from page background to deepest surface, text0→text3 from primary to muted, accent is the brand highlight, ctaButtonColor the primary button fill.
-- "style" on each block uses tokens from the theme (backgroundColor should be one of the theme bg/text/accent hex values).
+- Every typography key MUST include "desktop"; ALWAYS include "tablet" and "mobile" overrides with smaller sizes.
+- Use the Design Style + brand colours to pick a coherent palette: bg0→bg5 go from page background to deepest surface, text0→text3 from primary to muted, accent is the brand highlight, ctaButtonColor the primary button fill.
 - Ensure text contrast against its background (dark bg → light text0/text1 and vice-versa).
 
-Available OpenPage widget types & their standard props:
-1. "navbar": props: { logo: string, ctaText: string, ctaId: string, menuItems: [{ label: string, id: string }] }
-2. "project-banner": props: { badge: string, headline: string, location: string, description: string, price: string, primaryCta: string, secondaryCta: string, image: string, anchor: "hero" }
-3. "project-overview": props: { title: string, subtitle: string, body: string, image: string, highlights: [{ title: string, description: string }], anchor: "overview" }
-4. "property-details": props: { title: string, subtitle: string, items: [{ label: string, value: string }] }
-5. "amenities": props: { title: string, subtitle: string, items: string[] or [{ title: string, description: string }], anchor: "amenities" }
-6. "floor-plans": props: { title: string, subtitle: string, items: [{ name: string, beds: string, area: string, price: string, image: string }], anchor: "plans" }
-7. "re-pricing": props: { title: string, subtitle: string, startingPrice: string, items: [{ name: string, price: string, meta: string }], anchor: "pricing" }
-8. "location": props: { title: string, address: string, items: [{ title: string, meta: string }], anchor: "location" }
-9. "developer": props: { title: string, name: string, body: string, anchor: "developer" }
-10. "testimonials": props: { title: string, items: [{ name: string, role: string, quote: string, rating: 5 }] }
-11. "faq": props: { title: string, items: [{ question: string, answer: string }] }
-12. "cta": props: { headline: string, subheadline: string, buttonText: string, buttonUrl: string }
-13. "lead-form": props: { title: string, subtitle: string, formId: string, anchor: "enquire" }
-14. "download-brochure": props: { title: string, buttonText: string }
-15. "footer": props: { logo: string, copyright: string, links: string[] }
+Responsive (multi-device) rules — REQUIRED, the page must be designed for every screen:
+- Desktop values live directly on each block's "style". Provide per-device deltas under "style.responsive.tablet" and "style.responsive.mobile".
+- On mobile, typically reduce "paddingTop"/"paddingBottom", set "textAlign": "center" where it reads better, and tighten radii. Multi-column sections should stack (the builder does this automatically — reflect it in your padding/alignment choices).
+- Do NOT emit the exact same values for all breakpoints; make a real, considered per-device layout.
+
+Style rules:
+- "style.backgroundColor" should be one of the theme colours; keep contrast with the text.
+- You may also use "style.typography" (BlockTypography), "style.hover"/"style.active" states, and per-element overrides via "elementStyles" keyed by the element's stable key.
+- Every block MUST have a unique "id".
+- Provide real, specific, on-brief copy. Never output lorem ipsum or placeholder filler.
+
+Available widget types (choose and order ~6–12 that best serve the brief; you may omit "props" keys you are unsure of — sensible defaults are filled automatically, but always provide the content/copy):
+${formatWidgetCatalog()}
+
+Composition notes:
+- Start with a "navbar" and end with a "footer" unless the brief says otherwise.
+- Prefer purpose-fit types for the industry (e.g. "features"/"pricing"/"faq" for SaaS, "gallery"/"amenities"/"unit-config" for property, "gallery"/"testimonials" for restaurants).
 `;
 
     const userPrompt = `
-Design a high-converting real estate landing page from scratch based on these requirements:
+Design a high-converting landing page from scratch based on these requirements:
 - User Prompt: ${dto.prompt}
 - Template Name: ${dto.templateName || 'AI Designed Template'}
-- Category: ${dto.category || 'Luxury'}
+- Category / Industry: ${dto.category || 'Infer from the prompt'}
 - Design Style: ${dto.designStyle || 'You decide — invent a distinctive art direction that fits the prompt'}
 - Primary Brand Color: ${dto.primaryColor || 'You decide'}
 - Accent Color: ${dto.accentColor || 'You decide'}
@@ -320,7 +364,7 @@ ${
     : '- Sections: You decide the ideal composition, order and count (typically 8-12) for this specific brief.'
 }
 
-You have full creative freedom. Choose a unique palette, typography, spacing rhythm and section variants that express the prompt. Do NOT fall back to a generic template.
+You have full creative freedom. Choose a unique palette, typography, spacing rhythm, responsive rules and section variants that express the brief. Design for the industry the brief describes — do NOT fall back to a generic or real-estate-specific template unless the brief is real estate.
 Return raw JSON only.
 `;
 
@@ -391,23 +435,34 @@ Return RAW VALID JSON ONLY representing the updated block object:
 
     const blocks = Array.isArray(raw.blocks)
       ? raw.blocks.map((b: any, idx: number) => {
-          const block: any = {
+          // Fill omitted props from the block type's defaults, then keep every
+          // design field the agent emitted (style incl. responsive overrides,
+          // per-element styles, animation, visibility…).
+          const block: any = applyBlockDefaults({
             id:
               b.id ||
               `block-ai-${idx}-${Math.random().toString(36).slice(2, 7)}`,
-            type: b.type || 'project-overview',
+            type: b.type || 'content',
             variant: b.variant || 'default',
             props: b.props || {},
             style: b.style || { paddingTop: '80px', paddingBottom: '80px' },
-          };
+          });
           if (b.elementStyles && typeof b.elementStyles === 'object') {
             block.elementStyles = b.elementStyles;
+          }
+          for (const key of [
+            'animation',
+            'animationDuration',
+            'animationDelay',
+            'children',
+          ]) {
+            if (b[key] !== undefined) block[key] = b[key];
           }
           return block;
         })
       : [];
 
-    const site = {
+    const site: any = {
       engine: 'openpage',
       name,
       theme,
@@ -422,301 +477,35 @@ Return RAW VALID JSON ONLY representing the updated block object:
         },
       ],
       seo: {
-        metaTitle: `${name} | Official Project Website`,
-        metaDescription: `Discover ${name} in ${project?.location || 'prime location'}. High-end residences with premium amenities.`,
-      },
-      property: {
-        name,
-        builder: project?.developer || 'Premier Developers',
-        location: project?.location || 'Prime City',
-        startingPrice: project?.startingPrice
-          ? `₹ ${project.startingPrice}`
-          : '₹ 1.45 Cr*',
-        description: dto.prompt,
+        metaTitle: raw.seo?.metaTitle || `${name}`,
+        metaDescription:
+          raw.seo?.metaDescription ||
+          `Discover ${name}. ${dto.prompt.slice(0, 140)}`,
       },
     };
+
+    // Preserve any extra top-level fields the agent produced (page settings,
+    // popups, tracking, custom vars…).
+    for (const key of ['settings', 'popups', 'tracking', 'vars']) {
+      if (raw[key] !== undefined) site[key] = raw[key];
+    }
+
+    // Only attach the real-estate property block when the brief actually has
+    // one (project data fetched or the agent emitted it) — a restaurant or SaaS
+    // page must not inherit property fields.
+    if (project || (raw.property && typeof raw.property === 'object')) {
+      site.property = {
+        name,
+        builder: project?.developer || raw.property?.builder || '',
+        location: project?.location || raw.property?.location || '',
+        startingPrice: project?.startingPrice
+          ? `₹ ${project.startingPrice}`
+          : raw.property?.startingPrice || '',
+        description: raw.property?.description || dto.prompt,
+      };
+    }
 
     return site;
   }
 
-  /**
-   * Resilient fallback synthesizer for times when upstream AI providers (Gemini / Anthropic)
-   * experience temporary 503 high demand or capacity limits.
-   */
-  private buildEngineeredFallback(
-    dto: GenerateTemplateDto,
-    project: any,
-  ): any {
-    const name =
-      dto.templateName || project?.name || 'Exclusive Luxury Residences';
-    const location = project?.location || 'Prime Location';
-    const startingPrice = project?.startingPrice
-      ? `₹ ${project.startingPrice}`
-      : '₹ 1.85 Cr*';
-    const configs =
-      project?.unitTypes?.map((u: any) => u.name).join(', ') ||
-      '2, 3 & 4 BHK Luxury Apartments';
-    const developer =
-      project?.developer || 'Premier Real Estate Developers';
-
-    const accent = dto.primaryColor || '#c5a075';
-    const accentDim = dto.accentColor || '#8c6d48';
-
-    const blocks: any[] = [
-      {
-        id: `block-${Date.now()}-nav`,
-        type: 'navbar',
-        variant: 'default',
-        props: {
-          logo: name,
-          phone: '+91 98765 43210',
-          ctaText: 'Enquire Now',
-          ctaAnchor: 'enquire',
-          links: [
-            { label: 'Overview', href: '#overview' },
-            { label: 'Amenities', href: '#amenities' },
-            { label: 'Floor Plans', href: '#floor-plans' },
-            { label: 'Pricing', href: '#pricing' },
-            { label: 'Location', href: '#location' },
-          ],
-        },
-      },
-      {
-        id: `block-${Date.now()}-hero`,
-        type: 'project-banner',
-        variant: 'luxury',
-        props: {
-          headline: `Experience Unmatched Opulence at ${name}`,
-          subheadline: `Thoughtfully crafted ${configs} situated in the prestigious heart of ${location}.`,
-          locationBadge: location,
-          priceText: startingPrice,
-          ctaText: 'Book Private Viewing',
-          ctaAnchor: 'enquire',
-          backgroundImage:
-            'https://images.unsplash.com/photo-1600585154340-be6161a56a0c?auto=format&fit=crop&w=1920&q=80',
-          stats: [
-            { label: 'Configurations', value: '2, 3 & 4 BHK' },
-            { label: 'Starting At', value: startingPrice },
-            { label: 'Possession', value: 'Dec 2027' },
-          ],
-        },
-      },
-      {
-        id: `block-${Date.now()}-overview`,
-        type: 'project-overview',
-        variant: 'split',
-        props: {
-          eyebrow: 'ARCHITECTURAL MASTERPIECE',
-          title: `A New Benchmark for Refined Living in ${location}`,
-          description:
-            dto.prompt ||
-            `${name} presents an exclusive collection of luxury residences designed to elevate your standard of living with sprawling balconies, panoramic views, and bespoke finishes.`,
-          bulletPoints: [
-            'Expansive floor-to-ceiling glass facades with abundant natural light',
-            'IGBC Gold rated sustainable development with zero carbon footprint',
-            'Direct arterial connectivity to major business districts & retail hubs',
-          ],
-          image:
-            'https://images.unsplash.com/photo-1600596542815-ffad4c1539a9?auto=format&fit=crop&w=1200&q=80',
-        },
-      },
-      {
-        id: `block-${Date.now()}-property-details`,
-        type: 'property-details',
-        variant: 'cards',
-        props: {
-          title: 'Development Specifications & Highlights',
-          subtitle: 'Precision engineering tailored for generational legacy',
-          details: [
-            { label: 'Total Land Parcel', value: '12.5 Acres' },
-            { label: 'Total Towers', value: '4 Iconic High-Rise Towers' },
-            { label: 'Open Greenery', value: '80% Open Landscape' },
-            { label: 'Structure', value: 'G + 38 Floors (Mivan Construction)' },
-            { label: 'RERA Status', value: 'Approved & Registered' },
-            { label: 'Approvals', value: 'All Major Banks Approved' },
-          ],
-        },
-      },
-      {
-        id: `block-${Date.now()}-amenities`,
-        type: 'amenities',
-        variant: 'grid-icons',
-        props: {
-          title: 'Curated World-Class Amenities',
-          subtitle: 'Over 40+ resort-grade lifestyle experiences for every generation',
-          amenities: [
-            { title: 'Temperature Controlled Infinity Pool', icon: 'waves', tag: 'Wellness' },
-            { title: '50,000 Sq.Ft. Royal Clubhouse', icon: 'home', tag: 'Leisure' },
-            { title: 'CrossFit Gym & Yoga Pavilion', icon: 'activity', tag: 'Fitness' },
-            { title: 'Sky Lounge & Observational Deck', icon: 'sun', tag: 'Exclusive' },
-            { title: 'Tennis & Badminton Courts', icon: 'target', tag: 'Sports' },
-            { title: 'Multi-Tier 24/7 Smart Security', icon: 'shield', tag: 'Safety' },
-          ],
-        },
-      },
-      {
-        id: `block-${Date.now()}-floorplans`,
-        type: 'floor-plans',
-        variant: 'tabs',
-        props: {
-          title: 'Thoughtfully Engineered Floor Layouts',
-          subtitle: 'Zero space wastage layouts engineered for privacy and luxury',
-          plans: [
-            {
-              type: '2 BHK Elegance',
-              carpetArea: '1,350 Sq.Ft.',
-              price: '₹ 1.45 Cr*',
-              image:
-                'https://images.unsplash.com/photo-1600585154526-990dced4db0d?auto=format&fit=crop&w=800&q=80',
-            },
-            {
-              type: '3 BHK Signature',
-              carpetArea: '1,980 Sq.Ft.',
-              price: '₹ 2.10 Cr*',
-              image:
-                'https://images.unsplash.com/photo-1600607687939-ce8a6c25118c?auto=format&fit=crop&w=800&q=80',
-            },
-            {
-              type: '4 BHK Presidential',
-              carpetArea: '2,850 Sq.Ft.',
-              price: '₹ 3.40 Cr*',
-              image:
-                'https://images.unsplash.com/photo-1600566753190-17f0baa2a6c3?auto=format&fit=crop&w=800&q=80',
-            },
-          ],
-        },
-      },
-      {
-        id: `block-${Date.now()}-pricing`,
-        type: 're-pricing',
-        variant: 'tiers',
-        props: {
-          title: 'Transparent Pricing & Flexible Payment Plans',
-          subtitle: 'Lucrative launch benefits with attractive construction linked plans (CLP)',
-          tiers: [
-            {
-              name: '2 BHK Premium',
-              size: '1,350 Sq.Ft.',
-              price: '₹ 1.45 Cr*',
-              badge: 'Selling Fast',
-              features: ['Private Foyer', 'Modular Kitchen Fitted', 'Covered Car Parking'],
-            },
-            {
-              name: '3 BHK Grande',
-              size: '1,980 Sq.Ft.',
-              price: '₹ 2.10 Cr*',
-              badge: 'Most Popular',
-              featured: true,
-              features: ['Panoramic Deck', 'Italian Marble Flooring', '2 Covered Car Parkings', 'Walk-in Wardrobe'],
-            },
-            {
-              name: '4 BHK Duplex',
-              size: '2,850 Sq.Ft.',
-              price: '₹ 3.40 Cr*',
-              badge: 'Limited Edition',
-              features: ['Private Elevator Lobby', 'Double-Height Living', 'Plunge Pool on Terrace', 'Home Automation'],
-            },
-          ],
-        },
-      },
-      {
-        id: `block-${Date.now()}-location`,
-        type: 'location',
-        variant: 'map-landmarks',
-        props: {
-          title: 'Unrivalled Strategic Location',
-          subtitle: `Positioned at the epicenter of growth in ${location}`,
-          landmarks: [
-            { name: 'International Airport', distance: '25 Mins', category: 'Transit' },
-            { name: 'Major IT & Tech Parks', distance: '10 Mins', category: 'Work' },
-            { name: 'Leading International Schools', distance: '5 Mins', category: 'Education' },
-            { name: 'Super-Specialty Hospitals', distance: '8 Mins', category: 'Healthcare' },
-          ],
-        },
-      },
-      {
-        id: `block-${Date.now()}-developer`,
-        type: 'developer',
-        variant: 'profile',
-        props: {
-          developerName: developer,
-          experience: '28+ Years of Excellence',
-          totalDelivered: '45+ Landmark Developments',
-          onTimeDeliveryRate: '98% On-Time Track Record',
-          about:
-            `${developer} is renowned for unwavering commitment to architectural innovation, uncompromising build quality, and timely project delivery across prime metropolitan centers.`,
-        },
-      },
-      {
-        id: `block-${Date.now()}-faq`,
-        type: 'faq',
-        variant: 'accordion',
-        props: {
-          title: 'Frequently Asked Questions',
-          subtitle: 'Everything you need to know about the development and booking process',
-          items: [
-            {
-              question: `Is ${name} RERA registered?`,
-              answer: 'Yes, the project is fully RERA registered and compliant with all statutory guidelines.',
-            },
-            {
-              question: 'What are the available payment schedules?',
-              answer: 'We provide Construction-Linked Payment Plans (CLP) as well as subvention schemes through approved banking partners.',
-            },
-            {
-              question: 'When is possession scheduled?',
-              answer: 'Phase 1 possession is targeted for December 2027.',
-            },
-          ],
-        },
-      },
-      {
-        id: `block-${Date.now()}-cta`,
-        type: 'cta',
-        variant: 'gradient',
-        props: {
-          headline: 'Unlock Special Pre-Launch Pricing Benefits',
-          subheadline: 'Exclusive pricing and zero stamp duty offers available for the first 25 priority bookings.',
-          buttonText: 'Claim Launch Offer',
-          buttonAnchor: 'enquire',
-        },
-      },
-      {
-        id: `block-${Date.now()}-form`,
-        type: 'lead-form',
-        variant: 'card',
-        props: {
-          title: 'Schedule a Private Site Visit & Consultation',
-          subtitle: 'Fill in your details below. Our senior relationship manager will contact you within 15 minutes.',
-          anchor: 'enquire',
-          submitButtonText: 'Request VIP Call Back',
-        },
-      },
-      {
-        id: `block-${Date.now()}-footer`,
-        type: 'footer',
-        variant: 'simple',
-        props: {
-          logo: name,
-          copyright: `© ${new Date().getFullYear()} ${developer}. All Rights Reserved.`,
-          disclaimer:
-            'Disclaimer: The imagery and details displayed are artistic impressions for illustrative purposes only. All terms are subject to final agreement.',
-        },
-      },
-    ];
-
-    return {
-      name,
-      theme: {
-        accent,
-        accentDim,
-        ctaButtonColor: accent,
-      },
-      designSystem: {
-        style: dto.designStyle || 'luxury',
-        spacing: 'spacious',
-      },
-      blocks,
-    };
-  }
 }

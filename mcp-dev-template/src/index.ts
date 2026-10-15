@@ -16,6 +16,7 @@ import type { Request, Response } from "express";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { registerDesignTools } from "./tools.js";
+import { registerLibraryTools } from "./tools-library.js";
 
 const SERVER_NAME = "openpage-mcp";
 const SERVER_VERSION = "1.0.0";
@@ -23,6 +24,7 @@ const SERVER_VERSION = "1.0.0";
 function createServer(): McpServer {
   const server = new McpServer({ name: SERVER_NAME, version: SERVER_VERSION });
   registerDesignTools(server);
+  registerLibraryTools(server);
   return server;
 }
 

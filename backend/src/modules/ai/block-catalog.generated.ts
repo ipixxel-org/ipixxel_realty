@@ -1,0 +1,817 @@
+/**
+ * AUTO-GENERATED - do not edit by hand.
+ *
+ * Snapshot of frontend/lib/openpage/block-metadata.ts taken by
+ * mcp-dev-template/scripts/generate-library.ts. Re-run `npm run generate` in
+ * mcp-dev-template after changing the frontend catalogue.
+ */
+
+export interface BlockMetaSnapshot {
+  type: string;
+  label: string;
+  description: string;
+  category: string;
+  variants: string[];
+  defaultProps: Record<string, unknown>;
+}
+
+export const BLOCK_METADATA: BlockMetaSnapshot[] = [
+  {
+    "type": "columns",
+    "label": "Container / Columns",
+    "description": "Single-column container that can expand into a grid",
+    "category": "Core",
+    "variants": [
+      "1-col",
+      "2-col",
+      "3-col",
+      "4-col"
+    ],
+    "defaultProps": {
+      "gap": "24px"
+    }
+  },
+  {
+    "type": "heading",
+    "label": "Heading",
+    "description": "Section heading",
+    "category": "Core",
+    "variants": [
+      "default"
+    ],
+    "defaultProps": {
+      "text": "Heading",
+      "tag": "h2"
+    }
+  },
+  {
+    "type": "text",
+    "label": "Text Editor",
+    "description": "Body copy",
+    "category": "Core",
+    "variants": [
+      "default"
+    ],
+    "defaultProps": {
+      "body": "Write your content here."
+    }
+  },
+  {
+    "type": "image",
+    "label": "Image",
+    "description": "Upload or link an image",
+    "category": "Core",
+    "variants": [
+      "hero-image",
+      "side-by-side",
+      "grid"
+    ],
+    "defaultProps": {
+      "src": "",
+      "alt": "",
+      "title": ""
+    }
+  },
+  {
+    "type": "video",
+    "label": "Video",
+    "description": "YouTube or Vimeo walkthrough",
+    "category": "Core",
+    "variants": [
+      "youtube",
+      "vimeo"
+    ],
+    "defaultProps": {
+      "url": "",
+      "title": "Walkthrough"
+    }
+  },
+  {
+    "type": "button",
+    "label": "Button",
+    "description": "Call-to-action button",
+    "category": "Core",
+    "variants": [
+      "default",
+      "outline",
+      "pill",
+      "glass"
+    ],
+    "defaultProps": {
+      "label": "Enquire Now",
+      "url": "#enquire"
+    }
+  },
+  {
+    "type": "icon",
+    "label": "Icon",
+    "description": "Upload an icon or use a built-in name",
+    "category": "Core",
+    "variants": [
+      "default"
+    ],
+    "defaultProps": {
+      "icon": "",
+      "size": "48px",
+      "label": ""
+    }
+  },
+  {
+    "type": "icon-box",
+    "label": "Icon Box",
+    "description": "Icon with title and text",
+    "category": "Core",
+    "variants": [
+      "default",
+      "horizontal",
+      "minimal",
+      "centered"
+    ],
+    "defaultProps": {
+      "icon": "",
+      "title": "Icon box",
+      "description": "Short supporting text."
+    }
+  },
+  {
+    "type": "image-box",
+    "label": "Image Box",
+    "description": "Image with title and text",
+    "category": "Core",
+    "variants": [
+      "default"
+    ],
+    "defaultProps": {
+      "image": "",
+      "title": "Image box",
+      "description": "Short supporting text."
+    }
+  },
+  {
+    "type": "divider",
+    "label": "Divider",
+    "description": "Visual break",
+    "category": "Core",
+    "variants": [
+      "line",
+      "dots"
+    ],
+    "defaultProps": {
+      "height": 40
+    }
+  },
+  {
+    "type": "spacer",
+    "label": "Spacer",
+    "description": "Empty vertical space",
+    "category": "Core",
+    "variants": [
+      "default"
+    ],
+    "defaultProps": {
+      "height": "60px"
+    }
+  },
+  {
+    "type": "html-code",
+    "label": "HTML / Custom Code",
+    "description": "Embed custom HTML",
+    "category": "Core",
+    "variants": [
+      "default"
+    ],
+    "defaultProps": {
+      "code": "<p>Custom HTML</p>"
+    }
+  },
+  {
+    "type": "navbar",
+    "label": "Header / Navigation",
+    "description": "Logo, menu and enquire CTA",
+    "category": "Core",
+    "variants": [
+      "default",
+      "centered",
+      "dual",
+      "pill",
+      "glass",
+      "minimal",
+      "marketing"
+    ],
+    "defaultProps": {
+      "logo": "Project",
+      "logoImage": "",
+      "ctaText": "Enquire Now",
+      "ctaId": "enquire",
+      "menuItems": [
+        {
+          "label": "Overview",
+          "id": "overview"
+        },
+        {
+          "label": "Amenities",
+          "id": "amenities"
+        },
+        {
+          "label": "Plans",
+          "id": "plans"
+        },
+        {
+          "label": "Gallery",
+          "id": "gallery"
+        },
+        {
+          "label": "Contact",
+          "id": "enquire"
+        }
+      ],
+      "links": [
+        "Overview",
+        "Amenities",
+        "Plans",
+        "Gallery",
+        "Contact"
+      ]
+    }
+  },
+  {
+    "type": "project-banner",
+    "label": "Hero / Banner",
+    "description": "Cover image, title, CTAs and optional form",
+    "category": "Real Estate",
+    "variants": [
+      "split-form",
+      "overlay",
+      "centered",
+      "stats",
+      "editorial",
+      "framed",
+      "asymmetric",
+      "info-bar",
+      "framed-center",
+      "split-curve"
+    ],
+    "defaultProps": {
+      "badge": "New Launch",
+      "headline": "Project name",
+      "location": "",
+      "description": "",
+      "price": "",
+      "image": "",
+      "primaryCta": "Book a Site Visit",
+      "secondaryCta": "Download Brochure",
+      "stats": [],
+      "formId": "",
+      "anchor": "hero"
+    }
+  },
+  {
+    "type": "project-overview",
+    "label": "Project Overview",
+    "description": "About the project with highlights",
+    "category": "Real Estate",
+    "variants": [
+      "split",
+      "centered",
+      "cards",
+      "timeline"
+    ],
+    "defaultProps": {
+      "title": "About the Project",
+      "subtitle": "",
+      "body": "",
+      "image": "",
+      "highlights": [],
+      "stats": [],
+      "ctaText": "",
+      "anchor": "overview"
+    }
+  },
+  {
+    "type": "unit-config",
+    "label": "Property Listing / Cards",
+    "description": "Unit cards with type, area, price and enquire",
+    "category": "Real Estate",
+    "variants": [
+      "cards",
+      "table",
+      "listings"
+    ],
+    "defaultProps": {
+      "title": "Residences",
+      "items": [
+        {
+          "type": "Apartment",
+          "config": "2 BHK",
+          "area": "1,145 sq.ft",
+          "price": "From ₹ 1.42 Cr*",
+          "image": ""
+        }
+      ]
+    }
+  },
+  {
+    "type": "property-search",
+    "label": "Property Search",
+    "description": "Search bar for projects and units",
+    "category": "Real Estate",
+    "variants": [
+      "default"
+    ],
+    "defaultProps": {
+      "placeholder": "Search by location, project or configuration",
+      "buttonText": "Search"
+    }
+  },
+  {
+    "type": "property-filters",
+    "label": "Property Filters",
+    "description": "Filter chips for configuration and status",
+    "category": "Real Estate",
+    "variants": [
+      "default",
+      "tabs"
+    ],
+    "defaultProps": {
+      "title": "Filters",
+      "items": [
+        {
+          "label": "2 BHK"
+        },
+        {
+          "label": "3 BHK"
+        },
+        {
+          "label": "Ready"
+        }
+      ]
+    }
+  },
+  {
+    "type": "property-details",
+    "label": "Property Details",
+    "description": "Type, status, possession, RERA and stats",
+    "category": "Real Estate",
+    "variants": [
+      "grid",
+      "table",
+      "two-column",
+      "checklist"
+    ],
+    "defaultProps": {
+      "title": "Property Details",
+      "items": [
+        {
+          "label": "Type",
+          "value": "Apartment"
+        },
+        {
+          "label": "Possession",
+          "value": "Dec 2027"
+        }
+      ],
+      "anchor": "highlights"
+    }
+  },
+  {
+    "type": "gallery",
+    "label": "Property Gallery",
+    "description": "Gallery with lightbox and filters",
+    "category": "Real Estate",
+    "variants": [
+      "grid",
+      "masonry",
+      "strip",
+      "lifestyle"
+    ],
+    "defaultProps": {
+      "title": "Gallery",
+      "images": [
+        {
+          "src": "",
+          "alt": "",
+          "caption": "",
+          "meta": "",
+          "category": ""
+        }
+      ],
+      "anchor": "gallery"
+    }
+  },
+  {
+    "type": "amenities",
+    "label": "Property Amenities",
+    "description": "Amenity cards with icon or image",
+    "category": "Real Estate",
+    "variants": [
+      "grid",
+      "chips",
+      "icon-grid",
+      "featured",
+      "mosaic"
+    ],
+    "defaultProps": {
+      "title": "Amenities",
+      "items": [
+        {
+          "title": "Clubhouse",
+          "description": "Lounge and banquet.",
+          "image": "",
+          "icon": ""
+        }
+      ],
+      "anchor": "amenities"
+    }
+  },
+  {
+    "type": "floor-plans",
+    "label": "Floor Plans",
+    "description": "Gated gallery — Form Builder unlock + download",
+    "category": "Real Estate",
+    "variants": [
+      "cards",
+      "list",
+      "showcase"
+    ],
+    "defaultProps": {
+      "title": "Floor Plans",
+      "gateEnabled": true,
+      "formId": "",
+      "items": [
+        {
+          "name": "2 BHK",
+          "beds": "2 Beds",
+          "area": "1,145 sq.ft",
+          "price": "",
+          "image": "",
+          "downloadUrl": ""
+        }
+      ],
+      "anchor": "plans"
+    }
+  },
+  {
+    "type": "location",
+    "label": "Location / Map",
+    "description": "Map embed, address and nearby",
+    "category": "Real Estate",
+    "variants": [
+      "split-map",
+      "list",
+      "map-only",
+      "cards",
+      "editorial"
+    ],
+    "defaultProps": {
+      "title": "Location & Connectivity",
+      "address": "",
+      "embedUrl": "",
+      "items": [
+        {
+          "title": "Metro",
+          "meta": "12 min"
+        }
+      ],
+      "anchor": "location"
+    }
+  },
+  {
+    "type": "project-highlights",
+    "label": "Location Advantages",
+    "description": "Nearby highlights with icons",
+    "category": "Real Estate",
+    "variants": [
+      "grid",
+      "signature",
+      "quote",
+      "radial",
+      "split-impact"
+    ],
+    "defaultProps": {
+      "title": "Location advantages",
+      "items": [
+        {
+          "title": "ITPL",
+          "description": "8 minutes",
+          "icon": ""
+        }
+      ]
+    }
+  },
+  {
+    "type": "features",
+    "label": "Project Highlights",
+    "description": "Why choose us / selling points",
+    "category": "Real Estate",
+    "variants": [
+      "grid",
+      "list",
+      "alternating"
+    ],
+    "defaultProps": {
+      "label": "Highlights",
+      "title": "Project highlights",
+      "items": [
+        {
+          "icon": "",
+          "title": "RERA registered",
+          "description": "Fully compliant development."
+        }
+      ]
+    }
+  },
+  {
+    "type": "re-pricing",
+    "label": "Price",
+    "description": "Starting prices and enquire",
+    "category": "Real Estate",
+    "variants": [
+      "cards",
+      "simple",
+      "comparison",
+      "banner"
+    ],
+    "defaultProps": {
+      "title": "Pricing",
+      "startingPrice": "₹ 1.42 Cr*",
+      "items": [
+        {
+          "name": "2 BHK",
+          "price": "₹ 1.42 Cr*",
+          "meta": ""
+        }
+      ],
+      "anchor": "pricing"
+    }
+  },
+  {
+    "type": "payment-plan",
+    "label": "Payment Plan",
+    "description": "Booking and construction linked payments",
+    "category": "Real Estate",
+    "variants": [
+      "default"
+    ],
+    "defaultProps": {
+      "title": "Payment plan",
+      "items": [
+        {
+          "title": "10%",
+          "description": "On booking"
+        },
+        {
+          "title": "40%",
+          "description": "On agreement"
+        },
+        {
+          "title": "50%",
+          "description": "On possession"
+        }
+      ]
+    }
+  },
+  {
+    "type": "emi-calculator",
+    "label": "EMI / Mortgage Calculator",
+    "description": "Estimate monthly instalments",
+    "category": "Real Estate",
+    "variants": [
+      "default"
+    ],
+    "defaultProps": {
+      "title": "EMI calculator",
+      "principal": 14200000,
+      "rate": 8.4,
+      "years": 20
+    }
+  },
+  {
+    "type": "developer",
+    "label": "Builder / Developer",
+    "description": "About the developer with stats or logo band",
+    "category": "Real Estate",
+    "variants": [
+      "default",
+      "split",
+      "stats",
+      "band"
+    ],
+    "defaultProps": {
+      "title": "About the Developer",
+      "name": "",
+      "body": "",
+      "image": "",
+      "logo": "",
+      "stats": [],
+      "anchor": "builder"
+    }
+  },
+  {
+    "type": "team",
+    "label": "Agent / Sales Team",
+    "description": "Sales team with photos",
+    "category": "Real Estate",
+    "variants": [
+      "grid"
+    ],
+    "defaultProps": {
+      "title": "Sales team",
+      "members": [
+        {
+          "name": "Relationship manager",
+          "role": "Sales",
+          "avatar": ""
+        }
+      ]
+    }
+  },
+  {
+    "type": "testimonials",
+    "label": "Testimonials",
+    "description": "Customer quotes",
+    "category": "Real Estate",
+    "variants": [
+      "cards",
+      "carousel",
+      "spotlight",
+      "band"
+    ],
+    "defaultProps": {
+      "title": "What residents say",
+      "items": [
+        {
+          "name": "",
+          "role": "",
+          "quote": "",
+          "avatar": ""
+        }
+      ]
+    }
+  },
+  {
+    "type": "faq",
+    "label": "FAQ",
+    "description": "Accordion Q&A",
+    "category": "Real Estate",
+    "variants": [
+      "accordion"
+    ],
+    "defaultProps": {
+      "title": "FAQs",
+      "items": [
+        {
+          "question": "",
+          "answer": ""
+        }
+      ]
+    }
+  },
+  {
+    "type": "cta",
+    "label": "CTA / Enquiry Section",
+    "description": "Closing headline and button",
+    "category": "Real Estate",
+    "variants": [
+      "simple",
+      "split",
+      "booking"
+    ],
+    "defaultProps": {
+      "headline": "Book a site visit",
+      "subheadline": "",
+      "buttonText": "Enquire Now",
+      "buttonUrl": "#enquire"
+    }
+  },
+  {
+    "type": "download-brochure",
+    "label": "Download Brochure",
+    "description": "Brochure CTA with popup form",
+    "category": "Real Estate",
+    "variants": [
+      "split",
+      "card",
+      "banner",
+      "minimal"
+    ],
+    "defaultProps": {
+      "title": "Download Brochure",
+      "buttonText": "Download Brochure",
+      "image": "",
+      "pdfUrl": "",
+      "formId": "",
+      "popupId": "",
+      "anchor": "brochure"
+    }
+  },
+  {
+    "type": "construction-status",
+    "label": "Construction Status",
+    "description": "Progress bars or delivery timeline",
+    "category": "Real Estate",
+    "variants": [
+      "default",
+      "timeline"
+    ],
+    "defaultProps": {
+      "title": "Construction Status",
+      "subtitle": "",
+      "items": [
+        {
+          "label": "Foundation",
+          "percent": "100",
+          "year": "2026",
+          "title": "Foundation",
+          "description": ""
+        }
+      ],
+      "anchor": "progress"
+    }
+  },
+  {
+    "type": "lead-form",
+    "label": "Contact / Enquiry Form",
+    "description": "Form Builder form on the page",
+    "category": "Real Estate",
+    "variants": [
+      "card",
+      "split",
+      "inline",
+      "default"
+    ],
+    "defaultProps": {
+      "title": "Enquire now",
+      "subtitle": "",
+      "formId": "",
+      "image": "",
+      "anchor": "enquire"
+    }
+  },
+  {
+    "type": "site-visit",
+    "label": "Site Visit Booking",
+    "description": "Book a site visit with Form Builder",
+    "category": "Real Estate",
+    "variants": [
+      "default"
+    ],
+    "defaultProps": {
+      "title": "Book a site visit",
+      "subtitle": "",
+      "formId": "",
+      "anchor": "site-visit"
+    }
+  },
+  {
+    "type": "contact",
+    "label": "Contact Form",
+    "description": "Contact section with Form Builder form",
+    "category": "Real Estate",
+    "variants": [
+      "default"
+    ],
+    "defaultProps": {
+      "title": "Get in Touch",
+      "subtitle": "",
+      "formId": "",
+      "anchor": "contact"
+    }
+  },
+  {
+    "type": "newsletter",
+    "label": "Newsletter Signup",
+    "description": "Email / updates capture via Form Builder",
+    "category": "Real Estate",
+    "variants": [
+      "default"
+    ],
+    "defaultProps": {
+      "title": "Stay in the loop",
+      "subtitle": "Get updates on this project. No spam.",
+      "formId": "",
+      "anchor": "newsletter"
+    }
+  },
+  {
+    "type": "footer",
+    "label": "Footer",
+    "description": "Company info, links and legal",
+    "category": "Core",
+    "variants": [
+      "multi-column",
+      "simple",
+      "minimal",
+      "premium",
+      "contact"
+    ],
+    "defaultProps": {
+      "logo": "Project",
+      "logoImage": "",
+      "copyright": "All rights reserved.",
+      "links": [
+        "Privacy Policy",
+        "Terms"
+      ]
+    }
+  }
+];

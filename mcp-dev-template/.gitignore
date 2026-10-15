@@ -2,3 +2,7 @@ node_modules/
 dist/
 *.log
 .env
+
+# Locally saved brand kits (theme + typography bundles).
+.openpage/
+

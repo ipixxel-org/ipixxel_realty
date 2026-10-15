@@ -89,6 +89,40 @@ export function findBlock(site: SiteConfig, blockId: string): BlockConfig | unde
   return walkBlocks(site.blocks).find((b) => b.id === blockId);
 }
 
+/** Insert a block into the document's top-level section list at `index`. */
+export function insertBlock(site: SiteConfig, block: BlockConfig, index?: number): SiteConfig {
+  const next = structuredClone(site);
+  const blocks = Array.isArray(next.blocks) ? next.blocks : [];
+  const at = index == null ? blocks.length : Math.max(0, Math.min(index, blocks.length));
+  blocks.splice(at, 0, block);
+  next.blocks = blocks;
+  return next;
+}
+
+/** Remove a block by id from the top level or any nested `children` list. */
+export function removeBlockById(site: SiteConfig, blockId: string): SiteConfig {
+  const next = structuredClone(site);
+  const prune = (list: BlockConfig[]): BlockConfig[] =>
+    list
+      .filter((b) => b && b.id !== blockId)
+      .map((b) => (Array.isArray(b.children) ? { ...b, children: prune(b.children) } : b));
+  next.blocks = prune(Array.isArray(next.blocks) ? next.blocks : []);
+  return next;
+}
+
+/** Move a top-level block to `toIndex` within the section list. */
+export function moveBlock(site: SiteConfig, blockId: string, toIndex: number): SiteConfig {
+  const next = structuredClone(site);
+  const blocks = Array.isArray(next.blocks) ? next.blocks : [];
+  const from = blocks.findIndex((b) => b.id === blockId);
+  if (from === -1) throw new Error(`Block "${blockId}" not found at the top level.`);
+  const [moved] = blocks.splice(from, 1);
+  const at = Math.max(0, Math.min(toIndex, blocks.length));
+  blocks.splice(at, 0, moved);
+  next.blocks = blocks;
+  return next;
+}
+
 // ---------------------------------------------------------------------------
 // Token read / write
 // ---------------------------------------------------------------------------
@@ -142,6 +176,22 @@ export function applyThemePresetToSite(site: SiteConfig, presetTheme: ThemeToken
   return next;
 }
 
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
+}
+
+/**
+ * Deep-merge a style patch so nested groups (responsive.tablet/mobile, hover,
+ * active, typography) merge key-by-key instead of being replaced wholesale.
+ */
+export function mergeStyle(base: unknown, patch: unknown): Record<string, unknown> {
+  const out: Record<string, unknown> = { ...(isPlainObject(base) ? base : {}) };
+  for (const [key, value] of Object.entries(isPlainObject(patch) ? patch : {})) {
+    out[key] = isPlainObject(value) && isPlainObject(out[key]) ? mergeStyle(out[key], value) : value;
+  }
+  return out;
+}
+
 /** Patch a single block's style tokens and (optionally) per-element styles. */
 export function setBlockStyleTokens(
   site: SiteConfig,
@@ -152,9 +202,9 @@ export function setBlockStyleTokens(
   const next = structuredClone(site);
   const block = findBlock(next, blockId);
   if (!block) throw new Error(`Block "${blockId}" not found.`);
-  block.style = { ...(block.style ?? {}), ...(style ?? {}) };
-  if (elementStyles && typeof elementStyles === "object") {
-    block.elementStyles = { ...(block.elementStyles ?? {}), ...elementStyles };
+  block.style = mergeStyle(block.style, style) as BlockStyle;
+  if (isPlainObject(elementStyles)) {
+    block.elementStyles = mergeStyle(block.elementStyles, elementStyles) as Record<string, BlockStyle>;
   }
   return next;
 }
