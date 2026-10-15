@@ -51,10 +51,13 @@ export function Modal({
       if (e.key === "Escape" && !closeDisabled) onClose();
     };
     document.addEventListener("keydown", onKey);
+    // Restore whatever was there before, so closing a popup opened on top of
+    // another one doesn't unlock page scroll while the first is still open.
+    const previousOverflow = document.body.style.overflow;
     document.body.style.overflow = "hidden";
     return () => {
       document.removeEventListener("keydown", onKey);
-      document.body.style.overflow = "";
+      document.body.style.overflow = previousOverflow;
     };
   }, [open, onClose, closeDisabled]);
 
