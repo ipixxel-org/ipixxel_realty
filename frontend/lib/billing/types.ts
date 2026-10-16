@@ -242,6 +242,11 @@ export interface CheckoutPreview {
   coupon: { code: string; description: string } | null;
   /** Why the entered coupon was rejected (shown under the field). */
   couponError: string | null;
+  /**
+   * Why the org can't move to this plan yet ("allows 1 project, you have 2");
+   * Pay is disabled and the server refuses to start the payment.
+   */
+  usageError?: string | null;
   couponDiscount: number;
   taxable: number;
   /** Buyer's GST state code (or name, from the mock); null when unknown. */

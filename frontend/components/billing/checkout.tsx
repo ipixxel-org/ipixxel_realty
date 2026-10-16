@@ -445,7 +445,9 @@ export function CheckoutScreen({
   const showCoupon = parts.includes("coupon") && preview?.couponsEnabled !== false;
   const left = parts.includes("details") || showCoupon;
   const right = parts.includes("summary");
-  const disabled = !canEdit || saving || payment.busy || !!pendingUpgrade || manualRenewal;
+  // Over the plan's limits: never let them pay for a plan that can't be applied.
+  const tooSmall = preview?.usageError ?? null;
+  const disabled = !canEdit || saving || payment.busy || !!pendingUpgrade || manualRenewal || !!tooSmall;
 
   return (
     <div className="bl-stack">
@@ -493,7 +495,14 @@ export function CheckoutScreen({
             {preview ? (
               <>
                 <PriceSummary preview={preview} renewalMode={overview.renewalMode} />
-                {manualRenewal ? (
+                {tooSmall ? (
+                  <div className="bl-stack" style={{ gap: 8, marginTop: 10 }}>
+                    <ErrorNote message={tooSmall} />
+                    <BLink to="plans" className="btn btn-ghost btn-sm">
+                      Choose a bigger plan
+                    </BLink>
+                  </div>
+                ) : manualRenewal ? (
                   <div className="bl-muted" style={{ marginTop: 10, padding: "10px 12px", background: "var(--bg)", borderRadius: 10, lineHeight: 1.55 }}>
                     Online payment isn&apos;t available for your account, so our team renews your plan. We&apos;ll contact you before it&apos;s due.
                   </div>
