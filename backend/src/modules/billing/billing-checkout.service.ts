@@ -107,6 +107,12 @@ export interface QuoteContext {
   hasProfile: boolean;
   /** Why the entered coupon can't be used; null when none or it applied. */
   couponError: string | null;
+  /**
+   * Why the org can't move to this plan yet (it has more users / projects /
+   * pages than the plan allows); null when it fits. Checked before any
+   * payment is taken — fulfil checks it again.
+   */
+  usageError: string | null;
 }
 
 /** What a payment.captured did to its checkout (returned for tests / logs). */
@@ -174,6 +180,8 @@ export class BillingCheckoutService implements OnModuleInit {
     }
     // Never charge differently from what was shown: a bad code is refused.
     if (ctx.couponError) throw billingError('coupon_invalid', ctx.couponError);
+    // Never take money for a plan the org doesn't fit (fulfil would hold it).
+    if (ctx.usageError) throw billingError('plan_too_small', ctx.usageError);
     // Nothing to pay (a 100% coupon): apply it now, in either mode.
     if (ctx.quote.totalPaise === 0)
       return this.activateFree(orgId, userId, ctx);
@@ -721,7 +729,14 @@ export class BillingCheckoutService implements OnModuleInit {
             );
           }
         }
-        return { ...base, quote, couponError: null };
+        // Same rule as fulfil: a renewal on the same plan isn't re-checked;
+        // one that switches to a scheduled smaller plan is.
+        const next = active.find((p) => p.id === quote.toPlan.id);
+        const usageError =
+          next && next.id !== sub?.planId
+            ? await this.usageErrorFor(orgId, next)
+            : null;
+        return { ...base, quote, couponError: null, usageError };
       }
       const target = active.find((p) => p.id === planId);
       if (!target) {
@@ -750,7 +765,8 @@ export class BillingCheckoutService implements OnModuleInit {
             renewalsCoveredAfterFirst(found.coupon),
           );
       }
-      return { ...base, quote, couponError };
+      const usageError = await this.usageErrorFor(orgId, target);
+      return { ...base, quote, couponError, usageError };
     } catch (e) {
       if (e instanceof QuoteError) throw billingError(e.code, e.message);
       throw e;
@@ -786,6 +802,19 @@ export class BillingCheckoutService implements OnModuleInit {
       orgHasUsed: redeemers.some((r) => r.organisationId === orgId),
     });
     return check.ok ? { coupon } : { error: check.reason };
+  }
+
+  /** The "plan allows N projects, you have M" message, or null when the org fits. */
+  private async usageErrorFor(
+    orgId: string,
+    plan: { name?: string; limits: unknown },
+  ): Promise<string | null> {
+    try {
+      await assertPlanFitsCurrentUsage(this.prisma, orgId, plan);
+      return null;
+    } catch (e) {
+      return e instanceof Error ? e.message : String(e);
+    }
   }
 
   async preview(
@@ -836,6 +865,7 @@ export function toPreview(
       ? { code: q.coupon.code, description: q.coupon.description }
       : null,
     couponError: ctx.couponError,
+    usageError: ctx.usageError,
     // A renewal's coupon comes from the subscription, not a code.
     couponsEnabled: !renewal,
     couponDiscount: toRupees(q.couponDiscountPaise),

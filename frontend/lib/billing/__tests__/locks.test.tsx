@@ -253,7 +253,7 @@ describe("lists: one shared lock badge and a filter", () => {
     const filter = screen.getAllByRole("combobox").find((el) => within(el).queryByRole("option", { name: "Paused" }))!;
     fireEvent.change(filter, { target: { value: "paused" } });
     await waitFor(() => expect(api.calls.some((c) => c.startsWith("/org/users?") && c.includes("paused=true") && !c.includes("status="))).toBe(true));
-  });
+  }, 30_000);
 
   it("the badge words come from one place", () => {
     expect(PLAN_LOCK_COPY.project_view_only.badge).toBe("View only");

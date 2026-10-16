@@ -1201,12 +1201,13 @@ model Payment {
   failureReason     String?        @map("failure_reason")
   // Set exactly once, by fulfilPayment(); the idempotency marker.
   capturedAt        DateTime?      @map("captured_at")
-  createdById       String         @map("created_by_id")
+  // Who started the payment; kept as null when that user is deleted.
+  createdById       String?        @map("created_by_id")
   createdAt         DateTime       @default(now()) @map("created_at")
   updatedAt         DateTime       @updatedAt @map("updated_at")
 
   organisation Organisation @relation(fields: [organisationId], references: [id], onDelete: Cascade)
-  createdBy    User         @relation("PaymentCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+  createdBy    User?        @relation("PaymentCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
   billingCheckout BillingCheckout?
 
   @@index([organisationId])
@@ -1307,7 +1308,8 @@ model BillingCheckout {
   packageChangeRequestId String?               @unique @map("package_change_request_id")
   // Online checkouts expire unpaid after 30 minutes.
   expiresAt              DateTime?             @map("expires_at")
-  createdById            String                @map("created_by_id")
+  // Who started the checkout; kept as null when that user is deleted.
+  createdById            String?               @map("created_by_id")
   // Set exactly once when the plan is applied; the idempotency marker.
   fulfilledAt            DateTime?             @map("fulfilled_at")
   reviewReason           String?               @map("review_reason")
@@ -1322,7 +1324,7 @@ model BillingCheckout {
   toPlan               Plan                  @relation("BillingCheckoutToPlan", fields: [toPlanId], references: [id], onDelete: Restrict)
   payment              Payment?              @relation(fields: [paymentId], references: [id], onDelete: SetNull)
   packageChangeRequest PackageChangeRequest? @relation(fields: [packageChangeRequestId], references: [id], onDelete: SetNull)
-  createdBy            User                  @relation("BillingCheckoutCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+  createdBy            User?                 @relation("BillingCheckoutCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
   coupon               Coupon?               @relation(fields: [couponId], references: [id], onDelete: Restrict)
 
   @@index([organisationId, status])

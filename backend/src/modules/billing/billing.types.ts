@@ -275,6 +275,8 @@ export interface CheckoutPreviewV2 {
   coupon: { code: string; description: string } | null;
   /** Why the entered coupon can't be used (shown under the field); not an error. */
   couponError: string | null;
+  /** Why the org can't move to this plan yet (over its limits); null when it fits. Pay is refused. */
+  usageError: string | null;
   /** false for a renewal: its coupon (if any) comes from the subscription. */
   couponsEnabled: boolean;
   couponDiscount: number;

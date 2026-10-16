@@ -188,6 +188,30 @@ describe('startCheckout (online)', () => {
     });
   });
 
+  it('refuses before any payment when the org has more than the plan allows', async () => {
+    const { service, db, usage, payments } = setup();
+    usage.users = 9; // Growth allows 5
+    const preview = await service.preview('org-1', {
+      planId: 'growth',
+      interval: 'monthly',
+    });
+    expect(preview.usageError).toContain(
+      '"Growth" plan allows 5 user(s), but your organisation has 9',
+    );
+    await expect(
+      service.start('org-1', 'u1', { planId: 'growth', interval: 'monthly' }),
+    ).rejects.toMatchObject({ response: { code: 'plan_too_small' } });
+    expect(payments.createOrder).not.toHaveBeenCalled();
+    expect(db.billingCheckout.rows).toHaveLength(0);
+    // Within the limits it goes ahead.
+    usage.users = 3;
+    const fits = await service.preview('org-1', {
+      planId: 'growth',
+      interval: 'monthly',
+    });
+    expect(fits.usageError).toBeNull();
+  });
+
   it('records the quote and creates a Razorpay order for the recomputed total', async () => {
     const { service, db, payments } = setup();
     const res = await service.start('org-1', 'u1', {
