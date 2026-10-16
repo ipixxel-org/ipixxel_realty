@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Icon } from "@/components/icons";
 import { useToast } from "@/components/ui/toast";
-import { checkGstin, formatDate, formatINR, INDIAN_STATES, stateName } from "@/lib/billing/pricing";
+import { checkGstin, formatDate, formatINR, INDIAN_STATES, packagePriceText, stateName } from "@/lib/billing/pricing";
 import type { BillingInterval, BillingOverview, BillingProfile, CheckoutPreview, PendingUpgrade } from "@/lib/billing/types";
 import { useBillingEnv, useBillingQuery, useOrgBilling } from "./context";
 import { usePayment } from "./payment";
@@ -222,7 +222,7 @@ export function PriceSummary({ preview: p, renewalMode }: { preview: CheckoutPre
           : p.kind === "interval_change"
             ? `A new yearly cycle starts today and runs until ${formatDate(p.periodEnd)}. `
             : `Your plan runs until ${formatDate(p.periodEnd)}. `}
-        Then {formatINR(p.recurringPrice)} + GST per {per}
+        Then {packagePriceText(p.recurringPrice)} per {per}
         {p.coupon && p.couponRenewalsLeft > 0 && p.couponRenewalsLeft < 99 ? ` (${p.coupon.code} also covers the next ${p.couponRenewalsLeft} renewals)` : ""}
         {renewalMode === "auto" ? ", charged automatically to the method you pay with now." : ". We'll remind you 3 days before each renewal."}
       </div>

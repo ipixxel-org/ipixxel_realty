@@ -3,12 +3,12 @@
 import { useState } from "react";
 import { Icon } from "@/components/icons";
 import { useToast } from "@/components/ui/toast";
-import { formatDate, formatINR, round2 } from "@/lib/billing/pricing";
+import { formatDate, formatINR, packagePriceText, planPrice, renewalPriceNote, renewalPriceText, round2 } from "@/lib/billing/pricing";
 import type { BillingOverview, RetentionSummary } from "@/lib/billing/types";
 import { useBillingEnv, useOptionalOrgBilling } from "./context";
 import { BillingDialog, DialogActions } from "./dialog";
 import { usePayment } from "./payment";
-import { Banner, BLink, renewalBreakdownText, useRenewalLive } from "./ui";
+import { Banner, BLink, useRenewalLive } from "./ui";
 
 /** Re-fetch the shared overview after an action (no-op outside OrgBillingProvider). */
 function useRefresh() {
@@ -58,10 +58,10 @@ export function PayNowButton({ overview, className = "btn btn-primary btn-sm" }:
         type="button"
         className={className}
         disabled={!canEdit || pay.busy || !live}
-        title={!live ? "Online payment isn't available for your account — our team will contact you to renew." : canEdit ? renewalBreakdownText(overview) : "Ask an admin with billing access to pay"}
+        title={!live ? "Online payment isn't available for your account — our team will contact you to renew." : canEdit ? (renewalPriceNote(overview) ?? undefined) : "Ask an admin with billing access to pay"}
         onClick={() => void pay.renew()}
       >
-        Pay now · {formatINR(overview.renewalAmount ?? 0)}
+        Pay now · {renewalPriceText(overview)}
       </button>
       {pay.popup}
     </>
@@ -200,7 +200,7 @@ export function BillingBanner({ overview }: { overview: BillingOverview }) {
         <Banner
           tone="info"
           icon="calendar"
-          title={`${formatINR(o.renewalAmount ?? 0)} will be charged on ${formatDate(o.periodEnd!)}`}
+          title={`${renewalPriceText(o)} will be charged on ${formatDate(o.periodEnd!)}`}
           actions={<UpdatePaymentMethodButton overview={o} />}
         >
           Your {plan.name} plan renews automatically{o.paymentMethod ? ` using ${o.paymentMethod.label}` : ""}. Nothing to do.
@@ -212,7 +212,7 @@ export function BillingBanner({ overview }: { overview: BillingOverview }) {
           title={o.downgradeTo ? `Your plan changes to ${o.downgradeTo.name} on ${formatDate(o.periodEnd!)}` : `Your ${plan.name} plan renews on ${formatDate(o.periodEnd!)}`}
           actions={<PayNowButton overview={o} />}
         >
-          Pay {renewalBreakdownText(o)} before then to keep everything running
+          Pay {renewalPriceText(o)} before then to keep everything running
           {o.downgradeTo ? ` — that's ${o.downgradeTo.name} (${o.downgradeInterval ?? o.interval}) from then on` : ""}.
         </Banner>
       );
@@ -235,7 +235,7 @@ export function BillingBanner({ overview }: { overview: BillingOverview }) {
               ? `Grace ends tomorrow — on ${formatDate(o.graceEndsAt!)} ${o.orgName} moves to Basic`
               : auto
                 ? `We couldn't charge ${o.paymentMethod?.label ?? "your saved payment method"} on ${formatDate(o.dueDate!)}`
-                : `Your ${plan.name} renewal (${renewalBreakdownText(o)}) was due on ${formatDate(o.dueDate!)}`
+                : `Your ${plan.name} renewal (${renewalPriceText(o)}) was due on ${formatDate(o.dueDate!)}`
           }
           actions={
             <>
@@ -291,7 +291,7 @@ export function BillingBanner({ overview }: { overview: BillingOverview }) {
           actions={
             <>
               <BLink to="checkout" params={{ plan: plan.id, interval: o.interval }} className="btn btn-primary btn-sm">
-                Buy {plan.name} again
+                Buy {plan.name} again · {packagePriceText(planPrice(plan, o.interval))}
               </BLink>
               <BLink to="chooseWhatStays" className="btn btn-ghost btn-sm">
                 Change what stays
@@ -332,7 +332,7 @@ export function BillingBanner({ overview }: { overview: BillingOverview }) {
           }
         >
           You keep {plan.name} until then. From {formatDate(o.downgradeAt!)} you&apos;ll pay{" "}
-          {formatINR((o.downgradeInterval ?? o.interval) === "yearly" ? o.downgradeTo!.priceYearly : o.downgradeTo!.priceMonthly)} + GST per{" "}
+          {packagePriceText(planPrice(o.downgradeTo!, o.downgradeInterval ?? o.interval))} per{" "}
           {(o.downgradeInterval ?? o.interval) === "yearly" ? "year" : "month"}.
         </Banner>
       );
@@ -390,7 +390,7 @@ export function RenewalReminderPopup({ overview, alwaysOpen = false }: { overvie
                 void pay.renew();
               }}
             >
-              Pay now · {formatINR(overview.renewalAmount ?? 0)}
+              Pay now · {renewalPriceText(overview)}
             </button>
           </DialogActions>
         }

@@ -30,6 +30,7 @@ import {
   canSeeAllLeads,
 } from '../../common/utils/lead-scope.util';
 import { listLeadAssignableUsers } from '../../common/utils/lead-assignee.util';
+import { planLockedError } from '../../common/utils/plan-lock.util';
 import { GoogleSheetsService } from '../marketing/google-sheets.service';
 
 /** The unit a lead is about — stored as `data.unitId` (Lead has no column). */
@@ -431,11 +432,12 @@ export class LeadsService implements OnModuleInit {
     if (dto.assignedToId) {
       const assignee = await this.prisma.user.findFirst({
         where: { id: dto.assignedToId, orgId },
-        select: { id: true },
+        select: { id: true, billingPausedAt: true },
       });
       if (!assignee) {
         throw new NotFoundException('Assignee not found in this organisation');
       }
+      if (assignee.billingPausedAt) throw planLockedError('user_paused');
     }
 
     const assignedToId =
@@ -805,7 +807,11 @@ export class LeadsService implements OnModuleInit {
     if (marketing.roundRobinEnabled !== true) return null;
 
     const agents = await this.prisma.projectSalesAgent.findMany({
-      where: { projectId, user: { orgId, status: 'active' } },
+      // Paused users (billing v2) get no new leads.
+      where: {
+        projectId,
+        user: { orgId, status: 'active', billingPausedAt: null },
+      },
       select: { userId: true },
       orderBy: { assignedAt: 'asc' },
     });
@@ -881,6 +887,10 @@ export class LeadsService implements OnModuleInit {
     if (query.status) and.push({ status: query.status as never });
     if (query.source) and.push({ source: query.source });
     if (query.assignedToId) and.push({ assignedToId: query.assignedToId });
+    // Billing v2: leads whose assignee is paused by the plan.
+    if (query.needsReassign) {
+      and.push({ assignedTo: { billingPausedAt: { not: null } } });
+    }
 
     if (query.search) {
       const s = query.search.trim();
@@ -935,6 +945,7 @@ export class LeadsService implements OnModuleInit {
               firstName: true,
               lastName: true,
               email: true,
+              billingPausedAt: true,
             },
           },
           project: {
@@ -953,6 +964,12 @@ export class LeadsService implements OnModuleInit {
         _count: { _all: true },
       }),
     ]);
+    // Billing v2: leads whose assignee is paused ("Needs reassigning").
+    const needsReassign = await this.prisma.lead.count({
+      where: {
+        AND: [kpiWhere, { assignedTo: { billingPausedAt: { not: null } } }],
+      },
+    });
 
     const statusCount = (status: string) =>
       byStatus.find((row) => row.status === status)?._count._all ?? 0;
@@ -987,6 +1004,7 @@ export class LeadsService implements OnModuleInit {
         followUp: statusCount('follow_up'),
         siteVisit: statusCount('site_visit'),
         won: statusCount('won'),
+        needsReassign,
       },
     };
   }
@@ -1397,11 +1415,18 @@ export class LeadsService implements OnModuleInit {
     if (dto.assignedToId != null) {
       const assignee = await this.prisma.user.findFirst({
         where: { id: dto.assignedToId, orgId },
-        select: { id: true, firstName: true, lastName: true, email: true },
+        select: {
+          id: true,
+          firstName: true,
+          lastName: true,
+          email: true,
+          billingPausedAt: true,
+        },
       });
       if (!assignee) {
         throw new NotFoundException('Assignee not found in this organisation');
       }
+      if (assignee.billingPausedAt) throw planLockedError('user_paused');
     }
 
     if (dto.status && dto.status !== lead.status && !dto.note?.trim()) {
@@ -1514,7 +1539,10 @@ export class LeadsService implements OnModuleInit {
     const ids = [...new Set(projectIds.filter((id): id is string => !!id))];
     if (ids.length === 0) return map;
     const rows = await this.prisma.projectSalesAgent.findMany({
-      where: { projectId: { in: ids }, user: { orgId, status: 'active' } },
+      where: {
+        projectId: { in: ids },
+        user: { orgId, status: 'active', billingPausedAt: null },
+      },
       select: {
         projectId: true,
         user: {
@@ -1550,7 +1578,7 @@ export class LeadsService implements OnModuleInit {
       where: {
         unitId: { in: ids },
         unit: { orgId, projectId: null },
-        user: { orgId, status: 'active' },
+        user: { orgId, status: 'active', billingPausedAt: null },
       },
       select: {
         unitId: true,
@@ -1623,6 +1651,7 @@ export class LeadsService implements OnModuleInit {
       firstName: string | null;
       lastName: string | null;
       email: string;
+      billingPausedAt?: Date | null;
     } | null;
     createdAt: Date;
   }) {
@@ -1658,6 +1687,8 @@ export class LeadsService implements OnModuleInit {
               [lead.assignedTo.firstName, lead.assignedTo.lastName]
                 .filter(Boolean)
                 .join(' ') || lead.assignedTo.email,
+            // Billing v2: the assignee is paused — the lead needs reassigning.
+            ...(lead.assignedTo.billingPausedAt ? { paused: true } : {}),
           }
         : null,
       createdAt: lead.createdAt,

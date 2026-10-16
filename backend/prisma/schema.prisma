@@ -1399,6 +1399,9 @@ model Invoice {
   sgstPaise        Int           @map("sgst_paise")
   igstPaise        Int           @map("igst_paise")
   totalPaise       Int           @map("total_paise")
+  // When the "Payment received" / credit note email went out (claimed once,
+  // so verify + webhook never send it twice).
+  emailedAt        DateTime?     @map("emailed_at")
   createdAt        DateTime      @default(now()) @map("created_at")
 
   @@index([organisationId])

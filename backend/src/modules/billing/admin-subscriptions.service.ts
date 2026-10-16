@@ -1,5 +1,5 @@
 import { billingNow } from '../../common/utils/billing-clock.util';
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, NotFoundException, Optional } from '@nestjs/common';
 import type { Plan } from '@prisma/client';
 import { PrismaService } from '../../database/prisma.service';
 import { applyPlanChange } from '../../common/utils/plan-change.util';
@@ -10,6 +10,7 @@ import {
   moveToFreePlan,
 } from '../../common/utils/subscription-lifecycle.util';
 import { PaymentsService } from '../payments/payments.service';
+import { BillingInvoiceMailer } from './billing-invoice-mailer.service';
 import { PlatformConfigService } from '../platform-config/platform-config.service';
 import { AdminCouponsService } from './admin-coupons.service';
 import { billingError } from './billing-checkout.service';
@@ -101,6 +102,8 @@ export class AdminSubscriptionsService {
     private readonly changes: BillingPlanChangeService,
     private readonly payments: PaymentsService,
     private readonly platformConfig: PlatformConfigService,
+    // Optional so unit tests can leave it out (then no invoice email).
+    @Optional() private readonly invoiceMailer?: BillingInvoiceMailer,
   ) {}
 
   /* --------------------------------------------------------------- list */
@@ -463,6 +466,8 @@ export class AdminSubscriptionsService {
       planName: plan.name,
       invoiceNumber: result.invoice.number,
     });
+    // The GST invoice by email to the owner and admins (not awaited).
+    void this.invoiceMailer?.sendForInvoice(result.invoice.id);
     return this.detail(orgId);
   }
 
@@ -606,6 +611,8 @@ export class AdminSubscriptionsService {
       reason: reason ?? null,
       creditNoteNumber: note?.number ?? null,
     });
+    // The credit note by email to the owner and admins (not awaited).
+    if (note) void this.invoiceMailer?.sendForInvoice(note.id);
     const row = (await this.ledger.payments(orgId)).find(
       (p) => p.id === paymentId,
     )!;

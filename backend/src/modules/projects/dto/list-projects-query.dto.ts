@@ -1,5 +1,13 @@
-import { Type } from 'class-transformer';
-import { IsIn, IsInt, IsOptional, IsString, Max, Min } from 'class-validator';
+import { Transform, Type } from 'class-transformer';
+import {
+  IsBoolean,
+  IsIn,
+  IsInt,
+  IsOptional,
+  IsString,
+  Max,
+  Min,
+} from 'class-validator';
 
 export const PROJECT_STATUS_VALUES = ['active', 'inactive'] as const;
 export type ProjectStatusValue = (typeof PROJECT_STATUS_VALUES)[number];
@@ -46,6 +54,12 @@ export class ListProjectsQueryDto {
   @IsOptional()
   @IsIn(PROJECT_STATUS_VALUES)
   status?: ProjectStatusValue;
+
+  // Billing v2: only projects made view-only by the plan.
+  @IsOptional()
+  @Transform(({ value }) => value === true || value === 'true' || value === '1')
+  @IsBoolean()
+  viewOnly?: boolean;
 }
 
 // Which project-assignment picker a candidate list is for. `sales_agent` is

@@ -2,6 +2,7 @@
 import { PaymentEventsService } from '../payments/payment-events';
 import { AdminSubscriptionsService } from './admin-subscriptions.service';
 import { BillingCheckoutService } from './billing-checkout.service';
+import { BillingInvoiceMailer } from './billing-invoice-mailer.service';
 import {
   BillingLedgerService,
   renderInvoiceHtml,
@@ -149,6 +150,25 @@ function setup(sub: Record<string, unknown> = {}) {
       cancelAt: null,
     })),
   };
+  // The invoice / credit note email: the real mailer, SMTP faked. `mailed()`
+  // waits for the emails the service started without awaiting.
+  db.organisation = {
+    ...db.organisation,
+    findUnique: async () => ({ name: 'Acme Realty' }),
+  };
+  const email = {
+    sendMail: jest.fn<Promise<{ success: boolean }>, [Record<string, any>]>(
+      async () => ({ success: true }),
+    ),
+  };
+  const mailer = new BillingInvoiceMailer(db as never, email as never);
+  const started: Promise<number>[] = [];
+  const send = mailer.sendForInvoice.bind(mailer);
+  mailer.sendForInvoice = (id: string) => {
+    const p = send(id);
+    started.push(p);
+    return p;
+  };
   const admin = new AdminSubscriptionsService(
     db as never,
     overview as never,
@@ -157,8 +177,17 @@ function setup(sub: Record<string, unknown> = {}) {
     { cancel: jest.fn() } as never,
     payments as never,
     { getSellerSettings: async () => SELLER } as never,
+    mailer,
   );
-  return { db, ledger, admin, payments, sub: () => db.subscription.rows[0] };
+  return {
+    db,
+    ledger,
+    admin,
+    payments,
+    email,
+    mailed: () => Promise.all(started),
+    sub: () => db.subscription.rows[0],
+  };
 }
 
 describe('invoices for plan payments', () => {
@@ -353,6 +382,37 @@ describe('Super Admin actions', () => {
         (a: any) => a.action === 'offline_payment_recorded',
       ),
     ).toBe(true);
+  });
+
+  it('mark paid offline emails the invoice once; a refund emails the credit note', async () => {
+    const { admin, db, email, mailed } = setup();
+    await admin.markPaidOffline('org-1', 'admin', {
+      amount: 2360,
+      method: 'Bank transfer',
+      reference: 'UTR123',
+      receivedOn: '2026-10-14',
+    });
+    await mailed();
+    const invoice = db.invoice.rows[0];
+    expect(email.sendMail).toHaveBeenCalledTimes(1);
+    expect(email.sendMail.mock.calls[0][0]).toMatchObject({
+      to: 'asha@acme.test',
+      subject: `Payment received – Invoice ${invoice.number}`,
+    });
+    expect(email.sendMail.mock.calls[0][0].html).toContain('Total paid');
+
+    const off = db.offlinePayment.rows[0];
+    await admin.refund(off.id, 'admin', 'paid twice');
+    await mailed();
+    const note = db.invoice.rows.find((i: any) => i.kind === 'credit_note');
+    expect(email.sendMail).toHaveBeenCalledTimes(2);
+    expect(email.sendMail.mock.calls[1][0]).toMatchObject({
+      subject: `Refund processed – Credit note ${note.number}`,
+    });
+    expect(email.sendMail.mock.calls[1][0].html).toContain('Total refunded');
+    expect(email.sendMail.mock.calls[1][0].attachments[0].filename).toMatch(
+      /^Credit-note-CN-/,
+    );
   });
 
   it('mark paid offline on Basic after a paid plan buys that plan back', async () => {

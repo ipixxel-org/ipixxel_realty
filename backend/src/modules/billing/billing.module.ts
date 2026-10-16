@@ -21,6 +21,7 @@ import { BillingRetentionService } from './billing-retention.service';
 import { BillingLedgerService } from './billing-ledger.service';
 import { AdminSubscriptionsService } from './admin-subscriptions.service';
 import { InvoiceDocumentController } from './invoice-document.controller';
+import { BillingInvoiceMailer } from './billing-invoice-mailer.service';
 
 /**
  * Billing v2 (docs/billing-ui-contract.md). Built on the existing payments
@@ -49,6 +50,7 @@ import { InvoiceDocumentController } from './invoice-document.controller';
     BillingRetentionService,
     BillingLedgerService,
     AdminSubscriptionsService,
+    BillingInvoiceMailer,
     OrgApprovedGuard,
     PermissionGuard,
     SuperAdminGuard,

@@ -1,12 +1,8 @@
-import {
-  CanActivate,
-  ExecutionContext,
-  ForbiddenException,
-  Injectable,
-} from '@nestjs/common';
+import { CanActivate, ExecutionContext, Injectable } from '@nestjs/common';
 import { Request } from 'express';
 import { PrismaService } from '../../database/prisma.service';
 import { JwtPayload } from '../types/jwt-payload.interface';
+import { planLockedError } from '../utils/plan-lock.util';
 
 /**
  * Billing v2 "choose what stays": a project made view-only because the
@@ -30,14 +26,7 @@ export class ProjectEditableGuard implements CanActivate {
       where: { id: projectId, orgId: req.user.orgId },
       select: { billingViewOnlyAt: true },
     });
-    if (project?.billingViewOnlyAt) {
-      throw new ForbiddenException({
-        statusCode: 403,
-        code: 'project_view_only',
-        message:
-          'This project is view-only on your current plan. Upgrade, or choose it in Billing → Choose what stays, to edit it again.',
-      });
-    }
+    if (project?.billingViewOnlyAt) throw planLockedError('project_view_only');
     return true;
   }
 }

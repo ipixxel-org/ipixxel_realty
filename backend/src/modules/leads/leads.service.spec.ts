@@ -557,7 +557,13 @@ describe('LeadsService', () => {
 
       expect(prisma.user.findFirst).toHaveBeenCalledWith({
         where: { id: 'other-org-user', orgId: 'org-1' },
-        select: { id: true, firstName: true, lastName: true, email: true },
+        select: {
+          id: true,
+          firstName: true,
+          lastName: true,
+          email: true,
+          billingPausedAt: true,
+        },
       });
     });
 
@@ -668,7 +674,8 @@ describe('LeadsService', () => {
 
       expect(prisma.user.findMany).toHaveBeenCalledWith(
         expect.objectContaining({
-          where: { orgId: 'org-1', status: 'active' },
+          // Paused users (billing v2) aren't offered.
+          where: { orgId: 'org-1', status: 'active', billingPausedAt: null },
         }),
       );
       expect(data.map((u) => u.id)).toEqual(['sales-9']);

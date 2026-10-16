@@ -3,7 +3,7 @@
 import Link from "next/link";
 import type { CSSProperties, ReactNode } from "react";
 import { Icon, type IconName } from "@/components/icons";
-import { formatINR } from "@/lib/billing/pricing";
+import { formatINR, packagePriceText, renewalPriceNote, renewalPriceText } from "@/lib/billing/pricing";
 import type { BillingFunction } from "@/lib/billing/client";
 import type { BillingInterval, BillingOverview, BillingPlan, SubscriptionStatus } from "@/lib/billing/types";
 import { useBillingEnv, type BillingRoute, type RouteParams } from "./context";
@@ -21,14 +21,27 @@ export const STATUS_META: Record<SubscriptionStatus, { label: string; badge: str
 };
 
 /**
- * "₹1,499 + GST = ₹1,768.82" (with a coupon: "₹1,499 − ₹149.90 coupon LAUNCH20 + GST = …"),
- * from the overview's renewalBreakdown — the same calculation as the renewal checkout.
+ * A package price the shared way — "₹1,499 + GST" — with optional secondary
+ * text (muted) such as the GST-inclusive total. See packagePriceText.
  */
-export function renewalBreakdownText(o: Pick<BillingOverview, "renewalAmount" | "renewalBreakdown">): string {
-  const b = o.renewalBreakdown;
-  if (!b) return o.renewalAmount != null ? `${formatINR(o.renewalAmount)} incl. GST` : "";
-  const coupon = b.couponDiscount > 0 ? ` − ${formatINR(b.couponDiscount)} coupon${b.couponCode ? ` ${b.couponCode}` : ""}` : "";
-  return `${formatINR(b.price)}${coupon} + GST = ${formatINR(b.total)}`;
+export function PriceText({ amount, gst = true, note }: { amount: number; gst?: boolean; note?: string | null }) {
+  return (
+    <>
+      {packagePriceText(amount, { gst })}
+      {note ? <span className="bl-muted" style={{ fontWeight: 400 }}> · {note}</span> : null}
+    </>
+  );
+}
+
+/** The next renewal ("₹1,499 + GST"), with the coupon / total as secondary text. */
+export function RenewalPrice({ overview }: { overview: Pick<BillingOverview, "renewalBreakdown" | "interval" | "plan" | "paidPlan"> }) {
+  const note = renewalPriceNote(overview);
+  return (
+    <>
+      {renewalPriceText(overview)}
+      {note ? <span className="bl-muted" style={{ fontWeight: 400 }}> · {note}</span> : null}
+    </>
+  );
 }
 
 export function StatusBadge({ status }: { status: SubscriptionStatus }) {

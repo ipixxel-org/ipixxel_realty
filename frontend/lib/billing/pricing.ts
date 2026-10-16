@@ -4,7 +4,7 @@
  * Amounts are rupees rounded to the paisa. The backend must apply the same
  * rules; these are the reference implementation.
  */
-import type { BillingInterval as Cycle, BillingPlan, Coupon, PlanId } from "./types";
+import type { BillingInterval as Cycle, BillingOverview, BillingPlan, Coupon, PlanId } from "./types";
 
 type ProtoPlan = Pick<BillingPlan, "priceMonthly" | "priceYearly">;
 type ProtoCoupon = Coupon;
@@ -77,6 +77,43 @@ export function formatShortDate(iso: string): string {
 
 export function planPrice(plan: ProtoPlan, cycle: Cycle): number {
   return cycle === "yearly" ? plan.priceYearly : plan.priceMonthly;
+}
+
+/* -------------------------------------------------------- Price display */
+
+/**
+ * How a package price is shown everywhere a customer is asked to pay:
+ * "₹1,499 + GST" — the package amount before GST, never a GST-inclusive
+ * figure. Where GST doesn't apply (`gst: false`): just "₹1,499".
+ */
+export function packagePriceText(amount: number, opts: { gst?: boolean } = {}): string {
+  return opts.gst === false ? formatINR(amount) : `${formatINR(amount)} + GST`;
+}
+
+type RenewalPriceSource = Pick<BillingOverview, "renewalBreakdown" | "interval" | "plan" | "paidPlan">;
+
+/**
+ * The next renewal, shown like a package price: "₹1,499 + GST". From the
+ * renewal checkout's calculation when the backend sends it (a coupon on the
+ * subscription comes off first: "₹1,349.10 + GST"), else the plan's price.
+ */
+export function renewalPriceText(o: RenewalPriceSource): string {
+  const b = o.renewalBreakdown;
+  if (b) return packagePriceText(b.taxable, { gst: b.gst > 0 });
+  const plan = o.paidPlan ?? o.plan;
+  return plan.isFree ? "Free" : packagePriceText(planPrice(plan, o.interval));
+}
+
+/**
+ * Secondary text for the renewal price, or null: the coupon taken off and the
+ * total incl. GST ("₹1,499 − ₹149.90 coupon TEN · ₹1,591.94 incl. GST").
+ */
+export function renewalPriceNote(o: RenewalPriceSource): string | null {
+  const b = o.renewalBreakdown;
+  if (!b) return null;
+  const coupon = b.couponDiscount > 0 ? `${formatINR(b.price)} − ${formatINR(b.couponDiscount)} coupon${b.couponCode ? ` ${b.couponCode}` : ""}` : null;
+  const total = b.gst > 0 ? `${formatINR(b.total)} incl. GST` : null;
+  return [coupon, total].filter(Boolean).join(" · ") || null;
 }
 
 /* ------------------------------------------------------------ Proration */

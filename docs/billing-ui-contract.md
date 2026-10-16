@@ -25,6 +25,7 @@ client is the reference behaviour (see `frontend/lib/billing/__tests__/mock-clie
 | 6 | `getRetentionChoices`, `saveRetentionChoices`; pausing behind `getAccessStatus` / the overview | `common/utils/retention.util.ts`, `billing-retention.service.ts`, `common/guards/project-editable.guard.ts` |
 | 7 | `listInvoices`, `listPayments`, `listSubscriptions`, `getSubscription`, `extendGrace`, `markPaidOffline`, `applyCoupon`, `cancelSubscription`, `listAdminPayments`, `refundPayment` | `invoice.util.ts`, `billing-ledger.service.ts`, `admin-subscriptions.service.ts`, `invoice-document.controller.ts`; `PaymentsService.refundInFull` |
 | Fixes after testing | `listOrgCoupons`, `getCompanyDetails`, `saveCompanyDetails`, `runLifecycleCheck`; `BillingOverview.renewalBreakdown`, `Invoice.checkoutId`, `Coupon.showToCustomers`; reminders stored | `subscription-lifecycle.util.ts` (grace rule, reminders), `common/utils/billing-clock.util.ts`, `admin-billing.service.ts`, `admin-coupons.service.ts` (`orgCoupons`); migration `20261015114705_billing_v2_fixes` |
+| Fixes after testing (2) | one `plan_locked` error; list filters `viewOnly` / `offline` / `paused` / `needsReassign`; invoice email; `packagePriceText` | `common/utils/plan-lock.util.ts`, `billing-invoice-mailer.service.ts`, `lead-assignee.util.ts`; frontend `lib/plan-lock.ts`, `PlanLockBadge` (`components/billing/locked.tsx`); migration `20261016093000_billing_invoice_email` |
 
 Every function is real except `updatePaymentMethod`, which stays unimplemented on purpose: renewals are
 "pay each time" through the existing Razorpay Orders + Checkout flow (no Razorpay
@@ -91,8 +92,8 @@ period rule (`applyPlanChange`).
   (`billingNow()`). See `docs/local-dev.md`.
 - **Pay now breakdown:** `BillingOverview.renewalBreakdown` (`price`, `couponCode`,
   `couponDiscount`, `taxable`, `gst`, `total`), from `renewalCharge` — the renewal checkout's
-  calculation, so `total` = `renewalAmount` = the renewal preview. Banners show
-  "₹1,499 + GST = ₹1,768.82".
+  calculation, so `total` = `renewalAmount` = the renewal preview. Shown as "₹1,499 + GST"
+  since the second round of fixes (below).
 - **Company & tax details** moved out of the lifecycle settings: `GET/PUT /admin/billing/company`
   (`CompanyDetails` = `{ seller, warnings }`, `admin_settings`). `LifecycleSettings` no longer
   has `seller` (`PUT /admin/billing/lifecycle` still accepts it, for old clients).
@@ -108,6 +109,46 @@ period rule (`applyPlanChange`).
 - **Yearly saving:** `yearlySaving(priceMonthly, priceYearly)` in `pricing.ts` — shown only when
   both prices are set and yearly < 12 × monthly (admin hint "17% cheaper than 12 × monthly"; org
   plans page "Save ₹X a year"). The hardcoded "Yearly: 2 months free" badge is gone.
+
+### Fixes after testing (2)
+
+- **One error for anything the plan locked:** every edit of a view-only project (details, unit
+  types, units — add / edit / delete / book / hold —, sales agents), publishing an offline
+  landing page, re-activating a paused user (`PATCH /org/users/:id/status`, `POST
+  /org/users/:id/approve`) and assigning a lead to a paused user answer 403
+  `{ code: "plan_locked", lock: "project_view_only" | "landing_page_offline" | "user_paused",
+  message }` (`planLockedError`). The frontend's `apiFetch` turns it into one friendly message
+  per kind (`lib/plan-lock.ts`). An offline page comes back through "Change what stays" or an
+  upgrade only (Publish no longer clears the marker).
+- **In the app:** a view-only project shows "View only" next to its status in the header, a notice
+  with Upgrade / Change what stays on every tab, and no Edit / add / edit / delete / status
+  actions (overview, Units, unit detail, the edit page's Save, the hidden Knowledge / AI calling
+  tabs). Direct lead entry and lead updates keep working. There is no bulk lead creation on the
+  project pages.
+- **Lists:** one badge, `PlanLockBadge` ("View only" / "Offline" / "Paused", amber, with the
+  reason as tooltip) on the projects grid and table, All Units, landing pages (cards and table;
+  Publish disabled with the reason, bulk Publish skips them) and users (instead of Active; no
+  Activate, "Change what stays" instead). Filters (shown with billing v2 on): `GET /org/projects?viewOnly=true`,
+  `GET /org/units?viewOnly=true` (units of view-only projects — standalone units have no project
+  and are never locked), `GET /org/landing-pages?offline=true`, `GET /org/users?paused=true`
+  (and `status=active` leaves paused users out).
+- **Paused users:** checked end to end — no sign-in (password and now Google too), sessions end,
+  no seat, can't be re-activated from the user screens. New: they're not offered for leads
+  (assignable list, round-robin, project / unit agents), and Lead Center has "Needs reassigning"
+  (`GET /org/leads?needsReassign=true`, `stats.needsReassign`, `assignedTo.paused`).
+- **Pay now amounts:** `packagePriceText(amount, { gst })` → "₹1,499 + GST" (or "₹1,499" where GST
+  doesn't apply); `renewalPriceText(overview)` / `renewalPriceNote` for the renewal (after any
+  coupon; the coupon and the total incl. GST only as secondary text). Used by the banners, the
+  renewal popup, "Buy … again", the overview, the plans page and the plan-change screens. The
+  checkout itself still lists the full breakdown and pays the total.
+- **Invoice email:** when a payment is fulfilled (Razorpay verify or webhook, or "Mark paid
+  offline") the owner and every active admin get "Payment received – Invoice <number>" with the
+  plan, period and amounts (package amount, discount, GST, total), the invoice attached as the
+  printable HTML page (no PDF renderer yet — open it and Print → Save as PDF) and a link to
+  Billing → Invoices. A refund sends "Refund processed – Credit note <number>" the same way. Sent
+  once per invoice (`invoices.emailed_at` is claimed first), from the platform's SMTP, logged in
+  the email logs under the org (template `billing`). A ₹0 checkout and an approval without
+  payment have no invoice, so no email.
 
 ### Step 2 notes
 
@@ -242,11 +283,11 @@ period rule (`applyPlanChange`).
     orgName, ownerName, planName, planUserLimit }`; an open session ends on its next request with
     `USER_INACTIVE`; refresh tokens are revoked), and doesn't take a seat;
   - projects: `projects.billing_view_only_at` — open but not editable (`ProjectEditableGuard` on
-    the project / unit-type / unit / sales-agent edit routes → 403 `project_view_only`; deleting
-    is allowed), and doesn't count towards the limit;
+    the project / unit-type / unit / sales-agent edit routes → 403 `plan_locked` since the second
+    round of fixes; deleting is allowed), and doesn't count towards the limit;
   - landing pages: status `unpublished` + `landing_pages.billing_offline_at` (thank-you pages
-    follow), so the public slug route answers 404 and the publish limit sees room. Publishing a
-    page again by hand (within the limit) clears the marker.
+    follow), so the public slug route answers 404 and the publish limit sees room. Publishing it
+    by hand is refused (`plan_locked`); it comes back through "Change what stays" or an upgrade.
   The counting rules (`plan-quota.util`) skip paused users and view-only projects.
 - **What stays:** the org's saved choice for that plan (`billing.retention_choices`, one per
   org), else the default picks — owner, then admins, then latest sign-in (newest refresh token);

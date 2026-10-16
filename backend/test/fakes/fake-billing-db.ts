@@ -19,7 +19,8 @@ function matches(row: Row, where: Where = {}): boolean {
       if ('lt' in cond) return v instanceof Date && v < cond.lt;
       return true; // relation filters etc. — not needed here
     }
-    return v === cond;
+    // A column the row never set reads as NULL, like in Postgres.
+    return v === cond || (cond === null && v === undefined);
   });
 }
 

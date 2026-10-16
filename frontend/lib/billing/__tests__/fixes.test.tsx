@@ -12,7 +12,7 @@ import { AdminPlansEditor, yearlyHint } from "@/components/billing/admin/plans-e
 import { LifecycleSettingsCard, reminderRows } from "@/components/billing/admin/lifecycle";
 import { OrgCouponsScreen } from "@/components/billing/coupons-org";
 import { PlansScreen } from "@/components/billing/plans";
-import { renewalBreakdownText } from "@/components/billing/ui";
+import { renewalPriceNote, renewalPriceText } from "@/lib/billing/pricing";
 import { createMockBillingClient } from "../mock/client";
 import { yearlySaving } from "../pricing";
 import type { BillingClient } from "../client";
@@ -187,12 +187,14 @@ describe("payment mode warning", () => {
   });
 });
 
-describe("Pay now breakdown", () => {
-  it("shows the price, the coupon and GST, from the server's calculation", () => {
+describe("Pay now amount", () => {
+  it("is the package price + GST from the server's calculation; the coupon and total are secondary", async () => {
+    const o = await createMockBillingClient().getBillingOverview();
     const b = { planName: "Growth", interval: "monthly" as const, price: 1499, couponCode: null, couponDiscount: 0, taxable: 1499, gst: 269.82, total: 1768.82 };
-    expect(renewalBreakdownText({ renewalAmount: 1768.82, renewalBreakdown: b })).toBe("₹1,499 + GST = ₹1,768.82");
-    expect(
-      renewalBreakdownText({ renewalAmount: 1591.94, renewalBreakdown: { ...b, couponCode: "TEN", couponDiscount: 149.9, taxable: 1349.1, gst: 242.84, total: 1591.94 } }),
-    ).toBe("₹1,499 − ₹149.90 coupon TEN + GST = ₹1,591.94");
+    expect(renewalPriceText({ ...o, renewalBreakdown: b })).toBe("₹1,499 + GST");
+    expect(renewalPriceNote({ ...o, renewalBreakdown: b })).toBe("₹1,768.82 incl. GST");
+    const coupon = { ...b, couponCode: "TEN", couponDiscount: 149.9, taxable: 1349.1, gst: 242.84, total: 1591.94 };
+    expect(renewalPriceText({ ...o, renewalBreakdown: coupon })).toBe("₹1,349.10 + GST");
+    expect(renewalPriceNote({ ...o, renewalBreakdown: coupon })).toBe("₹1,499 − ₹149.90 coupon TEN · ₹1,591.94 incl. GST");
   });
 });

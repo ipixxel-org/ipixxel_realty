@@ -13,6 +13,7 @@ import { CountUp } from "@/components/superadmin/count-up";
 import { ProgressBar } from "@/components/superadmin/progress-bar";
 import { Icon } from "@/components/icons";
 import { ProjectPageHead } from "@/components/org/project-tabs";
+import { useProjectViewOnly } from "@/components/billing/locked";
 import "@/app/org/org.css";
 
 const CALLS = [
@@ -72,6 +73,8 @@ export default function OrgProjectAiCallingPage() {
   const canAddLead = hasPermission("projects", PROJECT_LEAD_ACTION);
   const params = useParams<{ id: string }>();
   const id = params?.id ?? "";
+  // Billing v2: a view-only project's call setup can't be changed.
+  const viewOnly = useProjectViewOnly(id);
 
   return (
     <>
@@ -117,10 +120,12 @@ export default function OrgProjectAiCallingPage() {
                 hands warm leads to the sales team and logs the visit slot to the CRM.
               </p>
             </div>
-            <div className="col gap-8 flex-none">
-              <button className="btn btn-ghost"><Icon name="edit" size={13} /> Edit</button>
-              <button className="btn btn-primary">▶ Test call</button>
-            </div>
+            {viewOnly ? null : (
+              <div className="col gap-8 flex-none">
+                <button className="btn btn-ghost"><Icon name="edit" size={13} /> Edit</button>
+                <button className="btn btn-primary">▶ Test call</button>
+              </div>
+            )}
           </div>
         </div>
       </Reveal>
@@ -197,7 +202,7 @@ export default function OrgProjectAiCallingPage() {
             </div>
             <ProgressBar width="82%" />
             <div className="row gap-8 mt-16">
-              <button className="btn btn-ghost">⏸ Pause</button>
+              {viewOnly ? null : <button className="btn btn-ghost">⏸ Pause</button>}
               <button className="btn btn-primary">View</button>
             </div>
           </div>

@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useParams } from "next/navigation";
 import { Reveal } from "@/components/superadmin/reveal";
 import { Icon } from "@/components/icons";
+import { PlanLockNotice, ProjectAccessBadge, useProjectViewOnly } from "@/components/billing/locked";
 import "@/app/admin-console/superadmin.css";
 import type { ProjectStatus } from "@/lib/types";
 
@@ -50,6 +51,7 @@ export function ProjectHeader({
   project?: ProjectHeaderInfo;
   actions?: ReactNode;
 }) {
+  const id = useProjectId();
   const subParts = [
     project?.location,
     project?.reraId ? `RERA ${project.reraId}` : null,
@@ -71,6 +73,8 @@ export function ProjectHeader({
               {project.status === "active" ? "Active" : "Inactive"}
             </span>
           ) : null}
+          {/* Billing v2: "View only" when the plan no longer covers this project. */}
+          {project ? <ProjectAccessBadge projectId={id} style={{ marginLeft: 6 }} /> : null}
         </h1>
         <div className="sub">
           {subParts.length > 0 ? subParts.join(" · ") : "Project workspace"}
@@ -110,10 +114,13 @@ export function ProjectPageHead({
   actions?: ReactNode;
   project?: ProjectHeaderInfo;
 }) {
+  // Billing v2: every tab of a view-only project says so, with the ways out.
+  const viewOnly = useProjectViewOnly(useProjectId());
   return (
     <>
       <ProjectHeader project={project} actions={actions} />
       <ProjectTabs active={active} />
+      {viewOnly ? <PlanLockNotice kind="project_view_only" /> : null}
     </>
   );
 }

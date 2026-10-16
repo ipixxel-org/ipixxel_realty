@@ -14,7 +14,8 @@ import type {
   OrgUsersListResponse,
 } from "@/lib/types";
 import { USERS_FLASH_KEY, USERS_PATH } from "./user-form";
-import { useSeatLimitGate } from "@/components/billing/locked";
+import { PlanLockBadge, usePlanLocks, useSeatLimitGate } from "@/components/billing/locked";
+import { PLAN_LOCK_COPY } from "@/lib/plan-lock";
 import "./users.css";
 
 const PAGE_SIZE = 10;
@@ -78,7 +79,9 @@ export default function OrgUsersPage() {
   const [searchInput, setSearchInput] = useState("");
   const [search, setSearch] = useState("");
   const [roleFilter, setRoleFilter] = useState<string>("");
-  const [statusFilter, setStatusFilter] = useState<"active" | "disabled" | "pending" | "">("");
+  // "paused" (billing v2) is its own filter: paused by the plan, not deactivated.
+  const [statusFilter, setStatusFilter] = useState<"active" | "disabled" | "pending" | "paused" | "">("");
+  const locks = usePlanLocks();
   // [DISABLED-TEAMS] The team filter never reached the users query anyway.
   // const [teamFilter, setTeamFilter] = useState<string>("");
   const [page, setPage] = useState(1);
@@ -180,7 +183,8 @@ export default function OrgUsersPage() {
     });
     if (search) params.set("search", search);
     if (roleFilter) params.set("role", roleFilter);
-    if (statusFilter) params.set("status", statusFilter);
+    if (statusFilter === "paused") params.set("paused", "true");
+    else if (statusFilter) params.set("status", statusFilter);
 
     apiFetch<OrgUsersListResponse>(`/org/users?${params.toString()}`, {
       headers: { Authorization: `Bearer ${accessToken}` },
@@ -270,7 +274,7 @@ export default function OrgUsersPage() {
   const totalPages = Math.max(1, Math.ceil(total / pageSize));
 
   // Compute stat card numbers
-  const activeCount = rows.filter((u) => u.status === "active").length || (rows.length > 0 ? 1 : 0);
+  const activeCount = rows.filter((u) => u.status === "active" && !locks.userPaused(u.id)).length || (rows.length > 0 ? 1 : 0);
   const inactiveCount = rows.filter((u) => u.status === "disabled" || u.status === "pending").length;
   const adminCount = rows.filter((u) => u.role?.key === "admin").length || 1;
 
@@ -455,7 +459,7 @@ export default function OrgUsersPage() {
               className="usr-select"
               value={statusFilter}
               onChange={(e) => {
-                setStatusFilter(e.target.value as "active" | "disabled" | "pending" | "");
+                setStatusFilter(e.target.value as "active" | "disabled" | "pending" | "paused" | "");
                 setPage(1);
               }}
             >
@@ -463,6 +467,7 @@ export default function OrgUsersPage() {
               <option value="active">Active</option>
               <option value="disabled">Disabled</option>
               <option value="pending">Pending</option>
+              {locks.active ? <option value="paused">{PLAN_LOCK_COPY.user_paused.badge}</option> : null}
             </select>
 
             {/* [DISABLED-TEAMS] Team Filter
@@ -688,6 +693,9 @@ export default function OrgUsersPage() {
                           <span style={{ color: "#6b7280" }}>—</span>
                         </td>
                         <td>
+                          {locks.userPaused(user.id) ? (
+                            <PlanLockBadge kind="user_paused" />
+                          ) : (
                           <span className={`usr-status-badge ${user.status === "active" ? "active" : "inactive"}`}>
                             <span
                               className="dot"
@@ -697,6 +705,7 @@ export default function OrgUsersPage() {
                             />
                             {user.status === "active" ? "Active" : "Inactive"}
                           </span>
+                          )}
                         </td>
                         <td>
                           <span style={{ color: "#6b7280" }}>—</span>
@@ -750,7 +759,18 @@ export default function OrgUsersPage() {
                                   textAlign: "left",
                                 }}
                               >
-                                {user.status === "disabled" && canActivate && (
+                                {/* A paused user (billing v2) comes back only through "Change what stays" or an upgrade. */}
+                                {locks.userPaused(user.id) && (
+                                  <Link
+                                    href="/org/settings/billing/choose-what-stays"
+                                    className="btn btn-ghost btn-sm"
+                                    style={{ justifyContent: "flex-start", width: "100%" }}
+                                    title={PLAN_LOCK_COPY.user_paused.tooltip}
+                                  >
+                                    Change what stays
+                                  </Link>
+                                )}
+                                {user.status === "disabled" && canActivate && !locks.userPaused(user.id) && (
                                   <button
                                     type="button"
                                     className="btn btn-ghost btn-sm"

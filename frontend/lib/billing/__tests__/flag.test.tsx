@@ -358,7 +358,8 @@ describe("billing v2 flag", () => {
       </ToastProvider>,
     );
     await settle();
-    const pay = screen.getAllByRole("button", { name: /Pay now · ₹2,360/ })[0];
+    // The package price + GST (never the GST-inclusive ₹2,360).
+    const pay = screen.getAllByRole("button", { name: "Pay now · ₹2,000 + GST" })[0];
     expect(pay).toBeEnabled();
     fireEvent.click(pay);
     await settle();

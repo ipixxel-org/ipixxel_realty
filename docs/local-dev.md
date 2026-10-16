@@ -195,7 +195,8 @@ BILLING_CLOCK_OVERRIDE="2026-11-20"  # a fixed date (or a full ISO datetime)
 Ignored when `NODE_ENV=production`. It moves only billing decisions — the
 lifecycle check, the Billing overview, checkout prices and period dates.
 Row timestamps, Razorpay orders and invoice dates stay real. Remove it (and
-restart) when you're done.
+restart) when you're done. The backend unit tests ignore it (and `BILLING_V2`):
+`test/jest-env.ts` blanks both, so a moved clock in your `.env` can't break them.
 
 Example — a subscription that renews 4 days from today, notify days 3, grace
 7 days: `+2d` → renewal due (Pay now, reminder); `+5d` → payment due, grace

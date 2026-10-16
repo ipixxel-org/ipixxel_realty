@@ -1,7 +1,7 @@
 "use client";
 
 import { Icon } from "@/components/icons";
-import { formatDate, formatINR, planPrice } from "@/lib/billing/pricing";
+import { formatDate, packagePriceText, planPrice } from "@/lib/billing/pricing";
 import type { BillingOverview } from "@/lib/billing/types";
 import { BillingBanner, PayNowButton, RenewalReminderPopup, UpdatePaymentMethodButton } from "./banners";
 
@@ -9,7 +9,7 @@ export { RenewalReminderPopup };
 import { BillingDetailsSummary, PendingUpgradeBanner } from "./checkout";
 import { useOrgBilling } from "./context";
 import { InvoicesTable, PaymentHistoryTable } from "./invoices";
-import { BLink, countLabel, ErrorNote, Kv, Loading, renewalBreakdownText, SampleDataTag, Section, StatusBadge, UsageMeter } from "./ui";
+import { BLink, countLabel, ErrorNote, Kv, Loading, RenewalPrice, SampleDataTag, Section, StatusBadge, UsageMeter } from "./ui";
 
 function planLine(o: BillingOverview): string {
   if (o.plan.isFree) {
@@ -44,10 +44,10 @@ export function CurrentPlanCard({ overview: o }: { overview: BillingOverview }) 
         </div>
         <div className="bl-row" style={{ gap: 22 }}>
           <Kv label="Price">
-            {o.plan.isFree ? "Free" : `${formatINR(planPrice(o.plan, o.interval))} + GST`}
+            {o.plan.isFree ? "Free" : packagePriceText(planPrice(o.plan, o.interval))}
             {!o.plan.isFree ? <span className="bl-muted" style={{ fontWeight: 500 }}> / {o.interval === "yearly" ? "year" : "month"}</span> : null}
           </Kv>
-          {!o.plan.isFree && o.renewalAmount != null ? <Kv label="Next charge">{renewalBreakdownText(o)}</Kv> : null}
+          {!o.plan.isFree && o.renewalAmount != null ? <Kv label="Next charge"><RenewalPrice overview={o} /></Kv> : null}
           {o.downgradeTo ? <Kv label="From">{`${o.downgradeTo.name} on ${formatDate(o.downgradeAt!)}`}</Kv> : null}
         </div>
       </div>

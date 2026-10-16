@@ -451,3 +451,56 @@ export function getTestEmailHtml(params: {
 </html>
 `;
 }
+
+/**
+ * Billing v2: "Payment received – Invoice …" (and the matching refund email
+ * with the credit note). Amounts are already formatted (₹1,499.00).
+ */
+export function getPaymentReceivedEmailHtml(params: {
+  kind: 'invoice' | 'credit_note';
+  recipientName?: string;
+  orgName: string;
+  number: string;
+  planLine: string;
+  periodLine: string | null;
+  rows: { label: string; value: string; strong?: boolean }[];
+  invoicesUrl: string;
+}): string {
+  const refund = params.kind === 'credit_note';
+  const greeting = params.recipientName
+    ? `Hello ${escapeHtml(params.recipientName)},`
+    : 'Hello,';
+  const intro = refund
+    ? `We've refunded a payment for <b>${escapeHtml(params.orgName)}</b>. Credit note <b>${escapeHtml(params.number)}</b> is attached.`
+    : `Thank you — we've received your payment for <b>${escapeHtml(params.orgName)}</b>. GST invoice <b>${escapeHtml(params.number)}</b> is attached.`;
+  const rows = params.rows
+    .map(
+      (r) =>
+        `<tr><td style="padding: 6px 0; color: #475569;${r.strong ? ' font-weight: 700; color: #0f172a; border-top: 1px solid #e2e8f0; padding-top: 10px;' : ''}">${escapeHtml(r.label)}</td><td style="padding: 6px 0; text-align: right;${r.strong ? ' font-weight: 700; border-top: 1px solid #e2e8f0; padding-top: 10px;' : ''}">${escapeHtml(r.value)}</td></tr>`,
+    )
+    .join('');
+
+  return `
+<!DOCTYPE html>
+<html>
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>${refund ? 'Refund processed' : 'Payment received'}</title></head>
+<body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; background-color: #f8fafc; margin: 0; padding: 0; color: #1e293b;">
+  <div style="max-width: 580px; margin: 30px auto; background: #ffffff; border-radius: 12px; border: 1px solid #e2e8f0; overflow: hidden;">
+    <div style="background: #0f172a; padding: 28px 32px;"><h1 style="margin: 0; color: #ffffff; font-size: 20px;">iPixxel Realty</h1></div>
+    <div style="padding: 32px; line-height: 1.6;">
+      <p style="font-size: 16px;">${greeting}</p>
+      <p>${intro}</p>
+      <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 16px 20px; margin: 20px 0;">
+        <p style="margin: 0 0 4px; font-weight: 700;">${escapeHtml(params.planLine)}</p>
+        ${params.periodLine ? `<p style="margin: 0 0 12px; color: #64748b; font-size: 13px;">${escapeHtml(params.periodLine)}</p>` : ''}
+        <table style="width: 100%; border-collapse: collapse; font-size: 14px;">${rows}</table>
+      </div>
+      <p style="font-size: 13px; color: #64748b;">The ${refund ? 'credit note' : 'invoice'} is attached as a printable page (open it and use Print → Save as PDF). You can also find it any time under Settings → Billing → Invoices.</p>
+      <div style="text-align: center;"><a href="${params.invoicesUrl}" style="display: inline-block; background: #6366f1; color: #ffffff; padding: 12px 28px; border-radius: 8px; font-weight: 600; text-decoration: none; margin: 12px 0;" target="_blank">View invoices</a></div>
+    </div>
+    <div style="padding: 20px 32px; background: #f8fafc; border-top: 1px solid #e2e8f0; font-size: 12px; color: #64748b; text-align: center;">&copy; ${new Date().getFullYear()} iPixxel Realty. All rights reserved.</div>
+  </div>
+</body>
+</html>
+`;
+}

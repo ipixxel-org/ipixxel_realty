@@ -1822,6 +1822,11 @@ export class AuthService {
         })
         .catch(() => undefined);
 
+      // Billing v2: a paused user can't sign in with Google either.
+      if (existing.orgId) {
+        await this.assertNotBillingPaused(existing.id, existing.orgId);
+      }
+
       const roles = existing.roles;
       const isSuperAdmin = roles.includes('super_admin');
       const tokens = await this.issueTokens(existing.id, existing.orgId, roles);

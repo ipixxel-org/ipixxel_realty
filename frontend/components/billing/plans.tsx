@@ -3,7 +3,7 @@
 import { useState, type ReactNode } from "react";
 import { Icon } from "@/components/icons";
 import { Seg } from "@/components/superadmin/seg";
-import { formatINR, yearlySaving } from "@/lib/billing/pricing";
+import { formatINR, packagePriceText, yearlySaving } from "@/lib/billing/pricing";
 import type { BillingInterval, BillingPlan } from "@/lib/billing/types";
 import { useBillingQuery, useOrgBilling } from "./context";
 import { BLink, countLabel, ErrorNote, Loading, PlanPrice, Section, planFeatureRows, useCheckoutLive } from "./ui";
@@ -101,7 +101,7 @@ export function PlansScreen({
   }
 
   const rows: { label: string; render: (p: BillingPlan) => ReactNode }[] = [
-    { label: "Price", render: (p) => (p.isFree ? "Free" : `${formatINR(interval === "yearly" ? p.priceYearly : p.priceMonthly)} + GST`) },
+    { label: "Price", render: (p) => (p.isFree ? "Free" : packagePriceText(interval === "yearly" ? p.priceYearly : p.priceMonthly)) },
     { label: "Users", render: (p) => p.limits.users ?? "Unlimited" },
     { label: "Projects", render: (p) => p.limits.projects ?? "Unlimited" },
     { label: "Landing pages", render: (p) => p.limits.landingPages ?? "Unlimited" },

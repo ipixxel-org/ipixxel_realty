@@ -13,7 +13,7 @@ import { Reveal } from "@/components/superadmin/reveal";
 import { CountUp } from "@/components/superadmin/count-up";
 import { Icon } from "@/components/icons";
 import { ProjectPageHead } from "@/components/org/project-tabs";
-import { ProjectAccessBadge } from "@/components/billing/locked";
+import { ProjectAccessBadge, useProjectViewOnly } from "@/components/billing/locked";
 import "@/app/org/org.css";
 import type { LandingPageRow, LandingPageStatus, ProjectDetail, ProjectSalesAgent } from "@/lib/types";
 
@@ -84,7 +84,9 @@ export default function OrgProjectOverviewPage() {
   const { accessToken, hasPermission } = useAuth();
   // Projects > Edit shows the Edit button; Projects > Add lead shows the
   // Direct Lead Entry form (the lead is created for this project).
-  const canEdit = hasPermission("projects", "edit");
+  // Billing v2: a view-only project keeps its leads but can't be edited.
+  const viewOnly = useProjectViewOnly(id);
+  const canEdit = hasPermission("projects", "edit") && !viewOnly;
   const canCreateLead = hasPermission("projects", PROJECT_LEAD_ACTION);
 
   const [project, setProject] = useState<ProjectDetail | null>(null);

@@ -7,7 +7,7 @@ import { Switch } from "@/components/superadmin/switch";
 import { useToast } from "@/components/ui/toast";
 import { apiFetch } from "@/lib/api";
 import { setFlash } from "@/lib/flash";
-import { formatINR, withGst, yearlySaving } from "@/lib/billing/pricing";
+import { formatINR, packagePriceText, yearlySaving } from "@/lib/billing/pricing";
 import type { BillingPlan, PlanLimits, PlanModules } from "@/lib/billing/types";
 import { useBillingEnv, useBillingQuery } from "../context";
 import { BillingDialog, DialogActions } from "../dialog";
@@ -111,7 +111,7 @@ export function AdminPlansEditor({ canDelete = false }: { canDelete?: boolean })
                 {!p.isFree ? <span style={{ color: "#64748b", fontWeight: 600, fontSize: 13 }}>/mo + GST</span> : null}
               </div>
               <div style={{ fontSize: 12, color: "#64748b", marginBottom: 8 }}>
-                {p.isFree ? "No payment, never expires" : `${formatINR(p.priceYearly)}/yr · ${formatINR(withGst(p.priceMonthly))}/mo incl. GST`}
+                {p.isFree ? "No payment, never expires" : `${packagePriceText(p.priceYearly)} per year`}
               </div>
 
               <p style={{ fontSize: 12.5, color: "#64748b", marginBottom: 14, minHeight: 36, lineHeight: 1.5 }}>{p.tagline || "No description yet."}</p>

@@ -3,6 +3,7 @@ import { BadRequestException } from '@nestjs/common';
 import { PaymentEventsService } from '../payments/payment-events';
 import { PackageChangeRequestsService } from '../package-change-requests/package-change-requests.service';
 import { BillingCheckoutService } from './billing-checkout.service';
+import { BillingInvoiceMailer } from './billing-invoice-mailer.service';
 import { createFakeBillingDb } from '../../../test/fakes/fake-billing-db';
 
 const DAY = 86_400_000;
@@ -143,6 +144,14 @@ function setup(
       pincode: null,
     }),
   };
+  // The invoice email goes through the real mailer; only SMTP is faked.
+  db.organisation = { findUnique: async () => ({ name: 'Acme Realty' }) };
+  const email = {
+    sendMail: jest.fn<Promise<{ success: boolean }>, [Record<string, any>]>(
+      async () => ({ success: true }),
+    ),
+  };
+  const mailer = new BillingInvoiceMailer(db as never, email as never);
   const service = new BillingCheckoutService(
     db as never,
     mode as never,
@@ -150,9 +159,10 @@ function setup(
     payments as never,
     events,
     requests as never,
+    mailer,
   );
   service.onModuleInit();
-  return { db, usage, service, payments, requests, events };
+  return { db, usage, service, payments, requests, events, email };
 }
 
 const capturedEvent = (payment: Record<string, any>) => ({
@@ -452,6 +462,44 @@ describe('payment.captured → plan applied', () => {
     expect(
       db.auditLog.rows.filter((a: any) => a.action === 'plan_purchased'),
     ).toHaveLength(1);
+  });
+
+  it('emails the GST invoice to the owner and admins exactly once, even when verify and the webhook both deliver', async () => {
+    const { service, db, events, payment, checkout, email } =
+      await paidCheckout();
+    await Promise.all([
+      service.fulfil(checkout.id, payment.amount),
+      service.fulfil(checkout.id, payment.amount),
+    ]);
+    await events.emit('payment.captured', capturedEvent(payment)); // the webhook again
+    await service.mailing;
+    const invoice = db.invoice.rows[0];
+    expect(email.sendMail).toHaveBeenCalledTimes(1); // one admin (the owner)
+    const mail = email.sendMail.mock.calls[0][0];
+    expect(mail).toMatchObject({
+      to: 'asha@acme.test',
+      subject: `Payment received – Invoice ${invoice.number}`,
+      template: 'billing',
+      orgId: 'org-1',
+      smtpOrgId: null,
+      metadata: { invoiceId: invoice.id, invoiceNumber: invoice.number },
+    });
+    // Plan, period and the amount breakdown; the invoice attached.
+    expect(mail.html).toContain('Growth · Monthly');
+    expect(mail.html).toContain('Period:');
+    expect(mail.html).toContain('Package amount');
+    expect(mail.html).toContain('₹2,000.00');
+    expect(mail.html).toContain('₹2,360.00');
+    expect(mail.attachments[0].filename).toMatch(/^Invoice-INV-.*.html$/);
+    expect(mail.attachments[0].content).toContain(invoice.number);
+    expect(invoice.emailedAt).toBeInstanceOf(Date);
+  });
+
+  it('sends no invoice email for a payment that went to review', async () => {
+    const { service, payment, checkout, email } = await paidCheckout();
+    await service.fulfil(checkout.id, payment.amount - 100);
+    await service.mailing;
+    expect(email.sendMail).not.toHaveBeenCalled();
   });
 
   it('puts the checkout in needs_review when the amount does not match', async () => {

@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { Icon } from "@/components/icons";
 import { useToast } from "@/components/ui/toast";
-import { formatDate, formatINR, planPrice } from "@/lib/billing/pricing";
+import { formatDate, packagePriceText, planPrice } from "@/lib/billing/pricing";
 import type { BillingInterval, BillingPlan } from "@/lib/billing/types";
 import { BillingBanner, PicksSummary } from "./banners";
 import { useBillingEnv, useBillingQuery, useOrgBilling } from "./context";
@@ -116,7 +116,7 @@ export function DowngradeScreen({ planId, interval: wanted }: { planId: string; 
         <div className="bl-grid3">
           <Kv label="Takes effect">{effective ? formatDate(effective) : "—"}</Kv>
           <Kv label="Until then">{o.plan.name} — everything as today</Kv>
-          <Kv label="Then you pay">{target.isFree ? "Nothing — Basic is free" : `${formatINR(planPrice(target, interval))} + GST / ${per}`}</Kv>
+          <Kv label="Then you pay">{target.isFree ? "Nothing — Basic is free" : `${packagePriceText(planPrice(target, interval))} / ${per}`}</Kv>
         </div>
       </Section>
 

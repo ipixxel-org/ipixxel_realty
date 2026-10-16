@@ -4,6 +4,7 @@ import {
   Injectable,
   Logger,
   NotFoundException,
+  Optional,
   type OnModuleInit,
 } from '@nestjs/common';
 import type { BillingCheckoutStatus, Prisma } from '@prisma/client';
@@ -42,6 +43,7 @@ import {
 } from './coupon-rules';
 import { settleCoupon } from './coupon-settlement';
 import { issueCheckoutInvoice } from './invoice.util';
+import { BillingInvoiceMailer } from './billing-invoice-mailer.service';
 import { isFreePlan, sortPlans } from './plan-modules';
 import type {
   CheckoutPreviewV2,
@@ -130,6 +132,8 @@ export class BillingCheckoutService implements OnModuleInit {
     private readonly payments: PaymentsService,
     private readonly events: PaymentEventsService,
     private readonly requests: PackageChangeRequestsService,
+    // Optional so unit tests can leave it out (then no invoice email).
+    @Optional() private readonly invoiceMailer?: BillingInvoiceMailer,
   ) {}
 
   onModuleInit() {
@@ -447,6 +451,23 @@ export class BillingCheckoutService implements OnModuleInit {
    * Admin. Never throws (it runs inside the payment event handler).
    */
   async fulfil(checkoutId: string, paidPaise: number): Promise<FulfilOutcome> {
+    const outcome = await this.applyPaid(checkoutId, paidPaise);
+    // Once the plan is applied: the GST invoice by email (once per invoice,
+    // so /confirm and the webhook can both get here). Not awaited — the
+    // payment response doesn't wait for SMTP.
+    if (outcome === 'paid' && this.invoiceMailer) {
+      this.mailing = this.invoiceMailer.sendForCheckout(checkoutId);
+    }
+    return outcome;
+  }
+
+  /** The last invoice email started by fulfil (tests await it). */
+  mailing: Promise<number> = Promise.resolve(0);
+
+  private async applyPaid(
+    checkoutId: string,
+    paidPaise: number,
+  ): Promise<FulfilOutcome> {
     try {
       return await this.prisma.$transaction(async (tx) => {
         await tx.$queryRaw`SELECT id FROM "billing"."billing_checkouts" WHERE id = ${checkoutId} FOR UPDATE`;

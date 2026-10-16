@@ -268,6 +268,8 @@ export class ProjectsService {
 
     const andConditions: Prisma.ProjectWhereInput[] = [{ orgId }];
     if (query.status) andConditions.push({ status: query.status });
+    if (query.viewOnly)
+      andConditions.push({ billingViewOnlyAt: { not: null } });
     if (query.search) {
       andConditions.push({ name: { contains: query.search, mode: 'insensitive' } });
     }
@@ -1508,6 +1510,7 @@ export class ProjectsService {
     const where: Prisma.UnitWhereInput = { orgId };
     if (query.projectId) where.projectId = query.projectId;
     else if (query.standalone) where.projectId = null;
+    if (query.viewOnly) where.project = { billingViewOnlyAt: { not: null } };
     if (query.status) where.status = query.status;
     if (query.search) {
       where.unitNo = { contains: query.search, mode: 'insensitive' };

@@ -1,7 +1,9 @@
 "use client";
 
-import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
-import { Icon } from "@/components/icons";
+import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
+import Link from "next/link";
+import { Icon, type IconName } from "@/components/icons";
+import { PLAN_LOCK_COPY, type PlanLockKind } from "@/lib/plan-lock";
 import type { AccessStatus, BillingPlan } from "@/lib/billing/types";
 import { useOptionalBillingEnv, useOptionalOrgBilling } from "./context";
 import { BillingDialog, DialogActions } from "./dialog";
@@ -35,6 +37,65 @@ export function useBillingAccess(): AccessStatus | null {
   return useContext(AccessContext);
 }
 
+/**
+ * What the plan has locked, by id. `active` is false (and nothing is locked)
+ * when billing v2 is off or still loading.
+ */
+export function usePlanLocks() {
+  const access = useBillingAccess();
+  return useMemo(
+    () => ({
+      active: !!access,
+      projectViewOnly: (id: string | null | undefined) => !!id && !!access?.viewOnlyProjectIds.includes(id),
+      pageOffline: (id: string | null | undefined) => !!id && !!access?.offlineLandingPageIds.includes(id),
+      userPaused: (id: string | null | undefined) => !!id && !!access?.pausedUserIds.includes(id),
+    }),
+    [access],
+  );
+}
+
+/** True when billing v2 has made this project view-only (then hide every edit action). */
+export function useProjectViewOnly(projectId: string | null | undefined): boolean {
+  return usePlanLocks().projectViewOnly(projectId);
+}
+
+/* -------------------------------------------------------------- Lock badge */
+
+const LOCK_ICON: Record<PlanLockKind, IconName> = {
+  project_view_only: "eye",
+  landing_page_offline: "globe",
+  user_paused: "pause",
+};
+
+/**
+ * The one badge for anything the plan has locked — the same words, colour and
+ * tooltip on every list, grid and detail page.
+ */
+export function PlanLockBadge({ kind, style }: { kind: PlanLockKind; style?: React.CSSProperties }) {
+  const copy = PLAN_LOCK_COPY[kind];
+  return (
+    <span className="badge b-amber" style={{ display: "inline-flex", alignItems: "center", gap: 4, ...style }} title={copy.tooltip} data-plan-lock={kind}>
+      <Icon name={LOCK_ICON[kind]} size={12} /> {copy.badge}
+    </span>
+  );
+}
+
+/** "This project is view-only…" with the ways out, for a locked project's pages. */
+export function PlanLockNotice({ kind }: { kind: PlanLockKind }) {
+  return (
+    <div className="form-alert" role="status" style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap", marginBottom: 14 }}>
+      <Icon name="lock" size={15} />
+      <span style={{ flex: 1, minWidth: 220 }}>{PLAN_LOCK_COPY[kind].error}</span>
+      <Link href="/org/settings/billing/plans" className="btn btn-primary btn-sm">
+        Upgrade
+      </Link>
+      <Link href="/org/settings/billing/choose-what-stays" className="btn btn-ghost btn-sm">
+        Change what stays
+      </Link>
+    </div>
+  );
+}
+
 /* ------------------------------------------------------------------ Login */
 
 /**
@@ -53,11 +114,7 @@ export function PausedAccountNotice({ orgName, ownerName, planName, userLimit }:
 /* ---------------------------------------------------------------- Projects */
 
 export function ViewOnlyBadge({ style }: { style?: React.CSSProperties }) {
-  return (
-    <span className="badge b-amber" style={style} title="Your organisation is on a smaller plan, so this project is view-only. Buy a plan again, or choose it in “What stays”.">
-      <Icon name="eye" size={12} /> View only
-    </span>
-  );
+  return <PlanLockBadge kind="project_view_only" style={style} />;
 }
 
 /** Renders the View only badge if billing v2 says this project is view-only. */
@@ -69,16 +126,22 @@ export function ProjectAccessBadge({ projectId, style }: { projectId: string; st
 /* ----------------------------------------------------------- Landing pages */
 
 export function OfflineBadge() {
-  return (
-    <span className="badge b-gray" title="Offline — your plan allows fewer live pages. Buy a plan again, or choose it in “What stays”.">
-      Offline
-    </span>
-  );
+  return <PlanLockBadge kind="landing_page_offline" />;
 }
 
 export function LandingPageAccessBadge({ landingPageId }: { landingPageId: string }) {
   const access = useBillingAccess();
   return access?.offlineLandingPageIds.includes(landingPageId) ? <OfflineBadge /> : null;
+}
+
+/* ------------------------------------------------------------------- Users */
+
+export function PausedUserBadge() {
+  return <PlanLockBadge kind="user_paused" />;
+}
+
+export function UserAccessBadge({ userId }: { userId: string }) {
+  return usePlanLocks().userPaused(userId) ? <PausedUserBadge /> : null;
 }
 
 /** What a visitor sees on an offline landing page. */

@@ -11,6 +11,8 @@ import { customValueText, nonRoleFields, roleField, templateTraits } from "@/lib
 import { Reveal } from "@/components/superadmin/reveal";
 import { Icon } from "@/components/icons";
 import { ProjectTabs } from "@/components/org/project-tabs";
+import { PlanLockNotice, useProjectViewOnly } from "@/components/billing/locked";
+import { PLAN_LOCK_COPY } from "@/lib/plan-lock";
 import { formatPossession } from "@/components/org/project-form-fields";
 import "@/app/org/org.css";
 import type { ProjectDetail, Unit, UnitStatus } from "@/lib/types";
@@ -53,7 +55,14 @@ export default function OrgProjectUnitDetailPage() {
   const unitId = params?.unitId ?? "";
   const { accessToken, hasPermission } = useAuth();
   // Edit and the status actions (Book / Hold / Mark as sold) = Edit unit.
-  const canEditUnit = hasPermission("projects", PROJECT_UNIT_ACTIONS.edit);
+  // Billing v2: a view-only project's units can't be booked, held or edited.
+  const viewOnly = useProjectViewOnly(id);
+  const canEditUnit = hasPermission("projects", PROJECT_UNIT_ACTIONS.edit) && !viewOnly;
+  const statusTitle = viewOnly
+    ? PLAN_LOCK_COPY.project_view_only.tooltip
+    : canEditUnit
+      ? undefined
+      : "You don't have permission to change unit status";
 
   const [project, setProject] = useState<ProjectDetail | null>(null);
   const [unit, setUnit] = useState<Unit | null>(null);
@@ -287,6 +296,7 @@ export default function OrgProjectUnitDetailPage() {
       </Reveal>
 
       <ProjectTabs active="units" />
+      {viewOnly ? <PlanLockNotice kind="project_view_only" /> : null}
 
       {error ? (
         <Reveal delay={1}>
@@ -421,7 +431,7 @@ export default function OrgProjectUnitDetailPage() {
                     className="btn btn-primary btn-block"
                     type="button"
                     disabled={!canEditUnit || busyAction !== null || unit.status === "booked"}
-                    title={canEditUnit ? undefined : "You don't have permission to change unit status"}
+                    title={statusTitle}
                     onClick={() => void changeStatus("booked")}
                   >
                     {busyAction === "booked" ? "Saving…" : <><Icon name="check" size={13} /> Book unit</>}
@@ -430,7 +440,7 @@ export default function OrgProjectUnitDetailPage() {
                     className="btn btn-soft btn-block"
                     type="button"
                     disabled={!canEditUnit || busyAction !== null || unit.status === "held"}
-                    title={canEditUnit ? undefined : "You don't have permission to change unit status"}
+                    title={statusTitle}
                     onClick={() => void changeStatus("held")}
                   >
                     {busyAction === "held" ? "Saving…" : <><Icon name="lock" size={13} /> Hold (48h)</>}
@@ -439,7 +449,7 @@ export default function OrgProjectUnitDetailPage() {
                     className="btn btn-ghost btn-block"
                     type="button"
                     disabled={!canEditUnit || busyAction !== null || unit.status === "sold"}
-                    title={canEditUnit ? undefined : "You don't have permission to change unit status"}
+                    title={statusTitle}
                     onClick={() => void changeStatus("sold")}
                   >
                     {busyAction === "sold" ? "Saving…" : <><Icon name="flag" size={13} /> Mark as sold</>}

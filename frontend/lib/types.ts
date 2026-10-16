@@ -1509,6 +1509,8 @@ export type CrmLeadStatus =
 export interface CrmAssignee {
   id: string;
   name: string;
+  /** Billing v2: the assignee is paused by the plan — the lead needs reassigning. */
+  paused?: boolean;
 }
 
 /** Actor on an activity / call timeline row. `null` renders as "System". */
@@ -1649,6 +1651,8 @@ export interface CrmLeadListResponse {
     followUp: number;
     siteVisit: number;
     won: number;
+    /** Billing v2: leads assigned to paused users. */
+    needsReassign?: number;
   };
 }
 
@@ -1660,6 +1664,8 @@ export interface GetCrmLeadsParams {
   search?: string;
   page?: number;
   limit?: number;
+  /** Billing v2: only leads assigned to users paused by the plan. */
+  needsReassign?: boolean;
 }
 
 export interface CrmAssignableUser {

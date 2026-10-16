@@ -67,7 +67,8 @@ import {
   needsInventorySelection,
   type InventoryBindValue,
 } from "@/components/org/inventory-bind-fields";
-import { LandingPageAccessBadge } from "@/components/billing/locked";
+import { LandingPageAccessBadge, PlanLockBadge, usePlanLocks } from "@/components/billing/locked";
+import { PLAN_LOCK_COPY } from "@/lib/plan-lock";
 import "@/app/openpage.css";
 import "./landing-pages.css";
 
@@ -95,6 +96,9 @@ interface LandingPageDetail extends LandingPageRow {
 
 const LIMIT = 10;
 const STATUS_TABS = ["All", "Draft", "Published", "Unpublished"] as const;
+
+/** Billing v2: the status filter's "Offline" choice (pages the plan took offline). */
+const OFFLINE_TAB = 4;
 
 function statusParamFor(tabIndex: number): LandingPageStatus | undefined {
   switch (tabIndex) {
@@ -147,6 +151,8 @@ export default function OrgLandingPagesPage() {
   const canEdit = hasPermission("landing_pages", "edit");
   const canDelete = hasPermission("landing_pages", "delete");
   const canPublish = hasPermission("landing_pages", "activate");
+  // Billing v2: offline pages get the badge, a filter, and no Publish.
+  const locks = usePlanLocks();
   const canPause = hasPermission("landing_pages", "deactivate");
   const canPickTemplate = canCreate && hasPermission("templates", "view");
 
@@ -290,6 +296,7 @@ export default function OrgLandingPagesPage() {
     const params = new URLSearchParams({ page: String(page), limit: String(LIMIT) });
     const status = statusParamFor(tabIndex);
     if (status) params.set("status", status);
+    if (tabIndex === OFFLINE_TAB) params.set("offline", "true");
     if (searchInput.trim()) params.set("search", searchInput.trim());
     if (filterProject !== "all") params.set("projectId", filterProject);
     apiFetch<OrgLandingPagesListResponse>(`/org/landing-pages?${params.toString()}`, {
@@ -504,7 +511,12 @@ export default function OrgLandingPagesPage() {
       notify(publishLimitReason || "Publish limit reached for your plan.");
       return;
     }
-    const ids = [...selectedIds];
+    // Offline pages come back through "Change what stays", not Publish.
+    const ids = action === "publish" ? selectedIds.filter((id) => !locks.pageOffline(id)) : [...selectedIds];
+    if (ids.length === 0) {
+      notify(PLAN_LOCK_COPY.landing_page_offline.tooltip);
+      return;
+    }
     const label = action === "publish" ? "Published" : action === "unpublish" ? "Unpublished" : "Deleted";
     setBulkBusy(action);
     let ok = 0;
@@ -1228,6 +1240,7 @@ export default function OrgLandingPagesPage() {
           <option value={2}>Published</option>
           <option value={1}>Draft</option>
           <option value={3}>Unpublished</option>
+          {locks.active ? <option value={OFFLINE_TAB}>{PLAN_LOCK_COPY.landing_page_offline.badge}</option> : null}
         </select>
 
         {/* Project Dropdown */}
@@ -1599,8 +1612,8 @@ export default function OrgLandingPagesPage() {
                           <button
                             type="button"
                             className="btn btn-primary btn-sm"
-                            disabled={busyId === row.id || atPublishLimit}
-                            title={publishLimitReason}
+                            disabled={busyId === row.id || atPublishLimit || locks.pageOffline(row.id)}
+                            title={locks.pageOffline(row.id) ? PLAN_LOCK_COPY.landing_page_offline.tooltip : publishLimitReason}
                             onClick={() => publishPage(row.id)}
                             style={{ fontWeight: 700 }}
                           >
@@ -1653,7 +1666,7 @@ export default function OrgLandingPagesPage() {
               onView={() => openView(row.id)}
               onViewThankYou={() => openViewThankYou(row)}
               onPublish={canPublish ? () => publishPage(row.id) : undefined}
-              publishDisabledReason={publishLimitReason}
+              publishDisabledReason={locks.pageOffline(row.id) ? PLAN_LOCK_COPY.landing_page_offline.tooltip : publishLimitReason}
               onUnpublish={canPause ? () => unpublishPage(row.id) : undefined}
               onDuplicate={canCreate ? () => duplicatePage(row.id) : undefined}
               duplicateDisabledReason={createLimitReason}
@@ -1944,6 +1957,7 @@ function OrgLandingPageVisualCard({
   const isPublished = row.status === "published";
   const isDraft = row.status === "draft";
   const isUnpublished = row.status === "unpublished";
+  const offline = usePlanLocks().pageOffline(row.id);
 
   const thumbSrc =
     row.thumbnail && (row.thumbnail.startsWith("http") || row.thumbnail.startsWith("/"))
@@ -2005,6 +2019,7 @@ function OrgLandingPageVisualCard({
             }`}
           />
           <span>{isPublished ? "Published" : isDraft ? "Draft" : "Unpublished"}</span>
+          {offline ? <PlanLockBadge kind="landing_page_offline" style={{ marginLeft: 6 }} /> : null}
         </div>
 
         {/* Overlaid Top-Right Options Button */}

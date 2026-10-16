@@ -14,6 +14,7 @@ import {
   teamChatUserDeactivated,
 } from './team-chat-membership.util';
 import { publishChatAccessChanged } from './team-chat-bus';
+import { planLockedError } from './plan-lock.util';
 
 import { EmailService } from '../../modules/email/email.service';
 
@@ -333,6 +334,9 @@ export async function approveOrgUser(
     throw new NotFoundException('User not found');
   }
 
+  // Billing v2: paused by the plan — only "Change what stays" or an upgrade
+  // brings them back.
+  if (user.billingPausedAt) throw planLockedError('user_paused');
   if (user.status === 'active' && user.approvedAt) {
     // Nothing to do — already a fully active member.
     return toSafeUser(user);
@@ -411,6 +415,7 @@ export interface OrgUsersQuery {
   search?: string;
   role?: AssignableRole;
   status?: OrgUserStatus;
+  paused?: boolean;
 }
 
 // Shared by GET /org/users (Org Admin, self-scoped) and
@@ -426,7 +431,10 @@ export async function listOrgUsers(
   const where: Prisma.UserWhereInput = { orgId };
   if (query.status) {
     where.status = query.status;
+    // Billing v2: paused users are listed as Paused, not Active.
+    if (query.status === 'active') where.billingPausedAt = null;
   }
+  if (query.paused) where.billingPausedAt = { not: null };
   if (query.role) {
     where.userRoles = { some: { role: { key: query.role } } };
   }
@@ -775,6 +783,9 @@ export async function setOrgUserStatus(
     user.userRoles.some(({ role }) => role.key === 'admin')
   ) {
     throw new ConflictException('Admin users cannot be deactivated.');
+  }
+  if (status !== 'disabled' && user.billingPausedAt) {
+    throw planLockedError('user_paused');
   }
 
   const updated = await prisma.$transaction(async (tx) => {

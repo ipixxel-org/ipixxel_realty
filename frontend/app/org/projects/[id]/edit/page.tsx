@@ -51,6 +51,7 @@ import "@/app/org/org.css";
 import { ConfirmModal } from "@/components/ui/confirm-modal";
 import { FormActions, FormAlert, FormPage, formPageStyles } from "@/components/forms/form-page";
 import { Icon } from "@/components/icons";
+import { PlanLockNotice, useProjectViewOnly } from "@/components/billing/locked";
 import type {
   Amenity,
   LandingPageRow,
@@ -146,6 +147,8 @@ export default function OrgProjectEditPage() {
   const id = params?.id ?? "";
   const router = useRouter();
   const { accessToken, hasPermission } = useAuth();
+  // Billing v2: a view-only project can't be saved (deleting it still frees a slot).
+  const viewOnly = useProjectViewOnly(id);
   // Projects > Edit opens this page; Delete needs Projects > Delete.
   const canEdit = hasPermission("projects", "edit");
   const canDelete = hasPermission("projects", "delete");
@@ -954,6 +957,7 @@ export default function OrgProjectEditPage() {
         </div>
       ) : null}
 
+      {viewOnly ? <PlanLockNotice kind="project_view_only" /> : null}
       <FormAlert message={error} />
       {notice ? <div className="form-alert ok">{notice}</div> : null}
 
@@ -1467,7 +1471,7 @@ export default function OrgProjectEditPage() {
           <FormActions
             cancelHref={`/org/projects/${id}`}
             busy={saving}
-            submitDisabled={deleting}
+            submitDisabled={deleting || viewOnly}
             busyLabel="Saving…"
             submitLabel="Save changes"
             submitIcon="check"

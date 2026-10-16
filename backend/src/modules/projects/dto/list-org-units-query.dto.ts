@@ -49,4 +49,10 @@ export class ListOrgUnitsQueryDto {
   @IsOptional()
   @IsString()
   search?: string;
+
+  // Billing v2: only units of projects made view-only by the plan.
+  @IsOptional()
+  @Transform(({ value }) => value === true || value === 'true' || value === '1')
+  @IsBoolean()
+  viewOnly?: boolean;
 }
