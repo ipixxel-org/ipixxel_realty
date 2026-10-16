@@ -167,6 +167,28 @@ describe('when grace ends: fall back to Basic with billing v2 on the server', ()
         expect(row().movedToBasicAt).toEqual(at('2026-10-15'));
       },
     );
+
+    it('a plan already left "expired" by the old restrict rule moves to Basic on the next pass', async () => {
+      const { db, row } = setup(
+        {
+          status: 'expired',
+          renewsAt: at('2026-10-13'),
+          graceEndsAt: at('2026-10-14'),
+        },
+        config({ billingGracePeriodDays: 1 }),
+      );
+      await applyOrgSubscriptionLifecycle(
+        db as never,
+        'org-1',
+        at('2026-10-16'),
+      );
+      expect(row()).toMatchObject({
+        planId: 'basic',
+        status: 'active',
+        renewsAt: null,
+        previousPlanId: 'growth',
+      });
+    });
   });
 
   describe('BILLING_V2 off (old behaviour unchanged)', () => {
@@ -180,6 +202,13 @@ describe('when grace ends: fall back to Basic with billing v2 on the server', ()
         r.db as never,
         'org-1',
         at('2026-10-15'),
+      );
+      expect(r.row()).toMatchObject({ planId: 'growth', status: 'expired' });
+      // …and stays expired on later passes.
+      await applyOrgSubscriptionLifecycle(
+        r.db as never,
+        'org-1',
+        at('2026-10-20'),
       );
       expect(r.row()).toMatchObject({ planId: 'growth', status: 'expired' });
 

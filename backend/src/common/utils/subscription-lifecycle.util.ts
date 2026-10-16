@@ -210,10 +210,17 @@ export async function applyOrgSubscriptionLifecycle(
   try {
     const cfg = await getBillingExpiryConfig(prisma);
 
+    const fallBack = cfg.behavior === 'fall_back_to_basic';
     const subs = await prisma.subscription.findMany({
       where: {
         ...(orgId ? { orgId } : {}),
-        status: { in: ['active', 'trial', 'past_due'] as never[] },
+        // With "fall back to Basic", a plan left `expired` by the old
+        // "restrict" rule (before the switch) is moved to Basic too.
+        status: {
+          in: (fallBack
+            ? ['active', 'trial', 'past_due', 'expired']
+            : ['active', 'trial', 'past_due']) as never[],
+        },
         renewsAt: { not: null },
       },
     });
@@ -221,6 +228,15 @@ export async function applyOrgSubscriptionLifecycle(
     summary.scanned = subs.length;
 
     for (let sub of subs) {
+      if (sub.status === 'expired') {
+        if (
+          fallBack &&
+          (await moveToFreePlan(prisma, sub, 'grace_ended', now))
+        ) {
+          summary.movedToFreePlan++;
+        }
+        continue;
+      }
       const renewsAt = sub.renewsAt as Date;
       const termOver = renewsAt.getTime() <= now.getTime();
       // Grace is measured from the due date (renewsAt), never from when the

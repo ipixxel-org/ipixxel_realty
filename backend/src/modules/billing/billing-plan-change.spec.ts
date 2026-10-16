@@ -7,6 +7,12 @@ import { buildOverview } from './billing-overview';
 import { createFakeBillingDb } from '../../../test/fakes/fake-billing-db';
 
 const DAY = 86_400_000;
+// Some tests switch the server flag off; put it back afterwards.
+const BILLING_V2 = process.env.BILLING_V2;
+afterEach(() => {
+  if (BILLING_V2 === undefined) delete process.env.BILLING_V2;
+  else process.env.BILLING_V2 = BILLING_V2;
+});
 const BASIC = {
   id: 'basic',
   name: 'Basic',
@@ -94,9 +100,16 @@ describe('cancel at the end of the term', () => {
       await code(setup({ planId: 'basic' }).service.cancel('org-1', 'u1', {})),
     ).toBe('nothing_to_cancel');
 
-    const { service, row } = setup({
+    const { service, row, db } = setup({
       status: 'expired',
       renewsAt: new Date(Date.now() - 40 * DAY),
+    });
+    // "expired" only happens under the old "restrict" rule (flag off).
+    delete process.env.BILLING_V2; // restored in afterEach
+    db.platformConfig.findUnique = async () => ({
+      billingGracePeriodDays: 7,
+      billingExpiryNotifyDays: 3,
+      billingExpiryBehavior: 'restrict',
     });
     await service.cancel('org-1', 'u1', {});
     expect(row()).toMatchObject({

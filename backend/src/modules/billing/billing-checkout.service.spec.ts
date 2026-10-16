@@ -6,6 +6,12 @@ import { BillingCheckoutService } from './billing-checkout.service';
 import { createFakeBillingDb } from '../../../test/fakes/fake-billing-db';
 
 const DAY = 86_400_000;
+// Some tests switch the server flag off; put it back afterwards.
+const BILLING_V2 = process.env.BILLING_V2;
+afterEach(() => {
+  if (BILLING_V2 === undefined) delete process.env.BILLING_V2;
+  else process.env.BILLING_V2 = BILLING_V2;
+});
 const BASIC = {
   id: 'basic',
   name: 'Basic',
@@ -366,6 +372,13 @@ describe('renewal (pay each time)', () => {
         status: 'expired',
         renewsAt: new Date(Date.now() - 40 * DAY),
       },
+    });
+    // "expired" only happens under the old "restrict" rule (flag off).
+    delete process.env.BILLING_V2; // restored in afterEach
+    db.platformConfig.findUnique = async () => ({
+      billingGracePeriodDays: 7,
+      billingExpiryNotifyDays: 3,
+      billingExpiryBehavior: 'restrict',
     });
     await service.start('org-1', 'u1', renew);
     const c = db.billingCheckout.rows[0];

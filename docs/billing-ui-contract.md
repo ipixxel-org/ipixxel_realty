@@ -75,7 +75,8 @@ period rule (`applyPlanChange`).
   server, the sweep falls back to Basic whatever is stored; `GET /admin/billing/lifecycle` returns
   `afterGrace: "fall_back_to_basic"`, and `PUT` no longer writes the stored legacy value, so the
   flag-off screens and behaviour are unchanged. Without the server flag the response has a
-  `billing_v2_server_off` warning.
+  `billing_v2_server_off` warning. A subscription already left `expired` by the old "restrict"
+  rule (before the flag was on) is moved to Basic on the next check too.
 - **Reminders** (`LifecycleSettings.reminders`, now stored in `platform_configs.billing_reminders`;
   `supports.reminderSchedule: true`): in-app notifications to the org's admins, once per due date
   (the date is in the title): `before_renewal` (from `notifyDaysBefore` days before),
