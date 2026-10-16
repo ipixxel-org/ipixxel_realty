@@ -277,23 +277,23 @@ export const COUPONS: Coupon[] = [
   {
     code: "LAUNCH20", description: "Launch offer — 20% off the first 3 months", kind: "percent", value: 20,
     planIds: ["growth", "pro"], interval: "monthly", duration: "first_n", durationCount: 3,
-    validFrom: "2026-04-01", validTo: "2026-12-31", totalUses: 200, oncePerOrg: true, orgIds: null,
+    validFrom: "2026-04-01", validTo: "2026-12-31", totalUses: 200, oncePerOrg: true, orgIds: null, showToCustomers: true,
   },
   {
     code: "FLAT500", description: "₹500 off your first payment", kind: "fixed", value: 500,
     planIds: ["growth", "pro"], interval: "any", duration: "first_payment", durationCount: null,
-    validFrom: "2026-01-01", validTo: null, totalUses: null, oncePerOrg: true, orgIds: null,
+    validFrom: "2026-01-01", validTo: null, totalUses: null, oncePerOrg: true, orgIds: null, showToCustomers: true,
   },
   {
     code: "PARTNER100", description: "Channel-partner deal — first payment free", kind: "percent", value: 100,
     planIds: ["growth", "pro"], interval: "any", duration: "first_payment", durationCount: null,
     validFrom: "2026-09-01", validTo: "2027-03-31", totalUses: 10, oncePerOrg: true,
-    orgIds: ["org-skyline", "org-crescent"],
+    orgIds: ["org-skyline", "org-crescent"], showToCustomers: false,
   },
   {
     code: "DIWALI25", description: "Diwali 2025 — 25% off yearly plans", kind: "percent", value: 25,
     planIds: ["growth", "pro"], interval: "yearly", duration: "first_payment", durationCount: null,
-    validFrom: "2025-10-15", validTo: "2025-11-15", totalUses: 50, oncePerOrg: true, orgIds: null,
+    validFrom: "2025-10-15", validTo: "2025-11-15", totalUses: 50, oncePerOrg: true, orgIds: null, showToCustomers: true,
   },
 ];
 

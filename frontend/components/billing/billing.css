@@ -94,6 +94,11 @@
 .bl-meter-fill.full { background: var(--rose); }
 
 .bl-plan-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 18px; }
+/* Super Admin plan cards (same layout as the Plans & Pricing tab with billing v2 off). */
+.bl-admin-plan-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; margin-bottom: 28px; }
+@media (max-width: 1000px) { .bl-admin-plan-grid { grid-template-columns: repeat(2, 1fr); } }
+@media (max-width: 640px) { .bl-admin-plan-grid { grid-template-columns: 1fr; } }
+.bl-admin-plan-edit { text-decoration: none; }
 .bl-plan-card {
   position: relative;
   display: flex;

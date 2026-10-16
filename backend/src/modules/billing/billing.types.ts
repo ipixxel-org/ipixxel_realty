@@ -88,10 +88,24 @@ export interface BillingOverviewV2 {
   downgradeInterval: BillingInterval | null;
   downgradeAt: string | null;
   renewalAmount: number | null;
+  /** How renewalAmount is made up — the same calculation as the renewal checkout. */
+  renewalBreakdown: RenewalBreakdownV2 | null;
   usage: UsageItemV2[];
   locked: { users: number; projects: number; landingPages: number };
   /** What stays on the plan the org is moving to (grace / cancel / downgrade / Basic). */
   retention: RetentionSummaryV2 | null;
+}
+
+export interface RenewalBreakdownV2 {
+  planName: string;
+  interval: BillingInterval;
+  /** Plan price before GST (rupees). */
+  price: number;
+  couponCode: string | null;
+  couponDiscount: number;
+  taxable: number;
+  gst: number;
+  total: number;
 }
 
 export interface RetentionSummaryV2 {
@@ -151,10 +165,48 @@ export interface LifecycleSettingsV2 {
   paymentModeReason: ManualReason | null;
   /** What this backend can store yet; the UI greys out the rest. */
   supports: { fallBackToBasic: boolean; reminderSchedule: boolean };
-  /** Company tax settings (step 2). */
-  seller: SellerSettingsV2;
-  /** E.g. the seller state is missing, so every checkout is IGST. */
+  /** E.g. the seller state is missing (every checkout is IGST), or BILLING_V2 isn't set on the server. */
   warnings: BillingWarning[];
+}
+
+/** Super Admin → Settings → Company & tax details. */
+export interface CompanyDetailsV2 {
+  seller: SellerSettingsV2;
+  warnings: BillingWarning[];
+}
+
+/** POST /admin/billing/lifecycle/run */
+export interface LifecycleRunResultV2 {
+  ranAt: string;
+  scanned: number;
+  movedToFreePlan: number;
+  scheduledPlanApplied: number;
+  newlyPastDue: number;
+  newlyExpired: number;
+  newlyCancelled: number;
+  remindersSent: number;
+}
+
+/** GET /org/billing/coupons — a coupon this organisation can see. */
+export type OrgCouponStatusV2 =
+  'available' | 'redeemed' | 'expired' | 'used_up';
+export interface OrgCouponV2 {
+  code: string;
+  description: string;
+  kind: 'percent' | 'fixed';
+  value: number;
+  plans: { id: string; name: string }[];
+  interval: 'any' | 'monthly' | 'yearly';
+  duration: 'first_payment' | 'first_n' | 'forever';
+  durationCount: number | null;
+  validTo: string | null;
+  /** Reserved for this organisation (vs a public coupon). */
+  forYourOrg: boolean;
+  status: OrgCouponStatusV2;
+  /** When this organisation first used it, with that payment's invoice. */
+  redeemedAt: string | null;
+  invoiceUrl: string | null;
+  invoiceNumber: string | null;
 }
 
 /* ------------------------------------------------------------ Step 2 */
@@ -184,7 +236,8 @@ export interface SellerSettingsV2 {
 }
 
 export interface BillingWarning {
-  code: 'seller_state_missing' | 'buyer_outside_india';
+  code:
+    'seller_state_missing' | 'buyer_outside_india' | 'billing_v2_server_off';
   message: string;
 }
 

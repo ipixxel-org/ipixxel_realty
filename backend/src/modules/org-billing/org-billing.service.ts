@@ -232,6 +232,7 @@ export class OrgBillingService {
       if (existing.status === 'expired' || existing.status === 'paused') {
         data.status = 'active';
         data.graceEndsAt = null;
+        data.graceExtensionDays = 0;
         data.renewsAt = new Date(
           Date.now() + (billingCycle === 'yearly' ? 365 : 30) * 24 * 60 * 60 * 1000,
         );

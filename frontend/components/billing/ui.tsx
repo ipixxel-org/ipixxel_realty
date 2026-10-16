@@ -11,7 +11,7 @@ import { useBillingEnv, type BillingRoute, type RouteParams } from "./context";
 export const STATUS_META: Record<SubscriptionStatus, { label: string; badge: string }> = {
   free: { label: "Free plan", badge: "b-gray" },
   active: { label: "Active", badge: "b-green" },
-  renewal_due: { label: "Renews in 3 days", badge: "b-amber" },
+  renewal_due: { label: "Renewal due", badge: "b-amber" },
   past_due: { label: "Payment due", badge: "b-rose" },
   grace_ending: { label: "Grace ends tomorrow", badge: "b-rose" },
   expired: { label: "Expired", badge: "b-rose" },
@@ -19,6 +19,17 @@ export const STATUS_META: Record<SubscriptionStatus, { label: string; badge: str
   cancellation_scheduled: { label: "Cancellation scheduled", badge: "b-amber" },
   downgrade_scheduled: { label: "Downgrade scheduled", badge: "b-violet" },
 };
+
+/**
+ * "₹1,499 + GST = ₹1,768.82" (with a coupon: "₹1,499 − ₹149.90 coupon LAUNCH20 + GST = …"),
+ * from the overview's renewalBreakdown — the same calculation as the renewal checkout.
+ */
+export function renewalBreakdownText(o: Pick<BillingOverview, "renewalAmount" | "renewalBreakdown">): string {
+  const b = o.renewalBreakdown;
+  if (!b) return o.renewalAmount != null ? `${formatINR(o.renewalAmount)} incl. GST` : "";
+  const coupon = b.couponDiscount > 0 ? ` − ${formatINR(b.couponDiscount)} coupon${b.couponCode ? ` ${b.couponCode}` : ""}` : "";
+  return `${formatINR(b.price)}${coupon} + GST = ${formatINR(b.total)}`;
+}
 
 export function StatusBadge({ status }: { status: SubscriptionStatus }) {
   return <span className={`badge ${STATUS_META[status].badge}`}>{STATUS_META[status].label}</span>;

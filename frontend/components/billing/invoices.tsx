@@ -8,21 +8,21 @@ import { formatDate, formatINR } from "@/lib/billing/pricing";
 import { useBillingQuery } from "./context";
 import { Empty, ErrorNote, Loading, PAYMENT_STATUS_META, SampleDataTag, Section } from "./ui";
 
-function useDownload() {
+/** Opens an invoice / receipt document — the same for the Invoices table and the payment success page. */
+export function useInvoiceDownload() {
   const { toast } = useToast();
   return (url: string | null, name: string) => {
     if (url) {
       window.open(url, "_blank", "noopener");
       return;
     }
-    // The backend will return signed PDF URLs; until then there's no file.
-    toast({ variant: "info", title: "PDF not available yet", description: `${name} will download here once invoices are generated.` });
+    toast({ variant: "info", title: "Not available yet", description: `${name} isn't ready yet — try again in a moment.` });
   };
 }
 
 export function InvoicesTable({ pageSize = 10, paged = true, action }: { pageSize?: number; paged?: boolean; action?: React.ReactNode }) {
   const [page, setPage] = useState(1);
-  const download = useDownload();
+  const download = useInvoiceDownload();
   const { data, error } = useBillingQuery((c) => c.listInvoices({ page, pageSize }), [page, pageSize]);
 
   return (
@@ -82,7 +82,7 @@ export function InvoicesTable({ pageSize = 10, paged = true, action }: { pageSiz
 
 export function PaymentHistoryTable({ pageSize = 10 }: { pageSize?: number }) {
   const [page, setPage] = useState(1);
-  const download = useDownload();
+  const download = useInvoiceDownload();
   const { data, error } = useBillingQuery((c) => c.listPayments({ page, pageSize }), [page, pageSize]);
   return (
     <>

@@ -132,6 +132,8 @@ function table(
 export interface Seed {
   plans: Row[];
   subscription?: Row | null;
+  /** The platform_configs row (grace days, reminders…); absent = defaults. */
+  platformConfig?: Row | null;
   /** Extra org users / projects / landing pages (for choose-what-stays tests). */
   users?: Row[];
   projects?: Row[];
@@ -197,6 +199,10 @@ export function createFakeBillingDb(seed: Seed) {
   db.payment = table([], 'pay');
   db.auditLog = table([], 'audit');
   db.notification = table([], 'note');
+  db.platformConfig = {
+    findUnique: async () =>
+      seed.platformConfig ? { ...seed.platformConfig } : null,
+  };
   // One org admin (the owner). Counts come from `usage`; the rows below are
   // what "choose what stays" (retention.util) reads and pauses.
   const users = table(

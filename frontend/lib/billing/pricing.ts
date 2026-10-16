@@ -123,6 +123,18 @@ export function withGst(taxable: number, billingState: string = COMPANY_STATE): 
   return round2(taxable + splitGst(taxable, billingState).total);
 }
 
+/**
+ * What paying yearly saves against 12 monthly payments, from the plan's own
+ * prices. null when either price isn't set or yearly isn't cheaper — the UI
+ * then shows no saving at all.
+ */
+export function yearlySaving(priceMonthly: number, priceYearly: number): { amount: number; percent: number } | null {
+  if (!(priceMonthly > 0) || !(priceYearly > 0)) return null;
+  const twelve = priceMonthly * 12;
+  if (priceYearly >= twelve) return null;
+  return { amount: round2(twelve - priceYearly), percent: Math.round((1 - priceYearly / twelve) * 100) };
+}
+
 /* -------------------------------------------------------------- Coupons */
 
 export interface CouponContext {

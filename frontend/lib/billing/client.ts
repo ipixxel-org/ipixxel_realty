@@ -16,6 +16,7 @@ import type {
   BillingProfile,
   CancelPlanRequest,
   CheckoutPreview,
+  CompanyDetails,
   ConfirmCheckoutRequest,
   ConfirmCheckoutResponse,
   CouponDetail,
@@ -23,10 +24,12 @@ import type {
   ExtendGraceRequest,
   GetRetentionChoicesRequest,
   Invoice,
+  LifecycleRunResult,
   LifecycleSettings,
   ListAdminPaymentsRequest,
   ListSubscriptionsRequest,
   MarkPaidOfflineRequest,
+  OrgCoupon,
   OrgOption,
   PageRequest,
   Paged,
@@ -99,6 +102,8 @@ export interface BillingClient {
   listInvoices(req: PageRequest): Promise<Paged<Invoice>>;
   /** GET /org/billing/payments */
   listPayments(req: PageRequest): Promise<Paged<PaymentRecord>>;
+  /** GET /org/billing/coupons — coupons reserved for the org, and open ones listed for customers. */
+  listOrgCoupons(): Promise<OrgCoupon[]>;
 
   /* ---------------- Super Admin (admin_subscriptions) ---------------- */
   /** GET /admin/billing/plans */
@@ -135,4 +140,10 @@ export interface BillingClient {
   getLifecycleSettings(): Promise<LifecycleSettings>;
   /** PUT /admin/billing/lifecycle */
   saveLifecycleSettings(settings: LifecycleSettings): Promise<LifecycleSettings>;
+  /** POST /admin/billing/lifecycle/run — run the lifecycle check now (super_admin only; audited). */
+  runLifecycleCheck(): Promise<LifecycleRunResult>;
+  /** GET /admin/billing/company — Settings → Company & tax details. */
+  getCompanyDetails(): Promise<CompanyDetails>;
+  /** PUT /admin/billing/company */
+  saveCompanyDetails(details: CompanyDetails): Promise<CompanyDetails>;
 }

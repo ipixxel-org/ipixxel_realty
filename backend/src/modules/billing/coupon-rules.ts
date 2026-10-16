@@ -186,6 +186,68 @@ export function couponStatus(
 }
 
 /**
+ * What the next renewal charges, made up the same way as the renewal
+ * checkout (quoteRenewal, then withCoupon): the plan price, any coupon still
+ * on the subscription taken off before GST, GST on what's left. Used by the
+ * overview so "Pay now · ₹X" and its breakdown equal the charge.
+ */
+export function renewalCharge(
+  pricePaise: number,
+  coupon: Pick<CouponRule, 'kind' | 'percentOff' | 'amountOffPaise'> | null,
+  parties: Pick<QuoteInput, 'buyer' | 'seller'>,
+): {
+  subtotalPaise: number;
+  couponDiscountPaise: number;
+  taxablePaise: number;
+  gstPaise: number;
+  totalPaise: number;
+} {
+  const discount = coupon ? couponDiscountPaise(coupon, pricePaise) : 0;
+  const taxable = pricePaise - discount;
+  const tax = taxOn(taxable, parties);
+  return {
+    subtotalPaise: pricePaise,
+    couponDiscountPaise: discount,
+    taxablePaise: taxable,
+    gstPaise: tax.cgstPaise + tax.sgstPaise + tax.igstPaise,
+    totalPaise: tax.totalPaise,
+  };
+}
+
+/**
+ * Org Billing → Coupons: which coupons an organisation sees — the ones
+ * reserved for it, and open ones a Super Admin chose to list. Coupons that
+ * haven't started yet are left out.
+ */
+export function couponVisibleToOrg(
+  c: Pick<CouponRule, 'orgIds' | 'validFrom'> & { showToCustomers: boolean },
+  orgId: string,
+  now: Date,
+): boolean {
+  if (dayOf(c.validFrom) > dayOf(now)) return false;
+  return c.orgIds.length > 0 ? c.orgIds.includes(orgId) : c.showToCustomers;
+}
+
+export type OrgCouponStatus = 'available' | 'redeemed' | 'expired' | 'used_up';
+
+/**
+ * A coupon's status for one organisation: redeemed (it used a once-per-org
+ * coupon), expired, used up (the limit was reached by others), else
+ * available — the same checks, in the same order, as checkCoupon.
+ */
+export function orgCouponStatus(
+  c: Pick<CouponRule, 'validTo' | 'totalUses' | 'oncePerOrg'>,
+  ctx: { now: Date; usesSoFar: number; orgHasUsed: boolean },
+): OrgCouponStatus {
+  if (ctx.orgHasUsed && c.oncePerOrg) return 'redeemed';
+  if (c.validTo && dayOf(c.validTo) < dayOf(ctx.now)) return 'expired';
+  if (c.totalUses != null && !ctx.orgHasUsed && ctx.usesSoFar >= c.totalUses) {
+    return 'used_up';
+  }
+  return 'available';
+}
+
+/**
  * Take a coupon off a quote: the discount comes off the taxable value
  * (after any proration credit), then GST is worked out again on what's left.
  */

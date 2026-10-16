@@ -2,6 +2,7 @@ import {
   Body,
   Controller,
   Delete,
+  ForbiddenException,
   Get,
   HttpCode,
   Param,
@@ -20,7 +21,10 @@ import type { JwtPayload } from '../../common/types/jwt-payload.interface';
 import { AdminBillingService } from './admin-billing.service';
 import { OrgBillingV2Service } from './org-billing-v2.service';
 import { SaveAdminPlanDto } from './dto/save-admin-plan.dto';
-import { SaveLifecycleDto } from './dto/save-lifecycle.dto';
+import {
+  SaveCompanyDetailsDto,
+  SaveLifecycleDto,
+} from './dto/save-lifecycle.dto';
 import { BillingProfileService } from './billing-profile.service';
 import { BillingCheckoutService } from './billing-checkout.service';
 import {
@@ -67,6 +71,7 @@ export class OrgBillingV2Controller {
     private readonly changes: BillingPlanChangeService,
     private readonly retention: BillingRetentionService,
     private readonly ledger: BillingLedgerService,
+    private readonly orgCouponList: AdminCouponsService,
   ) {}
 
   // Step 7: invoices and payment history. Under v2/ because GET
@@ -81,6 +86,13 @@ export class OrgBillingV2Controller {
   @Get('v2/payments')
   payments(@CurrentUser() user: JwtPayload, @Query() q: PageQueryDto) {
     return this.ledger.listPayments(user.orgId as string, q.page, q.pageSize);
+  }
+
+  // Coupons this organisation can see (reserved for it, or listed publicly).
+  @RequirePermission('billing', 'view')
+  @Get('coupons')
+  orgCoupons(@CurrentUser() user: JwtPayload) {
+    return this.orgCouponList.orgCoupons(user.orgId as string);
   }
 
   // Step 6: choose what stays on a smaller plan
@@ -326,5 +338,31 @@ export class AdminBillingController {
   @Put('lifecycle')
   saveLifecycle(@Body() dto: SaveLifecycleDto) {
     return this.service.saveLifecycle(dto);
+  }
+
+  /**
+   * "Run lifecycle check now" — runs the sweep at once (testing aid). Super
+   * Admin role only, not every platform role with settings access; audited.
+   */
+  @Post('lifecycle/run')
+  @HttpCode(200)
+  runLifecycle(@CurrentUser() user: JwtPayload) {
+    if (!user.roles?.includes('super_admin')) {
+      throw new ForbiddenException(
+        'Only a Super Admin can run the lifecycle check.',
+      );
+    }
+    return this.service.runLifecycleNow(user.sub);
+  }
+
+  // Super Admin → Settings → Company & tax details (admin_settings).
+  @Get('company')
+  getCompany() {
+    return this.service.getCompanyDetails();
+  }
+
+  @Put('company')
+  saveCompany(@Body() dto: SaveCompanyDetailsDto) {
+    return this.service.saveCompanyDetails(dto);
   }
 }

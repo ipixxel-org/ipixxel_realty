@@ -8,22 +8,29 @@ import {
 import { orgBillingRecipientsWhere } from './notification-recipients.util';
 import { NO_SCHEDULED_CHANGE } from './plan-change.util';
 import { applyRetention, type RetentionDb } from './retention.util';
+import { billingNow, isBillingV2Server } from './billing-clock.util';
 
 // ---------------------------------------------------------------------------
 // Subscription expiry lifecycle + plan-package gates for org-owned resources.
 //
 // Rules (all of them read the single PlatformConfig row, so a Super Admin can
 // tune every knob live from the console):
-//   - active/trial with renewsAt in the past  => `past_due`, grace starts
-//     (graceEndsAt = renewsAt + gracePeriodDays). During the grace window the
-//     org keeps working — publishing still allowed.
-//   - past_due past graceEndsAt               => `expired` (behavior
+//   - active/trial with renewsAt in the past  => `past_due`, grace starts.
+//     Grace always ends at renewsAt + gracePeriodDays + graceExtensionDays
+//     (graceEndFor) — measured from the due date, not from when the sweep
+//     noticed; graceEndsAt is re-synced on every pass. During the grace
+//     window the org keeps working — publishing still allowed.
+//   - grace over (checked in the same pass)   => `expired` (behavior
 //     'restrict'), `cancelled` (behavior 'cancel'), or — billing v2,
 //     'fall_back_to_basic' — the free plan with what doesn't fit paused
 //     ("choose what stays"; buying again restores it). Publishing (and other
-//     quota-gated actions) stop for `expired`.
-//   - active/trial whose renewsAt falls within `notifyDays` => an
-//     "expiring soon" popup notification is raised for the org's admins.
+//     quota-gated actions) stop for `expired`. With BILLING_V2=true on the
+//     server the behaviour is always 'fall_back_to_basic'.
+//   - reminders (each can be switched off in the billing v2 settings):
+//     `notifyDays` before renewsAt, on the due date, mid-grace (grace of 3+
+//     days) and on the last day of grace — once each per due date.
+//   - "now" is billingNow(): BILLING_CLOCK_OVERRIDE moves it outside
+//     production (testing aid).
 //   - billing v2 end-of-term changes, when the term ends: a scheduled
 //     cancellation moves the org to the free plan (no grace — they chose to
 //     stop); a scheduled smaller plan / interval is switched to, and the
@@ -35,11 +42,37 @@ import { applyRetention, type RetentionDb } from './retention.util';
 // if the timer hasn't ticked yet.
 // ---------------------------------------------------------------------------
 
+export type ReminderId =
+  'before_renewal' | 'payment_day' | 'mid_grace' | 'day_before_grace_ends';
+export const REMINDER_IDS: ReminderId[] = [
+  'before_renewal',
+  'payment_day',
+  'mid_grace',
+  'day_before_grace_ends',
+];
+export type ReminderSettings = Record<ReminderId, boolean>;
+
+/** Stored JSON → settings; a missing or unreadable key means "on". */
+export function readReminderSettings(raw: unknown): ReminderSettings {
+  const o =
+    raw && typeof raw === 'object' ? (raw as Record<string, unknown>) : {};
+  return Object.fromEntries(
+    REMINDER_IDS.map((id) => [id, o[id] !== false]),
+  ) as ReminderSettings;
+}
+
 export interface BillingExpiryConfig {
   gracePeriodDays: number;
   notifyDays: number;
+  /**
+   * What happens when grace ends unpaid. With billing v2 on the server
+   * (BILLING_V2=true) it is always 'fall_back_to_basic' — the stored legacy
+   * value (restrict / cancel) only applies with v2 off.
+   */
   behavior: 'restrict' | 'cancel' | 'fall_back_to_basic';
   message: string;
+  /** Which reminder notifications go out (billing v2 settings). */
+  reminders: ReminderSettings;
 }
 
 export const DEFAULT_BILLING_EXPIRY_CONFIG: BillingExpiryConfig = {
@@ -48,7 +81,22 @@ export const DEFAULT_BILLING_EXPIRY_CONFIG: BillingExpiryConfig = {
   behavior: 'restrict',
   message:
     'Your subscription is due for renewal soon. Renew to keep your landing pages and features running without interruption.',
+  reminders: readReminderSettings(null),
 };
+
+/**
+ * When grace ends for a term that fell due at renewsAt: the due date plus the
+ * grace days (today's setting) plus any extension a Super Admin granted.
+ * Always measured from the due date, never from when the sweep noticed.
+ */
+export function graceEndFor(
+  sub: { renewsAt: Date; graceExtensionDays?: number | null },
+  gracePeriodDays: number,
+): Date {
+  const days =
+    Math.max(0, gracePeriodDays) + Math.max(0, sub.graceExtensionDays ?? 0);
+  return new Date(sub.renewsAt.getTime() + days * DAY_MS);
+}
 
 export type LifecycleRunSummary = {
   scanned: number;
@@ -93,6 +141,15 @@ type PrismaLike = Pick<
   | 'lead'
 >;
 
+function defaultExpiryConfig(): BillingExpiryConfig {
+  return {
+    ...DEFAULT_BILLING_EXPIRY_CONFIG,
+    behavior: isBillingV2Server()
+      ? 'fall_back_to_basic'
+      : DEFAULT_BILLING_EXPIRY_CONFIG.behavior,
+  };
+}
+
 /** Read the Super Admin's expiry policy, falling back to safe defaults. */
 export async function getBillingExpiryConfig(
   prisma: PrismaLike,
@@ -101,7 +158,7 @@ export async function getBillingExpiryConfig(
     const row = await prisma.platformConfig.findUnique({
       where: { id: 'platform' },
     });
-    if (!row) return { ...DEFAULT_BILLING_EXPIRY_CONFIG };
+    if (!row) return defaultExpiryConfig();
     return {
       gracePeriodDays:
         typeof row.billingGracePeriodDays === 'number'
@@ -111,17 +168,21 @@ export async function getBillingExpiryConfig(
         typeof row.billingExpiryNotifyDays === 'number'
           ? row.billingExpiryNotifyDays
           : DEFAULT_BILLING_EXPIRY_CONFIG.notifyDays,
-      behavior:
-        row.billingExpiryBehavior === 'cancel' ||
-        row.billingExpiryBehavior === 'fall_back_to_basic'
+      behavior: isBillingV2Server()
+        ? 'fall_back_to_basic'
+        : row.billingExpiryBehavior === 'cancel' ||
+            row.billingExpiryBehavior === 'fall_back_to_basic'
           ? row.billingExpiryBehavior
           : 'restrict',
       message:
         row.billingExpiryMessage?.trim() ||
         DEFAULT_BILLING_EXPIRY_CONFIG.message,
+      reminders: readReminderSettings(
+        (row as { billingReminders?: unknown }).billingReminders,
+      ),
     };
   } catch {
-    return { ...DEFAULT_BILLING_EXPIRY_CONFIG };
+    return defaultExpiryConfig();
   }
 }
 
@@ -143,11 +204,11 @@ export function isSubscriptionUsable(status: string | null | undefined): boolean
 export async function applyOrgSubscriptionLifecycle(
   prisma: PrismaLike,
   orgId?: string,
+  now: Date = billingNow(),
 ): Promise<LifecycleRunSummary> {
   const summary: LifecycleRunSummary = { ...EMPTY_SUMMARY };
   try {
     const cfg = await getBillingExpiryConfig(prisma);
-    const now = new Date();
 
     const subs = await prisma.subscription.findMany({
       where: {
@@ -161,96 +222,154 @@ export async function applyOrgSubscriptionLifecycle(
 
     for (let sub of subs) {
       const renewsAt = sub.renewsAt as Date;
-
-      // Billing v2: end-of-term changes the org scheduled.
       const termOver = renewsAt.getTime() <= now.getTime();
-      const graceOver =
-        sub.status === 'past_due' &&
-        !!sub.graceEndsAt &&
-        sub.graceEndsAt.getTime() <= now.getTime();
+      // Grace is measured from the due date (renewsAt), never from when the
+      // sweep noticed — an edited renewsAt or grace setting applies at once.
+      const graceEnd = graceEndFor(
+        { renewsAt, graceExtensionDays: sub.graceExtensionDays },
+        cfg.gracePeriodDays,
+      );
+      const graceOver = termOver && graceEnd.getTime() <= now.getTime();
+      const running = sub.status === 'active' || sub.status === 'trial';
+
+      // Billing v2: a cancellation the org scheduled takes effect at the end
+      // of the term (or, made during grace, when grace ends).
       if (
         sub.cancelAtPeriodEnd &&
-        (((sub.status === 'active' || sub.status === 'trial') && termOver) ||
-          graceOver)
+        ((running && termOver) || (sub.status === 'past_due' && graceOver))
       ) {
-        if (await moveToFreePlan(prisma, sub)) {
+        if (await moveToFreePlan(prisma, sub, 'cancelled', now)) {
           summary.movedToFreePlan++;
           continue;
         }
       }
-      if (
-        sub.scheduledPlanId &&
-        (sub.status === 'active' || sub.status === 'trial') &&
-        termOver
-      ) {
+      // A scheduled smaller plan / interval switches in when the term ends…
+      if (sub.scheduledPlanId && running && termOver) {
         sub = await applyScheduledPlan(prisma, sub);
         summary.scheduledPlanApplied++;
-        // …then the unpaid term goes past_due below, on the new plan.
+        // …then the unpaid term goes into grace below, on the new plan.
       }
 
-      // Term ended -> enter the grace window.
-      if (
-        (sub.status === 'active' || sub.status === 'trial') &&
-        renewsAt.getTime() <= now.getTime()
-      ) {
-        await prisma.subscription.update({
-          where: { id: sub.id },
-          data: {
-            status: 'past_due',
-            graceEndsAt: new Date(renewsAt.getTime() + cfg.gracePeriodDays * DAY_MS),
-          },
-        });
-        summary.newlyPastDue++;
+      // Still within the term: the "renews soon" reminder.
+      if (running && !termOver) {
         if (
-          await ensureOrgNotified(prisma, sub, 'subscription_past_due', 'Subscription past due', cfg)
+          !sub.cancelAtPeriodEnd &&
+          cfg.reminders.before_renewal &&
+          renewsAt.getTime() <= now.getTime() + cfg.notifyDays * DAY_MS &&
+          (await notifyOnce(
+            prisma,
+            sub,
+            'subscription_expiring',
+            `Your plan renews on ${dayLabel(renewsAt)}`,
+            cfg.message,
+          ))
         ) {
-          summary.pastDueNotified++;
+          summary.expiringNotified++;
         }
         continue;
       }
 
-      // Still within the active term but expiring soon -> notify admins.
-      if (
-        (sub.status === 'active' || sub.status === 'trial') &&
-        renewsAt.getTime() <= now.getTime() + cfg.notifyDays * DAY_MS
-      ) {
-        if (await ensureOrgNotified(prisma, sub, 'subscription_expiring', 'Subscription renewing soon', cfg)) {
-          summary.expiringNotified++;
+      // Term ended unpaid -> grace (past_due), and the payment-day reminder.
+      if (running) {
+        await prisma.subscription.update({
+          where: { id: sub.id },
+          data: { status: 'past_due', graceEndsAt: graceEnd },
+        });
+        sub = { ...sub, status: 'past_due', graceEndsAt: graceEnd };
+        summary.newlyPastDue++;
+        if (
+          cfg.reminders.payment_day &&
+          !graceOver &&
+          (await notifyOnce(
+            prisma,
+            sub,
+            'subscription_past_due',
+            `Your renewal was due on ${dayLabel(renewsAt)}`,
+            `Pay now to keep your plan. Everything keeps working until ${dayLabel(graceEnd)}; after that the organisation moves to the free plan.`,
+          ))
+        ) {
+          summary.pastDueNotified++;
+        }
+        // No `continue`: when the grace window is already over (a late sweep,
+        // an edited renewsAt, a short grace) it is applied in this same pass.
+      } else if (sub.graceEndsAt?.getTime() !== graceEnd.getTime()) {
+        // past_due: keep the stored grace end in step with the rule.
+        await prisma.subscription.update({
+          where: { id: sub.id },
+          data: { graceEndsAt: graceEnd },
+        });
+        sub = { ...sub, graceEndsAt: graceEnd };
+      }
+
+      if (!graceOver) {
+        // In grace: the mid-grace and last-day reminders (only one per pass).
+        const graceDays = Math.round(
+          (graceEnd.getTime() - renewsAt.getTime()) / DAY_MS,
+        );
+        const lastDay = graceEnd.getTime() - now.getTime() <= DAY_MS;
+        const midGrace =
+          graceDays >= 3 &&
+          now.getTime() >=
+            renewsAt.getTime() + Math.ceil(graceDays / 2) * DAY_MS;
+        if (lastDay && cfg.reminders.day_before_grace_ends) {
+          if (
+            await notifyOnce(
+              prisma,
+              sub,
+              'subscription_past_due',
+              `Grace ends on ${dayLabel(graceEnd)}`,
+              'This is the last day to pay before the organisation moves to the free plan. Anything over its limits will be paused, never deleted.',
+            )
+          ) {
+            summary.pastDueNotified++;
+          }
+        } else if (!lastDay && midGrace && cfg.reminders.mid_grace) {
+          if (
+            await notifyOnce(
+              prisma,
+              sub,
+              'subscription_past_due',
+              `Payment reminder: grace ends on ${dayLabel(graceEnd)}`,
+              `Your renewal was due on ${dayLabel(renewsAt)}. Pay now to keep your plan.`,
+            )
+          ) {
+            summary.pastDueNotified++;
+          }
         }
         continue;
       }
 
       // Grace window over -> apply the configured expiry behaviour.
       if (
-        sub.status === 'past_due' &&
-        sub.graceEndsAt &&
-        sub.graceEndsAt.getTime() <= now.getTime()
+        cfg.behavior === 'fall_back_to_basic' &&
+        (await moveToFreePlan(prisma, sub, 'grace_ended', now))
       ) {
-        if (
-          cfg.behavior === 'fall_back_to_basic' &&
-          (await moveToFreePlan(prisma, sub, 'grace_ended'))
-        ) {
-          summary.movedToFreePlan++;
-          continue;
-        }
-        if (cfg.behavior === 'cancel') {
-          await prisma.subscription.update({
-            where: { id: sub.id },
-            data: { status: 'cancelled', cancelledAt: now },
-          });
-          summary.newlyCancelled++;
-        } else {
-          await prisma.subscription.update({
-            where: { id: sub.id },
-            data: { status: 'expired' },
-          });
-          summary.newlyExpired++;
-        }
-        if (
-          await ensureOrgNotified(prisma, sub, 'subscription_expired', 'Subscription ended', cfg)
-        ) {
-          summary.expiredNotified++;
-        }
+        summary.movedToFreePlan++;
+        continue;
+      }
+      if (cfg.behavior === 'cancel') {
+        await prisma.subscription.update({
+          where: { id: sub.id },
+          data: { status: 'cancelled', cancelledAt: now },
+        });
+        summary.newlyCancelled++;
+      } else {
+        await prisma.subscription.update({
+          where: { id: sub.id },
+          data: { status: 'expired' },
+        });
+        summary.newlyExpired++;
+      }
+      if (
+        await ensureOrgNotified(
+          prisma,
+          sub,
+          'subscription_expired',
+          'Subscription ended',
+          cfg,
+        )
+      ) {
+        summary.expiredNotified++;
       }
     }
   } catch (err) {
@@ -260,6 +379,49 @@ export async function applyOrgSubscriptionLifecycle(
     return summary;
   }
   return summary;
+}
+
+const dayLabel = (d: Date) =>
+  d.toLocaleDateString('en-IN', {
+    day: 'numeric',
+    month: 'short',
+    year: 'numeric',
+    timeZone: 'UTC',
+  });
+
+/**
+ * A reminder to the org's admins, sent once: the title carries the date it is
+ * about (the due date or the grace end), so it goes out once per term even
+ * after it's been read, and again for the next term.
+ */
+async function notifyOnce(
+  prisma: PrismaLike,
+  sub: Subscription,
+  type: NotificationType,
+  title: string,
+  body: string,
+): Promise<boolean> {
+  const existing = await prisma.notification.count({
+    where: { orgId: sub.orgId, type, entityId: sub.id, title },
+  });
+  if (existing > 0) return false;
+  const recipients = await prisma.user.findMany({
+    where: orgBillingRecipientsWhere(sub.orgId),
+    select: { id: true },
+  });
+  if (recipients.length === 0) return false;
+  await prisma.notification.createMany({
+    data: recipients.map((u) => ({
+      orgId: sub.orgId,
+      recipientId: u.id,
+      type,
+      title,
+      body,
+      entity: 'Subscription',
+      entityId: sub.id,
+    })),
+  });
+  return true;
 }
 
 type ChangeDb = Pick<
@@ -319,6 +481,7 @@ export async function moveToFreePlan(
   prisma: ChangeDb,
   sub: Subscription,
   reason: 'cancelled' | 'grace_ended' = 'cancelled',
+  now: Date = billingNow(),
 ): Promise<boolean> {
   const free = await findFreePlan(prisma);
   if (!free) return false;
@@ -333,8 +496,9 @@ export async function moveToFreePlan(
       mrr: 0,
       renewsAt: null,
       graceEndsAt: null,
+      graceExtensionDays: 0,
       ...NO_SCHEDULED_CHANGE,
-      movedToBasicAt: new Date(),
+      movedToBasicAt: now,
       previousPlanId: sub.planId,
       previousInterval: sub.billingCycle,
     },
@@ -493,8 +657,9 @@ export async function renewOrgSubscription(
     data: {
       status: 'active',
       graceEndsAt: null,
+      graceExtensionDays: 0,
       cancelledAt: null,
-      renewsAt: new Date(Date.now() + periodMs),
+      renewsAt: new Date(billingNow().getTime() + periodMs),
     },
   });
   return renewed;

@@ -1,3 +1,4 @@
+import { billingNow } from '../../common/utils/billing-clock.util';
 import { Injectable, NotFoundException } from '@nestjs/common';
 import type { Plan } from '@prisma/client';
 import { PrismaService } from '../../database/prisma.service';
@@ -5,6 +6,7 @@ import { applyPlanChange } from '../../common/utils/plan-change.util';
 import {
   applyOrgSubscriptionLifecycle,
   getBillingExpiryConfig,
+  graceEndFor,
   moveToFreePlan,
 } from '../../common/utils/subscription-lifecycle.util';
 import { PaymentsService } from '../payments/payments.service';
@@ -29,7 +31,6 @@ import type {
   SubscriptionStatusV2,
 } from './billing.types';
 
-const DAY_MS = 86_400_000;
 const isoDate = (d: Date) => d.toISOString().slice(0, 10);
 const dateLabel = (d: Date) =>
   d.toLocaleDateString('en-IN', {
@@ -116,7 +117,7 @@ export class AdminSubscriptionsService {
     }
   > {
     await applyOrgSubscriptionLifecycle(this.prisma);
-    const now = new Date();
+    const now = billingNow();
     const [orgs, active, cfg, seats, coupons, profiles] = await Promise.all([
       this.prisma.organisation.findMany({
         where: { status: { in: ['active', 'pending'] } },
@@ -360,16 +361,23 @@ export class AdminSubscriptionsService {
     note?: string,
   ) {
     const sub = await this.sub(orgId);
-    if (sub.status !== 'past_due' || !sub.graceEndsAt) {
+    if (sub.status !== 'past_due' || !sub.renewsAt) {
       throw billingError(
         'not_in_grace',
         'Only an organisation in its grace period can get more time.',
       );
     }
-    const until = new Date(sub.graceEndsAt.getTime() + days * DAY_MS);
+    // Stored as extra days on top of the grace rule (renewsAt + grace days),
+    // so the sweep keeps honouring it when it re-derives the grace end.
+    const cfg = await getBillingExpiryConfig(this.prisma);
+    const extension = (sub.graceExtensionDays ?? 0) + days;
+    const until = graceEndFor(
+      { renewsAt: sub.renewsAt, graceExtensionDays: extension },
+      cfg.gracePeriodDays,
+    );
     await this.prisma.subscription.update({
       where: { id: sub.id },
-      data: { graceEndsAt: until },
+      data: { graceExtensionDays: extension, graceEndsAt: until },
     });
     await this.audit(orgId, actorId, 'grace_extended', {
       days,
@@ -481,7 +489,7 @@ export class AdminSubscriptionsService {
       distinct: ['organisationId'],
     });
     const check = checkCoupon(coupon, {
-      now: new Date(),
+      now: billingNow(),
       orgId,
       planId: nextPlanId,
       interval: sub.scheduledInterval ?? sub.billingCycle,

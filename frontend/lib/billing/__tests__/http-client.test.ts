@@ -80,7 +80,7 @@ describe("billing http client — step 2", () => {
     expect(lastCall().path).toBe("/admin/billing/coupons");
     await httpBilling.getCoupon!("LAUNCH20");
     expect(lastCall().path).toBe("/admin/billing/coupons/LAUNCH20");
-    const coupon = { code: "SUMMER15", description: "", kind: "percent" as const, value: 15, planIds: ["p1"], interval: "any" as const, duration: "first_payment" as const, durationCount: null, validFrom: "2026-10-01", validTo: null, totalUses: null, oncePerOrg: true, orgIds: null };
+    const coupon = { code: "SUMMER15", description: "", kind: "percent" as const, value: 15, planIds: ["p1"], interval: "any" as const, duration: "first_payment" as const, durationCount: null, validFrom: "2026-10-01", validTo: null, totalUses: null, oncePerOrg: true, orgIds: null, showToCustomers: false };
     await httpBilling.saveCoupon!({ coupon, isNew: true });
     expect(lastCall()).toEqual({ path: "/admin/billing/coupons", method: "POST", body: { coupon, isNew: true } });
     await httpBilling.saveCoupon!({ coupon, isNew: false });

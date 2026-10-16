@@ -92,6 +92,12 @@ export const httpBilling: Impl = {
   listAdminPayments: (req) =>
     call(`/admin/billing/payments${qs({ status: req.status, orgId: req.orgId, page: req.page, pageSize: req.pageSize })}`),
   refundPayment: ({ paymentId, ...body }) => call(`/admin/billing/payments/${encodeURIComponent(paymentId)}/refund`, post(body)),
+
+  // Fixes after testing: org coupons, company & tax details, run the lifecycle check now
+  listOrgCoupons: () => call("/org/billing/coupons"),
+  getCompanyDetails: () => call("/admin/billing/company"),
+  saveCompanyDetails: (details) => call("/admin/billing/company", put(details)),
+  runLifecycleCheck: () => call("/admin/billing/lifecycle/run", post({})),
 };
 
 export const HTTP_FUNCTIONS = Object.keys(httpBilling) as BillingFunction[];

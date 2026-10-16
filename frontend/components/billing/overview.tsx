@@ -9,7 +9,7 @@ export { RenewalReminderPopup };
 import { BillingDetailsSummary, PendingUpgradeBanner } from "./checkout";
 import { useOrgBilling } from "./context";
 import { InvoicesTable, PaymentHistoryTable } from "./invoices";
-import { BLink, countLabel, ErrorNote, Kv, Loading, SampleDataTag, Section, StatusBadge, UsageMeter } from "./ui";
+import { BLink, countLabel, ErrorNote, Kv, Loading, renewalBreakdownText, SampleDataTag, Section, StatusBadge, UsageMeter } from "./ui";
 
 function planLine(o: BillingOverview): string {
   if (o.plan.isFree) {
@@ -47,7 +47,7 @@ export function CurrentPlanCard({ overview: o }: { overview: BillingOverview }) 
             {o.plan.isFree ? "Free" : `${formatINR(planPrice(o.plan, o.interval))} + GST`}
             {!o.plan.isFree ? <span className="bl-muted" style={{ fontWeight: 500 }}> / {o.interval === "yearly" ? "year" : "month"}</span> : null}
           </Kv>
-          {!o.plan.isFree && o.renewalAmount != null ? <Kv label="Next charge">{formatINR(o.renewalAmount)}</Kv> : null}
+          {!o.plan.isFree && o.renewalAmount != null ? <Kv label="Next charge">{renewalBreakdownText(o)}</Kv> : null}
           {o.downgradeTo ? <Kv label="From">{`${o.downgradeTo.name} on ${formatDate(o.downgradeAt!)}`}</Kv> : null}
         </div>
       </div>
@@ -144,6 +144,9 @@ export function BillingOverviewPanel({ showInvoices = true }: { showInvoices?: b
         ) : null}
         <BLink to="chooseWhatStays" className="btn btn-ghost">
           Choose what stays
+        </BLink>
+        <BLink to="coupons" className="btn btn-ghost">
+          Coupons
         </BLink>
       </div>
       <UsageCard overview={o} />

@@ -1,88 +1,116 @@
 "use client";
 
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
+import Link from "next/link";
 import { formPageStyles } from "@/components/forms/form-page";
 import { Switch } from "@/components/superadmin/switch";
-import { checkGstin, INDIAN_STATES } from "@/lib/billing/pricing";
-import type { AfterGraceBehavior, LifecycleSettings, ReminderRule, SellerSettings } from "@/lib/billing/types";
+import { useAuth } from "@/lib/auth-context";
+import type { LifecycleRunResult, LifecycleSettings, ManualReason, ReminderRule } from "@/lib/billing/types";
 import { useBillingEnv, useBillingQuery } from "../context";
 import { ErrorNote, Loading, SampleDataTag } from "../ui";
+import { COMPANY_TAX_HREF } from "./company";
 
-const REMINDER_COPY: Record<ReminderRule["id"], { auto: string; manual: string }> = {
-  before_renewal: { auto: "Heads-up: “₹X will be charged on …”", manual: "Popup + email with a Pay now button" },
-  payment_day: { auto: "If the charge fails: “We couldn't charge your card”", manual: "“Your renewal is due today” with Pay now" },
-  mid_grace: { auto: "Retry result + Update payment method", manual: "Reminder with the days left and Pay now" },
-  day_before_grace_ends: { auto: "Final notice listing what will stay active", manual: "Same as automatic" },
+const RAZORPAY_HREF = "/admin-console/integrations/razorpay";
+const days = (n: number) => `${n} ${n === 1 ? "day" : "days"}`;
+
+/**
+ * The reminders we send, with timings worked out from the settings (one row
+ * each). The mid-grace one only exists with a grace period of 3+ days; the
+ * last-day one needs a grace period at all.
+ */
+export function reminderRows(s: Pick<LifecycleSettings, "notifyDaysBefore" | "graceDays" | "reminders">): { rule: ReminderRule; when: string; what: string }[] {
+  const out: { rule: ReminderRule; when: string; what: string }[] = [];
+  for (const rule of s.reminders) {
+    if (rule.id === "before_renewal") {
+      out.push({
+        rule,
+        when: s.notifyDaysBefore > 0 ? `${days(s.notifyDaysBefore)} before renewal` : "On the renewal date",
+        what: "“Your plan renews on …” — the amount is on the Billing page with Pay now.",
+      });
+    } else if (rule.id === "payment_day") {
+      out.push({ rule, when: "On the renewal date, if unpaid", what: "“Your renewal was due on …” — grace starts and everything keeps working." });
+    } else if (rule.id === "mid_grace") {
+      if (s.graceDays >= 3) out.push({ rule, when: `${days(Math.ceil(s.graceDays / 2))} into grace`, what: "A reminder with the date grace ends and Pay now." });
+    } else if (s.graceDays >= 1) {
+      out.push({ rule, when: "1 day before grace ends", what: "Final notice: unpaid, the organisation moves to Basic and anything over Basic's limits is paused." });
+    }
+  }
+  return out;
+}
+
+const MANUAL_WHY: Record<ManualReason, string> = {
+  switched_off: "the switch is off",
+  keys_missing: "no Razorpay keys are saved in Integrations → Razorpay (or the server's RAZORPAY_* settings)",
+  gateway_disabled: "Razorpay is turned off in Integrations → Razorpay",
 };
 
-function reminderWhen(id: ReminderRule["id"], s: LifecycleSettings): string {
-  if (id === "before_renewal") return `${s.notifyDaysBefore} days before renewal`;
-  if (id === "payment_day") return "On the payment day";
-  if (id === "mid_grace") return `Mid-grace (day ${Math.max(1, Math.ceil(s.graceDays / 2))})`;
-  return "Day before grace ends";
-}
-
-/** What the switch does right now — the effective mode needs usable Razorpay keys too. */
-function paymentModeNote(s: LifecycleSettings, saved: LifecycleSettings): string {
-  if (s.onlinePaymentsEnabled !== saved.onlinePaymentsEnabled) return "Save to apply.";
-  if (saved.paymentMode === "online") return "Now: customers pay online with Razorpay.";
-  if (saved.paymentModeReason === "keys_missing") return "Now: manual approval — add Razorpay keys in Integrations → Razorpay to take payments online.";
-  if (saved.paymentModeReason === "gateway_disabled") return "Now: manual approval — Razorpay is turned off in Integrations → Razorpay.";
-  return "Now: manual approval.";
-}
-
-/** The platform as GST seller: printed on invoices; its state decides CGST+SGST vs IGST. */
-function SellerFields({ value, onChange }: { value: SellerSettings; onChange: (patch: Partial<SellerSettings>) => void }) {
-  const text = (key: keyof SellerSettings, label: string, placeholder: string, hint?: string) => (
-    <div className="field">
-      <label>{label}</label>
-      <input
-        className="inp"
-        aria-label={label}
-        value={value[key] ?? ""}
-        placeholder={placeholder}
-        onChange={(e) => onChange({ [key]: key === "gstin" ? e.target.value.toUpperCase() : e.target.value })}
-      />
-      {hint ? <div className="hint">{hint}</div> : null}
+/** Switch on, but Razorpay can't be used: say why the platform is still in manual mode. */
+function PaymentModeWarning({ saved }: { saved: LifecycleSettings }) {
+  if (!saved.onlinePaymentsEnabled || saved.paymentMode === "online") return null;
+  return (
+    <div className="form-alert" role="status">
+      Online payments are switched on, but customers can&apos;t pay online yet: {MANUAL_WHY[saved.paymentModeReason ?? "keys_missing"]}. Until that&apos;s fixed the platform runs in manual
+      mode — upgrades are requests you approve in Package Requests. <Link href={RAZORPAY_HREF}>Open Razorpay settings</Link>
     </div>
   );
-  const gstinError = checkGstin(value.gstin, value.state);
+}
+
+/** Shown to the super_admin role only; the backend refuses other roles too. */
+function SuperAdminOnly({ children }: { children: ReactNode }) {
+  const { user } = useAuth();
+  return user?.roleKeys?.includes("super_admin") ? <>{children}</> : null;
+}
+
+/** "Run lifecycle check now" — a testing aid (walkthroughs show it on the mock). */
+function RunLifecycleNow() {
+  const { client } = useBillingEnv();
+  return client.isMock ? (
+    <RunLifecycleNowRow />
+  ) : (
+    <SuperAdminOnly>
+      <RunLifecycleNowRow />
+    </SuperAdminOnly>
+  );
+}
+
+function RunLifecycleNowRow() {
+  const { client } = useBillingEnv();
+  const [busy, setBusy] = useState(false);
+  const [result, setResult] = useState<{ tone: "ok" | "err"; text: string } | null>(null);
+
+  async function run() {
+    setBusy(true);
+    try {
+      const r: LifecycleRunResult = await client.runLifecycleCheck();
+      const parts = [
+        `${r.scanned} checked`,
+        r.newlyPastDue ? `${r.newlyPastDue} into grace` : null,
+        r.movedToFreePlan ? `${r.movedToFreePlan} moved to Basic` : null,
+        r.scheduledPlanApplied ? `${r.scheduledPlanApplied} scheduled changes applied` : null,
+        r.newlyExpired ? `${r.newlyExpired} expired` : null,
+        r.newlyCancelled ? `${r.newlyCancelled} cancelled` : null,
+        r.remindersSent ? `${r.remindersSent} reminders sent` : null,
+      ].filter(Boolean);
+      setResult({ tone: "ok", text: `Done: ${parts.join(", ")}.` });
+    } catch (e) {
+      setResult({ tone: "err", text: e instanceof Error ? e.message : "Couldn't run the check." });
+    } finally {
+      setBusy(false);
+    }
+  }
+
   return (
-    <div style={{ display: "grid", gap: 4 }}>
-      <b style={{ fontSize: 13.5 }}>Company tax details</b>
-      <div className="hint" style={{ marginTop: 0, marginBottom: 8 }}>
-        Our details as the seller on GST invoices. The state decides the tax split: same state as the buyer = CGST + SGST, otherwise IGST.
-      </div>
-      <div className="row2">
-        {text("legalName", "Legal name", "iPixxel Technologies Pvt. Ltd.")}
-        <div className="field">
-          <label>GSTIN</label>
-          <input className="inp" aria-label="GSTIN" maxLength={15} value={value.gstin ?? ""} placeholder="29ABCDE1234F1Z5" onChange={(e) => onChange({ gstin: e.target.value.toUpperCase() })} />
-          {gstinError ? <div className="hint" style={{ color: "var(--rose)" }}>{gstinError}</div> : null}
+    <div className="bl-between" style={{ padding: "12px 0 0", borderTop: "1px solid var(--line)" }}>
+      <div style={{ minWidth: 0, flex: 1 }}>
+        <b style={{ fontSize: 13.5 }}>Run lifecycle check now</b>
+        <div className="hint" style={{ marginTop: 2 }}>
+          Applies due renewals, grace, Basic fall-backs, scheduled changes and reminders straight away, instead of at the next hourly check. Recorded in the audit log.
         </div>
+        {result ? <div style={{ fontSize: 12.5, fontWeight: 600, marginTop: 4, color: result.tone === "ok" ? "var(--green)" : "var(--rose)" }}>{result.text}</div> : null}
       </div>
-      <div className="row2">
-        {text("addressLine1", "Address", "Building, street, area")}
-        {text("addressLine2", "Address line 2", "Optional")}
-      </div>
-      <div className="row2">
-        {text("city", "City", "Bengaluru")}
-        <div className="field">
-          <label>State</label>
-          <select aria-label="Company state" value={value.state ?? ""} onChange={(e) => onChange({ state: e.target.value || null })}>
-            <option value="">Not set — every checkout is charged IGST</option>
-            {INDIAN_STATES.map((st) => (
-              <option key={st.code} value={st.code}>
-                {st.name} ({st.code})
-              </option>
-            ))}
-          </select>
-        </div>
-      </div>
-      <div className="row2">
-        {text("pincode", "PIN code", "560001")}
-        <div />
-      </div>
+      <button type="button" className="btn btn-ghost btn-sm" disabled={busy} onClick={() => void run()}>
+        {busy ? "Running…" : "Run now"}
+      </button>
     </div>
   );
 }
@@ -97,27 +125,33 @@ function Editor({ initial }: { initial: LifecycleSettings }) {
     setS((p) => ({ ...p, ...patch }));
     setStatus(null);
   };
+  const rows = reminderRows(s);
 
   async function save() {
-    const gstinError = checkGstin(s.seller.gstin, s.seller.state);
-    if (gstinError) {
-      setStatus({ tone: "err", text: `Company GSTIN: ${gstinError}` });
-      return;
-    }
-    // Empty text = not set.
-    const seller = Object.fromEntries(Object.entries(s.seller).map(([k, v]) => [k, typeof v === "string" && v.trim() ? v.trim() : null])) as unknown as SellerSettings;
     setBusy(true);
     try {
-      const next = await client.saveLifecycleSettings({ ...s, seller });
+      // Billing v2 always falls back to Basic when grace ends.
+      const next = await client.saveLifecycleSettings({ ...s, afterGrace: "fall_back_to_basic" });
       setSaved(next);
       setS(next);
-      setStatus({ tone: "ok", text: "Lifecycle settings saved — they apply from the next daily check." });
+      setStatus({ tone: "ok", text: "Settings saved — they apply from the next check (hourly, and whenever an organisation opens Billing)." });
     } catch (e) {
       setStatus({ tone: "err", text: e instanceof Error ? e.message : "Save failed" });
     } finally {
       setBusy(false);
     }
   }
+
+  const actions = (
+    <div className={formPageStyles.actions}>
+      <button className={formPageStyles.btn} type="button" onClick={() => setS(saved)}>
+        Discard
+      </button>
+      <button className={formPageStyles.btnPrimary} type="button" onClick={() => void save()} disabled={busy || !canEdit}>
+        {busy ? "Saving…" : "Save expiry policy"}
+      </button>
+    </div>
+  );
 
   return (
     <div className="bl-stack">
@@ -130,69 +164,69 @@ function Editor({ initial }: { initial: LifecycleSettings }) {
           {saved.warnings.map((w) => (
             <div key={w.code} className="form-alert" role="status">
               {w.message}
+              {w.code === "seller_state_missing" ? (
+                <>
+                  {" "}
+                  <Link href={COMPANY_TAX_HREF}>Company &amp; tax details</Link>
+                </>
+              ) : null}
             </div>
           ))}
           <div style={{ fontSize: 12.5, color: "var(--muted)", lineHeight: 1.6 }}>
-            Controls what happens when an organisation&apos;s subscription term ends: when members are warned, how long the grace window lasts, and what happens once it
+            Controls what happens when an organisation&apos;s subscription term ends: when admins are reminded, how long the grace window lasts, and what happens once it
             closes.
           </div>
           <div className="row2">
             <div className="field">
               <label>Notify days before expiry</label>
               <input className="inp" type="number" min={0} value={s.notifyDaysBefore} onChange={(e) => set({ notifyDaysBefore: Math.max(0, Math.floor(Number(e.target.value) || 0)) })} />
-              <div className="hint">Days before renewal that the &apos;expiring soon&apos; popup fires for org members.</div>
+              <div className="hint">From this many days before renewal, admins see Pay now and the renewal reminder.</div>
             </div>
             <div className="field">
               <label>Grace period (days)</label>
               <input className="inp" type="number" min={0} value={s.graceDays} onChange={(e) => set({ graceDays: Math.max(0, Math.floor(Number(e.target.value) || 0)) })} />
-              <div className="hint">Days a past-due subscription stays fully usable before action is taken.</div>
+              <div className="hint">Counted from the renewal date. A past-due subscription keeps working until then.</div>
             </div>
           </div>
           <div className="field" style={{ marginBottom: 0 }}>
             <label>When grace period ends</label>
-            <select value={s.afterGrace} onChange={(e) => set({ afterGrace: e.target.value as AfterGraceBehavior })}>
-              <option value="fall_back_to_basic" disabled={!s.supports.fallBackToBasic}>
-                Fall back to Basic (recommended){s.supports.fallBackToBasic ? "" : " — coming soon"}
-              </option>
-              <option value="restrict">Restrict organisation (expired → publishing paused)</option>
-              <option value="cancel">Cancel subscription (blocked effectively)</option>
-            </select>
+            <div className="inp" aria-readonly="true" style={{ background: "var(--surface-2)" }}>
+              Fall back to Basic
+            </div>
             <div className="hint">
-              {s.afterGrace === "fall_back_to_basic"
-                ? "The org moves to the free plan: what fits Basic stays active (their “Choose what stays” picks, or ours), everything else is paused — never deleted — and leads keep coming in. Buying again restores everything."
-                : "Restrict keeps the org open with publishing paused; Cancel soft-cancels the subscription (an admin can renew it in place)."}
+              The organisation moves to the free plan: what fits Basic stays active (their “Choose what stays” picks, or ours), everything else is paused — never deleted —
+              and leads keep coming in. Buying again restores everything.
             </div>
           </div>
           <div className="bl-between" style={{ padding: "12px 0", borderTop: "1px solid var(--line)", borderBottom: "1px solid var(--line)" }}>
             <div style={{ minWidth: 0, flex: 1 }}>
               <b style={{ fontSize: 13.5 }}>Online payments (Razorpay)</b>
-              <div className="hint" style={{ marginTop: 2 }}>When off, upgrades are sent to Super Admin for manual approval.</div>
-              <div className="hint" style={{ marginTop: 4 }}>{paymentModeNote(s, saved)}</div>
+              <div className="hint" style={{ marginTop: 2 }}>
+                Customers pay online only when this is on <i>and</i> Razorpay keys are working. Otherwise upgrades are sent to Super Admin for manual approval.
+              </div>
+              {s.onlinePaymentsEnabled !== saved.onlinePaymentsEnabled ? <div className="hint" style={{ marginTop: 4 }}>Save to apply.</div> : null}
             </div>
             <Switch checked={s.onlinePaymentsEnabled} onChange={(on) => set({ onlinePaymentsEnabled: on })} />
           </div>
-          <SellerFields value={s.seller} onChange={(patch) => set({ seller: { ...s.seller, ...patch } })} />
+          <PaymentModeWarning saved={saved} />
+          <div className="hint" style={{ marginTop: 0 }}>
+            Company name, GSTIN, state and address for invoices: <Link href={COMPANY_TAX_HREF}>Company &amp; tax details</Link>.
+          </div>
           <div className="field" style={{ marginBottom: 0 }}>
             <label>Expiry notification message</label>
             <textarea value={s.expiryMessage} onChange={(e) => set({ expiryMessage: e.target.value })} placeholder="Your plan has expired — renew to keep publishing…" style={{ minHeight: 84 }} />
-            <div className="hint">Shown in the in-app expiry popup. Leave blank to use the platform default message.</div>
+            <div className="hint">Used in the “renews soon” notification. Leave blank to use the platform default message.</div>
           </div>
           {status ? <div style={{ fontSize: 12.5, fontWeight: 600, color: status.tone === "ok" ? "var(--green)" : "var(--rose)" }}>{status.text}</div> : null}
-          <div className={formPageStyles.actions}>
-            <button className={formPageStyles.btn} type="button" onClick={() => setS(saved)}>
-              Discard
-            </button>
-            <button className={formPageStyles.btnPrimary} type="button" onClick={() => void save()} disabled={busy || !canEdit}>
-              {busy ? "Saving…" : "Save expiry policy"}
-            </button>
-          </div>
+          {actions}
+          <RunLifecycleNow />
         </div>
       </div>
 
       <div className="card">
         <div className="card-h">
           <span className="t">Reminder schedule</span>
-          <span className="x">{s.supports.reminderSchedule ? "Email + in-app · to the owner and admins" : "Fixed schedule for now · email + in-app to the owner and admins"}</span>
+          <span className="x">In-app notifications to the organisation&apos;s admins</span>
         </div>
         <div className="card-b" style={{ padding: 0 }}>
           <div className="tbl-wrap">
@@ -200,30 +234,30 @@ function Editor({ initial }: { initial: LifecycleSettings }) {
               <thead>
                 <tr>
                   <th>When</th>
-                  <th>Automatic renewal</th>
-                  <th>Pay each time</th>
+                  <th>What they get</th>
                   <th>On</th>
                 </tr>
               </thead>
               <tbody>
-                {s.reminders.map((r) => (
-                  <tr key={r.id}>
+                {rows.map(({ rule, when, what }) => (
+                  <tr key={rule.id}>
                     <td className="bl-strong" style={{ whiteSpace: "nowrap" }}>
-                      {reminderWhen(r.id, s)}
+                      {when}
                     </td>
-                    <td>{REMINDER_COPY[r.id].auto}</td>
-                    <td>{REMINDER_COPY[r.id].manual}</td>
+                    <td>{what}</td>
                     <td>
-                      {s.supports.reminderSchedule ? (
-                        <Switch checked={r.enabled} onChange={(on) => set({ reminders: s.reminders.map((x) => (x.id === r.id ? { ...x, enabled: on } : x)) })} />
-                      ) : (
-                        <div className={`switch${r.enabled ? " on" : ""}`} aria-disabled="true" title="This schedule is fixed for now" style={{ opacity: 0.5, cursor: "not-allowed" }} />
-                      )}
+                      <Switch
+                        checked={rule.enabled}
+                        onChange={(on) => set({ reminders: s.reminders.map((x) => (x.id === rule.id ? { ...x, enabled: on } : x)) })}
+                      />
                     </td>
                   </tr>
                 ))}
               </tbody>
             </table>
+          </div>
+          <div className="hint" style={{ padding: "10px 16px" }}>
+            Switches are saved with “Save expiry policy”. Each reminder goes out once per renewal date.
           </div>
         </div>
       </div>

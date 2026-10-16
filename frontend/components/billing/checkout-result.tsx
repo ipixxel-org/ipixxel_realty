@@ -4,7 +4,37 @@ import { Icon } from "@/components/icons";
 import { useToast } from "@/components/ui/toast";
 import { formatDate, formatINR } from "@/lib/billing/pricing";
 import type { BillingInterval, RenewalMode } from "@/lib/billing/types";
+import { useBillingQuery } from "./context";
+import { useInvoiceDownload } from "./invoices";
 import { BLink, Kv, Section } from "./ui";
+
+/**
+ * "Download invoice" on the success page: finds this payment's invoice (by
+ * its checkout) and opens the same document as Settings → Billing → Invoices.
+ */
+function DownloadInvoiceButton({ checkoutId }: { checkoutId: string }) {
+  const { toast } = useToast();
+  const download = useInvoiceDownload();
+  // Looked up on arrival so the click opens it straight away (no popup blocker).
+  // The invoice is issued with the payment, so it's on the first page.
+  const { data, reload } = useBillingQuery((c) => c.listInvoices({ page: 1, pageSize: 20 }), [checkoutId]);
+  const invoice = data?.data.find((i) => i.checkoutId === checkoutId) ?? null;
+
+  function open() {
+    if (invoice) {
+      download(invoice.pdfUrl, `Invoice ${invoice.number}`);
+      return;
+    }
+    reload();
+    toast({ variant: "info", title: "Your invoice is on its way", description: "It's being prepared and will be listed under Billing → Invoices in a minute." });
+  }
+
+  return (
+    <button type="button" className="btn btn-ghost" disabled={!data} onClick={open}>
+      <Icon name="download" size={15} /> Download invoice
+    </button>
+  );
+}
 
 export interface ReceiptView {
   planId: string;
@@ -17,7 +47,7 @@ export interface ReceiptView {
 }
 
 export function CheckoutSuccess({ receipt: r, orgName, renewalMode, finishing = false }: { receipt: ReceiptView; orgName: string; renewalMode: RenewalMode; finishing?: boolean }) {
-  const { toast } = useToast();
+  const paid = r.amount > 0 && r.reference !== "free_coupon";
   return (
     <Section
       title={
@@ -50,14 +80,13 @@ export function CheckoutSuccess({ receipt: r, orgName, renewalMode, finishing = 
           <BLink to="overview" className="btn btn-primary">
             Go to billing
           </BLink>
-          <button
-            type="button"
-            className="btn btn-ghost"
-            onClick={() => toast({ variant: "info", title: "Invoice on its way", description: "Your GST invoice is emailed to the owner and listed under Invoices." })}
-          >
-            <Icon name="download" size={15} /> Download invoice
-          </button>
+          {paid ? <DownloadInvoiceButton checkoutId={r.reference} /> : null}
         </div>
+        {paid ? (
+          <div className="bl-muted bl-small">
+            Your GST invoice is also listed under <BLink to="invoices">Billing → Invoices</BLink>.
+          </div>
+        ) : null}
       </div>
     </Section>
   );

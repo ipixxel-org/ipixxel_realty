@@ -1,3 +1,4 @@
+import { billingNow } from '../../common/utils/billing-clock.util';
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../../database/prisma.service';
 import {
@@ -15,8 +16,8 @@ import { BillingRetentionService } from './billing-retention.service';
 import { buildOverview } from './billing-overview';
 import { toProfileV2 } from './billing-profile.service';
 import { expireStaleCheckouts, findPendingUpgrade } from './checkout-state';
-import { taxOn } from './checkout-quote';
-import { couponDiscountPaise } from './coupon-rules';
+import { toRupees } from './checkout-quote';
+import { renewalCharge } from './coupon-rules';
 import {
   isFreePlan,
   sortPlans,
@@ -54,10 +55,10 @@ export class OrgBillingV2Service {
 
   async getOverview(
     orgId: string,
-    now = new Date(),
+    now = billingNow(),
   ): Promise<BillingOverviewV2> {
     // Same lazy lifecycle pass as GET /org/billing, so a lapsed term shows up.
-    await applyOrgSubscriptionLifecycle(this.prisma, orgId);
+    await applyOrgSubscriptionLifecycle(this.prisma, orgId, now);
     await expireStaleCheckouts(this.prisma, orgId, now);
 
     const [
@@ -157,19 +158,29 @@ export class OrgBillingV2Service {
       !!coupon &&
       coupon.planIds.includes(nextPlan.id) &&
       (coupon.interval === 'any' || coupon.interval === nextInterval);
-    const taxablePaise =
-      price * 100 -
-      (couponApplies ? couponDiscountPaise(coupon, price * 100) : 0);
-    const renewalTotalPaise =
+    const charge =
       seller && price > 0
-        ? taxOn(taxablePaise, {
+        ? renewalCharge(price * 100, couponApplies ? coupon : null, {
             buyer: {
               state: profile?.state ?? null,
               country: profile?.country ?? 'IN',
             },
             seller: { state: seller.state },
-          }).totalPaise
+          })
         : null;
+    const renewalTotalPaise = charge?.totalPaise ?? null;
+    const renewalBreakdown = charge
+      ? {
+          planName: nextPlan.name,
+          interval: nextInterval ?? 'monthly',
+          price: toRupees(charge.subtotalPaise),
+          couponCode: couponApplies ? coupon.code : null,
+          couponDiscount: toRupees(charge.couponDiscountPaise),
+          taxable: toRupees(charge.taxablePaise),
+          gst: toRupees(charge.gstPaise),
+          total: toRupees(charge.totalPaise),
+        }
+      : null;
 
     const ownerName = owner
       ? [owner.firstName, owner.lastName].filter(Boolean).join(' ') ||
@@ -202,6 +213,7 @@ export class OrgBillingV2Service {
       graceDays: cfg.gracePeriodDays,
       mode,
       renewalTotalPaise,
+      renewalBreakdown,
       movedToBasic:
         subscription?.movedToBasicAt && previousRow
           ? {

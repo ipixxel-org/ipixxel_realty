@@ -1,3 +1,4 @@
+import { billingNow } from '../../common/utils/billing-clock.util';
 import {
   BadRequestException,
   Injectable,
@@ -150,7 +151,7 @@ export class BillingCheckoutService implements OnModuleInit {
       dto.planId,
       dto.interval,
       null,
-      new Date(),
+      billingNow(),
       renewal ? 'renewal' : 'purchase',
       renewal ? null : dto.couponCode,
     );
@@ -607,7 +608,7 @@ export class BillingCheckoutService implements OnModuleInit {
     planId: string,
     interval: Interval,
     billingState?: string | null,
-    now = new Date(),
+    now = billingNow(),
     purpose: 'purchase' | 'renewal' = 'purchase',
     couponCode?: string | null,
   ): Promise<QuoteContext> {
@@ -776,7 +777,7 @@ export class BillingCheckoutService implements OnModuleInit {
       dto.planId,
       dto.interval,
       dto.billingState,
-      new Date(),
+      billingNow(),
       renewal ? 'renewal' : 'purchase',
       renewal ? null : dto.couponCode,
     );

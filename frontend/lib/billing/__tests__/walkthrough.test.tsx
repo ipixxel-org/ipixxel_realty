@@ -155,7 +155,7 @@ const ADMIN_EXPECT: (RegExp | string)[] = [
   /Upgraded to Pro mid-cycle/,
   "Give more time to pay",
   /credit note/,
-  "Fall back to Basic (recommended)",
+  "Fall back to Basic",
 ];
 
 describe("admin walkthrough", () => {

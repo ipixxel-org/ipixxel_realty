@@ -231,15 +231,16 @@ describe('the lifecycle sweep applies scheduled changes when the term ends', () 
   });
 
   it('a cancellation made during grace applies when grace ends', async () => {
+    // Grace (7 days by default) is measured from the due date.
     const { db, row } = setup({
       status: 'past_due',
-      renewsAt: new Date(Date.now() - 8 * DAY),
+      renewsAt: new Date(Date.now() - 6 * DAY),
       graceEndsAt: new Date(Date.now() + DAY),
       cancelAtPeriodEnd: true,
     });
     await applyOrgSubscriptionLifecycle(db as never, 'org-1');
     expect(row().planId).toBe('pro'); // grace still running
-    row().graceEndsAt = new Date(Date.now() - 60_000);
+    row().renewsAt = new Date(Date.now() - 8 * DAY);
     await applyOrgSubscriptionLifecycle(db as never, 'org-1');
     expect(row()).toMatchObject({ planId: 'basic', status: 'active' });
   });

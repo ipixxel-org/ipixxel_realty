@@ -85,7 +85,7 @@ describe("mock billing client", () => {
       isNew: true,
       coupon: {
         code: "SKYLINE15", description: "", kind: "percent", value: 15, planIds: ["growth", "pro"], interval: "any", duration: "first_payment",
-        durationCount: null, validFrom: "2026-10-01", validTo: null, totalUses: null, oncePerOrg: true, orgIds: ["org-skyline"],
+        durationCount: null, validFrom: "2026-10-01", validTo: null, totalUses: null, oncePerOrg: true, orgIds: ["org-skyline"], showToCustomers: false,
       },
     });
     expect((await c.listCoupons()).map((r) => r.coupon.code)).toContain("SKYLINE15");

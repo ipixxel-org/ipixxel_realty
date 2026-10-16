@@ -231,7 +231,10 @@ export class SubscriptionsService {
       // Manual status moves (active/trial/expired/…) end any grace window
       // opened by the lifecycle sweep — grace is only ever re-set by the
       // active/trial -> past_due transition.
-      if (dto.status !== 'past_due') data.graceEndsAt = null;
+      if (dto.status !== 'past_due') {
+        data.graceEndsAt = null;
+        data.graceExtensionDays = 0;
+      }
     }
     if (dto.currency) data.currency = dto.currency;
     if (dto.renewsAt) data.renewsAt = new Date(dto.renewsAt);
@@ -288,6 +291,7 @@ export class SubscriptionsService {
               status: 'active',
               cancelledAt: null,
               graceEndsAt: null,
+              graceExtensionDays: 0,
               renewsAt: new Date(Date.now() + periodMs),
             },
           })

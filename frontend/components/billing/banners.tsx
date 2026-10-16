@@ -8,7 +8,7 @@ import type { BillingOverview, RetentionSummary } from "@/lib/billing/types";
 import { useBillingEnv, useOptionalOrgBilling } from "./context";
 import { BillingDialog, DialogActions } from "./dialog";
 import { usePayment } from "./payment";
-import { Banner, BLink, useRenewalLive } from "./ui";
+import { Banner, BLink, renewalBreakdownText, useRenewalLive } from "./ui";
 
 /** Re-fetch the shared overview after an action (no-op outside OrgBillingProvider). */
 function useRefresh() {
@@ -58,7 +58,7 @@ export function PayNowButton({ overview, className = "btn btn-primary btn-sm" }:
         type="button"
         className={className}
         disabled={!canEdit || pay.busy || !live}
-        title={!live ? "Online payment isn't available for your account — our team will contact you to renew." : canEdit ? undefined : "Ask an admin with billing access to pay"}
+        title={!live ? "Online payment isn't available for your account — our team will contact you to renew." : canEdit ? renewalBreakdownText(overview) : "Ask an admin with billing access to pay"}
         onClick={() => void pay.renew()}
       >
         Pay now · {formatINR(overview.renewalAmount ?? 0)}
@@ -212,7 +212,7 @@ export function BillingBanner({ overview }: { overview: BillingOverview }) {
           title={o.downgradeTo ? `Your plan changes to ${o.downgradeTo.name} on ${formatDate(o.periodEnd!)}` : `Your ${plan.name} plan renews on ${formatDate(o.periodEnd!)}`}
           actions={<PayNowButton overview={o} />}
         >
-          Pay {formatINR(o.renewalAmount ?? 0)} (incl. GST) before then to keep everything running
+          Pay {renewalBreakdownText(o)} before then to keep everything running
           {o.downgradeTo ? ` — that's ${o.downgradeTo.name} (${o.downgradeInterval ?? o.interval}) from then on` : ""}.
         </Banner>
       );
@@ -235,7 +235,7 @@ export function BillingBanner({ overview }: { overview: BillingOverview }) {
               ? `Grace ends tomorrow — on ${formatDate(o.graceEndsAt!)} ${o.orgName} moves to Basic`
               : auto
                 ? `We couldn't charge ${o.paymentMethod?.label ?? "your saved payment method"} on ${formatDate(o.dueDate!)}`
-                : `Your ${plan.name} renewal of ${formatINR(o.renewalAmount ?? 0)} was due on ${formatDate(o.dueDate!)}`
+                : `Your ${plan.name} renewal (${renewalBreakdownText(o)}) was due on ${formatDate(o.dueDate!)}`
           }
           actions={
             <>
@@ -342,7 +342,7 @@ export function BillingBanner({ overview }: { overview: BillingOverview }) {
   }
 }
 
-/** Option B: the "renews in 3 days" popup. Opens on its own once per renewal date. */
+/** Option B: the "renews in N days" popup (from the reminder setting). Opens on its own once per renewal date. */
 export function RenewalReminderPopup({ overview, alwaysOpen = false }: { overview: BillingOverview; alwaysOpen?: boolean }) {
   const pay = usePayNow(overview);
   const key = `billing-v2:reminder-dismissed:${overview.periodEnd}`;
@@ -363,7 +363,9 @@ export function RenewalReminderPopup({ overview, alwaysOpen = false }: { overvie
     }
   };
   const plan = overview.paidPlan ?? overview.plan;
-  const price = overview.interval === "yearly" ? plan.priceYearly : plan.priceMonthly;
+  const b = overview.renewalBreakdown;
+  const price = b?.price ?? (overview.interval === "yearly" ? plan.priceYearly : plan.priceMonthly);
+  const left = overview.daysLeftInPeriod;
   const live = useRenewalLive(overview);
   // Only when the customer can actually pay online.
   const show = live && overview.renewalMode === "manual" && overview.status === "renewal_due" && (!dismissed || alwaysOpen);
@@ -373,7 +375,7 @@ export function RenewalReminderPopup({ overview, alwaysOpen = false }: { overvie
       <BillingDialog
         open={show && !pay.busy}
         onClose={dismiss}
-        title={`Your ${plan.name} plan renews in 3 days`}
+        title={left > 0 ? `Your ${plan.name} plan renews in ${left} ${left === 1 ? "day" : "days"}` : `Your ${plan.name} plan renews today`}
         description={`Renewal date: ${overview.periodEnd ? formatDate(overview.periodEnd) : ""}. Pay now so nothing is interrupted.`}
         footer={
           <DialogActions>
@@ -396,13 +398,19 @@ export function RenewalReminderPopup({ overview, alwaysOpen = false }: { overvie
         <div className="bl-breakdown">
           <div className="bl-line">
             <span>
-              {plan.name} · {overview.interval}
+              {b?.planName ?? plan.name} · {b?.interval ?? overview.interval}
             </span>
             <span>{formatINR(price)}</span>
           </div>
+          {b && b.couponDiscount > 0 ? (
+            <div className="bl-line">
+              <span>Coupon{b.couponCode ? ` ${b.couponCode}` : ""}</span>
+              <span>−{formatINR(b.couponDiscount)}</span>
+            </div>
+          ) : null}
           <div className="bl-line">
             <span>GST 18%</span>
-            <span>{formatINR(round2((overview.renewalAmount ?? 0) - price))}</span>
+            <span>{formatINR(b?.gst ?? round2((overview.renewalAmount ?? 0) - price))}</span>
           </div>
           <div className="bl-line total">
             <span>Total</span>

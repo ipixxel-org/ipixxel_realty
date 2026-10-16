@@ -23,7 +23,9 @@ export type BillingRoute =
   | "adminCoupon"
   | "adminCouponEdit"
   | "adminSubscriptions"
-  | "adminSubscription";
+  | "adminSubscription"
+  | "adminPlanEdit"
+  | "coupons";
 
 export type RouteParams = Record<string, string | number | null | undefined>;
 
@@ -71,6 +73,10 @@ export function billingHref(to: BillingRoute, params: RouteParams = {}): string 
       return "/admin-console/subscriptions";
     case "adminSubscription":
       return `/admin-console/subscriptions/org/${encodeURIComponent(String(params.orgId))}`;
+    case "adminPlanEdit":
+      return `/admin-console/subscriptions/plans/${encodeURIComponent(String(params.id))}/edit`;
+    case "coupons":
+      return `${ORG}/coupons`;
   }
 }
 

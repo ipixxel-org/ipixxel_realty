@@ -6,9 +6,10 @@ import { TODAY } from "@/lib/billing/mock/data";
 import { LifecycleSettingsCard } from "../admin/lifecycle";
 import { BLANK_COUPON, CouponForm, CouponsList, CouponUsage } from "../admin/coupons";
 import { AdminPaymentsView } from "../admin/payments";
-import { AdminPlansEditor } from "../admin/plans-editor";
+import { AdminPlansEditor, PlanEditForm } from "../admin/plans-editor";
 import { SubscriptionDetailView, SubscriptionsList } from "../admin/subscriptions";
-import { BillingEnvProvider, type BillingRoute } from "../context";
+import { BillingEnvProvider, useBillingQuery, type BillingRoute } from "../context";
+import { Section } from "../ui";
 import { AppFrame, type WalkStep } from "./stepper";
 
 /**
@@ -33,6 +34,22 @@ function AdminSandbox({ children }: { children: ReactNode }) {
   );
 }
 
+/** The plan cards, and what "Edit Plan" opens (shown for the first paid plan). */
+function PlansWithEditForm() {
+  const { data } = useBillingQuery((c) => c.listAdminPlans(), []);
+  const paid = data?.find((p) => !p.isFree) ?? null;
+  return (
+    <div className="bl-stack">
+      <AdminPlansEditor />
+      {paid ? (
+        <Section title={`Edit Plan → ${paid.name}`} sub="The full form opens on its own page">
+          <PlanEditForm initial={paid} />
+        </Section>
+      ) : null}
+    </div>
+  );
+}
+
 export const ADMIN_STEP_ROUTES: Partial<Record<BillingRoute, number>> = {};
 
 const SKYLINE_OFFER = {
@@ -50,12 +67,12 @@ const SKYLINE_OFFER = {
 export const ADMIN_STEPS: WalkStep[] = [
   {
     title: "Setting plan prices and limits",
-    caption: "Each plan has a monthly and a yearly price, limits on users, projects, landing pages and templates, and the features it includes. Basic is the free plan everyone can fall back to.",
+    caption: "Each plan is a card with its price and limits. Edit Plan opens the full form: monthly and yearly price, limits on users, projects, landing pages and templates, and the features it includes. Basic is the free plan everyone can fall back to.",
     behind: "New prices apply to new purchases at once, and to existing customers from their next renewal.",
     render: () => (
       <AppFrame url="/admin-console/subscriptions">
         <AdminSandbox>
-          <AdminPlansEditor />
+          <PlansWithEditForm />
         </AdminSandbox>
       </AppFrame>
     ),

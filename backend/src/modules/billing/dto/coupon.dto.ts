@@ -29,6 +29,8 @@ export class CouponDto {
   @IsOptional() @Matches(/^\d{4}-\d{2}-\d{2}$/) validTo?: string | null;
   @IsOptional() @IsInt() @Min(0) totalUses?: number | null;
   @IsBoolean() oncePerOrg!: boolean;
+  /** Open coupons only: list it on the org Billing → Coupons page. Omitted = off. */
+  @IsOptional() @IsBoolean() showToCustomers?: boolean;
   @IsOptional()
   @IsArray()
   @ArrayMaxSize(500)

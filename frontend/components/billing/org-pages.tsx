@@ -5,6 +5,7 @@ import { useAuth } from "@/lib/auth-context";
 import type { BillingInterval } from "@/lib/billing/types";
 import { CheckoutScreen } from "./checkout";
 import { CheckoutFailure, CheckoutSuccess } from "./checkout-result";
+import { OrgCouponsScreen } from "./coupons-org";
 import { ChooseWhatStaysScreen } from "./choose-what-stays";
 import { useBillingQuery, useOrgBilling } from "./context";
 import { InvoicesTable, PaymentHistoryTable } from "./invoices";
@@ -31,7 +32,7 @@ function Guard({ children }: { children: ReactNode }) {
 const EYEBROW = "Settings · Billing & Subscription";
 const toInterval = (v?: string): BillingInterval => (v === "yearly" ? "yearly" : "monthly");
 
-export function PlansPage() {
+export function PlansPage({ coupon, interval }: { coupon?: string; interval?: string } = {}) {
   return (
     <Guard>
       <PageHead
@@ -42,12 +43,12 @@ export function PlansPage() {
         back={{ to: "overview", label: "Billing" }}
         sampleFns={["listPlans", "getBillingOverview"]}
       />
-      <PlansScreen />
+      <PlansScreen coupon={coupon || undefined} initialInterval={interval === "monthly" || interval === "yearly" ? interval : undefined} />
     </Guard>
   );
 }
 
-export function CheckoutPage({ plan, interval, renew }: { plan?: string; interval?: string; renew?: string }) {
+export function CheckoutPage({ plan, interval, renew, coupon }: { plan?: string; interval?: string; renew?: string; coupon?: string }) {
   const renewal = renew === "1";
   return (
     <Guard>
@@ -59,7 +60,7 @@ export function CheckoutPage({ plan, interval, renew }: { plan?: string; interva
         back={renewal ? { to: "overview", label: "Billing" } : { to: "plans", label: "Plans" }}
         sampleFns={["listPlans", "getBillingOverview"]}
       />
-      <CheckoutScreen planId={plan ?? "growth"} interval={toInterval(interval)} renewal={renewal} />
+      <CheckoutScreen planId={plan ?? "growth"} interval={toInterval(interval)} renewal={renewal} initialCoupon={renewal ? undefined : coupon || undefined} />
     </Guard>
   );
 }
@@ -137,6 +138,22 @@ export function InvoicesPage() {
         <InvoicesTable />
         <PaymentHistoryTable />
       </div>
+    </Guard>
+  );
+}
+
+export function CouponsPage() {
+  return (
+    <Guard>
+      <PageHead
+        eyebrow={EYEBROW}
+        icon="tag"
+        title="Coupons"
+        sub="Coupons reserved for your organisation and offers open to everyone. Use one at checkout."
+        back={{ to: "overview", label: "Billing" }}
+        sampleFns={["listOrgCoupons"]}
+      />
+      <OrgCouponsScreen />
     </Guard>
   );
 }

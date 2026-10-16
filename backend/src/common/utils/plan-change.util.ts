@@ -2,6 +2,7 @@ import { ConflictException } from '@nestjs/common';
 import type { Prisma } from '@prisma/client';
 import { orgBillingRecipientsWhere } from './notification-recipients.util';
 import { applyRetention } from './retention.util';
+import { billingNow } from './billing-clock.util';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 const CYCLE_DAYS = { monthly: 30, yearly: 365 } as const;
@@ -81,7 +82,7 @@ export async function applyPlanChange(
   tx: Prisma.TransactionClient,
   input: ApplyPlanChangeInput,
 ) {
-  const now = input.now ?? new Date();
+  const now = input.now ?? billingNow();
   const plan = await tx.plan.findUniqueOrThrow({
     where: { id: input.toPlanId },
   });
@@ -129,6 +130,7 @@ export async function applyPlanChange(
           mrr,
           renewsAt,
           graceEndsAt: null,
+          graceExtensionDays: 0,
           cancelledAt: null,
           // Any plan change (upgrade, renewal, approval) replaces a scheduled
           // cancellation or downgrade; a renewal has just applied it.

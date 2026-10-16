@@ -102,7 +102,8 @@ export interface SellerSettings {
 }
 
 export interface BillingWarning {
-  code: "seller_state_missing" | "buyer_outside_india";
+  /** billing_v2_server_off: BILLING_V2=true isn't set on the backend, so grace still ends with the old setting. */
+  code: "seller_state_missing" | "buyer_outside_india" | "billing_v2_server_off";
   message: string;
 }
 
@@ -132,6 +133,18 @@ export interface RetentionSummary {
   users: string[];
   projects: string[];
   landingPages: string[];
+}
+
+export interface RenewalBreakdown {
+  planName: string;
+  interval: BillingInterval;
+  /** Plan price before GST. */
+  price: number;
+  couponCode: string | null;
+  couponDiscount: number;
+  taxable: number;
+  gst: number;
+  total: number;
 }
 
 export interface BillingOverview {
@@ -173,6 +186,8 @@ export interface BillingOverview {
   downgradeAt: string | null;
   /** Next renewal charge incl. GST. null on the free plan with nothing to renew. */
   renewalAmount: number | null;
+  /** How renewalAmount is made up ("₹1,499 + GST = ₹1,768.82") — the renewal checkout's calculation. */
+  renewalBreakdown: RenewalBreakdown | null;
   usage: UsageItem[];
   /** How many items are paused / view-only / offline right now. */
   locked: { users: number; projects: number; landingPages: number };
@@ -410,8 +425,10 @@ export interface Invoice {
   gst: number;
   total: number;
   status: "paid" | "refunded" | "void";
-  /** Signed URL to the PDF; null until the backend generates them. */
+  /** Signed link to the printable invoice (valid for an hour). */
   pdfUrl: string | null;
+  /** The checkout it was issued for — the success page finds "its" invoice by it. null: offline payment / credit note. */
+  checkoutId: string | null;
 }
 
 export type PaymentStatus = "captured" | "failed" | "refunded" | "offline";
@@ -456,6 +473,8 @@ export interface Coupon {
   oncePerOrg: boolean;
   /** null = open to every organisation. */
   orgIds: string[] | null;
+  /** Open coupons only: list it on customers' Billing → Coupons page. Off by default. */
+  showToCustomers: boolean;
 }
 
 export type CouponStatus = "active" | "scheduled" | "expired" | "used_up";
@@ -599,8 +618,48 @@ export interface LifecycleSettings {
   paymentModeReason: ManualReason | null;
   /** Read-only: what the backend can store yet; the UI disables the rest. */
   supports: { fallBackToBasic: boolean; reminderSchedule: boolean };
-  /** Company tax settings (the platform as GST seller). */
-  seller: SellerSettings;
-  /** E.g. the seller state isn't set, so every checkout is IGST. */
+  /** E.g. the seller state isn't set (every checkout is IGST), or BILLING_V2 isn't set on the server. */
   warnings: BillingWarning[];
+}
+
+/** Super Admin → Settings → Company & tax details (the platform as GST seller). */
+export interface CompanyDetails {
+  seller: SellerSettings;
+  /** Read-only, e.g. the state isn't set so every checkout is IGST. */
+  warnings: BillingWarning[];
+}
+
+/** "Run lifecycle check now" — what one sweep did. */
+export interface LifecycleRunResult {
+  ranAt: string;
+  scanned: number;
+  movedToFreePlan: number;
+  scheduledPlanApplied: number;
+  newlyPastDue: number;
+  newlyExpired: number;
+  newlyCancelled: number;
+  remindersSent: number;
+}
+
+/** available · redeemed (used a once-per-org coupon) · expired · used_up (the limit was reached). */
+export type OrgCouponStatus = "available" | "redeemed" | "expired" | "used_up";
+
+/** Org Billing → Coupons: a coupon reserved for this organisation, or an open one listed for customers. */
+export interface OrgCoupon {
+  code: string;
+  description: string;
+  kind: CouponKind;
+  /** Percent or rupees. */
+  value: number;
+  plans: { id: PlanId; name: string }[];
+  interval: BillingInterval | "any";
+  duration: CouponDuration;
+  durationCount: number | null;
+  validTo: string | null;
+  forYourOrg: boolean;
+  status: OrgCouponStatus;
+  /** When this organisation first used it (ISO), with that payment's invoice. */
+  redeemedAt: string | null;
+  invoiceUrl: string | null;
+  invoiceNumber: string | null;
 }

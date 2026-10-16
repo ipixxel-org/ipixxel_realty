@@ -24,6 +24,7 @@ client is the reference behaviour (see `frontend/lib/billing/__tests__/mock-clie
 | 5 | `listCoupons`, `getCoupon`, `saveCoupon`, `listOrgOptions`; coupons in `previewCheckout` / `startCheckout` | `coupon-rules.ts`, `coupon-settlement.ts`, `admin-coupons.service.ts` |
 | 6 | `getRetentionChoices`, `saveRetentionChoices`; pausing behind `getAccessStatus` / the overview | `common/utils/retention.util.ts`, `billing-retention.service.ts`, `common/guards/project-editable.guard.ts` |
 | 7 | `listInvoices`, `listPayments`, `listSubscriptions`, `getSubscription`, `extendGrace`, `markPaidOffline`, `applyCoupon`, `cancelSubscription`, `listAdminPayments`, `refundPayment` | `invoice.util.ts`, `billing-ledger.service.ts`, `admin-subscriptions.service.ts`, `invoice-document.controller.ts`; `PaymentsService.refundInFull` |
+| Fixes after testing | `listOrgCoupons`, `getCompanyDetails`, `saveCompanyDetails`, `runLifecycleCheck`; `BillingOverview.renewalBreakdown`, `Invoice.checkoutId`, `Coupon.showToCustomers`; reminders stored | `subscription-lifecycle.util.ts` (grace rule, reminders), `common/utils/billing-clock.util.ts`, `admin-billing.service.ts`, `admin-coupons.service.ts` (`orgCoupons`); migration `20261015114705_billing_v2_fixes` |
 
 Every function is real except `updatePaymentMethod`, which stays unimplemented on purpose: renewals are
 "pay each time" through the existing Razorpay Orders + Checkout flow (no Razorpay
@@ -35,11 +36,77 @@ Subscriptions), and the overview says `autoRenewAvailable: false`, which hides t
 (`platform_configs.online_payments_enabled`, default **off**) is on **and** Razorpay is usable
 (keys in Integrations → Razorpay or the `RAZORPAY_*` env fallback, not turned off). Otherwise
 it is `manual` with `paymentModeReason`: `switched_off`, `keys_missing` or `gateway_disabled`
-(`BillingModeService`). In manual mode the checkout screen is the same (billing details + price
+(`BillingModeService`). Confirmed after testing — no behaviour change. When the switch is on but
+Razorpay can't be used, the settings card shows a warning saying why it is running in manual mode
+(no keys, or Razorpay turned off), with a link to Integrations → Razorpay. In manual mode the checkout screen is the same (billing details + price
 summary) but its button is "Send upgrade request": `startCheckout` creates a legacy
 `PackageChangeRequest` plus a `manual` `BillingCheckout` and returns `pending_approval`. The
 Super Admin approves it in the existing Package Requests tab; approval applies the checkout's
 period rule (`applyPlanChange`).
+
+### Removing the flag (TODO, final step)
+
+`NEXT_PUBLIC_BILLING_V2` (frontend) and `BILLING_V2` (backend) stay until then. To finish:
+
+- [ ] Remove `NEXT_PUBLIC_BILLING_V2` / `BILLING_V2` and `frontend/lib/billing/flag.ts`; make
+      `isBillingV2Server()` always true (grace always ends in fall back to Basic).
+- [ ] Make the v2 screens the only billing screens: Settings → Billing, the Subscriptions page tabs
+      (Plans & Pricing, Organisation Subscriptions, Payments & Invoicing, Expiry & Grace Policy, Package
+      Requests extras), Super Admin Settings, the plan edit route.
+- [ ] Delete the old billing UI paths: `components/superadmin/billing-expiry-settings.tsx`, the
+      flag-off branches in `app/admin-console/subscriptions/page.tsx`, `plan-form.tsx` and
+      `plans/[id]/edit` (legacy form), the legacy Settings → Billing section in `app/org/settings`,
+      and the legacy `GET /org/billing`, `/org/billing/invoices`, `PATCH /org/billing/plan`,
+      `POST /org/billing/renew` once nothing calls them.
+- [ ] Drop the stored legacy `billing_expiry_behavior` (restrict / cancel) and the
+      `notFound()` flag checks on the `/org/settings/billing/*` and `/admin-console/coupons*` routes.
+- [ ] Remove the mock-only "Sample data" plumbing (`REAL_FUNCTIONS`) except for the walkthroughs.
+
+### Fixes after testing
+
+- **Grace is measured from the due date.** Grace ends at `renewsAt + graceDays +
+  graceExtensionDays` (`graceEndFor`), worked out again on every lifecycle pass: an edited
+  `renews_at` or a changed grace setting applies on the next check or page load, and
+  `grace_ends_at` is kept in step (a NULL — e.g. a status set by hand — is filled in). The term
+  ending and grace ending are handled in the same pass, so renewsAt 13 Oct + 1-day grace, checked on
+  15 Oct, is already on Basic. "Extend grace" now adds to `subscriptions.grace_extension_days`
+  (reset on renewal), so the extension survives the re-derivation.
+- **When grace ends:** v2 offers only "Fall back to Basic". With `BILLING_V2=true` on the
+  server, the sweep falls back to Basic whatever is stored; `GET /admin/billing/lifecycle` returns
+  `afterGrace: "fall_back_to_basic"`, and `PUT` no longer writes the stored legacy value, so the
+  flag-off screens and behaviour are unchanged. Without the server flag the response has a
+  `billing_v2_server_off` warning.
+- **Reminders** (`LifecycleSettings.reminders`, now stored in `platform_configs.billing_reminders`;
+  `supports.reminderSchedule: true`): in-app notifications to the org's admins, once per due date
+  (the date is in the title): `before_renewal` (from `notifyDaysBefore` days before),
+  `payment_day` (term ended unpaid), `mid_grace` (half-way, only with 3+ days of grace),
+  `day_before_grace_ends` (last day). A switched-off reminder isn't sent; the state changes still
+  happen. Not emailed.
+- **Run lifecycle check now:** `POST /admin/billing/lifecycle/run` → `LifecycleRunResult`.
+  `super_admin` role only (403 for other platform roles), writes a `billing_lifecycle_run` audit
+  log.
+- **Billing clock:** `BILLING_CLOCK_OVERRIDE` (`+10d`, `-36h`, `2026-11-20`), ignored when
+  `NODE_ENV=production`, moves the lifecycle check, the overview, quotes and period dates
+  (`billingNow()`). See `docs/local-dev.md`.
+- **Pay now breakdown:** `BillingOverview.renewalBreakdown` (`price`, `couponCode`,
+  `couponDiscount`, `taxable`, `gst`, `total`), from `renewalCharge` — the renewal checkout's
+  calculation, so `total` = `renewalAmount` = the renewal preview. Banners show
+  "₹1,499 + GST = ₹1,768.82".
+- **Company & tax details** moved out of the lifecycle settings: `GET/PUT /admin/billing/company`
+  (`CompanyDetails` = `{ seller, warnings }`, `admin_settings`). `LifecycleSettings` no longer
+  has `seller` (`PUT /admin/billing/lifecycle` still accepts it, for old clients).
+- **Org coupons:** `GET /org/billing/coupons` → `OrgCoupon[]`: coupons reserved for the org, and
+  open coupons with `Coupon.showToCustomers` (new, default off; only for open coupons). Not-yet-started
+  coupons are left out. `status`: `redeemed` (used a once-per-org coupon; with `redeemedAt`, the
+  invoice link and number), `expired`, `used_up`, else `available` — the checkout's checks, in
+  order. "Use at checkout" opens Plans with `?coupon=`, carried into the checkout links, where
+  the code is filled in and checked.
+- **Invoice download after paying:** `Invoice.checkoutId` (null for offline payments and credit
+  notes); the success page finds the payment's invoice by it and opens the same document as
+  Billing → Invoices.
+- **Yearly saving:** `yearlySaving(priceMonthly, priceYearly)` in `pricing.ts` — shown only when
+  both prices are set and yearly < 12 × monthly (admin hint "17% cheaper than 12 × monthly"; org
+  plans page "Save ₹X a year"). The hardcoded "Yearly: 2 months free" badge is gone.
 
 ### Step 2 notes
 
@@ -49,8 +116,9 @@ period rule (`applyPlanChange`).
   first two digits must equal `state`. `GET` returns `null` until the first save.
   `startCheckout` without a profile → `billing_profile_required`. Foreign buyers: accepted
   without GSTIN, still taxed as IGST (TODO: export of services).
-- **Seller (company tax settings):** `LifecycleSettings.seller` (`SellerSettings`, saved with
-  `PUT /admin/billing/lifecycle`; omit it to leave it unchanged). Its `state` decides the split:
+- **Seller (company tax settings):** `CompanyDetails.seller` (`SellerSettings`), saved with
+  `PUT /admin/billing/company` (Settings → Company & tax details; until the fixes it was part of
+  `LifecycleSettings`). Its `state` decides the split:
   same state as the buyer = CGST 9% + SGST 9%, otherwise IGST 18%. Unset → every checkout is IGST
   and `warnings` has `seller_state_missing` (shown to the Super Admin, not to customers).
 - **Kinds** (`CheckoutPreview.kind`): `new` (no active paid plan — full price, new cycle now),
@@ -251,8 +319,8 @@ period rule (`applyPlanChange`).
 - **Periods:** the existing subscription code sets `renewsAt` = start + 30 / 365 days, so
   `daysInPeriod` is 30 or 365. Dates are the UTC calendar date.
 - **Owner:** the org's earliest-created user (the person who signed up).
-- **Lifecycle:** `supports.reminderSchedule` is `false`, so the UI disables that control, and
-  the `reminders` array is accepted but not stored (`fallBackToBasic` is `true` since step 6). Read-only fields (`paymentMode`,
+- **Lifecycle:** reminders are stored since the fixes (`supports.reminderSchedule: true`);
+  `fallBackToBasic` is `true` since step 6. Read-only fields (`paymentMode`,
   `paymentModeReason`, `supports`, and a plan's `id` / `rank`) may be sent back and are ignored.
 - **Access:** `getAccessStatus` returns the real plan's limits and modules (and, since step 6,
   the paused / view-only / offline ids).
@@ -300,6 +368,7 @@ period rule (`applyPlanChange`).
 | `getAccessStatus()` | `GET /org/billing/access` | — | `AccessStatus` (paused users, view-only projects, offline landing pages, limits, modules) |
 | `listInvoices(req)` | `GET /org/billing/v2/invoices?page=&pageSize=` (`/org/billing/invoices` is the legacy list) | `PageRequest` | `Paged<Invoice>` (invoices and credit notes; `pdfUrl` = signed link to the printable document) |
 | `listPayments(req)` | `GET /org/billing/v2/payments?page=&pageSize=` | `PageRequest` | `Paged<PaymentRecord>` (plan payments: Razorpay + offline) |
+| `listOrgCoupons()` | `GET /org/billing/coupons` | — | `OrgCoupon[]` (reserved for the org + open ones listed for customers, with the org's status) |
 
 **Login refusal for a paused user** (not part of `BillingClient`): `POST /auth/login` returns
 403 with `{ code: "account_paused", orgName, ownerName, planName, planUserLimit }`. The login
@@ -323,8 +392,11 @@ page shows the paused message (`frontend/lib/billing/paused.ts`).
 | `cancelSubscription(req)` | `POST /admin/billing/subscriptions/:orgId/cancel` | `AdminCancelRequest` | `SubscriptionDetail` |
 | `listAdminPayments(req)` | `GET /admin/billing/payments` | `ListAdminPaymentsRequest` | `AdminPaymentList` |
 | `refundPayment(req)` | `POST /admin/billing/payments/:id/refund` | `RefundPaymentRequest` | `RefundPaymentResponse` (full amount only; issue a credit note) |
-| `getLifecycleSettings()` | `GET /admin/billing/lifecycle` | — | `LifecycleSettings` (incl. `seller`, `warnings`) |
-| `saveLifecycleSettings(s)` | `PUT /admin/billing/lifecycle` | `LifecycleSettings` | `LifecycleSettings` |
+| `getLifecycleSettings()` | `GET /admin/billing/lifecycle` | — | `LifecycleSettings` (incl. `reminders`, `warnings`) |
+| `saveLifecycleSettings(s)` | `PUT /admin/billing/lifecycle` | `LifecycleSettings` | `LifecycleSettings` (`afterGrace` is ignored: always fall back to Basic) |
+| `runLifecycleCheck()` | `POST /admin/billing/lifecycle/run` (`super_admin` only) | — | `LifecycleRunResult` |
+| `getCompanyDetails()` | `GET /admin/billing/company` (`admin_settings`) | — | `CompanyDetails` |
+| `saveCompanyDetails(d)` | `PUT /admin/billing/company` | `CompanyDetails` | `CompanyDetails` |
 | `listAdminCheckouts(status?)` | `GET /admin/billing/checkouts?status=` | `CheckoutStatus` (default `needs_review`) | `AdminCheckoutRow[]` (latest 100) |
 
 The legacy `GET /admin/package-change-requests` rows now include `billingCheckout` (amounts in
@@ -355,13 +427,14 @@ Settings → Subscription Expiry, `rzp_test_…` keys in Integrations → Razorp
 | Screen | Location | Component |
 |---|---|---|
 | Billing overview | Settings → Billing (`/org/settings?section=billing`) | `components/billing/overview.tsx` |
-| Plans · checkout · success · failure · downgrade · cancel · invoices · choose what stays | `/org/settings/billing/...` | `components/billing/{plans,checkout,checkout-result,plan-changes,invoices,choose-what-stays}.tsx` |
+| Plans · checkout · success · failure · downgrade · cancel · invoices · choose what stays · coupons | `/org/settings/billing/...` | `components/billing/{plans,checkout,checkout-result,plan-changes,invoices,choose-what-stays,coupons-org}.tsx` |
 | Banners + renewal popup | org shell (`components/org/shell.tsx` → `BillingV2Root`) | `components/billing/banners.tsx` |
 | Locked states | login, project detail, landing pages list, team chat composer, Users "Create user" | `components/billing/locked.tsx` |
-| Admin plans | `/admin-console/subscriptions` → "Plans & Pricing Matrices" tab (the existing page keeps all its tabs; with the flag on only this tab and "Expiry & Grace Policy" are swapped) | `components/billing/admin/plans-editor.tsx` |
+| Admin plans | `/admin-console/subscriptions` → "Plans & Pricing Matrices" tab: plan cards (price, description, limit chips, Edit / Delete). Edit Plan → `/admin-console/subscriptions/plans/:id/edit`, the full form on its own page (`FormPage`) | `components/billing/admin/plans-editor.tsx` |
 | Admin subscriptions · payments | `/admin-console/subscriptions` → "Organisation Subscriptions" and "Payments & Invoicing" tabs (flag on; the tabs stay); org detail at `/admin-console/subscriptions/org/:orgId` | `components/billing/admin/{subscriptions,payments}.tsx` |
 | Admin coupons | `/admin-console/coupons` (+ `new`, `:code`, `:code/edit`) | `components/billing/admin/coupons.tsx` |
-| Admin lifecycle + company tax details | `/admin-console/settings` and the Subscriptions "Expiry & Grace Policy" tab | `components/billing/admin/lifecycle.tsx` |
+| Admin lifecycle (+ Run lifecycle check now) | `/admin-console/settings` and the Subscriptions "Expiry & Grace Policy" tab | `components/billing/admin/lifecycle.tsx` |
+| Admin company & tax details | `/admin-console/settings#company-tax` (linked from the Expiry card and Integrations → Razorpay) | `components/billing/admin/company.tsx` |
 | Admin "Paid — needs review" + checkout amounts on requests | `/admin-console/subscriptions` → Package Requests tab (flag on) | `components/billing/admin/checkouts-review.tsx` |
 | Walkthroughs (always on, not in nav) | `/org/billing-walkthrough`, `/org/billing-walkthrough/banners`, `/admin-console/billing-walkthrough` | `components/billing/walkthrough/*` |
 

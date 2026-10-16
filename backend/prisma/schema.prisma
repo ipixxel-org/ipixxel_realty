@@ -1075,11 +1075,16 @@ model Subscription {
   amount       Int
   currency     String             @default("INR")
   renewsAt     DateTime?          @map("renews_at")
-  // End of the platform-configurable grace period once the term has lapsed.
-  // Set on the active/trial -> past_due transition and cleared on renewal.
-  // When the sweep runs after this datetime and the status is still past_due,
-  // the configured expiry behaviour is applied (see lifetime.utils).
+  // End of the grace period once the term has lapsed. Always derived:
+  // renewsAt + (gracePeriodDays + graceExtensionDays) days — the sweep
+  // re-syncs it on every pass while past_due (so an edited renewsAt or a
+  // changed grace setting applies), and clears it on renewal. When the sweep
+  // runs after it and the status is still past_due, the configured expiry
+  // behaviour is applied (see subscription-lifecycle.util).
   graceEndsAt  DateTime?          @map("grace_ends_at")
+  // Billing v2: extra grace days a Super Admin granted for the current due
+  // date ("Extend grace"). Reset to 0 whenever the term is renewed.
+  graceExtensionDays Int          @default(0) @map("grace_extension_days")
   mrr          Int? // monthly recurring normalized value
   startedAt    DateTime           @default(now()) @map("started_at")
   cancelledAt  DateTime?          @map("cancelled_at")
@@ -1474,6 +1479,9 @@ model Coupon {
   oncePerOrg     Boolean             @default(true) @map("once_per_org")
   // Empty = open to every organisation.
   orgIds         String[]            @map("org_ids")
+  // Open coupons (orgIds empty) listed on the org's Billing → Coupons page.
+  // Org-only coupons are always listed for those organisations.
+  showToCustomers Boolean            @default(false) @map("show_to_customers")
   createdById    String?             @map("created_by_id")
   createdAt      DateTime            @default(now()) @map("created_at")
   updatedAt      DateTime            @updatedAt @map("updated_at")
@@ -2728,6 +2736,9 @@ model PlatformConfig {
   // upgrades go to Super Admin for manual approval. The effective mode also
   // needs usable Razorpay keys — see BillingModeService.
   onlinePaymentsEnabled   Boolean @default(false) @map("online_payments_enabled")
+  // Billing v2: which renewal reminders are on — { before_renewal, payment_day,
+  // mid_grace, day_before_grace_ends: boolean }. Null / missing key = on.
+  billingReminders        Json?   @map("billing_reminders")
   // Billing v2: the platform as GST seller, printed on invoices and used to
   // split GST (CGST+SGST when the buyer's state = sellerState, else IGST).
   // sellerState is the 2-digit GST state code ("29" = Karnataka).

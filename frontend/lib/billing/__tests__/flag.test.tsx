@@ -59,6 +59,7 @@ const overview = (over: Partial<BillingOverview> = {}): BillingOverview => ({
   downgradeInterval: null,
   downgradeAt: null,
   renewalAmount: null,
+  renewalBreakdown: null,
   usage: [
     { key: "users", label: "Users", used: 1, limit: 1 },
     { key: "projects", label: "Projects", used: 3, limit: null },
@@ -511,6 +512,11 @@ describe("billing v2 flag", () => {
         "cancelSubscription",
         "listAdminPayments",
         "refundPayment",
+        // fixes after testing
+        "listOrgCoupons",
+        "getCompanyDetails",
+        "saveCompanyDetails",
+        "runLifecycleCheck",
       ].sort(),
     );
     // Only the saved-payment-method flow stays unimplemented (renewals are "pay each time").

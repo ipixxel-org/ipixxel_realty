@@ -3,7 +3,7 @@ import type { Metadata } from "next";
 // import { Reveal } from "@/components/superadmin/reveal";
 // import { Switch } from "@/components/superadmin/switch";
 import { BillingExpirySettings } from "@/components/superadmin/billing-expiry-settings";
-import { AdminLifecycleSettings } from "@/components/billing/admin/admin-pages";
+import { AdminCompanyTaxDetails, AdminLifecycleSettings } from "@/components/billing/admin/admin-pages";
 import { BILLING_V2 } from "@/lib/billing/flag";
 import { GlobalBrandingSettings } from "@/components/superadmin/global-branding-settings";
 import { Icon } from "@/components/icons";
@@ -37,6 +37,19 @@ export default function SuperAdminSettingsPage() {
         {/* Billing v2 (NEXT_PUBLIC_BILLING_V2): lifecycle card with "Fall back to Basic" + reminder schedule. */}
         {BILLING_V2 ? <AdminLifecycleSettings /> : <BillingExpirySettings />}
       </div>
+
+      {/* Billing v2: the platform as GST seller, linked from the Expiry card and Integrations → Razorpay. */}
+      {BILLING_V2 ? (
+        <section id="company-tax" style={{ scrollMarginTop: 80 }}>
+          <h2 style={{ margin: "24px 0 6px" }}>Company &amp; tax details</h2>
+          <div className="sub muted reveal" style={{ marginBottom: 16 }}>
+            Legal name, GSTIN, state and address printed on GST invoices. The state decides CGST + SGST or IGST.
+          </div>
+          <div style={{ marginBottom: 24 }}>
+            <AdminCompanyTaxDetails />
+          </div>
+        </section>
+      ) : null}
 
       {/* TODO: static tabs — commented out until tab switching is implemented.
       <div className="tabs reveal in">

@@ -3,7 +3,7 @@
 import { useState, type ReactNode } from "react";
 import { Icon } from "@/components/icons";
 import { Seg } from "@/components/superadmin/seg";
-import { formatINR } from "@/lib/billing/pricing";
+import { formatINR, yearlySaving } from "@/lib/billing/pricing";
 import type { BillingInterval, BillingPlan } from "@/lib/billing/types";
 import { useBillingQuery, useOrgBilling } from "./context";
 import { BLink, countLabel, ErrorNote, Loading, PlanPrice, Section, planFeatureRows, useCheckoutLive } from "./ui";
@@ -16,20 +16,41 @@ export function IntervalToggle({ value, onChange }: { value: BillingInterval; on
   return (
     <div className="bl-row">
       <Seg options={["Monthly", "Yearly"]} value={value === "yearly" ? 1 : 0} onChange={(i) => onChange(i === 1 ? "yearly" : "monthly")} />
-      <span className="badge b-green">Yearly: 2 months free</span>
     </div>
   );
 }
 
+/** "Save ₹1,998 a year" from the plan's own prices; nothing when yearly isn't cheaper. */
+export function YearlySavingNote({ plan, interval }: { plan: BillingPlan; interval: BillingInterval }) {
+  const s = plan.isFree ? null : yearlySaving(plan.priceMonthly, plan.priceYearly);
+  if (!s) return null;
+  return (
+    <span className="badge b-green" style={{ alignSelf: "flex-start" }}>
+      Save {formatINR(s.amount)} a year{interval === "monthly" ? " with yearly billing" : ""}
+    </span>
+  );
+}
+
 /** Plan cards + comparison. The interval toggle lives in the page head (or the walkthrough). */
-export function PlansScreen({ interval: controlled, onIntervalChange }: { interval?: BillingInterval; onIntervalChange?: (v: BillingInterval) => void }) {
+export function PlansScreen({
+  interval: controlled,
+  onIntervalChange,
+  coupon,
+  initialInterval,
+}: {
+  interval?: BillingInterval;
+  onIntervalChange?: (v: BillingInterval) => void;
+  /** From Billing → Coupons "Use at checkout": carried into the checkout links. */
+  coupon?: string;
+  initialInterval?: BillingInterval;
+}) {
   const { overview } = useOrgBilling();
   const { data: plans, error } = useBillingQuery((c) => c.listPlans(), []);
   const [own, setOwn] = useState<BillingInterval | null>(null);
   const live = useCheckoutLive(overview);
   if (error) return <ErrorNote message={error} />;
   if (!plans || !overview) return <Loading what="plans" />;
-  const interval = controlled ?? own ?? overview.interval;
+  const interval = controlled ?? own ?? initialInterval ?? overview.interval;
   const current = overview.plan;
 
   const pending = overview.pendingUpgrade;
@@ -45,7 +66,7 @@ export function PlansScreen({ interval: controlled, onIntervalChange }: { interv
     // Same paid plan, monthly → yearly: an upgrade with credit for the unused month.
     if (p.id === current.id && !p.isFree && onPaidMonthly && interval === "yearly") {
       return (
-        <BLink to="checkout" params={{ plan: p.id, interval }} className="btn btn-primary" style={{ width: "100%", justifyContent: "center" }}>
+        <BLink to="checkout" params={{ plan: p.id, interval, coupon }} className="btn btn-primary" style={{ width: "100%", justifyContent: "center" }}>
           <Icon name="arrow-up" size={15} /> {live ? "Switch to yearly" : "Request yearly billing"}
         </BLink>
       );
@@ -67,7 +88,7 @@ export function PlansScreen({ interval: controlled, onIntervalChange }: { interv
     }
     if (p.rank > current.rank) {
       return (
-        <BLink to="checkout" params={{ plan: p.id, interval }} className="btn btn-primary" style={{ width: "100%", justifyContent: "center" }}>
+        <BLink to="checkout" params={{ plan: p.id, interval, coupon }} className="btn btn-primary" style={{ width: "100%", justifyContent: "center" }}>
           <Icon name="arrow-up" size={15} /> {live ? "Upgrade" : "Request upgrade"}
         </BLink>
       );
@@ -94,6 +115,11 @@ export function PlansScreen({ interval: controlled, onIntervalChange }: { interv
   return (
     <div className="bl-stack">
       {controlled === undefined ? <IntervalToggle value={interval} onChange={(v) => (onIntervalChange ? onIntervalChange(v) : setOwn(v))} /> : null}
+      {coupon ? (
+        <div className="bl-coupon-ok" role="status">
+          Coupon <b className="bl-mono">{coupon}</b> will be filled in at checkout — pick a plan it works on.
+        </div>
+      ) : null}
       <div className="bl-plan-grid">
         {plans.map((p) => {
           const isCurrent = p.id === current.id;
@@ -106,6 +132,7 @@ export function PlansScreen({ interval: controlled, onIntervalChange }: { interv
               <div className="bl-muted bl-small" style={{ visibility: !p.isFree && interval === "yearly" ? "visible" : "hidden" }}>
                 ≈ {formatINR(Math.round(p.priceYearly / 12))}/month, billed yearly
               </div>
+              <YearlySavingNote plan={p} interval={interval} />
               <ul className="bl-plan-list">
                 {planFeatureRows(p).map((f) => (
                   <li key={f.label} className={f.on ? "" : "off"}>

@@ -1,10 +1,20 @@
+import { billingNow } from '../../common/utils/billing-clock.util';
 import { Injectable, NotFoundException } from '@nestjs/common';
 import type { Coupon } from '@prisma/client';
 import { PrismaService } from '../../database/prisma.service';
 import { billingError } from './billing-checkout.service';
-import { couponStatus, dayOf, normaliseCouponCode } from './coupon-rules';
+import {
+  couponStatus,
+  couponVisibleToOrg,
+  dayOf,
+  describeCouponV2,
+  normaliseCouponCode,
+  orgCouponStatus,
+} from './coupon-rules';
 import { isFreePlan } from './plan-modules';
 import { toRupees } from './checkout-quote';
+import { invoiceDocumentUrl } from './invoice.util';
+import type { OrgCouponV2 } from './billing.types';
 import type { CouponDto } from './dto/coupon.dto';
 
 /** The contract's Coupon shape. */
@@ -22,6 +32,8 @@ export interface CouponV2 {
   totalUses: number | null;
   oncePerOrg: boolean;
   orgIds: string[] | null;
+  /** Open coupons: listed on the org Billing → Coupons page. */
+  showToCustomers: boolean;
 }
 
 export interface CouponRowV2 {
@@ -47,6 +59,7 @@ const toCouponV2 = (c: Coupon): CouponV2 => ({
   totalUses: c.totalUses,
   oncePerOrg: c.oncePerOrg,
   orgIds: c.orgIds.length ? c.orgIds : null,
+  showToCustomers: c.showToCustomers,
 });
 
 /** Billing v2 step 5 — Super Admin coupons (and the org picker for org-only ones). */
@@ -66,7 +79,7 @@ export class AdminCouponsService {
     return uses;
   }
 
-  private row(c: Coupon, uses: number, now = new Date()): CouponRowV2 {
+  private row(c: Coupon, uses: number, now = billingNow()): CouponRowV2 {
     return { coupon: toCouponV2(c), uses, status: couponStatus(c, uses, now) };
   }
 
@@ -204,6 +217,8 @@ export class AdminCouponsService {
       totalUses: dto.totalUses ?? null,
       oncePerOrg: dto.oncePerOrg,
       orgIds,
+      // Only meaningful for open coupons; org-only ones are always listed for those orgs.
+      showToCustomers: orgIds.length === 0 && dto.showToCustomers === true,
     };
     const existing = await this.prisma.coupon.findUnique({ where: { code } });
     if (isNew && existing) {
@@ -230,6 +245,63 @@ export class AdminCouponsService {
       .catch(() => undefined);
     const uses = await this.usesByCoupon([saved.id]);
     return this.row(saved, uses.get(saved.id) ?? 0);
+  }
+
+  /**
+   * Org Billing → Coupons: coupons reserved for this organisation, and open
+   * ones listed for customers, with this organisation's status (and, once
+   * used, the date and the invoice of that payment).
+   */
+  async orgCoupons(orgId: string, now = billingNow()): Promise<OrgCouponV2[]> {
+    const coupons = (
+      await this.prisma.coupon.findMany({ orderBy: { createdAt: 'desc' } })
+    ).filter((c) => couponVisibleToOrg(c, orgId, now));
+    if (coupons.length === 0) return [];
+    const ids = coupons.map((c) => c.id);
+    const [uses, mine, plans] = await Promise.all([
+      this.usesByCoupon(ids),
+      this.prisma.couponRedemption.findMany({
+        where: { couponId: { in: ids }, organisationId: orgId },
+        orderBy: { createdAt: 'asc' },
+      }),
+      this.prisma.plan.findMany({ select: { id: true, name: true } }),
+    ]);
+    const first = new Map<string, (typeof mine)[number]>();
+    for (const r of mine) if (!first.has(r.couponId)) first.set(r.couponId, r);
+    const invoices = await this.prisma.invoice.findMany({
+      where: {
+        checkoutId: { in: [...first.values()].map((r) => r.checkoutId) },
+        kind: 'invoice',
+      },
+      select: { id: true, number: true, checkoutId: true },
+    });
+    const invoiceFor = new Map(invoices.map((i) => [i.checkoutId, i]));
+    const planName = new Map(plans.map((p) => [p.id, p.name]));
+    return coupons.map((c) => {
+      const used = first.get(c.id) ?? null;
+      const inv = used ? invoiceFor.get(used.checkoutId) : undefined;
+      const v = toCouponV2(c);
+      return {
+        code: v.code,
+        description: c.description || describeCouponV2(c),
+        kind: v.kind,
+        value: v.value,
+        plans: c.planIds.map((id) => ({ id, name: planName.get(id) ?? id })),
+        interval: v.interval,
+        duration: v.duration,
+        durationCount: v.durationCount,
+        validTo: v.validTo,
+        forYourOrg: c.orgIds.length > 0,
+        status: orgCouponStatus(c, {
+          now,
+          usesSoFar: uses.get(c.id) ?? 0,
+          orgHasUsed: !!used,
+        }),
+        redeemedAt: used ? used.createdAt.toISOString() : null,
+        invoiceUrl: inv ? invoiceDocumentUrl(inv.id) : null,
+        invoiceNumber: inv?.number ?? null,
+      };
+    });
   }
 
   /** Organisations for the "only these organisations" picker. */

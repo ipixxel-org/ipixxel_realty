@@ -98,6 +98,14 @@ export class PlatformConfigService implements OnApplicationBootstrap {
         `ALTER TABLE "identity"."platform_configs" ADD COLUMN IF NOT EXISTS "online_payments_enabled" BOOLEAN NOT NULL DEFAULT false;`,
       );
     } catch {}
+    // Billing v2 reminder switches (also in migration 20261015114705).
+    try {
+      await this.prisma.$executeRawUnsafe(
+        `ALTER TABLE "identity"."platform_configs" ADD COLUMN IF NOT EXISTS "billing_reminders" JSONB;`,
+      );
+    } catch {
+      // Column already there, or no rights to alter: reads fall back to "all on".
+    }
     // Billing v2 seller (GST) settings (also in migration 20261014110220).
     for (const col of SELLER_COLUMNS) {
       try {
@@ -106,6 +114,42 @@ export class PlatformConfigService implements OnApplicationBootstrap {
         );
       } catch {}
     }
+  }
+
+  /** Billing v2: which renewal reminders are on (stored JSON; null = all on). */
+  async getBillingReminders(): Promise<unknown> {
+    try {
+      await this.ensureTable();
+      const rows: { billing_reminders: unknown }[] = await this.prisma
+        .$queryRaw`
+        SELECT "billing_reminders" FROM "identity"."platform_configs"
+        WHERE "id" = ${PLATFORM_CONFIG_ID} LIMIT 1
+      `;
+      return rows?.[0]?.billing_reminders ?? null;
+    } catch (err) {
+      this.logger.warn(
+        `Could not read billing reminders: ${err instanceof Error ? err.message : String(err)}`,
+      );
+      return null;
+    }
+  }
+
+  /** Billing v2: save which renewal reminders are on. */
+  async saveBillingReminders(
+    reminders: Record<string, boolean>,
+  ): Promise<void> {
+    await this.ensureTable();
+    await this.prisma.$executeRaw`
+      INSERT INTO "identity"."platform_configs" ("id", "updated_at")
+      VALUES (${PLATFORM_CONFIG_ID}, CURRENT_TIMESTAMP)
+      ON CONFLICT ("id") DO NOTHING
+    `;
+    await this.prisma.$executeRaw`
+      UPDATE "identity"."platform_configs" SET
+        "billing_reminders" = ${JSON.stringify(reminders)}::jsonb,
+        "updated_at" = CURRENT_TIMESTAMP
+      WHERE "id" = ${PLATFORM_CONFIG_ID}
+    `;
   }
 
   /** Billing v2: the platform as GST seller. Every field null until set. */

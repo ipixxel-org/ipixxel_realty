@@ -16,6 +16,8 @@ export interface InvoiceV2 {
   total: number;
   status: 'paid' | 'refunded' | 'void';
   pdfUrl: string | null;
+  /** The checkout it was issued for (null: offline payment or credit note). */
+  checkoutId: string | null;
 }
 
 /** The contract's PaymentRecord (+ org for the admin list). */
@@ -65,6 +67,7 @@ export function toInvoiceV2(i: Invoice): InvoiceV2 {
     total: toRupees(i.totalPaise),
     status: i.status,
     pdfUrl: invoiceDocumentUrl(i.id),
+    checkoutId: i.kind === 'invoice' ? i.checkoutId : null,
   };
 }
 

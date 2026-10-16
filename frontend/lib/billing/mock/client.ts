@@ -28,13 +28,14 @@ import type {
   CheckoutReceipt,
   Coupon,
   CouponRow,
+  OrgCoupon,
   Paged,
   PaymentRecord,
   SubscriptionDetail,
   SubscriptionRow,
   SubscriptionStatus,
 } from "../types";
-import { DEFAULT_BILLING_DETAILS, DEMO_ORG, TODAY, type MockOrg, type MockPayment } from "./data";
+import { DEFAULT_BILLING_DETAILS, DEMO_ORG, MOCK_SELLER, TODAY, type MockOrg, type MockPayment } from "./data";
 import { deriveAccess, deriveDates, deriveOverview, deriveRetention, freePlan, initialMockState, planById, planNames, type MockState } from "./state";
 
 export interface MockBillingClient extends BillingClient {
@@ -412,7 +413,7 @@ export function createMockBillingClient(opts: { initial?: Partial<MockState>; pe
     getAccessStatus: () => ok(deriveAccess(get())),
 
     listInvoices: (req) =>
-      ok(paged(overview().status === "free" ? [] : get().invoices.map((i) => ({ ...i, pdfUrl: null })), req.page, req.pageSize)),
+      ok(paged(overview().status === "free" ? [] : get().invoices.map((i) => ({ ...i, pdfUrl: null, checkoutId: null })), req.page, req.pageSize)),
     listPayments: (req) =>
       ok(
         paged<PaymentRecord>(
@@ -437,6 +438,38 @@ export function createMockBillingClient(opts: { initial?: Partial<MockState>; pe
           req.pageSize,
         ),
       ),
+
+    listOrgCoupons() {
+      const s = get();
+      const names = planNames(s);
+      return ok(
+        s.coupons
+          .filter((c) => (c.orgIds ? c.orgIds.includes(DEMO_ORG.id) : c.showToCustomers === true) && c.validFrom <= today)
+          .map((c) => {
+            const used = s.redemptions.find((r) => r.code === c.code && r.orgId === DEMO_ORG.id) ?? null;
+            const redeemed = !!used || s.redeemed.includes(c.code);
+            const row = couponRow(c);
+            const status: OrgCoupon["status"] =
+              redeemed && c.oncePerOrg ? "redeemed" : row.status === "expired" ? "expired" : row.status === "used_up" && !redeemed ? "used_up" : "available";
+            return {
+              code: c.code,
+              description: c.description || describeCoupon(c),
+              kind: c.kind,
+              value: c.value,
+              plans: c.planIds.map((id) => ({ id, name: names[id] ?? id })),
+              interval: c.interval,
+              duration: c.duration,
+              durationCount: c.durationCount,
+              validTo: c.validTo,
+              forYourOrg: !!c.orgIds,
+              status,
+              redeemedAt: used ? used.at : null,
+              invoiceUrl: null,
+              invoiceNumber: null,
+            };
+          }),
+      );
+    },
 
     /* ------------------------------------------------------------ admin */
 
@@ -573,6 +606,18 @@ export function createMockBillingClient(opts: { initial?: Partial<MockState>; pe
     },
 
     getLifecycleSettings: () => ok(get().lifecycle),
+    runLifecycleCheck: () =>
+      ok({ ranAt: new Date().toISOString(), scanned: get().orgs.length, movedToFreePlan: 0, scheduledPlanApplied: 0, newlyPastDue: 0, newlyExpired: 0, newlyCancelled: 0, remindersSent: 0 }),
+    getCompanyDetails() {
+      const seller = get().seller ?? { ...MOCK_SELLER };
+      return ok({ seller, warnings: seller.state ? [] : [{ code: "seller_state_missing" as const, message: "The company's state isn't set, so every checkout is charged IGST." }] });
+    },
+    saveCompanyDetails(details) {
+      const problem = checkGstin(details.seller.gstin, details.seller.state);
+      if (problem) return fail(problem);
+      set({ seller: details.seller });
+      return ok({ seller: details.seller, warnings: details.seller.state ? [] : [{ code: "seller_state_missing" as const, message: "The company's state isn't set, so every checkout is charged IGST." }] });
+    },
     saveLifecycleSettings(settings) {
       if (settings.graceDays < 0 || settings.notifyDaysBefore < 0) return fail("Days can't be negative.");
       const on = settings.onlinePaymentsEnabled;

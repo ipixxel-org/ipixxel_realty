@@ -25,6 +25,15 @@ export class SellerSettingsDto {
   @IsOptional() @IsString() @MaxLength(12) pincode?: string | null;
 }
 
+/** PUT /admin/billing/company — Super Admin → Settings → Company & tax details. */
+export class SaveCompanyDetailsDto {
+  @ValidateNested()
+  @Type(() => SellerSettingsDto)
+  seller!: SellerSettingsDto;
+  // Read-only in the contract shape; accepted, ignored.
+  @IsOptional() @IsArray() warnings?: unknown[];
+}
+
 class ReminderRuleDto {
   @IsIn(['before_renewal', 'payment_day', 'mid_grace', 'day_before_grace_ends'])
   id!: 'before_renewal' | 'payment_day' | 'mid_grace' | 'day_before_grace_ends';
@@ -35,12 +44,15 @@ class ReminderRuleDto {
 export class SaveLifecycleDto {
   @IsInt() @Min(0) @Max(90) notifyDaysBefore!: number;
   @IsInt() @Min(0) @Max(365) graceDays!: number;
-  @IsIn(['fall_back_to_basic', 'restrict', 'cancel']) afterGrace!:
-    'fall_back_to_basic' | 'restrict' | 'cancel';
+  // Billing v2 always falls back to Basic (BILLING_V2 on the server); the
+  // stored legacy value is left as it is for the flag-off screens. Accepted
+  // so the contract shape round-trips, then ignored.
+  @IsOptional()
+  @IsIn(['fall_back_to_basic', 'restrict', 'cancel'])
+  afterGrace?: 'fall_back_to_basic' | 'restrict' | 'cancel';
   @IsString() @MaxLength(500) expiryMessage!: string;
   @IsBoolean() onlinePaymentsEnabled!: boolean;
-  // Not stored yet (supports.reminderSchedule = false); accepted so the
-  // contract shape round-trips, then ignored.
+  /** Which reminders are on; omitted = unchanged. */
   @IsOptional()
   @IsArray()
   @ValidateNested({ each: true })
@@ -51,7 +63,7 @@ export class SaveLifecycleDto {
   @IsOptional() @IsString() paymentModeReason?: string | null;
   @IsOptional() @IsObject() supports?: Record<string, boolean>;
   @IsOptional() @IsArray() warnings?: unknown[];
-  /** Company tax settings; omitted = unchanged. */
+  /** Company tax settings — moved to PUT /admin/billing/company; still accepted here, omitted = unchanged. */
   @IsOptional()
   @ValidateNested()
   @Type(() => SellerSettingsDto)

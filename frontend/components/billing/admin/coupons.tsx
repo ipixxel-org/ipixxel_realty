@@ -70,7 +70,10 @@ export function CouponsList() {
                       {c.totalUses != null ? ` / ${c.totalUses}` : ""}
                       <div className="bl-muted bl-small">{c.oncePerOrg ? "once per org" : "repeat use"}</div>
                     </td>
-                    <td>{c.orgIds ? `${c.orgIds.length} org${c.orgIds.length === 1 ? "" : "s"} only` : "All orgs"}</td>
+                    <td>
+                      {c.orgIds ? `${c.orgIds.length} org${c.orgIds.length === 1 ? "" : "s"} only` : "All orgs"}
+                      {!c.orgIds && c.showToCustomers ? <div className="bl-muted bl-small">listed for customers</div> : null}
+                    </td>
                     <td>
                       <span className={`badge ${COUPON_STATUS[status].badge}`}>{COUPON_STATUS[status].label}</span>
                     </td>
@@ -110,6 +113,7 @@ export const BLANK_COUPON: Coupon = {
   totalUses: null,
   oncePerOrg: true,
   orgIds: null,
+  showToCustomers: false,
 };
 
 type Errors = Partial<Record<"code" | "value" | "plans" | "dates" | "durationCount" | "orgIds" | "totalUses", string>>;
@@ -299,10 +303,23 @@ export function CouponForm({ initial, isNew }: { initial: Coupon; isNew: boolean
               Every organisation
             </label>
             <label className="bl-row" style={{ gap: 6, cursor: "pointer" }}>
-              <input type="radio" name="bl-audience" checked={c.orgIds !== null} onChange={() => set({ orgIds: c.orgIds ?? [] })} />
+              <input type="radio" name="bl-audience" checked={c.orgIds !== null} onChange={() => set({ orgIds: c.orgIds ?? [], showToCustomers: false })} />
               Only specific organisations
             </label>
           </div>
+          {c.orgIds === null ? (
+            <label className="bl-row" style={{ gap: 8, cursor: "pointer", fontSize: 13 }}>
+              <input type="checkbox" checked={c.showToCustomers} onChange={(e) => set({ showToCustomers: e.target.checked })} />
+              <span>
+                Show in customers&apos; coupon list
+                <span className="bl-muted"> — every organisation sees it under Billing → Coupons. Off: only people you give the code to know it.</span>
+              </span>
+            </label>
+          ) : (
+            <div className="hint" style={{ marginTop: 0 }}>
+              These organisations see it under Billing → Coupons.
+            </div>
+          )}
           {c.orgIds !== null ? (
             <div>
               <div className="bl-between" style={{ marginBottom: 8 }}>

@@ -4,7 +4,7 @@
  * dates are derived from it and the mock clock (TODAY), so every screen agrees.
  */
 import { defaultPicks, rankLandingPages, rankProjects, rankUsers } from "../default-picks";
-import { addCycle, addDays, addMonths, daysBetween, planPrice, withGst } from "../pricing";
+import { addCycle, addDays, addMonths, daysBetween, planPrice, round2, withGst } from "../pricing";
 import type {
   AccessStatus,
   BillingInterval,
@@ -13,6 +13,7 @@ import type {
   BillingProfile,
   Coupon,
   LifecycleSettings,
+  SellerSettings,
   PaymentMethodSummary,
   RenewalMode,
   RetentionChoices,
@@ -82,6 +83,8 @@ export interface MockState {
   payments: MockPayment[];
   redemptions: MockRedemption[];
   lifecycle: LifecycleSettings;
+  /** Settings → Company & tax details. */
+  seller: SellerSettings;
   creditNoteSeq: number;
   invoiceSeq: number;
 }
@@ -121,9 +124,9 @@ export function initialMockState(overrides: Partial<MockState> = {}): MockState 
       paymentMode: "online",
       paymentModeReason: null,
       supports: { fallBackToBasic: true, reminderSchedule: true },
-      seller: { ...MOCK_SELLER },
       warnings: [],
     },
+    seller: { ...MOCK_SELLER },
     creditNoteSeq: 42,
     invoiceSeq: 713,
     ...overrides,
@@ -284,6 +287,18 @@ export function deriveOverview(s: MockState, today: string): BillingOverview {
     downgradeInterval: s.situation === "downgrade_scheduled" ? s.interval : null,
     downgradeAt: s.situation === "downgrade_scheduled" ? scheduledAt : null,
     renewalAmount: paidPlan ? withGst(planPrice(paidPlan, s.interval), billingState) : null,
+    renewalBreakdown: paidPlan
+      ? {
+          planName: paidPlan.name,
+          interval: s.interval,
+          price: planPrice(paidPlan, s.interval),
+          couponCode: null,
+          couponDiscount: 0,
+          taxable: planPrice(paidPlan, s.interval),
+          gst: round2(withGst(planPrice(paidPlan, s.interval), billingState) - planPrice(paidPlan, s.interval)),
+          total: withGst(planPrice(paidPlan, s.interval), billingState),
+        }
+      : null,
     usage: [
       { key: "users", label: "Users", used: DEMO_USERS.length, limit: plan.limits.users },
       { key: "projects", label: "Projects", used: DEMO_PROJECTS.length, limit: plan.limits.projects },

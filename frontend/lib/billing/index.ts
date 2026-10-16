@@ -51,6 +51,11 @@ export const REAL_FUNCTIONS: Record<BillingFunction, boolean> = {
   cancelSubscription: true,
   listAdminPayments: true,
   refundPayment: true,
+  // Fixes after testing — org coupons page, company & tax details, "Run lifecycle check now"
+  listOrgCoupons: true,
+  getCompanyDetails: true,
+  saveCompanyDetails: true,
+  runLifecycleCheck: true,
   // Never real: renewals are "pay each time" (no saved payment method).
   updatePaymentMethod: false,
 };

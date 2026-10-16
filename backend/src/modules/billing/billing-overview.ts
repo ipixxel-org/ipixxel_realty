@@ -10,6 +10,7 @@ import type {
   PaymentMode,
   ManualReason,
   PendingUpgradeV2,
+  RenewalBreakdownV2,
   RetentionSummaryV2,
   SubscriptionStatusV2,
 } from './billing.types';
@@ -55,6 +56,8 @@ export interface OverviewInput {
    * (taxOn). When absent, price × 1.18.
    */
   renewalTotalPaise?: number | null;
+  /** How that total is made up (same calculation); absent = price + 18% GST. */
+  renewalBreakdown?: RenewalBreakdownV2 | null;
   /** Step 6: the paid plan the org moved down from (now on the free plan). */
   movedToBasic?: {
     at: Date;
@@ -181,6 +184,19 @@ export function buildOverview(input: OverviewInput): BillingOverviewV2 {
         : input.renewalTotalPaise != null
           ? input.renewalTotalPaise / 100
           : round2(price * (1 + GST_RATE)),
+    renewalBreakdown:
+      !paid || cancelling
+        ? null
+        : (input.renewalBreakdown ?? {
+            planName: next.plan.name,
+            interval: next.interval,
+            price,
+            couponCode: null,
+            couponDiscount: 0,
+            taxable: price,
+            gst: round2(price * GST_RATE),
+            total: round2(price * (1 + GST_RATE)),
+          }),
     usage: [
       {
         key: 'users',
