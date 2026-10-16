@@ -40,8 +40,20 @@ export interface SendMailOptions {
     | 'user_account_deactivated'
     | 'test'
     | 'notification'
+    | 'billing'
     | 'system';
   metadata?: Record<string, any>;
+  /** Files to attach (not stored in the email log). */
+  attachments?: {
+    filename: string;
+    content: string | Buffer;
+    contentType?: string;
+  }[];
+  /**
+   * Whose SMTP sends it, when that isn't `orgId`'s: `null` = the platform's
+   * (billing mail comes from the platform but is logged under the org).
+   */
+  smtpOrgId?: string | null;
 }
 
 @Injectable()
@@ -427,13 +439,24 @@ export class EmailService implements OnApplicationBootstrap {
    * Automatically creates audit logs in EmailLog.
    */
   async sendMail(options: SendMailOptions): Promise<{ success: boolean; messageId?: string; error?: string }> {
-    const { to, subject, html, text, template = 'system', metadata, orgId } = options;
+    const {
+      to,
+      subject,
+      html,
+      text,
+      template = 'system',
+      metadata,
+      orgId,
+      attachments,
+    } = options;
+    const smtpOrgId =
+      options.smtpOrgId !== undefined ? options.smtpOrgId : orgId;
 
     let errorStr: string | undefined = undefined;
     let messageId: string | undefined = undefined;
 
     try {
-      const { transporter, from } = await this.getTransporter(orgId);
+      const { transporter, from } = await this.getTransporter(smtpOrgId);
 
       const info = await transporter.sendMail({
         from,
@@ -441,6 +464,7 @@ export class EmailService implements OnApplicationBootstrap {
         subject,
         html,
         text: text || html.replace(/<[^>]*>?/gm, ''),
+        ...(attachments?.length ? { attachments } : {}),
       });
 
       messageId = info.messageId;

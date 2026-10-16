@@ -206,6 +206,8 @@ model Organisation {
   marketingConnections  MarketingConnection[]
   marketingOrgAccess    MarketingOrgPlatformAccess[]
   payments              Payment[]
+  billingProfile        BillingProfile?
+  billingCheckouts      BillingCheckout[]
 
   @@map("organisations")
   @@schema("identity")
@@ -223,6 +225,10 @@ model User {
   mustChangePassword  Boolean    @default(false) @map("must_change_password")
   failedLoginAttempts Int        @default(0) @map("failed_login_attempts")
   lockedUntil         DateTime?  @map("locked_until")
+  // Billing v2: paused because the organisation moved to a smaller plan
+  // ("choose what stays"). Can't sign in; doesn't take a seat. Cleared when
+  // the plan has room again.
+  billingPausedAt     DateTime?  @map("billing_paused_at")
   createdAt           DateTime   @default(now()) @map("created_at")
 
   // Set when an Organisation Admin approves a pending member. Null = still
@@ -291,6 +297,7 @@ model User {
   packageChangeRequests PackageChangeRequest[] @relation("PackageChangeRequestedBy")
   packageChangeReviews  PackageChangeRequest[] @relation("PackageChangeReviewedBy")
   paymentsCreated       Payment[]              @relation("PaymentCreatedBy")
+  billingCheckouts      BillingCheckout[]      @relation("BillingCheckoutCreatedBy")
 
   @@map("users")
   @@schema("identity")
@@ -1052,6 +1059,8 @@ model Plan {
   subscriptions Subscription[]
   currentPlanRequests PackageChangeRequest[] @relation("CurrentPlanRequests")
   targetPlanRequests  PackageChangeRequest[] @relation("TargetPlanRequests")
+  checkoutsFrom       BillingCheckout[]      @relation("BillingCheckoutFromPlan")
+  checkoutsTo         BillingCheckout[]      @relation("BillingCheckoutToPlan")
 
   @@map("plans")
   @@schema("billing")
@@ -1066,14 +1075,38 @@ model Subscription {
   amount       Int
   currency     String             @default("INR")
   renewsAt     DateTime?          @map("renews_at")
-  // End of the platform-configurable grace period once the term has lapsed.
-  // Set on the active/trial -> past_due transition and cleared on renewal.
-  // When the sweep runs after this datetime and the status is still past_due,
-  // the configured expiry behaviour is applied (see lifetime.utils).
+  // End of the grace period once the term has lapsed. Always derived:
+  // renewsAt + (gracePeriodDays + graceExtensionDays) days — the sweep
+  // re-syncs it on every pass while past_due (so an edited renewsAt or a
+  // changed grace setting applies), and clears it on renewal. When the sweep
+  // runs after it and the status is still past_due, the configured expiry
+  // behaviour is applied (see subscription-lifecycle.util).
   graceEndsAt  DateTime?          @map("grace_ends_at")
+  // Billing v2: extra grace days a Super Admin granted for the current due
+  // date ("Extend grace"). Reset to 0 whenever the term is renewed.
+  graceExtensionDays Int          @default(0) @map("grace_extension_days")
   mrr          Int? // monthly recurring normalized value
   startedAt    DateTime           @default(now()) @map("started_at")
   cancelledAt  DateTime?          @map("cancelled_at")
+  // Billing v2 end-of-term changes, applied by the lifecycle sweep when the
+  // term ends (renewsAt). Cancel → move to the free plan; a scheduled plan /
+  // interval → switch to it (its price is what the next renewal charges).
+  // At most one of the two is set; any plan change clears both.
+  cancelAtPeriodEnd  Boolean       @default(false) @map("cancel_at_period_end")
+  cancelReason       String?       @map("cancel_reason")
+  scheduledPlanId    String?       @map("scheduled_plan_id")
+  scheduledInterval  BillingCycle? @map("scheduled_interval")
+  changeScheduledAt  DateTime?     @map("change_scheduled_at")
+  // A first_n / forever coupon still discounting renewals (step 5).
+  // couponRenewalsLeft null = every renewal (forever).
+  couponId           String?       @map("coupon_id")
+  couponRenewalsLeft Int?          @map("coupon_renewals_left")
+  // Set when a paid plan ended and the org moved to the free plan
+  // (cancellation, or "fall back to Basic" after grace); kept so the UI can
+  // offer "Buy <plan> again". Cleared by any purchase.
+  movedToBasicAt     DateTime?     @map("moved_to_basic_at")
+  previousPlanId     String?       @map("previous_plan_id")
+  previousInterval   BillingCycle? @map("previous_interval")
   createdAt    DateTime           @default(now()) @map("created_at")
   updatedAt    DateTime           @updatedAt @map("updated_at")
 
@@ -1115,6 +1148,8 @@ model PackageChangeRequest {
   reviewedBy   User?        @relation("PackageChangeReviewedBy", fields: [reviewedById], references: [id], onDelete: SetNull)
   currentPlan  Plan         @relation("CurrentPlanRequests", fields: [currentPlanId], references: [id], onDelete: Restrict)
   targetPlan   Plan         @relation("TargetPlanRequests", fields: [targetPlanId], references: [id], onDelete: Restrict)
+  // Billing v2: set when the request was raised by a manual-mode checkout.
+  billingCheckout BillingCheckout?
 
   @@index([orgId])
   @@index([status])
@@ -1142,6 +1177,10 @@ enum PaymentStatus {
 enum PaymentPurpose {
   // Super Admin ₹1 test-mode payment (verifies the integration end-to-end).
   test
+  // Billing v2: buying / upgrading a plan. referenceType 'billing_checkout',
+  // referenceId = BillingCheckout.id. Fulfilled by BillingCheckoutService on
+  // the payment.captured event.
+  plan_purchase
 
   @@schema("billing")
 }
@@ -1168,11 +1207,311 @@ model Payment {
 
   organisation Organisation @relation(fields: [organisationId], references: [id], onDelete: Cascade)
   createdBy    User         @relation("PaymentCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+  billingCheckout BillingCheckout?
 
   @@index([organisationId])
   @@index([status])
   @@index([referenceType, referenceId])
   @@map("payments")
+  @@schema("billing")
+}
+
+// ---------------------------------------------------------------------------
+// Billing v2 (docs/billing-ui-contract.md)
+// ---------------------------------------------------------------------------
+
+// The organisation as GST buyer — printed on its invoices. One per org.
+model BillingProfile {
+  id             String   @id @default(uuid())
+  organisationId String   @unique @map("organisation_id")
+  legalName      String   @map("legal_name")
+  addressLine1   String   @map("address_line1")
+  addressLine2   String?  @map("address_line2")
+  city           String
+  // 2-digit GST state code ("29" = Karnataka); must match the GSTIN prefix.
+  state          String
+  pincode        String
+  country        String   @default("IN")
+  gstin          String?
+  createdAt      DateTime @default(now()) @map("created_at")
+  updatedAt      DateTime @updatedAt @map("updated_at")
+
+  organisation Organisation @relation(fields: [organisationId], references: [id], onDelete: Cascade)
+
+  @@map("billing_profiles")
+  @@schema("billing")
+}
+
+enum BillingCheckoutKind {
+  // From Basic / no active paid plan: full price, new cycle starts now.
+  new
+  // Higher plan, same interval: (new − old) × daysLeft ÷ daysInCycle; renewsAt unchanged.
+  upgrade_same_interval
+  // Monthly → yearly: yearly price − unused credit; new yearly cycle starts now.
+  interval_change
+  // Same plan + interval, full price for the next term ("pay each time").
+  renewal
+
+  @@schema("billing")
+}
+
+enum BillingCheckoutMode {
+  online
+  manual
+
+  @@schema("billing")
+}
+
+enum BillingCheckoutStatus {
+  pending
+  paid
+  failed
+  expired
+  cancelled
+  approved
+  rejected
+  // Payment captured but the plan couldn't be applied (amount mismatch,
+  // usage over the new plan's limits) — a Super Admin must look at it.
+  needs_review
+
+  @@schema("billing")
+}
+
+// What an organisation was quoted when it started buying / upgrading a plan.
+// Amounts are integer paise and never come from the client.
+model BillingCheckout {
+  id                     String                @id @default(uuid())
+  organisationId         String                @map("organisation_id")
+  fromPlanId             String?               @map("from_plan_id")
+  toPlanId               String                @map("to_plan_id")
+  fromInterval           BillingCycle?         @map("from_interval")
+  toInterval             BillingCycle          @map("to_interval")
+  kind                   BillingCheckoutKind
+  // Renewals: the subscription's renewsAt when quoted. A payment applies only
+  // while it still matches, so a second payment can't renew twice.
+  fromRenewsAt           DateTime?             @map("from_renews_at")
+  subtotalPaise          Int                   @map("subtotal_paise")
+  creditPaise            Int                   @map("credit_paise")
+  taxablePaise           Int                   @map("taxable_paise")
+  cgstPaise              Int                   @map("cgst_paise")
+  sgstPaise              Int                   @map("sgst_paise")
+  igstPaise              Int                   @map("igst_paise")
+  totalPaise             Int                   @map("total_paise")
+  buyerLegalName         String                @map("buyer_legal_name")
+  buyerState             String                @map("buyer_state")
+  buyerGstin             String?               @map("buyer_gstin")
+  sellerSnapshot         Json                  @map("seller_snapshot")
+  mode                   BillingCheckoutMode
+  status                 BillingCheckoutStatus @default(pending)
+  paymentId              String?               @unique @map("payment_id")
+  packageChangeRequestId String?               @unique @map("package_change_request_id")
+  // Online checkouts expire unpaid after 30 minutes.
+  expiresAt              DateTime?             @map("expires_at")
+  createdById            String                @map("created_by_id")
+  // Set exactly once when the plan is applied; the idempotency marker.
+  fulfilledAt            DateTime?             @map("fulfilled_at")
+  reviewReason           String?               @map("review_reason")
+  // Coupon taken off before GST (step 5); the discount is part of taxable.
+  couponId               String?               @map("coupon_id")
+  couponDiscountPaise    Int                   @default(0) @map("coupon_discount_paise")
+  createdAt              DateTime              @default(now()) @map("created_at")
+  updatedAt              DateTime              @updatedAt @map("updated_at")
+
+  organisation         Organisation          @relation(fields: [organisationId], references: [id], onDelete: Cascade)
+  fromPlan             Plan?                 @relation("BillingCheckoutFromPlan", fields: [fromPlanId], references: [id], onDelete: Restrict)
+  toPlan               Plan                  @relation("BillingCheckoutToPlan", fields: [toPlanId], references: [id], onDelete: Restrict)
+  payment              Payment?              @relation(fields: [paymentId], references: [id], onDelete: SetNull)
+  packageChangeRequest PackageChangeRequest? @relation(fields: [packageChangeRequestId], references: [id], onDelete: SetNull)
+  createdBy            User                  @relation("BillingCheckoutCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+  coupon               Coupon?               @relation(fields: [couponId], references: [id], onDelete: Restrict)
+
+  @@index([organisationId, status])
+  @@index([status])
+  @@map("billing_checkouts")
+  @@schema("billing")
+}
+
+enum CouponKind {
+  percent
+  fixed
+
+  @@schema("billing")
+}
+
+enum CouponDuration {
+  // Only the payment it's entered on.
+  first_payment
+  // That payment and the next (durationCount − 1) renewals.
+  first_n
+  // Every payment while the subscription keeps the plan.
+  forever
+
+  @@schema("billing")
+}
+
+enum CouponIntervalScope {
+  any
+  monthly
+  yearly
+
+  @@schema("billing")
+}
+
+enum InvoiceKind {
+  invoice
+  // Issued when a paid invoice is refunded; refers to it (creditForId).
+  credit_note
+
+  @@schema("billing")
+}
+
+enum InvoiceStatus {
+  paid
+  refunded
+  void
+
+  @@schema("billing")
+}
+
+// GST tax invoices and credit notes for plan payments (billing v2 step 7).
+// Numbers run per Indian financial year: INV/26-27/0001, CN/26-27/0001.
+// Amounts are integer paise; seller and buyer are snapshots at issue time.
+model Invoice {
+  id               String        @id @default(uuid())
+  number           String        @unique
+  kind             InvoiceKind   @default(invoice)
+  status           InvoiceStatus @default(paid)
+  organisationId   String        @map("organisation_id")
+  checkoutId       String?       @map("checkout_id")
+  paymentId        String?       @map("payment_id")
+  offlinePaymentId String?       @map("offline_payment_id")
+  // Credit notes: the invoice they cancel.
+  creditForId      String?       @map("credit_for_id")
+  issuedAt         DateTime      @default(now()) @map("issued_at")
+  description      String
+  seller           Json
+  buyer            Json
+  // Before discounts / credits, the discounts, then the taxable value.
+  subtotalPaise    Int           @map("subtotal_paise")
+  discountPaise    Int           @default(0) @map("discount_paise")
+  taxablePaise     Int           @map("taxable_paise")
+  cgstPaise        Int           @map("cgst_paise")
+  sgstPaise        Int           @map("sgst_paise")
+  igstPaise        Int           @map("igst_paise")
+  totalPaise       Int           @map("total_paise")
+  // When the "Payment received" / credit note email went out (claimed once,
+  // so verify + webhook never send it twice).
+  emailedAt        DateTime?     @map("emailed_at")
+  createdAt        DateTime      @default(now()) @map("created_at")
+
+  @@index([organisationId])
+  @@index([checkoutId])
+  @@index([paymentId])
+  @@map("invoices")
+  @@schema("billing")
+}
+
+// Next number per series ("INV/26-27", "CN/26-27").
+model InvoiceCounter {
+  series String @id
+  next   Int
+
+  @@map("invoice_counters")
+  @@schema("billing")
+}
+
+// A plan payment received outside Razorpay, recorded by a Super Admin
+// ("Mark paid offline"). Shows in payment history; can be refunded.
+model OfflinePayment {
+  id             String   @id @default(uuid())
+  organisationId String   @map("organisation_id")
+  amountPaise    Int      @map("amount_paise")
+  method         String
+  reference      String   @default("")
+  receivedOn     DateTime @map("received_on")
+  note           String?
+  // received | refunded
+  status         String   @default("received")
+  recordedById   String?  @map("recorded_by_id")
+  createdAt      DateTime @default(now()) @map("created_at")
+
+  @@index([organisationId])
+  @@map("offline_payments")
+  @@schema("billing")
+}
+
+// "Choose what stays": what an organisation keeps active on a smaller plan.
+// One row per organisation, for one target plan; when no row matches the plan
+// the org moves to, the default picks apply (owner, admins, latest login;
+// latest-updated projects; landing pages with most leads in 30 days).
+model RetentionChoice {
+  id             String   @id @default(uuid())
+  organisationId String   @unique @map("organisation_id")
+  targetPlanId   String   @map("target_plan_id")
+  userIds        String[] @map("user_ids")
+  projectIds     String[] @map("project_ids")
+  landingPageIds String[] @map("landing_page_ids")
+  updatedById    String?  @map("updated_by_id")
+  createdAt      DateTime @default(now()) @map("created_at")
+  updatedAt      DateTime @updatedAt @map("updated_at")
+
+  @@map("retention_choices")
+  @@schema("billing")
+}
+
+// A discount code Super Admins create; entered at checkout, taken off
+// before GST. Codes are stored upper-case and never renamed.
+model Coupon {
+  id             String              @id @default(uuid())
+  code           String              @unique
+  description    String              @default("")
+  kind           CouponKind
+  // percent: 1–100. fixed: rupees off each discounted payment, in paise.
+  percentOff     Int?                @map("percent_off")
+  amountOffPaise Int?                @map("amount_off_paise")
+  // Plans it works on (ids); never empty.
+  planIds        String[]            @map("plan_ids")
+  interval       CouponIntervalScope @default(any)
+  duration       CouponDuration
+  // first_n: payments counting the first one.
+  durationCount  Int?                @map("duration_count")
+  validFrom      DateTime            @map("valid_from")
+  validTo        DateTime?           @map("valid_to")
+  // How many organisations may use it; null = no limit.
+  totalUses      Int?                @map("total_uses")
+  oncePerOrg     Boolean             @default(true) @map("once_per_org")
+  // Empty = open to every organisation.
+  orgIds         String[]            @map("org_ids")
+  // Open coupons (orgIds empty) listed on the org's Billing → Coupons page.
+  // Org-only coupons are always listed for those organisations.
+  showToCustomers Boolean            @default(false) @map("show_to_customers")
+  createdById    String?             @map("created_by_id")
+  createdAt      DateTime            @default(now()) @map("created_at")
+  updatedAt      DateTime            @updatedAt @map("updated_at")
+
+  redemptions CouponRedemption[]
+  checkouts   BillingCheckout[]
+
+  @@map("coupons")
+  @@schema("billing")
+}
+
+// One row per discounted payment (the first one, and each renewal a
+// first_n / forever coupon still covers). "Uses" = distinct organisations.
+model CouponRedemption {
+  id             String   @id @default(uuid())
+  couponId       String   @map("coupon_id")
+  organisationId String   @map("organisation_id")
+  checkoutId     String   @unique @map("checkout_id")
+  planId         String   @map("plan_id")
+  discountPaise  Int      @map("discount_paise")
+  createdAt      DateTime @default(now()) @map("created_at")
+
+  coupon Coupon @relation(fields: [couponId], references: [id], onDelete: Restrict)
+
+  @@index([couponId])
+  @@index([organisationId])
+  @@map("coupon_redemptions")
   @@schema("billing")
 }
 
@@ -1259,6 +1598,9 @@ model LandingPage {
   reviewedById     String?           @map("reviewed_by_id")
   rejectionReason  String?           @map("rejection_reason")
   publishedAt      DateTime?         @map("published_at")
+  // Billing v2: taken offline (status unpublished) because the organisation
+  // moved to a smaller plan; republished when there's room again.
+  billingOfflineAt DateTime?         @map("billing_offline_at")
   createdAt        DateTime          @default(now()) @map("created_at")
   updatedAt        DateTime          @updatedAt @map("updated_at")
 
@@ -2048,6 +2390,10 @@ model Project {
   // can only exist once unit types are created after publish.
   floorPlanUrls          String[] @default([]) @map("floor_plan_urls")
 
+  // Billing v2: view-only because the organisation moved to a smaller plan;
+  // doesn't count towards the project limit. Cleared when there's room again.
+  billingViewOnlyAt DateTime? @map("billing_view_only_at")
+
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
@@ -2389,6 +2735,23 @@ model PlatformConfig {
   billingGracePeriodDays  Int     @default(7) @map("billing_grace_period_days")
   billingExpiryBehavior   String  @default("restrict") @map("billing_expiry_behavior") // restrict | cancel
   billingExpiryMessage    String  @default("Your subscription is due for renewal soon. Renew to keep your landing pages and features running without interruption.") @map("billing_expiry_message")
+  // Billing v2: Super Admin switch for online (Razorpay) plan payments. Off =
+  // upgrades go to Super Admin for manual approval. The effective mode also
+  // needs usable Razorpay keys — see BillingModeService.
+  onlinePaymentsEnabled   Boolean @default(false) @map("online_payments_enabled")
+  // Billing v2: which renewal reminders are on — { before_renewal, payment_day,
+  // mid_grace, day_before_grace_ends: boolean }. Null / missing key = on.
+  billingReminders        Json?   @map("billing_reminders")
+  // Billing v2: the platform as GST seller, printed on invoices and used to
+  // split GST (CGST+SGST when the buyer's state = sellerState, else IGST).
+  // sellerState is the 2-digit GST state code ("29" = Karnataka).
+  sellerLegalName         String? @map("seller_legal_name")
+  sellerGstin             String? @map("seller_gstin")
+  sellerState             String? @map("seller_state")
+  sellerAddressLine1      String? @map("seller_address_line1")
+  sellerAddressLine2      String? @map("seller_address_line2")
+  sellerCity              String? @map("seller_city")
+  sellerPincode           String? @map("seller_pincode")
   primaryColor            String  @default("#0f1424") @map("primary_color")
   secondaryColor          String  @default("#2a3348") @map("secondary_color")
   updatedAt               DateTime @updatedAt @map("updated_at")

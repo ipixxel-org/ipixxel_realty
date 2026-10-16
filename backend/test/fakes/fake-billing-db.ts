@@ -1,0 +1,248 @@
+/* eslint-disable @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-argument, @typescript-eslint/require-await -- test-only in-memory Prisma fake: rows are untyped on purpose */
+/**
+ * Minimal in-memory stand-in for the Prisma calls the billing checkout and
+ * plan-change code make. Transactions run one at a time (a mutex), which is
+ * what the row locks guarantee in Postgres — enough to test idempotency.
+ * Test-only.
+ */
+type Row = Record<string, any>;
+type Where = Record<string, any>;
+
+function matches(row: Row, where: Where = {}): boolean {
+  return Object.entries(where).every(([key, cond]) => {
+    if (key === 'OR') return (cond as Where[]).some((w) => matches(row, w));
+    const v = row[key];
+    if (cond !== null && typeof cond === 'object' && !(cond instanceof Date)) {
+      if ('in' in cond) return (cond.in as unknown[]).includes(v);
+      if ('notIn' in cond) return !(cond.notIn as unknown[]).includes(v);
+      if ('not' in cond) return v !== cond.not;
+      if ('lt' in cond) return v instanceof Date && v < cond.lt;
+      return true; // relation filters etc. — not needed here
+    }
+    // A column the row never set reads as NULL, like in Postgres.
+    return v === cond || (cond === null && v === undefined);
+  });
+}
+
+let seq = 0;
+const id = (p: string) => `${p}_${++seq}`;
+
+function table(
+  rows: Row[],
+  prefix: string,
+  includes: (row: Row, inc?: Row) => Row = (r) => r,
+) {
+  const find = (where?: Where) => rows.find((r) => matches(r, where));
+  const out = (r: Row | undefined, inc?: Row) =>
+    r ? includes({ ...r }, inc) : null;
+  return {
+    rows,
+    findUnique: async ({ where, include }: { where: Where; include?: Row }) =>
+      out(find(where), include),
+    findUniqueOrThrow: async ({
+      where,
+      include,
+    }: {
+      where: Where;
+      include?: Row;
+    }) => {
+      const r = out(find(where), include);
+      if (!r) throw new Error(`${prefix} not found`);
+      return r;
+    },
+    findFirst: async ({
+      where,
+      include,
+    }: { where?: Where; include?: Row } = {}) => out(find(where), include),
+    findFirstOrThrow: async ({
+      where,
+      include,
+    }: { where?: Where; include?: Row } = {}) => {
+      const r = out(find(where), include);
+      if (!r) throw new Error(`${prefix} not found`);
+      return r;
+    },
+    findMany: async ({
+      where,
+      distinct,
+    }: { where?: Where; distinct?: string[] } = {}) => {
+      const hit = rows.filter((r) => matches(r, where)).map((r) => ({ ...r }));
+      if (!distinct) return hit;
+      const seen = new Set<string>();
+      return hit.filter((r) => {
+        const key = distinct.map((k) => String(r[k])).join('|');
+        if (seen.has(key)) return false;
+        seen.add(key);
+        return true;
+      });
+    },
+    count: async ({ where }: { where?: Where } = {}) =>
+      rows.filter((r) => matches(r, where)).length,
+    create: async ({ data }: { data: Row }) => {
+      const row = {
+        id: id(prefix),
+        createdAt: new Date(),
+        updatedAt: new Date(),
+        ...data,
+      };
+      rows.push(row);
+      return { ...row };
+    },
+    createMany: async ({ data }: { data: Row[] }) => {
+      for (const d of data) rows.push({ id: id(prefix), ...d });
+      return { count: data.length };
+    },
+    update: async ({ where, data }: { where: Where; data: Row }) => {
+      const r = find(where);
+      if (!r) throw new Error(`${prefix} not found`);
+      Object.assign(r, data, { updatedAt: new Date() });
+      return { ...r };
+    },
+    upsert: async ({
+      where,
+      create,
+      update,
+    }: {
+      where: Where;
+      create: Row;
+      update: Row;
+    }) => {
+      const r = find(where);
+      if (r) {
+        // Supports { field: { increment: n } } (invoice counters).
+        for (const [k, v] of Object.entries(update)) {
+          r[k] =
+            v !== null && typeof v === 'object' && 'increment' in v
+              ? (r[k] as number) + (v as { increment: number }).increment
+              : v;
+        }
+        return { ...r };
+      }
+      const row = { id: id(prefix), createdAt: new Date(), ...create };
+      rows.push(row);
+      return { ...row };
+    },
+    updateMany: async ({ where, data }: { where: Where; data: Row }) => {
+      const hit = rows.filter((r) => matches(r, where));
+      hit.forEach((r) => Object.assign(r, data, { updatedAt: new Date() }));
+      return { count: hit.length };
+    },
+  };
+}
+
+export interface Seed {
+  plans: Row[];
+  subscription?: Row | null;
+  /** The platform_configs row (grace days, reminders…); absent = defaults. */
+  platformConfig?: Row | null;
+  /** Extra org users / projects / landing pages (for choose-what-stays tests). */
+  users?: Row[];
+  projects?: Row[];
+  landingPages?: Row[];
+  usage?: {
+    users?: number;
+    projects?: number;
+    landingPages?: number;
+    templates?: number;
+  };
+}
+
+export function createFakeBillingDb(seed: Seed) {
+  const plans: Row[] = seed.plans.map((p) => ({
+    isActive: true,
+    isSystem: false,
+    limits: {},
+    capabilities: {},
+    createdAt: new Date(0),
+    description: '',
+    ...p,
+  }));
+  const planById = (pid: string) => plans.find((p) => p.id === pid);
+  const usage = {
+    users: 1,
+    projects: 1,
+    landingPages: 0,
+    templates: 0,
+    ...seed.usage,
+  };
+
+  const db: Row = {};
+  db.plan = table(plans, 'plan');
+  db.subscription = table(
+    seed.subscription ? [{ ...seed.subscription }] : [],
+    'sub',
+    (r, inc) => (inc?.plan ? { ...r, plan: planById(r.planId) } : r),
+  );
+  db.packageChangeRequest = table([], 'pcr', (r, inc) => ({
+    ...r,
+    ...(inc?.billingCheckout
+      ? {
+          billingCheckout:
+            db.billingCheckout.rows.find(
+              (c: Row) => c.packageChangeRequestId === r.id,
+            ) ?? null,
+        }
+      : {}),
+    ...(inc?.targetPlan ? { targetPlan: planById(r.targetPlanId) } : {}),
+    ...(inc?.organisation
+      ? { organisation: { id: r.orgId, name: 'Acme' } }
+      : {}),
+  }));
+  db.billingCheckout = table([], 'chk', (r, inc) =>
+    inc?.toPlan ? { ...r, toPlan: planById(r.toPlanId) } : r,
+  );
+  db.billingProfile = table([], 'prof');
+  db.coupon = table([], 'cpn');
+  db.invoice = table([], 'inv');
+  db.invoiceCounter = table([], 'ctr');
+  db.offlinePayment = table([], 'off');
+  db.couponRedemption = table([], 'red');
+  db.payment = table([], 'pay');
+  db.auditLog = table([], 'audit');
+  db.notification = table([], 'note');
+  db.platformConfig = {
+    findUnique: async () =>
+      seed.platformConfig ? { ...seed.platformConfig } : null,
+  };
+  // One org admin (the owner). Counts come from `usage`; the rows below are
+  // what "choose what stays" (retention.util) reads and pauses.
+  const users = table(
+    [
+      {
+        id: 'u-admin',
+        orgId: 'org-1',
+        status: 'active',
+        firstName: 'Asha',
+        lastName: null,
+        email: 'asha@acme.test',
+        billingPausedAt: null,
+        createdAt: new Date(0),
+        userRoles: [{ role: { key: 'admin', name: 'Admin' } }],
+      },
+      ...(seed.users ?? []),
+    ],
+    'user',
+  );
+  db.user = { ...users, count: async () => usage.users };
+  const projects = table([...(seed.projects ?? [])], 'proj');
+  db.project = { ...projects, count: async () => usage.projects };
+  const pages = table([...(seed.landingPages ?? [])], 'page');
+  db.landingPage = { ...pages, count: async () => usage.landingPages };
+  db.refreshToken = table([], 'rt');
+  db.retentionChoice = table([], 'ret');
+  db.lead = { groupBy: async () => [] };
+  db.organisationTemplate = { count: async () => usage.templates };
+
+  let chain = Promise.resolve();
+  db.$transaction = (fn: (tx: Row) => Promise<unknown>) => {
+    const run = chain.then(() => fn(db));
+    chain = run.then(
+      () => undefined,
+      () => undefined,
+    );
+    return run;
+  };
+  db.$queryRaw = async () => [];
+  db.$executeRaw = async () => 0;
+  return { db, usage, planById };
+}

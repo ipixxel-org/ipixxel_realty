@@ -11,6 +11,27 @@ import { UpdatePlatformConfigDto } from './dto/update-platform-config.dto';
 // The single global config row id. Only one row is ever used.
 const PLATFORM_CONFIG_ID = 'platform';
 
+const SELLER_COLUMNS = [
+  'seller_legal_name',
+  'seller_gstin',
+  'seller_state',
+  'seller_address_line1',
+  'seller_address_line2',
+  'seller_city',
+  'seller_pincode',
+] as const;
+
+/** Billing v2: the platform as GST seller. `state` is the 2-digit GST state code. */
+export interface SellerSettings {
+  legalName: string | null;
+  gstin: string | null;
+  state: string | null;
+  addressLine1: string | null;
+  addressLine2: string | null;
+  city: string | null;
+  pincode: string | null;
+}
+
 function migrateLegacyBase(base: string | null | undefined): string {
   const normalized = base ? normalizeDomain(base) : '';
   if (!normalized || normalized === 'ipixxel.in') return 'ipixxel.ae';
@@ -71,6 +92,140 @@ export class PlatformConfigService implements OnApplicationBootstrap {
         `ALTER TABLE "identity"."platform_configs" ADD COLUMN IF NOT EXISTS "secondary_color" TEXT NOT NULL DEFAULT '#2a3348';`,
       );
     } catch {}
+    // Billing v2 payment switch (also in migration 20261014090925).
+    try {
+      await this.prisma.$executeRawUnsafe(
+        `ALTER TABLE "identity"."platform_configs" ADD COLUMN IF NOT EXISTS "online_payments_enabled" BOOLEAN NOT NULL DEFAULT false;`,
+      );
+    } catch {}
+    // Billing v2 reminder switches (also in migration 20261015114705).
+    try {
+      await this.prisma.$executeRawUnsafe(
+        `ALTER TABLE "identity"."platform_configs" ADD COLUMN IF NOT EXISTS "billing_reminders" JSONB;`,
+      );
+    } catch {
+      // Column already there, or no rights to alter: reads fall back to "all on".
+    }
+    // Billing v2 seller (GST) settings (also in migration 20261014110220).
+    for (const col of SELLER_COLUMNS) {
+      try {
+        await this.prisma.$executeRawUnsafe(
+          `ALTER TABLE "identity"."platform_configs" ADD COLUMN IF NOT EXISTS "${col}" TEXT;`,
+        );
+      } catch {}
+    }
+  }
+
+  /** Billing v2: which renewal reminders are on (stored JSON; null = all on). */
+  async getBillingReminders(): Promise<unknown> {
+    try {
+      await this.ensureTable();
+      const rows: { billing_reminders: unknown }[] = await this.prisma
+        .$queryRaw`
+        SELECT "billing_reminders" FROM "identity"."platform_configs"
+        WHERE "id" = ${PLATFORM_CONFIG_ID} LIMIT 1
+      `;
+      return rows?.[0]?.billing_reminders ?? null;
+    } catch (err) {
+      this.logger.warn(
+        `Could not read billing reminders: ${err instanceof Error ? err.message : String(err)}`,
+      );
+      return null;
+    }
+  }
+
+  /** Billing v2: save which renewal reminders are on. */
+  async saveBillingReminders(
+    reminders: Record<string, boolean>,
+  ): Promise<void> {
+    await this.ensureTable();
+    await this.prisma.$executeRaw`
+      INSERT INTO "identity"."platform_configs" ("id", "updated_at")
+      VALUES (${PLATFORM_CONFIG_ID}, CURRENT_TIMESTAMP)
+      ON CONFLICT ("id") DO NOTHING
+    `;
+    await this.prisma.$executeRaw`
+      UPDATE "identity"."platform_configs" SET
+        "billing_reminders" = ${JSON.stringify(reminders)}::jsonb,
+        "updated_at" = CURRENT_TIMESTAMP
+      WHERE "id" = ${PLATFORM_CONFIG_ID}
+    `;
+  }
+
+  /** Billing v2: the platform as GST seller. Every field null until set. */
+  async getSellerSettings(): Promise<SellerSettings> {
+    const empty: SellerSettings = {
+      legalName: null,
+      gstin: null,
+      state: null,
+      addressLine1: null,
+      addressLine2: null,
+      city: null,
+      pincode: null,
+    };
+    try {
+      await this.ensureTable();
+      const rows: any[] = await this.prisma.$queryRaw`
+        SELECT "seller_legal_name", "seller_gstin", "seller_state", "seller_address_line1",
+               "seller_address_line2", "seller_city", "seller_pincode"
+        FROM "identity"."platform_configs" WHERE "id" = ${PLATFORM_CONFIG_ID} LIMIT 1
+      `;
+      const r = rows?.[0];
+      if (!r) return empty;
+      return {
+        legalName: r.seller_legal_name ?? null,
+        gstin: r.seller_gstin ?? null,
+        state: r.seller_state ?? null,
+        addressLine1: r.seller_address_line1 ?? null,
+        addressLine2: r.seller_address_line2 ?? null,
+        city: r.seller_city ?? null,
+        pincode: r.seller_pincode ?? null,
+      };
+    } catch (err: any) {
+      this.logger.warn(`Could not read seller settings: ${err.message}`);
+      return empty;
+    }
+  }
+
+  /** Billing v2: save the seller fields (validated by the caller). */
+  async saveSellerSettings(s: SellerSettings): Promise<SellerSettings> {
+    await this.ensureTable();
+    // Make sure the single row exists (all other columns have defaults).
+    await this.prisma.$executeRaw`
+      INSERT INTO "identity"."platform_configs" ("id", "updated_at")
+      VALUES (${PLATFORM_CONFIG_ID}, CURRENT_TIMESTAMP)
+      ON CONFLICT ("id") DO NOTHING
+    `;
+    await this.prisma.$executeRaw`
+      UPDATE "identity"."platform_configs" SET
+        "seller_legal_name" = ${s.legalName},
+        "seller_gstin" = ${s.gstin},
+        "seller_state" = ${s.state},
+        "seller_address_line1" = ${s.addressLine1},
+        "seller_address_line2" = ${s.addressLine2},
+        "seller_city" = ${s.city},
+        "seller_pincode" = ${s.pincode},
+        "updated_at" = CURRENT_TIMESTAMP
+      WHERE "id" = ${PLATFORM_CONFIG_ID}
+    `;
+    return this.getSellerSettings();
+  }
+
+  /**
+   * Billing v2: is online (Razorpay) plan payment switched on by Super Admin?
+   * Off by default and on any read failure — manual approval is the safe side.
+   */
+  async getOnlinePaymentsEnabled(): Promise<boolean> {
+    try {
+      await this.ensureTable();
+      const rows: any[] = await this.prisma.$queryRaw`
+        SELECT "online_payments_enabled" FROM "identity"."platform_configs" WHERE "id" = ${PLATFORM_CONFIG_ID} LIMIT 1
+      `;
+      return rows?.[0]?.online_payments_enabled === true;
+    } catch (err: any) {
+      this.logger.warn(`Could not read online payments switch: ${err.message}`);
+      return false;
+    }
   }
 
   async onApplicationBootstrap() {
@@ -146,6 +301,7 @@ export class PlatformConfigService implements OnApplicationBootstrap {
           billingGracePeriodDays: r.billing_grace_period_days ?? r.billingGracePeriodDays ?? 7,
           billingExpiryBehavior: r.billing_expiry_behavior || r.billingExpiryBehavior || 'restrict',
           billingExpiryMessage: r.billing_expiry_message || r.billingExpiryMessage || 'Your subscription is due for renewal soon. Renew to keep your landing pages and features running without interruption.',
+          onlinePaymentsEnabled: (r.online_payments_enabled ?? r.onlinePaymentsEnabled) === true,
           primaryColor: r.primary_color || r.primaryColor || '#0f1424',
           secondaryColor: r.secondary_color || r.secondaryColor || '#2a3348',
           updatedAt: r.updated_at ? new Date(r.updated_at).toISOString() : null,
@@ -172,6 +328,7 @@ export class PlatformConfigService implements OnApplicationBootstrap {
       billingExpiryBehavior: 'restrict',
       billingExpiryMessage:
         'Your subscription is due for renewal soon. Renew to keep your landing pages and features running without interruption.',
+      onlinePaymentsEnabled: false,
       primaryColor: process.env.PLATFORM_PRIMARY_COLOR || '#0f1424',
       secondaryColor: process.env.PLATFORM_SECONDARY_COLOR || '#2a3348',
       updatedAt: null,
@@ -233,6 +390,9 @@ export class PlatformConfigService implements OnApplicationBootstrap {
     const billingExpiryMessage = dto.billingExpiryMessage !== undefined
       ? dto.billingExpiryMessage.trim()
       : (existing?.billing_expiry_message ?? existing?.billingExpiryMessage ?? 'Your subscription is due for renewal soon. Renew to keep your landing pages and features running without interruption.');
+    const onlinePaymentsEnabled = dto.onlinePaymentsEnabled !== undefined
+      ? dto.onlinePaymentsEnabled
+      : (existing?.online_payments_enabled ?? existing?.onlinePaymentsEnabled ?? false) === true;
     const primaryColor = dto.primaryColor !== undefined
       ? dto.primaryColor.trim()
       : (existing?.primary_color ?? existing?.primaryColor ?? '#0f1424');
@@ -258,7 +418,7 @@ export class PlatformConfigService implements OnApplicationBootstrap {
           "id", "subdomain_mode", "subdomain_base", "dns_mode", "infra_ip", "infra_ipv6",
           "infra_cname", "infra_ns1", "infra_ns2", "billing_expiry_notify_days",
           "billing_grace_period_days", "billing_expiry_behavior", "billing_expiry_message",
-          "primary_color", "secondary_color", "updated_at"
+          "online_payments_enabled", "primary_color", "secondary_color", "updated_at"
         ) VALUES (
           ${PLATFORM_CONFIG_ID},
           ${subdomainMode},
@@ -273,6 +433,7 @@ export class PlatformConfigService implements OnApplicationBootstrap {
           ${billingGracePeriodDays},
           ${billingExpiryBehavior},
           ${billingExpiryMessage},
+          ${onlinePaymentsEnabled},
           ${primaryColor},
           ${secondaryColor},
           CURRENT_TIMESTAMP
@@ -290,6 +451,7 @@ export class PlatformConfigService implements OnApplicationBootstrap {
           "billing_grace_period_days" = EXCLUDED."billing_grace_period_days",
           "billing_expiry_behavior" = EXCLUDED."billing_expiry_behavior",
           "billing_expiry_message" = EXCLUDED."billing_expiry_message",
+          "online_payments_enabled" = EXCLUDED."online_payments_enabled",
           "primary_color" = EXCLUDED."primary_color",
           "secondary_color" = EXCLUDED."secondary_color",
           "updated_at" = CURRENT_TIMESTAMP;
@@ -328,6 +490,7 @@ export class PlatformConfigService implements OnApplicationBootstrap {
       billingGracePeriodDays,
       billingExpiryBehavior,
       billingExpiryMessage,
+      onlinePaymentsEnabled,
       primaryColor,
       secondaryColor,
       updatedAt: new Date().toISOString(),

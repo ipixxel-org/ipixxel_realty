@@ -41,6 +41,8 @@ import {
 import { Icon } from "@/components/icons";
 import { RowActionsMenu } from "@/components/superadmin/row-actions-menu";
 import { ProjectPageHead } from "@/components/org/project-tabs";
+import { useProjectViewOnly } from "@/components/billing/locked";
+import { PLAN_LOCK_COPY } from "@/lib/plan-lock";
 import {
   ConfigurationSelect,
   TowerCombobox,
@@ -160,9 +162,11 @@ export default function OrgProjectUnitsPage() {
   const id = params?.id ?? "";
   const { accessToken, hasPermission } = useAuth();
   // Projects > Add unit / Edit unit / Delete unit (unit types included).
-  const canAddUnit = hasPermission("projects", PROJECT_UNIT_ACTIONS.add);
-  const canEditUnit = hasPermission("projects", PROJECT_UNIT_ACTIONS.edit);
-  const canDeleteUnit = hasPermission("projects", PROJECT_UNIT_ACTIONS.delete);
+  // Billing v2: a view-only project's units can be opened, not changed.
+  const viewOnly = useProjectViewOnly(id);
+  const canAddUnit = hasPermission("projects", PROJECT_UNIT_ACTIONS.add) && !viewOnly;
+  const canEditUnit = hasPermission("projects", PROJECT_UNIT_ACTIONS.edit) && !viewOnly;
+  const canDeleteUnit = hasPermission("projects", PROJECT_UNIT_ACTIONS.delete) && !viewOnly;
 
   const [project, setProject] = useState<ProjectDetail | null>(null);
   const [units, setUnits] = useState<Unit[]>([]);
@@ -1441,7 +1445,8 @@ export default function OrgProjectUnitsPage() {
                           <select
                             className={`badge ${STATUS_BADGE[row.status]} nb`}
                             value={row.status}
-                            disabled={statusSavingId === row.id}
+                            disabled={statusSavingId === row.id || viewOnly}
+                            title={viewOnly ? PLAN_LOCK_COPY.project_view_only.tooltip : undefined}
                             onChange={(e) =>
                               void changeStatus(
                                 row,

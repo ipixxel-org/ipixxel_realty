@@ -112,6 +112,7 @@ import type {
 } from "./types";
 import type { LeadImportRow } from "./lead-import";
 import { getStoredAttribution } from "./openpage/form-runtime";
+import { planLockMessage } from "./plan-lock";
 
 const API_BASE = "/api";
 
@@ -131,6 +132,9 @@ export class ApiError extends Error {
 }
 
 function errorMessage(body: ApiErrorBody | null, status: number): string {
+  // Billing v2: something the plan has locked — one friendly message per kind.
+  const locked = planLockMessage(body);
+  if (locked) return locked;
   if (body?.message) {
     return Array.isArray(body.message) ? body.message.join(", ") : body.message;
   }
@@ -643,6 +647,7 @@ export async function getCrmLeads(
   if (params?.search) q.set("search", params.search);
   if (params?.page) q.set("page", String(params.page));
   if (params?.limit) q.set("limit", String(params.limit));
+  if (params?.needsReassign) q.set("needsReassign", "true");
   const s = q.toString();
   return apiFetch<CrmLeadListResponse>(`/org/leads${s ? `?${s}` : ""}`);
 }
@@ -1160,6 +1165,8 @@ export async function getOrgUnits(params?: {
   standalone?: boolean;
   status?: UnitStatus;
   search?: string;
+  /** Billing v2: only units of projects the plan made view-only. */
+  viewOnly?: boolean;
 }): Promise<OrgUnitsListResponse> {
   const q = new URLSearchParams();
   if (params?.page) q.set("page", String(params.page));
@@ -1168,6 +1175,7 @@ export async function getOrgUnits(params?: {
   if (params?.standalone) q.set("standalone", "1");
   if (params?.status) q.set("status", params.status);
   if (params?.search) q.set("search", params.search);
+  if (params?.viewOnly) q.set("viewOnly", "true");
   const qs = q.toString();
   return apiFetch<OrgUnitsListResponse>(`/org/units${qs ? `?${qs}` : ""}`);
 }

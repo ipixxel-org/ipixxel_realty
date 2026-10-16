@@ -94,8 +94,10 @@ export function assertTemplateQuota(
 // --- Usage counters ---
 // The agreed counting rules live here and nowhere else:
 //   - users:    active + pending organisation users, including the
-//               organisation admin; disabled users do not consume a seat.
-//   - projects: every project counts, regardless of status.
+//               organisation admin; disabled users and users paused by
+//               billing ("choose what stays") do not consume a seat.
+//   - projects: every project counts, regardless of status — except ones
+//               made view-only by billing.
 //   - templates: assigned OrganisationTemplate rows.
 //   - landingPages: LandingPage rows with pageType 'landing' — thank-you
 //               companion pages are linked from a landing page, not sold
@@ -119,6 +121,7 @@ export function countBillableOrgUsers(
     where: {
       orgId,
       status: { in: ['active', 'pending'] },
+      billingPausedAt: null,
     },
   });
 }
@@ -127,7 +130,7 @@ export function countOrgProjects(
   prisma: ProjectCountPrisma,
   orgId: string,
 ): Promise<number> {
-  return prisma.project.count({ where: { orgId } });
+  return prisma.project.count({ where: { orgId, billingViewOnlyAt: null } });
 }
 
 export function countOrgLandingPages(

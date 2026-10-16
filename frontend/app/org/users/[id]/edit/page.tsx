@@ -7,6 +7,7 @@ import { useAuth } from "@/lib/auth-context";
 import { apiFetch } from "@/lib/api";
 import type { OrgUser } from "@/lib/types";
 import { OrgUserForm, USERS_PATH } from "../../user-form";
+import { PlanLockNotice, usePlanLocks } from "@/components/billing/locked";
 import "../../users.css";
 
 // GET /org/users/:id returns the snake_case safe-user shape (first_name,
@@ -52,6 +53,8 @@ export default function EditOrgUserPage() {
   const id = params?.id;
   const { accessToken, isLoading, hasPermission } = useAuth();
   const canEdit = hasPermission("users", "edit");
+  // Billing v2: say a paused user can't be brought back from here.
+  const paused = usePlanLocks().userPaused(id);
 
   const [user, setUser] = useState<OrgUser | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -80,5 +83,10 @@ export default function EditOrgUserPage() {
   // The backend refuses edits to organisation admins; say so up front
   // instead of letting the save fail.
   if (user.role?.key === "admin") return <Notice>Organisation admins can&apos;t be edited here.</Notice>;
-  return <OrgUserForm key={user.id} user={user} />;
+  return (
+    <>
+      {paused ? <PlanLockNotice kind="user_paused" /> : null}
+      <OrgUserForm key={user.id} user={user} />
+    </>
+  );
 }

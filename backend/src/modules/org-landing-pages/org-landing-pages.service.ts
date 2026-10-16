@@ -24,6 +24,7 @@ import {
   assertOrgLandingPageQuota,
 } from '../../common/utils/subscription-lifecycle.util';
 import { PageRevisionsService } from '../page-revisions/page-revisions.service';
+import { planLockedError } from '../../common/utils/plan-lock.util';
 
 function defaultThankYouContent(pageName: string, slug: string) {
   const brandName = pageName.replace(/\s*—\s*Thank You$/i, '').trim() || 'Property';
@@ -485,6 +486,7 @@ export class OrgLandingPagesService {
 
     const where: Prisma.LandingPageWhereInput = { orgId };
     if (query.status) where.status = query.status;
+    if (query.offline) where.billingOfflineAt = { not: null };
     if (query.search) {
       where.OR = [
         { name: { contains: query.search, mode: 'insensitive' } },
@@ -674,6 +676,10 @@ export class OrgLandingPagesService {
   async publish(orgId: string, id: string) {
     const page = await this.getOwned(orgId, id);
 
+    // Billing v2: a page taken offline by the plan comes back through
+    // "Change what stays" or an upgrade, not Publish.
+    if (page.billingOfflineAt) throw planLockedError('landing_page_offline');
+
     // Publishing is a package-gated action: a usable subscription (active /
     // trial / inside grace) AND the `publishing` plan capability. Drafting and
     // editing stay open to everyone so builders can prepare work while waiting
@@ -682,13 +688,21 @@ export class OrgLandingPagesService {
 
     const updated = await this.prisma.landingPage.update({
       where: { id },
-      data: { status: 'published', publishedAt: new Date() },
+      data: {
+        status: 'published',
+        publishedAt: new Date(),
+        billingOfflineAt: null,
+      },
     });
 
     if (page.pageType === 'landing') {
       await this.prisma.landingPage.updateMany({
         where: { parentId: page.id, orgId, pageType: 'thank_you' },
-        data: { status: 'published', publishedAt: new Date() },
+        data: {
+          status: 'published',
+          publishedAt: new Date(),
+          billingOfflineAt: null,
+        },
       });
     }
 

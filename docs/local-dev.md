@@ -159,3 +159,45 @@ Applying the migration on a DB whose history has drifted (see
 `npx prisma db execute --schema prisma/schema.prisma --file prisma/migrations/20261012054949_add_razorpay_payments/migration.sql`
 is safe, then `npx prisma generate` (stop the dev server first on Windows;
 `docker exec realestate-api npx prisma generate` when the API runs in Docker).
+
+## Testing billing v2 renewals, grace and "fall back to Basic"
+
+Billing v2 needs `NEXT_PUBLIC_BILLING_V2=true` in `frontend/.env` **and**
+`BILLING_V2=true` in `backend/.env`. On the server, `BILLING_V2` only changes
+what happens when grace ends unpaid: the org always falls back to Basic. With
+it unset, the old "restrict" / "cancel" setting still applies (the v2 settings
+card shows a warning).
+
+How the dates work: grace always ends at **renewal date + grace days** (+ any
+"Extend grace" days). It is worked out again on every check, so editing
+`billing.subscriptions.renews_at`, or changing the grace days, applies at once;
+`grace_ends_at` is kept in step (a NULL there is filled in). The check runs
+hourly, whenever an org opens Billing, and on demand (below).
+
+### Run lifecycle check now
+
+Super Admin → Settings → Subscription expiry policy → **Run now** (the
+`super_admin` role only; `POST /admin/billing/lifecycle/run`). It runs the
+check straight away — renewals due, grace, fall back to Basic, scheduled
+downgrades / cancellations, reminders — shows what it did, and writes a
+`billing_lifecycle_run` audit log entry.
+
+### Moving the billing clock (`BILLING_CLOCK_OVERRIDE`)
+
+To try future dates without editing the database, set in `backend/.env` and
+restart the backend:
+
+```
+BILLING_CLOCK_OVERRIDE="+10d"        # 10 days from now (also -2d, +36h)
+BILLING_CLOCK_OVERRIDE="2026-11-20"  # a fixed date (or a full ISO datetime)
+```
+
+Ignored when `NODE_ENV=production`. It moves only billing decisions — the
+lifecycle check, the Billing overview, checkout prices and period dates.
+Row timestamps, Razorpay orders and invoice dates stay real. Remove it (and
+restart) when you're done. The backend unit tests ignore it (and `BILLING_V2`):
+`test/jest-env.ts` blanks both, so a moved clock in your `.env` can't break them.
+
+Example — a subscription that renews 4 days from today, notify days 3, grace
+7 days: `+2d` → renewal due (Pay now, reminder); `+5d` → payment due, grace
+day 2 of 7; `+12d` → on Basic with the extras paused.

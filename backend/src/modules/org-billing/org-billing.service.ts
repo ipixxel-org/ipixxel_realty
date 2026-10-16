@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import { NotFoundException } from '@nestjs/common';
+import { BadRequestException, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../../database/prisma.service';
 import {
   assertPlanFitsCurrentUsage,
@@ -139,6 +139,27 @@ export class OrgBillingService {
    */
   async renew(orgId: string) {
     await applyOrgSubscriptionLifecycle(this.prisma, orgId);
+    // Closed loophole (billing v2 step 3): this extended a paid plan for
+    // free. Paid renewals go through checkout (billing v2 "Pay now") or a
+    // Super Admin renewal; a free plan can still be renewed here.
+    const current = await this.prisma.subscription.findFirst({
+      where: { orgId, status: { not: 'cancelled' } },
+      include: { plan: { select: { priceMonthly: true, priceYearly: true } } },
+    });
+    if (
+      current &&
+      (current.billingCycle === 'yearly'
+        ? current.plan.priceYearly
+        : current.plan.priceMonthly) > 0
+    ) {
+      throw new BadRequestException({
+        statusCode: 400,
+        error: 'Bad Request',
+        code: 'paid_renewal_requires_checkout',
+        message:
+          'Renewing a paid plan needs a payment. Contact our team and we will renew it for you.',
+      });
+    }
     const renewed = await renewOrgSubscription(this.prisma, orgId);
 
     await this.prisma.auditLog
@@ -173,6 +194,18 @@ export class OrgBillingService {
   async changePlan(orgId: string, dto: ChangePlanDto) {
     const plan = await this.prisma.plan.findUnique({ where: { id: dto.planId } });
     if (!plan || !plan.isActive) throw new NotFoundException('Plan not found or inactive');
+    // Closed loophole (billing v2 step 2): this path switched plans for free.
+    // Paid plans are bought through checkout (or a Super Admin approval);
+    // free plans can still be selected here.
+    if (plan.priceMonthly > 0 || plan.priceYearly > 0) {
+      throw new BadRequestException({
+        statusCode: 400,
+        error: 'Bad Request',
+        code: 'paid_plan_requires_checkout',
+        message:
+          'Paid plans are bought from Billing → Plans, not switched here.',
+      });
+    }
 
     // Downgrade guard — refuse to move onto a plan the org already exceeds.
     // Nothing is deleted to make it fit; upgrades and same-usage moves pass.
@@ -199,6 +232,7 @@ export class OrgBillingService {
       if (existing.status === 'expired' || existing.status === 'paused') {
         data.status = 'active';
         data.graceEndsAt = null;
+        data.graceExtensionDays = 0;
         data.renewsAt = new Date(
           Date.now() + (billingCycle === 'yearly' ? 365 : 30) * 24 * 60 * 60 * 1000,
         );

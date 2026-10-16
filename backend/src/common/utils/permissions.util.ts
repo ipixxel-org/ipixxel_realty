@@ -315,6 +315,11 @@ export const PLATFORM_ROUTE_MODULES: Array<{ prefix: string; module: string }> =
   { prefix: '/admin/subscriptions', module: 'admin_subscriptions' },
   { prefix: '/admin/plans', module: 'admin_subscriptions' },
   { prefix: '/admin/payments', module: 'admin_subscriptions' },
+  // Billing v2. First match wins: lifecycle and company details live on the
+  // Settings page.
+  { prefix: '/admin/billing/lifecycle', module: 'admin_settings' },
+  { prefix: '/admin/billing/company', module: 'admin_settings' },
+  { prefix: '/admin/billing', module: 'admin_subscriptions' },
   { prefix: '/admin/email', module: 'admin_email' },
   { prefix: '/admin/notifications', module: 'admin_notifications' },
   { prefix: '/admin/dashboard', module: 'admin_dashboard' },

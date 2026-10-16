@@ -439,7 +439,12 @@ export class PublicSiteService {
     });
     if (!page) {
       const draft = await this.prisma.landingPage.findFirst({
-        where: { ...scope, OR: whereOr },
+        where: {
+          ...scope,
+          OR: whereOr,
+          // Billing v2: a page taken offline by a smaller plan is not served.
+          billingOfflineAt: null,
+        },
         include,
         orderBy: [{ updatedAt: 'desc' }],
       });

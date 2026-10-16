@@ -9,6 +9,7 @@ import { CreatePlanDto } from './dto/create-plan.dto';
 import { UpdatePlanDto } from './dto/update-plan.dto';
 import { ListPlansQueryDto } from './dto/list-plans-query.dto';
 import { normalizeCapabilityMap } from './plan-capabilities';
+import { carryV2Keys } from '../billing/plan-modules';
 
 function slugify(input: string): string {
   return input
@@ -205,13 +206,24 @@ export class PlansService {
     if (dto.priceMonthly !== undefined) data.priceMonthly = dto.priceMonthly;
     if (dto.priceYearly !== undefined) data.priceYearly = dto.priceYearly;
     if (dto.features !== undefined) data.features = dto.features as Prisma.InputJsonValue;
-    if (dto.limits !== undefined) {
-      data.limits = normalizeLimits(dto.limits) as unknown as Prisma.InputJsonValue;
+    // Billing v2 keeps a few plan settings outside the catalog (team chat,
+    // Meta lead ads, Meta pages); carry them over so a save from this editor
+    // doesn't drop them. No effect on plans that never had them.
+    const carried = carryV2Keys(plan, {
+      limits:
+        dto.limits !== undefined
+          ? (normalizeLimits(dto.limits) as unknown as Record<string, unknown>)
+          : undefined,
+      capabilities:
+        dto.capabilities !== undefined
+          ? normalizeCapabilityMap(dto.capabilities)
+          : undefined,
+    });
+    if (carried.limits) {
+      data.limits = carried.limits as Prisma.InputJsonValue;
     }
-    if (dto.capabilities !== undefined) {
-      data.capabilities = normalizeCapabilityMap(
-        dto.capabilities,
-      ) as Prisma.InputJsonValue;
+    if (carried.capabilities) {
+      data.capabilities = carried.capabilities as Prisma.InputJsonValue;
     }
     if (dto.color !== undefined) data.color = dto.color;
     if (dto.badge !== undefined) data.badge = dto.badge;

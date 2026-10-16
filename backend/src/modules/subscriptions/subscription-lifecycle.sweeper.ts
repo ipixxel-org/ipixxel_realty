@@ -1,6 +1,7 @@
 import { Injectable, Logger, OnApplicationBootstrap, OnApplicationShutdown } from '@nestjs/common';
 import { PrismaService } from '../../database/prisma.service';
 import { applyOrgSubscriptionLifecycle } from '../../common/utils/subscription-lifecycle.util';
+import { expireStaleCheckouts } from '../billing/checkout-state';
 
 // How often the expiry sweep re-runs. The online path (org billing read /
 // publish attempt) applies the lifecycle lazily anyway, so this timer is only
@@ -36,12 +37,16 @@ export class SubscriptionLifecycleSweeper
   }
 
   async runOnce() {
+    // Billing v2: online checkouts left unpaid past their 30 minutes.
+    await expireStaleCheckouts(this.prisma).catch(() => undefined);
     try {
       const summary = await applyOrgSubscriptionLifecycle(this.prisma);
       if (
         summary.newlyPastDue ||
         summary.newlyExpired ||
         summary.newlyCancelled ||
+        summary.movedToFreePlan ||
+        summary.scheduledPlanApplied ||
         summary.expiringNotified ||
         summary.pastDueNotified ||
         summary.expiredNotified

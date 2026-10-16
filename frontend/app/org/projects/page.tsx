@@ -11,6 +11,8 @@ import { Reveal } from "@/components/superadmin/reveal";
 import { CountUp } from "@/components/superadmin/count-up";
 import { ConfirmModal } from "@/components/ui/confirm-modal";
 import { Icon } from "@/components/icons";
+import { PlanLockBadge, usePlanLocks } from "@/components/billing/locked";
+import { PLAN_LOCK_COPY } from "@/lib/plan-lock";
 import "@/app/org/org.css";
 import type { OrgBillingSummary, Project, ProjectDetail, ProjectsListResponse, ProjectStatus } from "@/lib/types";
 
@@ -22,6 +24,8 @@ const STATUS_FOR_TAB: (ProjectStatus | undefined)[] = [
   "active",
   "inactive",
 ];
+/** Billing v2: the "View only" filter (projects the plan made view-only). */
+const VIEW_ONLY_TAB = 3;
 
 function managerInitials(name: string | null | undefined): string {
   if (!name) return "—";
@@ -51,6 +55,8 @@ export default function OrgProjectsPage() {
   const { accessToken, hasPermission } = useAuth();
   // Projects > New project — enforced for the org admin too.
   const canCreate = hasPermission("projects", "add");
+  // Billing v2: "View only" badge and filter (inactive with the flag off).
+  const locks = usePlanLocks();
   const projectTypes = useProjectTypes(!!accessToken);
   const router = useRouter();
 
@@ -125,6 +131,7 @@ export default function OrgProjectsPage() {
     if (search) params.set("search", search);
     const status = STATUS_FOR_TAB[tabIndex];
     if (status) params.set("status", status);
+    if (tabIndex === VIEW_ONLY_TAB) params.set("viewOnly", "true");
 
     apiFetch<ProjectsListResponse>(`/org/projects?${params.toString()}`, {
       headers: { Authorization: `Bearer ${accessToken}` },
@@ -139,7 +146,7 @@ export default function OrgProjectsPage() {
   const from = total === 0 ? 0 : (page - 1) * LIMIT + 1;
   const to = Math.min(page * LIMIT, total);
   const totalPages = Math.max(1, Math.ceil(total / LIMIT));
-  const isFiltered = Boolean(search || STATUS_FOR_TAB[tabIndex]);
+  const isFiltered = Boolean(search || STATUS_FOR_TAB[tabIndex] || tabIndex === VIEW_ONLY_TAB);
   const atProjectLimit =
     projectQuota != null &&
     projectQuota.limit != null &&
@@ -506,6 +513,7 @@ export default function OrgProjectsPage() {
             <option value={0}>All Statuses</option>
             <option value={1}>Active</option>
             <option value={2}>Inactive</option>
+            {locks.active ? <option value={VIEW_ONLY_TAB}>{PLAN_LOCK_COPY.project_view_only.badge}</option> : null}
           </select>
 
           {/* Location Dropdown */}
@@ -743,6 +751,7 @@ export default function OrgProjectsPage() {
                     <span className="tag">{[p.location, p.reraId].filter(Boolean).join(" · ") || "Project"}</span>
                     <span className="st">
                       <span className={`badge ${p.status === "active" ? "b-green" : "b-gray"}`}>{p.status === "active" ? "Active" : "Inactive"}</span>
+                      {locks.projectViewOnly(p.id) ? <PlanLockBadge kind="project_view_only" style={{ marginLeft: 4 }} /> : null}
                     </span>
                   </div>
                   <div className="pb">
@@ -813,6 +822,7 @@ export default function OrgProjectsPage() {
                           ) : (
                             <span className="badge b-gray">Inactive</span>
                           )}
+                          {locks.projectViewOnly(p.id) ? <PlanLockBadge kind="project_view_only" style={{ marginLeft: 4 }} /> : null}
                         </td>
                         <td>{formatMoneyRange(p.priceMin, p.priceMax, p.currency)}</td>
                         <td>{p.unitTypeCount}</td>

@@ -1,6 +1,7 @@
 import {
   BadRequestException,
   ConflictException,
+  ForbiddenException,
   Injectable,
   Logger,
   NotFoundException,
@@ -896,7 +897,9 @@ export class AuthService {
     } catch (err) {
       if (
         err instanceof UnauthorizedException ||
-        err instanceof BadRequestException
+        err instanceof BadRequestException ||
+        // Billing v2: account_paused carries what the login page shows.
+        err instanceof ForbiddenException
       ) {
         throw err;
       }
@@ -935,6 +938,7 @@ export class AuthService {
         'Your account access has been revoked. Please contact your administrator.',
       );
     }
+    if (user.orgId) await this.assertNotBillingPaused(user.id, user.orgId);
 
     const roles = user.roles;
     const isSuperAdmin = roles.includes('super_admin');
@@ -1030,6 +1034,48 @@ export class AuthService {
     };
   }
 
+  /**
+   * Billing v2 "choose what stays": a user paused because the organisation
+   * moved to a smaller plan can't sign in. 403 with what the login page shows
+   * (frontend/lib/billing/paused.ts).
+   */
+  private async assertNotBillingPaused(userId: string, orgId: string) {
+    const me = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: { billingPausedAt: true },
+    });
+    if (!me?.billingPausedAt) return;
+    const [org, owner, sub] = await Promise.all([
+      this.prisma.organisation.findUnique({
+        where: { id: orgId },
+        select: { name: true },
+      }),
+      this.prisma.user.findFirst({
+        where: { orgId },
+        orderBy: { createdAt: 'asc' },
+        select: { firstName: true, lastName: true, email: true },
+      }),
+      this.prisma.subscription.findFirst({
+        where: { orgId, status: { not: 'cancelled' } },
+        include: { plan: { select: { name: true, limits: true } } },
+      }),
+    ]);
+    const limit = (sub?.plan.limits as { users?: unknown } | null)?.users;
+    throw new ForbiddenException({
+      statusCode: 403,
+      code: 'account_paused',
+      message:
+        'Your account is paused because your organisation moved to a smaller plan. Ask the owner to bring it back.',
+      orgName: org?.name ?? '',
+      ownerName: owner
+        ? [owner.firstName, owner.lastName].filter(Boolean).join(' ') ||
+          owner.email
+        : '',
+      planName: sub?.plan.name ?? '',
+      planUserLimit: typeof limit === 'number' ? limit : null,
+    });
+  }
+
   async refresh(rawToken: string) {
     const existing = await this.findActiveRefreshToken(rawToken);
 
@@ -1040,7 +1086,7 @@ export class AuthService {
     // `disabled` = disapproved/deactivated — refuse. `pending` is allowed here
     // because an approved member mid-first-login (still mustChangePassword)
     // holds a valid refresh token and may legitimately rotate it.
-    if (!user || user.status === 'disabled') {
+    if (!user || user.status === 'disabled' || user.billingPausedAt) {
       throw new UnauthorizedException('Invalid or expired refresh token');
     }
 
@@ -1775,6 +1821,11 @@ export class AuthService {
           },
         })
         .catch(() => undefined);
+
+      // Billing v2: a paused user can't sign in with Google either.
+      if (existing.orgId) {
+        await this.assertNotBillingPaused(existing.id, existing.orgId);
+      }
 
       const roles = existing.roles;
       const isSuperAdmin = roles.includes('super_admin');

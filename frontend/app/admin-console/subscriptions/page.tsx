@@ -23,6 +23,9 @@ import { useFlash } from "@/lib/flash";
 import { LIST_PAGE_SIZE, ListPager } from "@/components/ui/list-pager";
 import { ORG_SUBS_TAB, SUBS_FLASH_KEY, SUBS_PATH } from "./subscriptions-shared";
 import { ChangeSubscriptionModal } from "./change-subscription-modal";
+import { AdminCheckoutsNeedingReview, AdminLifecycleSettings, AdminPaymentsV2, AdminPlansV2, AdminSubscriptionsV2 } from "@/components/billing/admin/admin-pages";
+import { BILLING_V2 } from "@/lib/billing/flag";
+import { formatPaise } from "@/lib/razorpay";
 import type {
   Plan,
   PlanCapability,
@@ -819,8 +822,14 @@ export default function SuperAdminSubscriptionsPage() {
           </div>
         )}
 
-        {/* Tab 1: Plans & Pricing Matrices */}
-        {tab === 1 && (
+        {/* Tab 1: Plans & Pricing Matrices — billing v2 (NEXT_PUBLIC_BILLING_V2) swaps in the new
+            plan editor; every other tab stays as-is until its billing v2 version is real. */}
+        {tab === 1 && BILLING_V2 && (
+          <div style={{ padding: 24 }}>
+            <AdminPlansV2 />
+          </div>
+        )}
+        {tab === 1 && !BILLING_V2 && (
           <div style={{ padding: 24 }}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
               <div>
@@ -1017,8 +1026,14 @@ export default function SuperAdminSubscriptionsPage() {
           </div>
         )}
 
-        {/* Tab 2: Organisation Subscriptions */}
-        {tab === 2 && (
+        {/* Tab 2: Organisation Subscriptions — billing v2 swaps in the real v2 list (statuses,
+            grace, coupons, the org billing page); the live one below is unchanged when off. */}
+        {tab === 2 && BILLING_V2 && (
+          <div style={{ padding: 24 }}>
+            <AdminSubscriptionsV2 />
+          </div>
+        )}
+        {tab === 2 && !BILLING_V2 && (
           <div style={{ padding: 24 }}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, flexWrap: "wrap", marginBottom: 16 }}>
               <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
@@ -1225,6 +1240,8 @@ export default function SuperAdminSubscriptionsPage() {
               </div>
             </div>
 
+            {BILLING_V2 ? <AdminCheckoutsNeedingReview /> : null}
+
             <div style={{ border: "1px solid #e2e8f0", borderRadius: 14, overflow: "hidden" }}>
               <div style={{ overflowX: "auto" }}>
                 <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
@@ -1275,6 +1292,13 @@ export default function SuperAdminSubscriptionsPage() {
                             <span style={{ padding: "3px 8px", borderRadius: 6, background: "rgba(21, 27, 46, 0.08)", color: "#0f1424", fontWeight: 700, fontSize: 11 }}>
                               {r.targetPlan?.name ?? "Target"}
                             </span>
+                            {BILLING_V2 && r.billingCheckout ? (
+                              <div style={{ fontSize: 11, color: "#64748b", marginTop: 4, whiteSpace: "nowrap" }}>
+                                {formatPaise(r.billingCheckout.totalPaise)} incl. GST
+                                {r.billingCheckout.kind === "upgrade_same_interval" ? " · prorated" : r.billingCheckout.kind === "interval_change" ? " · less monthly credit" : ""}
+                                <div>{r.billingCheckout.buyerGstin ? `GSTIN ${r.billingCheckout.buyerGstin}` : "No GSTIN"}</div>
+                              </div>
+                            ) : null}
                           </td>
                           <td style={{ padding: "12px 16px", textAlign: "center", textTransform: "capitalize" }}>
                             {r.billingCycle}
@@ -1360,8 +1384,21 @@ export default function SuperAdminSubscriptionsPage() {
           </div>
         )}
 
-        {/* Tab 5: Subscription Expiry Policy */}
-        {tab === 5 && (
+        {/* Tab 5: Subscription Expiry Policy — billing v2: the new lifecycle card (incl. the
+            Online payments switch), the same one as Settings → Subscription Expiry & Lifecycle. */}
+        {/* Tab 4: Payments & Invoicing — billing v2: plan payments, offline payments and refunds. */}
+        {tab === 4 && BILLING_V2 && (
+          <div style={{ padding: 24 }}>
+            <AdminPaymentsV2 />
+          </div>
+        )}
+
+        {tab === 5 && BILLING_V2 && (
+          <div style={{ padding: 24 }}>
+            <AdminLifecycleSettings />
+          </div>
+        )}
+        {tab === 5 && !BILLING_V2 && (
           <div style={{ padding: 24, display: "grid", gap: 20 }}>
             <div style={{ padding: 24, borderRadius: 14, border: "1px solid #e2e8f0", background: "#fff", maxWidth: 720 }}>
               <div style={{ fontWeight: 700, fontSize: 16, color: "#0f172a", marginBottom: 4 }}>

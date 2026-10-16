@@ -9,6 +9,7 @@ import { apiFetch } from "@/lib/api";
 import { Icon } from "@/components/icons";
 import { BuildingLogoIcon } from "@/components/brand-logo";
 import { INTEGRATIONS, INTEGRATIONS_HREF } from "@/lib/integrations";
+import { BILLING_V2 } from "@/lib/billing/flag";
 import { NotificationsBell } from "./notifications-bell";
 
 type NavItem = {
@@ -38,6 +39,7 @@ export const NAV_MODULE: Record<string, string> = {
   "/admin-console/org-domains": "admin_domains",
   "/admin-console/subscriptions": "admin_subscriptions",
   "/admin-console/payments": "admin_subscriptions",
+  "/admin-console/coupons": "admin_subscriptions",
   // "/admin-console/integrations" has no single module — see canAccessAdminNavItem.
   "/admin-console/marketing": "admin_settings",
   "/admin-console/attribution": "admin_settings",
@@ -100,6 +102,10 @@ export const NAV_GROUPS: NavGroup[] = [
         activeMatch: ["/admin-console/leads"],
       },
       { href: "/admin-console/subscriptions", icon: "billing", label: "Subscriptions", tip: "Plans and subscriptions", activeMatch: ["/admin-console/subscriptions"] },
+      // Billing v2 only (NEXT_PUBLIC_BILLING_V2).
+      ...(BILLING_V2
+        ? [{ href: "/admin-console/coupons", icon: "tag", label: "Coupons", tip: "Discount coupons for plans", activeMatch: ["/admin-console/coupons"] }]
+        : []),
       { href: "/admin-console/payments", icon: "billing", label: "Payments", tip: "Razorpay payments", activeMatch: ["/admin-console/payments"] },
       {
         href: "/admin-console/media",
@@ -218,6 +224,7 @@ const CRUMB_MAP: Record<string, string> = {
   "/admin-console/org-domains": "Domains",
   "/admin-console/subscriptions": "Subscriptions",
   "/admin-console/payments": "Payments",
+  "/admin-console/coupons": "Coupons",
   "/admin-console/integrations": "Integrations",
   "/admin-console/marketing": "Marketing",
   "/admin-console/attribution": "Lead Attribution",

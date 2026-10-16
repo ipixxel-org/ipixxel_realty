@@ -9,6 +9,7 @@ import { useParams } from "next/navigation";
 import { Reveal } from "@/components/superadmin/reveal";
 import { Icon } from "@/components/icons";
 import { ProjectPageHead } from "@/components/org/project-tabs";
+import { useProjectViewOnly } from "@/components/billing/locked";
 import "@/app/org/org.css";
 
 type Doc = { name: string; type: string; typeBadge: string; updated: string };
@@ -57,12 +58,14 @@ const PRICING = [
 export default function OrgProjectKnowledgePage() {
   const params = useParams<{ id: string }>();
   const id = params?.id ?? "";
+  // Billing v2: nothing can be added to a view-only project.
+  const viewOnly = useProjectViewOnly(id);
 
   return (
     <>
       <ProjectPageHead
         active="knowledge"
-        actions={<button className="btn btn-primary">＋ Add knowledge</button>}
+        actions={viewOnly ? null : <button className="btn btn-primary">＋ Add knowledge</button>}
       />
 
       <Reveal delay={1}>

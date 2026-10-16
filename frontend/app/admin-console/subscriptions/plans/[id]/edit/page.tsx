@@ -6,6 +6,8 @@ import { useParams } from "next/navigation";
 import { useAuth } from "@/lib/auth-context";
 import { apiFetch } from "@/lib/api";
 import type { Plan } from "@/lib/types";
+import { AdminEditPlanPage } from "@/components/billing/admin/admin-pages";
+import { BILLING_V2 } from "@/lib/billing/flag";
 import { PlanForm } from "../../../plan-form";
 import { SUBS_PATH } from "../../../subscriptions-shared";
 
@@ -19,7 +21,12 @@ function Notice({ children }: { children: React.ReactNode }) {
 
 export default function EditPlanPage() {
   const params = useParams<{ id: string }>();
-  const id = params?.id;
+  // Billing v2 (NEXT_PUBLIC_BILLING_V2): the v2 plan form (prices, free plan, limits, features).
+  if (BILLING_V2) return params?.id ? <AdminEditPlanPage planId={params.id} /> : null;
+  return <LegacyEditPlanPage id={params?.id} />;
+}
+
+function LegacyEditPlanPage({ id }: { id: string | undefined }) {
   const { isLoading, hasPermission } = useAuth();
   const canEdit = hasPermission("admin_subscriptions", "edit");
   const [plan, setPlan] = useState<Plan | null>(null);

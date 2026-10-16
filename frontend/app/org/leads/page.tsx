@@ -24,6 +24,7 @@ import { useToast } from "@/components/ui/toast";
 import { LIST_PAGE_SIZE, ListPager } from "@/components/ui/list-pager";
 import { LeadStatusSelect } from "@/components/org/lead-status-select";
 import { LEAD_STAGE_ORDER, StageBadge, useLeadStages } from "@/lib/lead-stages";
+import { PlanLockBadge, usePlanLocks } from "@/components/billing/locked";
 import "@/app/org/org.css";
 
 function initialsFor(name: string): string {
@@ -61,6 +62,10 @@ export default function OrgLeadsPage() {
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("");
   const [assigneeFilter, setAssigneeFilter] = useState(() => searchParams.get("assignedTo") ?? "");
+  // Billing v2: leads whose assignee is paused by the plan ("Needs reassigning").
+  const locks = usePlanLocks();
+  const [needsReassign, setNeedsReassign] = useState(() => searchParams.get("needsReassign") === "1");
+  const [needsReassignCount, setNeedsReassignCount] = useState(0);
   const [selectedLeads, setSelectedLeads] = useState<Set<string>>(new Set());
   const router = useRouter();
   const { toast } = useToast();
@@ -145,7 +150,7 @@ export default function OrgLeadsPage() {
     }
   };
 
-  const filterKey = `${search}|${statusFilter}|${assigneeFilter}`;
+  const filterKey = `${search}|${statusFilter}|${assigneeFilter}|${needsReassign}`;
   const [pageFor, setPageFor] = useState({ key: filterKey, page: 1 });
   const page = pageFor.key === filterKey ? pageFor.page : 1;
   const setPage = useCallback((p: number) => setPageFor({ key: filterKey, page: p }), [filterKey]);
@@ -159,6 +164,7 @@ export default function OrgLeadsPage() {
         search: search || undefined,
         status: (statusFilter || undefined) as CrmLeadStatus | undefined,
         assignedToId: assigneeFilter || undefined,
+        needsReassign: needsReassign || undefined,
       });
       // The last row on a later page was removed — step back to the last page.
       if (res.data.length === 0 && page > 1 && res.total > 0) {
@@ -173,12 +179,13 @@ export default function OrgLeadsPage() {
         new: res.stats?.new ?? res.data.filter((l) => l.status === "new").length,
         won: res.stats?.won ?? res.data.filter((l) => l.status === "won").length,
       });
+      setNeedsReassignCount(res.stats?.needsReassign ?? 0);
     } catch (e) {
       setError(
         e instanceof Error ? e.message : "Failed to load leads.",
       );
     }
-  }, [search, statusFilter, assigneeFilter, page, setPage]);
+  }, [search, statusFilter, assigneeFilter, needsReassign, page, setPage]);
 
   useEffect(() => {
     load();
@@ -341,8 +348,11 @@ export default function OrgLeadsPage() {
         <div className="lc-filter-pills">
           <button
             type="button"
-            className={`lc-filter-pill ${statusFilter === "" ? "active" : ""}`}
-            onClick={() => setStatusFilter("")}
+            className={`lc-filter-pill ${statusFilter === "" && !needsReassign ? "active" : ""}`}
+            onClick={() => {
+              setStatusFilter("");
+              setNeedsReassign(false);
+            }}
           >
             All Leads
           </button>
@@ -367,6 +377,16 @@ export default function OrgLeadsPage() {
           >
             Closures
           </button>
+          {locks.active && admin && (needsReassign || needsReassignCount > 0) ? (
+            <button
+              type="button"
+              className={`lc-filter-pill ${needsReassign ? "active" : ""}`}
+              title="Leads assigned to users who are paused on your current plan"
+              onClick={() => setNeedsReassign((v) => !v)}
+            >
+              Needs reassigning ({needsReassignCount})
+            </button>
+          ) : null}
         </div>
       </div>
 
@@ -679,6 +699,7 @@ export default function OrgLeadsPage() {
                               <span style={{ fontWeight: 500, color: "#0f172a", fontSize: 13.5 }}>
                                 {lead.assignedTo.name}
                               </span>
+                              {lead.assignedTo.paused ? <PlanLockBadge kind="user_paused" /> : null}
                             </div>
                           ) : lead.projectTeam?.count ? (
                             <span style={{ fontWeight: 500, color: "#64748b" }} title={lead.projectTeam.names.join(", ")}>

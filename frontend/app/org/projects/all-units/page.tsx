@@ -10,6 +10,8 @@ import { formatUpdatedAt } from "@/components/org/project-form-fields";
 import { Reveal } from "@/components/superadmin/reveal";
 import { CountUp } from "@/components/superadmin/count-up";
 import { Icon } from "@/components/icons";
+import { PlanLockBadge, usePlanLocks } from "@/components/billing/locked";
+import { PLAN_LOCK_COPY } from "@/lib/plan-lock";
 import "@/app/org/org.css";
 import type {
   OrgUnitsListResponse,
@@ -19,6 +21,8 @@ import type {
 } from "@/lib/types";
 
 const LIMIT = 10;
+/** Billing v2: the project filter's "View only" choice. */
+const VIEW_ONLY = "__view_only__";
 
 const STATUS_TABS: { label: string; value: UnitStatus | null }[] = [
   { label: "All", value: null },
@@ -44,6 +48,8 @@ const STATUS_LABEL: Record<UnitStatus, string> = {
 export default function AllUnitsPage() {
   const { accessToken, hasPermission } = useAuth();
   const canAddUnit = hasPermission("projects", PROJECT_UNIT_ACTIONS.add);
+  // Billing v2: units of a view-only project get the badge and a filter.
+  const locks = usePlanLocks();
 
   const [search, setSearch] = useState("");
   const [statusTab, setStatusTab] = useState(0);
@@ -80,10 +86,11 @@ export default function AllUnitsPage() {
       limit: LIMIT,
       status: STATUS_TABS[statusTab].value ?? undefined,
       projectId:
-        projectFilter && projectFilter !== "__standalone__"
+        projectFilter && projectFilter !== "__standalone__" && projectFilter !== VIEW_ONLY
           ? projectFilter
           : undefined,
       standalone: projectFilter === "__standalone__" || undefined,
+      viewOnly: projectFilter === VIEW_ONLY || undefined,
       search: search.trim() || undefined,
     })
       .then((res) => {
@@ -202,6 +209,7 @@ export default function AllUnitsPage() {
           >
             <option value="">All projects</option>
             <option value="__standalone__">Standalone (no project)</option>
+            {locks.active ? <option value={VIEW_ONLY}>{PLAN_LOCK_COPY.project_view_only.badge}</option> : null}
             {projects.map((p) => (
               <option key={p.id} value={p.id}>
                 {p.name}
@@ -341,6 +349,7 @@ export default function AllUnitsPage() {
                           <span className={`badge ${STATUS_BADGE[u.status]}`}>
                             {STATUS_LABEL[u.status]}
                           </span>
+                          {locks.projectViewOnly(u.project?.id) ? <PlanLockBadge kind="project_view_only" style={{ marginLeft: 4 }} /> : null}
                         </td>
                         <td>
                           <Link

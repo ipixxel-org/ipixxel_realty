@@ -13,6 +13,7 @@ import { Reveal } from "@/components/superadmin/reveal";
 import { CountUp } from "@/components/superadmin/count-up";
 import { Icon } from "@/components/icons";
 import { ProjectPageHead } from "@/components/org/project-tabs";
+import { ProjectAccessBadge, useProjectViewOnly } from "@/components/billing/locked";
 import "@/app/org/org.css";
 import type { LandingPageRow, LandingPageStatus, ProjectDetail, ProjectSalesAgent } from "@/lib/types";
 
@@ -83,7 +84,9 @@ export default function OrgProjectOverviewPage() {
   const { accessToken, hasPermission } = useAuth();
   // Projects > Edit shows the Edit button; Projects > Add lead shows the
   // Direct Lead Entry form (the lead is created for this project).
-  const canEdit = hasPermission("projects", "edit");
+  // Billing v2: a view-only project keeps its leads but can't be edited.
+  const viewOnly = useProjectViewOnly(id);
+  const canEdit = hasPermission("projects", "edit") && !viewOnly;
   const canCreateLead = hasPermission("projects", PROJECT_LEAD_ACTION);
 
   const [project, setProject] = useState<ProjectDetail | null>(null);
@@ -357,6 +360,8 @@ export default function OrgProjectOverviewPage() {
                 <span className={`badge ${project.status === "active" ? "b-green" : "b-gray"}`} style={{ boxShadow: "0 2px 8px rgba(0,0,0,0.4)" }}>
                   {project.status === "active" ? "● Active Project" : "○ Inactive"}
                 </span>
+                {/* Billing v2: "View only" when the org's plan no longer covers this project (renders nothing otherwise). */}
+                <ProjectAccessBadge projectId={project.id} style={{ boxShadow: "0 2px 8px rgba(0,0,0,0.4)" }} />
                 {project.reraId ? (
                   <span className="badge b-violet" style={{ boxShadow: "0 2px 8px rgba(0,0,0,0.4)", fontFamily: "monospace" }}>
                     RERA: {project.reraId}

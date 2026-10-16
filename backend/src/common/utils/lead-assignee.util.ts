@@ -43,7 +43,8 @@ export async function listLeadAssignableUsers(
   orgId: string,
 ): Promise<LeadAssignableUser[]> {
   const users = await prisma.user.findMany({
-    where: { orgId, status: 'active' },
+    // Paused users (billing v2) can't sign in, so they aren't offered.
+    where: { orgId, status: 'active', billingPausedAt: null },
     select: {
       id: true,
       firstName: true,

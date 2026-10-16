@@ -10,6 +10,9 @@ import { PasswordInput } from "@/components/auth/password-input";
 import { GoogleSignInButton, consumeGoogleErrorParam } from "@/components/auth/google-sign-in-button";
 import { mapApiFieldErrors } from "@/lib/form-errors";
 import { applyThemeVariables } from "@/components/global-theme-provider";
+import { PausedAccountNotice } from "@/components/billing/locked";
+import { BILLING_V2 } from "@/lib/billing/flag";
+import { pausedAccountFromError, type PausedAccountInfo } from "@/lib/billing/paused";
 
 const FIELD_KEYS = ["email", "password"];
 
@@ -23,6 +26,8 @@ export default function LoginPage() {
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [generalError, setGeneralError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  // Billing v2: sign-in refused because the user is paused (org moved to a smaller plan).
+  const [paused, setPaused] = useState<PausedAccountInfo | null>(null);
   // Read the browser-only query string after hydration so the server and
   // client render the same initial markup.
   const [notice, setNotice] = useState<string | null>(null);
@@ -70,6 +75,7 @@ export default function LoginPage() {
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setGeneralError(null);
+    setPaused(null);
     setFieldErrors({});
     setIsSubmitting(true);
     try {
@@ -100,6 +106,11 @@ export default function LoginPage() {
       );
       router.refresh();
     } catch (err) {
+      const pausedInfo = BILLING_V2 ? pausedAccountFromError(err) : null;
+      if (pausedInfo) {
+        setPaused(pausedInfo);
+        return;
+      }
       const { fieldErrors: fe, general } = mapApiFieldErrors(err, FIELD_KEYS);
       setFieldErrors(fe);
       setGeneralError(general);
@@ -197,6 +208,7 @@ export default function LoginPage() {
           </Link>
         </div>
 
+        {paused ? <PausedAccountNotice {...paused} /> : null}
         {generalError ? (
           <p role="alert" className="help" style={{ color: "var(--rose)", borderColor: "var(--rose-050)", background: "var(--rose-050)", marginBottom: 14 }}>
             {generalError}

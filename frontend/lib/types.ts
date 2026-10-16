@@ -108,6 +108,8 @@ export interface ApiErrorBody {
   error?: string;
   /** Form field the error belongs to, when the backend attributes it. */
   field?: string;
+  /** Machine-readable reason some endpoints add (e.g. billing: "same_plan"). */
+  code?: string;
 }
 
 // --- Signup wizard (resumable, step-wise) ---
@@ -884,6 +886,19 @@ export interface PackageChangeRequestRow {
   } | null;
   currentPlan?: Plan | OrgBillingPlan;
   targetPlan?: Plan | OrgBillingPlan;
+  /** Billing v2: the manual-mode checkout behind the request (amounts in paise). */
+  billingCheckout?: {
+    id: string;
+    kind: "new" | "upgrade_same_interval" | "interval_change";
+    taxablePaise: number;
+    cgstPaise: number;
+    sgstPaise: number;
+    igstPaise: number;
+    totalPaise: number;
+    buyerLegalName: string;
+    buyerGstin: string | null;
+    buyerState: string;
+  } | null;
 }
 
 export interface PackageChangeRequestsListResponse {
@@ -1494,6 +1509,8 @@ export type CrmLeadStatus =
 export interface CrmAssignee {
   id: string;
   name: string;
+  /** Billing v2: the assignee is paused by the plan — the lead needs reassigning. */
+  paused?: boolean;
 }
 
 /** Actor on an activity / call timeline row. `null` renders as "System". */
@@ -1634,6 +1651,8 @@ export interface CrmLeadListResponse {
     followUp: number;
     siteVisit: number;
     won: number;
+    /** Billing v2: leads assigned to paused users. */
+    needsReassign?: number;
   };
 }
 
@@ -1645,6 +1664,8 @@ export interface GetCrmLeadsParams {
   search?: string;
   page?: number;
   limit?: number;
+  /** Billing v2: only leads assigned to users paused by the plan. */
+  needsReassign?: boolean;
 }
 
 export interface CrmAssignableUser {

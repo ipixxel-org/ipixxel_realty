@@ -28,6 +28,8 @@ import {
   type OrgBrandingChangeDetail,
 } from "@/lib/org-profile";
 import { ProfileAuditLog } from "@/components/org/profile-audit-log";
+import { BillingOverviewPanel } from "@/components/billing/overview";
+import { BILLING_V2 } from "@/lib/billing/flag";
 
 const LANGUAGES = [
   { value: "en-IN", label: "English (India)" },
@@ -2632,6 +2634,8 @@ export default function OrgSettingsPage() {
           <div className={`os-section${activeSection === "billing" ? " on" : ""}`}>
             <SectionHead section="billing" />
 
+            {/* Billing v2 (NEXT_PUBLIC_BILLING_V2) replaces this section; the live one below is unchanged when off. */}
+            {BILLING_V2 ? <BillingOverviewPanel /> : (<>
             {/* Success / Alert Banner */}
             {changeOk ? (
               <div style={{ padding: "12px 16px", borderRadius: 12, background: "var(--green-050)", border: "1px solid rgba(22, 163, 74, 0.3)", color: "var(--green)", display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 20, fontSize: 13.5, fontWeight: 600 }}>
@@ -3032,6 +3036,7 @@ export default function OrgSettingsPage() {
                 </>
               )}
             </Card>
+            </>)}
           </div>
 
           {/* TEAM PREFERENCES */}
