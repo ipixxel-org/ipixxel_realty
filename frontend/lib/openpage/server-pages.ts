@@ -25,56 +25,112 @@ interface RawPublicPage {
     config?: SiteConfig;
     site?: LandingPageData["openPageSite"];
   } | null;
-  organisation?: { customDomain?: string | null } | null;
+  organisation?: { customDomain?: string | null; slug?: string | null } | null;
   sourceTemplate?: { name?: string | null } | null;
   thankYouPage?: LandingPageData["thankYouPage"];
   parentLandingPage?: LandingPageData["parentLandingPage"];
 }
 
-/**
- * Server-side lookup of a published landing page by slug. Mirrors the mapping
- * in `store.findPageBySlug` so the server-rendered HTML matches the client
- * render exactly (same config hydration, design id, page type).
- */
-export async function fetchPublicPageBySlug(rawSlug: string): Promise<LandingPageData | null> {
+/** Normalise a slug the same way the backend resolver does. */
+function slugKey(rawSlug: string): string {
   const rawKey = decodeURIComponent(rawSlug ?? "").trim().toLowerCase();
-  const key = rawKey.replace(/\s+/g, "-");
-  if (!key) return null;
+  return rawKey.replace(/\s+/g, "-");
+}
+
+/**
+ * Maps the backend's public page payload onto LandingPageData. Mirrors the
+ * mapping in `store.findPageBySlug` so the server-rendered HTML matches the
+ * client render exactly (same config hydration, design id, page type).
+ */
+function mapPublicPage(raw: RawPublicPage, key: string): LandingPageData {
+  const templateName = raw.sourceTemplate?.name ?? raw.name ?? "EstatePro Standard";
+  const mapped: LandingPageData = {
+    id: raw.id,
+    name: raw.name ?? "Landing page",
+    slug: raw.slug ?? key,
+    orgSlug: raw.organisation?.slug ?? undefined,
+    status: (raw.status ?? "published") as LandingPageData["status"],
+    template: templateName,
+    domain: raw.organisation?.customDomain ?? "",
+    views: "—",
+    conversions: "—",
+    updated: "",
+    updatedAt: raw.updatedAt,
+    thumbnail: raw.thumbnail ?? "",
+    sections: raw.content?.sections ?? [],
+    config: raw.content?.config ? ensureConfig({ config: raw.content.config } as unknown as LandingPageData) : undefined,
+    openPageSite: raw.content?.site,
+    kind: "custom",
+    designId: inferDesignId(templateName),
+    pageType: raw.pageType === "thank_you" ? "thank-you" : "landing",
+    parentPageId: raw.parentId ?? undefined,
+    thankYouPage: raw.thankYouPage ?? null,
+    parentLandingPage: raw.parentLandingPage ?? null,
+    isPaid: false,
+    category: null,
+  };
+  applyLandingPagePropertyFromConfig(mapped.config);
+  return mapped;
+}
+
+async function fetchPublicPage(path: string, key: string): Promise<LandingPageData | null> {
   try {
-    const res = await fetch(`${backendBaseUrl()}/public/site/page/${encodeURIComponent(key)}?track=0`, {
+    const res = await fetch(`${backendBaseUrl()}${path}?track=0`, {
       cache: "no-store",
       headers: { Accept: "application/json" },
     });
     if (!res.ok) return null;
     const raw = (await res.json()) as RawPublicPage;
     if (!raw || !raw.id) return null;
-    const templateName = raw.sourceTemplate?.name ?? raw.name ?? "EstatePro Standard";
-    const mapped: LandingPageData = {
-      id: raw.id,
-      name: raw.name ?? "Landing page",
-      slug: raw.slug ?? key,
-      status: (raw.status ?? "published") as LandingPageData["status"],
-      template: templateName,
-      domain: raw.organisation?.customDomain ?? "",
-      views: "—",
-      conversions: "—",
-      updated: "",
-      updatedAt: raw.updatedAt,
-      thumbnail: raw.thumbnail ?? "",
-      sections: raw.content?.sections ?? [],
-      config: raw.content?.config ? ensureConfig({ config: raw.content.config } as unknown as LandingPageData) : undefined,
-      openPageSite: raw.content?.site,
-      kind: "custom",
-      designId: inferDesignId(templateName),
-      pageType: raw.pageType === "thank_you" ? "thank-you" : "landing",
-      parentPageId: raw.parentId ?? undefined,
-      thankYouPage: raw.thankYouPage ?? null,
-      parentLandingPage: raw.parentLandingPage ?? null,
-      isPaid: false,
-      category: null,
+    return mapPublicPage(raw, key);
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Legacy lookup by page slug alone (`/p/:slug`, `/:slug`). Page slugs are
+ * only unique per organisation, so this may match several orgs — the
+ * backend returns the most recently published. Callers redirect to the
+ * organisation-scoped URL; new links never use this.
+ */
+export async function fetchPublicPageBySlug(rawSlug: string): Promise<LandingPageData | null> {
+  const key = slugKey(rawSlug);
+  if (!key) return null;
+  return fetchPublicPage(`/public/site/page/${encodeURIComponent(key)}`, key);
+}
+
+/** Server-side lookup of a page within one organisation (`/p/:orgSlug/:slug`). */
+export async function fetchPublicPageInOrg(
+  rawOrgSlug: string,
+  rawSlug: string,
+): Promise<LandingPageData | null> {
+  const org = slugKey(rawOrgSlug);
+  const key = slugKey(rawSlug);
+  if (!org || !key) return null;
+  return fetchPublicPage(
+    `/public/site/org/${encodeURIComponent(org)}/page/${encodeURIComponent(key)}`,
+    key,
+  );
+}
+
+/** Org slug + page slug for a page id (no content) — backs /live/:id. */
+export async function fetchPublicPagePath(
+  id: string,
+): Promise<{ orgSlug: string; slug: string; pageType: string } | null> {
+  try {
+    const res = await fetch(`${backendBaseUrl()}/public/site/page-path/${encodeURIComponent(id)}`, {
+      cache: "no-store",
+      headers: { Accept: "application/json" },
+    });
+    if (!res.ok) return null;
+    const data = (await res.json()) as { orgSlug?: unknown; slug?: unknown; pageType?: unknown };
+    if (typeof data?.orgSlug !== "string" || typeof data?.slug !== "string") return null;
+    return {
+      orgSlug: data.orgSlug,
+      slug: data.slug,
+      pageType: typeof data.pageType === "string" ? data.pageType : "landing",
     };
-    applyLandingPagePropertyFromConfig(mapped.config);
-    return mapped;
   } catch {
     return null;
   }

@@ -274,13 +274,21 @@ export class PublicSiteService {
   async listPublishedPages() {
     const pages = await this.prisma.landingPage.findMany({
       where: { status: 'published', slug: { not: '' } },
-      select: { id: true, slug: true, name: true, pageType: true, updatedAt: true },
+      select: {
+        id: true,
+        slug: true,
+        name: true,
+        pageType: true,
+        updatedAt: true,
+        organisation: { select: { slug: true } },
+      },
       orderBy: { updatedAt: 'desc' },
       take: 50000,
     });
     return pages.map((p) => ({
       id: p.id,
       slug: p.slug,
+      orgSlug: p.organisation?.slug ?? null,
       name: p.name,
       pageType: p.pageType,
       updatedAt: p.updatedAt ? p.updatedAt.toISOString() : null,
@@ -331,7 +339,60 @@ export class PublicSiteService {
     return null;
   }
 
+  /**
+   * Legacy `/p/:slug` lookup. Page slugs are only unique per organisation, so
+   * a slug can match pages in several orgs; the most recently published one
+   * wins (deterministic, instead of whichever row Postgres returns first).
+   * New public links are organisation-scoped — see resolveBySlugInOrg.
+   */
   async resolveBySlug(slug: string, track = true) {
+    return this.findPublicPage(slug, {}, track);
+  }
+
+  /**
+   * Organisation-scoped lookup for `/p/:orgSlug/:slug`. Organisation slugs
+   * are globally unique, so this always identifies exactly one page.
+   */
+  async resolveBySlugInOrg(orgSlug: string, slug: string, track = true) {
+    const org = (orgSlug ?? '').trim().toLowerCase();
+    if (!org) throw new NotFoundException('Landing page not found or not published');
+    return this.findPublicPage(
+      slug,
+      { organisation: { slug: { equals: org, mode: 'insensitive' } } },
+      track,
+    );
+  }
+
+  /**
+   * Public path parts for a page, by id — lets admin screens open the live
+   * page without knowing the organisation slug. Exposes no page content.
+   */
+  async publicPathForPage(id: string) {
+    const page = await this.prisma.landingPage.findUnique({
+      where: { id },
+      select: {
+        slug: true,
+        status: true,
+        pageType: true,
+        organisation: { select: { slug: true } },
+      },
+    });
+    if (!page || !page.slug || !page.organisation?.slug) {
+      throw new NotFoundException('Landing page not found');
+    }
+    return {
+      orgSlug: page.organisation.slug,
+      slug: page.slug,
+      status: page.status,
+      pageType: page.pageType,
+    };
+  }
+
+  private async findPublicPage(
+    slug: string,
+    scope: Prisma.LandingPageWhereInput,
+    track: boolean,
+  ) {
     const raw = (slug ?? '').trim().toLowerCase();
     const hyphenated = raw.replace(/\s+/g, '-').replace(/\/thank-you$/, '-thank-you');
     const isThankYou = raw.endsWith('/thank-you') || raw.endsWith('-thank-you');
@@ -351,47 +412,36 @@ export class PublicSiteService {
       });
     }
 
+    const include = {
+      organisation: {
+        select: {
+          id: true,
+          name: true,
+          slug: true,
+          logoUrl: true,
+          brandColour: true,
+          customDomain: true,
+        },
+      },
+      sourceTemplate: {
+        select: { id: true, name: true, baseDesignName: true },
+      },
+    } satisfies Prisma.LandingPageInclude;
+    const orderBy: Prisma.LandingPageOrderByWithRelationInput[] = [
+      { publishedAt: { sort: 'desc', nulls: 'last' } },
+      { updatedAt: 'desc' },
+    ];
+
     const page = await this.prisma.landingPage.findFirst({
-      where: {
-        OR: whereOr,
-        status: 'published',
-      },
-      include: {
-        organisation: {
-          select: {
-            id: true,
-            name: true,
-            slug: true,
-            logoUrl: true,
-            brandColour: true,
-            customDomain: true,
-          },
-        },
-        sourceTemplate: {
-          select: { id: true, name: true, baseDesignName: true },
-        },
-      },
+      where: { ...scope, OR: whereOr, status: 'published' },
+      include,
+      orderBy,
     });
     if (!page) {
       const draft = await this.prisma.landingPage.findFirst({
-        where: {
-          OR: whereOr,
-        },
-        include: {
-          organisation: {
-            select: {
-              id: true,
-              name: true,
-              slug: true,
-              logoUrl: true,
-              brandColour: true,
-              customDomain: true,
-            },
-          },
-          sourceTemplate: {
-            select: { id: true, name: true, baseDesignName: true },
-          },
-        },
+        where: { ...scope, OR: whereOr },
+        include,
+        orderBy: [{ updatedAt: 'desc' }],
       });
       if (draft) return draft;
 

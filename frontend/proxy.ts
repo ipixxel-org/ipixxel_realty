@@ -25,6 +25,7 @@ export function proxy(request: NextRequest) {
     path.startsWith("/org-site") ||
     path.startsWith("/preview") ||
     path.startsWith("/p/") ||
+    path.startsWith("/live/") ||
     path.startsWith("/api")
   ) {
     return NextResponse.next();

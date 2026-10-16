@@ -21,7 +21,7 @@ import { loadTemplate, loadTemplates, saveTemplate, saveTemplateNow, publishLand
 import { uploadBuilderImage } from "@/lib/openpage/persist";
 import { BuilderUploadProvider, type BuilderImageUploader } from "@/components/openpage/builder/upload-context";
 import { BuilderFormScopeProvider } from "@/components/openpage/builder/forms-context";
-import { templatePreviewPath } from "@/lib/openpage/paths";
+import { livePagePath, templatePreviewPath } from "@/lib/openpage/paths";
 import { TopNav } from "@/components/openpage/topnav";
 import { EditorLayout } from "@/components/openpage/editor/EditorLayout";
 import { OpenPageBridge } from "@/components/openpage/editor/OpenPageBridge";
@@ -315,8 +315,9 @@ export function OpenPageStudio({ resource = "template" }: { resource?: Resource 
             : cur,
         );
         toast("Published");
-        const targetSlug = updated.slug || next.slug || activePage.slug;
-        const liveUrl = targetSlug ? `/p/${encodeURIComponent(targetSlug)}` : `/preview/${encodeURIComponent(activePage.id)}`;
+        // Org-scoped live URL (/p/:orgSlug/:slug) via /live/:id — a bare page
+        // slug can also belong to another organisation.
+        const liveUrl = livePagePath(updated.id || activePage.id);
         window.open(liveUrl, "_blank", "noopener,noreferrer");
       })
       .catch((err) => toast(err instanceof Error ? err.message : "Couldn't publish — try again"));

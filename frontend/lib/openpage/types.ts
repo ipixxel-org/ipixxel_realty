@@ -563,6 +563,8 @@ export interface LandingPageData {
   id: string;
   name: string;
   slug: string;
+  /** Owning organisation's slug — public URLs are /p/<orgSlug>/<slug>. */
+  orgSlug?: string;
   status: "draft" | "published" | "scheduled" | "password" | "unpublished";
   template: string;
   domain: string;

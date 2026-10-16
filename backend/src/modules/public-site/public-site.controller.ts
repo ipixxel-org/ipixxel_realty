@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Body, Param, Query, Header, Res } from '@nestjs/common';
+import { Controller, Get, Post, Body, Param, ParseUUIDPipe, Query, Header, Res } from '@nestjs/common';
 import { PublicSiteService } from './public-site.service';
 import type { Response } from 'express';
 
@@ -53,6 +53,24 @@ export class PublicSiteController {
     // SSR / metadata fetches pass track=0 so crawlers and server renders don't
     // inflate page-view analytics (the browser reports the real view).
     return this.service.resolveBySlug(slug, track !== '0');
+  }
+
+  // Organisation-scoped page lookup behind /p/:orgSlug/:slug. Page slugs are
+  // only unique per organisation; the org slug makes the URL unambiguous.
+  @Get('org/:orgSlug/page/:slug')
+  resolvePageInOrg(
+    @Param('orgSlug') orgSlug: string,
+    @Param('slug') slug: string,
+    @Query('track') track?: string,
+  ) {
+    return this.service.resolveBySlugInOrg(orgSlug, slug, track !== '0');
+  }
+
+  // Public path parts (org slug + page slug) for a page id, so admin screens
+  // can open the live page. Returns no page content.
+  @Get('page-path/:id')
+  pagePath(@Param('id', new ParseUUIDPipe()) id: string) {
+    return this.service.publicPathForPage(id);
   }
 
   @Get('page-by-id/:id')

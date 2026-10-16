@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { LocalSitePreview } from "@/components/openpage/live-site";
-import { fetchPublicPageBySlug, landingMetadata, requestOrigin, NOT_FOUND_METADATA } from "@/lib/openpage/server-pages";
+import { resolveLegacyPublicPage } from "@/lib/openpage/legacy-public-route";
 
 const RESERVED_SLUGS = new Set([
   "login",
@@ -15,25 +15,27 @@ const RESERVED_SLUGS = new Set([
   "org-site",
   "preview",
   "p",
+  "live",
   "embed",
   "api",
   "privacy",
 ]);
 
-export async function generateMetadata({ params }: { params: Promise<{ slug: string }> }): Promise<Metadata> {
-  const { slug } = await params;
-  if (RESERVED_SLUGS.has(slug.toLowerCase())) return NOT_FOUND_METADATA;
-  const page = await fetchPublicPageBySlug(slug);
-  if (!page) return NOT_FOUND_METADATA;
-  const origin = await requestOrigin();
-  return landingMetadata(page, { origin, canonical: origin ? `${origin}/${encodeURIComponent(slug)}` : undefined });
-}
+// Legacy /:slug — redirects to the organisation-scoped /p/:orgSlug/:slug.
+// The canonical org-scoped URL carries the indexable metadata.
+export const metadata: Metadata = { robots: { index: false, follow: true } };
 
-export default async function DirectSlugPage({ params }: { params: Promise<{ slug: string }> }) {
+export default async function DirectSlugPage({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ slug: string }>;
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
+}) {
   const { slug } = await params;
   if (RESERVED_SLUGS.has(slug.toLowerCase())) {
     notFound();
   }
-  const page = await fetchPublicPageBySlug(slug);
+  const page = await resolveLegacyPublicPage(slug, { searchParams: await searchParams });
   return <LocalSitePreview slug={slug} page={page} publicLive />;
 }
