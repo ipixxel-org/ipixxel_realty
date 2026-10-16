@@ -10,17 +10,20 @@ import { ensureConfig } from "@/lib/openpage/site-config";
 import { applyDocumentSeo } from "@/lib/openpage/seo";
 import { OpenPageTrackingScripts } from "@/components/openpage/tracking-scripts";
 import { bumpTracking } from "@/lib/openpage/tracking";
-import { findPageByDomain, findPageBySlug } from "@/lib/openpage/store";
+import { findPageByDomain, findPageBySlug, findPageInOrg } from "@/lib/openpage/store";
 import { applyLandingPagePropertyFromConfig } from "@/lib/openpage/data";
 import { builderPath, localDomainPreviewPath } from "@/lib/openpage/paths";
 
 export function LocalSitePreview({
   slug,
+  orgSlug,
   host,
   page: serverPage,
   publicLive = false,
 }: {
   slug?: string;
+  /** Set on /p/:orgSlug/:slug — the client fallback looks the page up within that org. */
+  orgSlug?: string;
   host?: string;
   page?: LandingPageData | null;
   publicLive?: boolean;
@@ -39,7 +42,13 @@ export function LocalSitePreview({
     }
     let cancelled = false;
     (async () => {
-      const found = host ? await findPageByDomain(host) : slug ? await findPageBySlug(slug) : undefined;
+      const found = host
+        ? await findPageByDomain(host)
+        : slug && orgSlug
+          ? await findPageInOrg(orgSlug, slug)
+          : slug
+            ? await findPageBySlug(slug)
+            : undefined;
       if (cancelled) return;
       setPage(found ?? null);
       setUnlocked(false);
@@ -52,7 +61,7 @@ export function LocalSitePreview({
     return () => {
       cancelled = true;
     };
-  }, [slug, host, serverPage]);
+  }, [slug, orgSlug, host, serverPage]);
 
   if (page === undefined) {
     return (
@@ -163,7 +172,7 @@ export function LocalSitePreview({
         <span style={{ fontWeight: 800, letterSpacing: 0.4, color: "#c9a56a" }}>LOCAL PREVIEW</span>
         <span style={{ opacity: 0.45 }}>|</span>
         <span style={{ fontFamily: "ui-monospace, monospace", color: "#c4c8d4" }}>
-          {assigned || "no domain assigned"} · /p/{page.slug}
+          {assigned || "no domain assigned"} · /p/{page.orgSlug ? `${page.orgSlug}/` : ""}{page.slug}
         </span>
         <span
           style={{

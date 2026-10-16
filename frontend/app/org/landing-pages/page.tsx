@@ -41,7 +41,7 @@ import { useAuth } from "@/lib/auth-context";
 import { apiFetch, assignCustomDomain, getOrgDomainInfo, requestCustomDomain } from "@/lib/api";
 import { Reveal } from "@/components/superadmin/reveal";
 import { TemplateCover, StatusBadge, TierBadge } from "@/components/superadmin/templates/shared";
-import { orgBuilderPath } from "@/lib/openpage/paths";
+import { livePagePath, orgBuilderPath } from "@/lib/openpage/paths";
 import { defaultSiteConfig } from "@/lib/openpage/site-config";
 import { SiteRenderer } from "@/components/openpage/renderer/SiteRenderer";
 import { siteFromLandingPage } from "@/lib/openpage/content";
@@ -588,7 +588,7 @@ export default function OrgLandingPagesPage() {
   function openView(idOrRow: string | LandingPageRow) {
     if (typeof idOrRow === "object") {
       if (idOrRow.status === "published" && idOrRow.slug) {
-        window.open(`/p/${encodeURIComponent(idOrRow.slug)}`, "_blank", "noopener,noreferrer");
+        window.open(livePagePath(idOrRow.id), "_blank", "noopener,noreferrer");
         return;
       }
       window.open(`/preview/${encodeURIComponent(idOrRow.id)}`, "_blank", "noopener,noreferrer");
@@ -596,7 +596,7 @@ export default function OrgLandingPagesPage() {
     }
     const row = rawRows.find((r) => r.id === idOrRow);
     if (row?.status === "published" && row.slug) {
-      window.open(`/p/${encodeURIComponent(row.slug)}`, "_blank", "noopener,noreferrer");
+      window.open(livePagePath(row.id), "_blank", "noopener,noreferrer");
       return;
     }
     window.open(`/preview/${encodeURIComponent(idOrRow)}`, "_blank", "noopener,noreferrer");
@@ -626,7 +626,7 @@ export default function OrgLandingPagesPage() {
 
   function openViewThankYou(row: LandingPageRow) {
     if (row.thankYouPage?.slug && row.status === "published") {
-      window.open(`/p/${encodeURIComponent(row.thankYouPage.slug)}`, "_blank", "noopener,noreferrer");
+      window.open(livePagePath(row.thankYouPage.id), "_blank", "noopener,noreferrer");
       return;
     }
     if (row.thankYouPage?.id) {
@@ -634,7 +634,7 @@ export default function OrgLandingPagesPage() {
       return;
     }
     if (row.slug && row.status === "published") {
-      window.open(`/p/${encodeURIComponent(row.slug)}/thank-you`, "_blank", "noopener,noreferrer");
+      window.open(`${livePagePath(row.id)}/thank-you`, "_blank", "noopener,noreferrer");
       return;
     }
     window.open(`/preview/${encodeURIComponent(row.id)}`, "_blank", "noopener,noreferrer");

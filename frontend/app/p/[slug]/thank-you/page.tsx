@@ -1,20 +1,19 @@
 import type { Metadata } from "next";
 import { LocalSitePreview } from "@/components/openpage/live-site";
-import { fetchPublicPageBySlug, landingMetadata, requestOrigin, NOT_FOUND_METADATA } from "@/lib/openpage/server-pages";
+import { resolveLegacyPublicPage } from "@/lib/openpage/legacy-public-route";
 
-export async function generateMetadata({ params }: { params: Promise<{ slug: string }> }): Promise<Metadata> {
-  const { slug } = await params;
-  const page = await fetchPublicPageBySlug(`${slug}/thank-you`);
-  if (!page) return NOT_FOUND_METADATA;
-  const origin = await requestOrigin();
-  return landingMetadata(page, {
-    origin,
-    canonical: origin ? `${origin}/p/${encodeURIComponent(slug)}/thank-you` : undefined,
-  });
-}
+// Legacy /p/:slug/thank-you — redirects to /p/:orgSlug/:slug/thank-you.
+// The canonical org-scoped URL carries the indexable metadata.
+export const metadata: Metadata = { robots: { index: false, follow: true } };
 
-export default async function LocalPreviewThankYouPage({ params }: { params: Promise<{ slug: string }> }) {
+export default async function LegacyPublicThankYouPage({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ slug: string }>;
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
+}) {
   const { slug } = await params;
-  const page = await fetchPublicPageBySlug(`${slug}/thank-you`);
+  const page = await resolveLegacyPublicPage(slug, { thankYou: true, searchParams: await searchParams });
   return <LocalSitePreview slug={`${slug}/thank-you`} page={page} publicLive />;
 }

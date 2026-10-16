@@ -53,7 +53,7 @@ import {
 import { Reveal } from "@/components/superadmin/reveal";
 import { Modal } from "@/components/ui/modal";
 import { Icon, type IconName } from "@/components/icons";
-import { orgBuilderPath } from "@/lib/openpage/paths";
+import { livePagePath, orgBuilderPath, publicPagePath } from "@/lib/openpage/paths";
 import { FormPage, formPageStyles } from "@/components/forms/form-page";
 import "@/app/org/org.css";
 import type {
@@ -346,6 +346,13 @@ export default function AddNewProjectPage() {
   const [publishLandingPageNow, setPublishLandingPageNow] = useState(false);
   const [landingPageTitle, setLandingPageTitle] = useState("");
   const [createdLandingPage, setCreatedLandingPage] = useState<{ id: string; slug: string; name: string } | null>(null);
+  // Org slug for the public URL (/p/<orgSlug>/<slug>) shown after publishing.
+  const [orgSlug, setOrgSlug] = useState("");
+  const createdLivePath = createdLandingPage
+    ? orgSlug
+      ? publicPagePath(orgSlug, createdLandingPage.slug)
+      : livePagePath(createdLandingPage.id)
+    : "";
   const [orgDbTemplates, setOrgDbTemplates] = useState<OrgTemplateSummary[]>([]);
 
   // Visual Builder Customization state
@@ -451,7 +458,10 @@ export default function AddNewProjectPage() {
       .then((res) => setSalesAgents(res.data))
       .catch(() => setSalesAgents([]));
     apiFetch<SafeOrganisation>("/org/settings", auth)
-      .then((o) => setOrgName(o.name))
+      .then((o) => {
+        setOrgName(o.name);
+        setOrgSlug(o.slug ?? "");
+      })
       .catch(() => setOrgName(""));
     apiFetch<OrgBillingSummary>("/org/billing", auth)
       .then((b) =>
@@ -2004,7 +2014,7 @@ export default function AddNewProjectPage() {
                           <div className="field mb-0">
                             <label style={{ fontSize: 12 }}>Live web URL preview</label>
                             <div style={{ height: 38, background: "#fff", border: "1px solid var(--line)", borderRadius: 6, display: "flex", alignItems: "center", padding: "0 10px", fontSize: 12, color: "var(--muted)" }}>
-                              /p/{name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "") || "project-slug"}
+                              /p/{orgSlug || "your-org"}/{name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "") || "project-slug"}
                             </div>
                           </div>
                         </div>
@@ -2206,7 +2216,7 @@ export default function AddNewProjectPage() {
                         </div>
                         <div className="sp"><span className="k">Live landing page</span><span className="v"><span className={`badge ${publishLandingPageNow ? "b-green" : "b-gray"}`}>{publishLandingPageNow ? "Yes — Auto Publish" : "Disabled"}</span></span></div>
                         {publishLandingPageNow && (
-                          <div className="sp"><span className="k">Target URL</span><span className="v mono">/p/{name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "") || "project-slug"}</span></div>
+                          <div className="sp"><span className="k">Target URL</span><span className="v mono">/p/{orgSlug || "your-org"}/{name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "") || "project-slug"}</span></div>
                         )}
                         <div style={{ marginTop: 8, display: "flex", gap: 8 }}>
                           <button
@@ -2498,7 +2508,7 @@ export default function AddNewProjectPage() {
                 <span className="badge b-green">● Published</span>
               </div>
               <a
-                href={`/p/${createdLandingPage.slug}`}
+                href={createdLivePath}
                 target="_blank"
                 rel="noreferrer"
                 style={{
@@ -2509,7 +2519,7 @@ export default function AddNewProjectPage() {
                   display: "inline-block",
                 }}
               >
-                {typeof window !== "undefined" ? window.location.origin : ""}/p/{createdLandingPage.slug} ↗
+                {typeof window !== "undefined" ? window.location.origin : ""}{createdLivePath} ↗
               </a>
               <div className="muted fs-11" style={{ marginTop: 6 }}>
                 <Icon name="info" size={13} /> You can edit, add, or remove any sections anytime without affecting the original master template.
@@ -2518,7 +2528,7 @@ export default function AddNewProjectPage() {
 
             <div className="col gap-10">
               <a
-                href={`/p/${createdLandingPage.slug}`}
+                href={createdLivePath}
                 target="_blank"
                 rel="noreferrer"
                 className="btn btn-primary btn-block"

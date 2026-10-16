@@ -4,6 +4,11 @@ import { ensureConfig } from "./site-config";
 export function suggestedCanonical(page: LandingPageData): string {
   const host = page.domain.trim();
   if (host) return `https://${host.replace(/^https?:\/\//, "")}`;
+  // Public org pages: the canonical URL is organisation-scoped.
+  if (page.orgSlug && page.slug) {
+    const path = `/p/${encodeURIComponent(page.orgSlug)}/${encodeURIComponent(page.slug)}`;
+    return typeof window !== "undefined" ? `${window.location.origin}${path}` : path;
+  }
   // Per-individual landing page: landing pages (kind custom) are previewed via /preview/:id, not /p/:slug
   const isLandingPage = page.kind === "custom" || page.pageType === "landing" && page.id.includes("-");
   if (isLandingPage && page.id) {

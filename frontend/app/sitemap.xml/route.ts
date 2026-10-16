@@ -1,5 +1,6 @@
 import { hostname, isPlatformHost } from "@/lib/platform-hosts";
 import { backendBaseUrl } from "@/lib/backend-url";
+import { publicPagePath } from "@/lib/openpage/paths";
 
 // Served at /sitemap.xml on every host. proxy.ts deliberately excludes
 // sitemap.xml from the /org-site rewrite so this route handles both:
@@ -66,7 +67,7 @@ export async function GET(request: Request) {
   }
 
   // Platform host: aggregate every published landing page.
-  let pages: Array<{ slug?: string; updatedAt?: string | null }> = [];
+  let pages: Array<{ slug?: string; orgSlug?: string | null; updatedAt?: string | null }> = [];
   try {
     const res = await fetch(`${backendBaseUrl()}/public/site/published-pages`, {
       cache: "no-store",
@@ -80,9 +81,10 @@ export async function GET(request: Request) {
   const entries: SitemapEntry[] = [
     { loc: `${origin}/`, changefreq: "weekly", priority: "1.0" },
     ...pages
-      .filter((p) => p.slug)
+      // Canonical org-scoped URL — page slugs are only unique per organisation.
+      .filter((p) => p.slug && p.orgSlug)
       .map((p) => ({
-        loc: `${origin}/${p.slug}`,
+        loc: `${origin}${publicPagePath(p.orgSlug as string, p.slug as string)}`,
         lastmod: p.updatedAt ?? undefined,
         changefreq: "weekly",
         priority: "0.8",

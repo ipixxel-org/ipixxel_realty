@@ -14,6 +14,37 @@ export function orgBuilderPath(pageId: string, returnUrl?: string): string {
   return returnUrl ? `${base}&returnUrl=${encodeURIComponent(returnUrl)}` : base;
 }
 
+/**
+ * Canonical public URL for an org landing page. Page slugs are only unique
+ * within an organisation, so the org slug is part of every public link.
+ */
+export function publicPagePath(orgSlug: string, slug: string): string {
+  return `/p/${encodeURIComponent(orgSlug)}/${encodeURIComponent(slug)}`;
+}
+
+/**
+ * Opens a landing page's live URL by id — /live/:id redirects to
+ * publicPagePath() for that page. Use from admin screens, which know the page
+ * id but not the organisation slug.
+ */
+export function livePagePath(pageId: string): string {
+  return `/live/${encodeURIComponent(pageId)}`;
+}
+
+/** Keeps a request's query string (e.g. UTM tags) across a redirect. */
+export function withQuery(
+  path: string,
+  searchParams: Record<string, string | string[] | undefined> | undefined,
+): string {
+  const qs = new URLSearchParams();
+  for (const [key, value] of Object.entries(searchParams ?? {})) {
+    if (Array.isArray(value)) value.forEach((v) => qs.append(key, v));
+    else if (typeof value === "string") qs.append(key, value);
+  }
+  const query = qs.toString();
+  return query ? `${path}?${query}` : path;
+}
+
 export function localPreviewPath(page: { slug: string }): string {
   return `/p/${encodeURIComponent(page.slug)}`;
 }
