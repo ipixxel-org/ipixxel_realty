@@ -439,32 +439,14 @@ export class PublicSiteService {
     });
     if (!page) {
       const draft = await this.prisma.landingPage.findFirst({
-<<<<<<< HEAD
-        where: { ...scope, OR: whereOr },
-        include,
-        orderBy: [{ updatedAt: 'desc' }],
-=======
         where: {
+          ...scope,
           OR: whereOr,
           // Billing v2: a page taken offline by a smaller plan is not served.
           billingOfflineAt: null,
         },
-        include: {
-          organisation: {
-            select: {
-              id: true,
-              name: true,
-              slug: true,
-              logoUrl: true,
-              brandColour: true,
-              customDomain: true,
-            },
-          },
-          sourceTemplate: {
-            select: { id: true, name: true, baseDesignName: true },
-          },
-        },
->>>>>>> 2d67d02 (feat(billing): step 6 - choose what stays and fall back to Basic)
+        include,
+        orderBy: [{ updatedAt: 'desc' }],
       });
       if (draft) return draft;
 
