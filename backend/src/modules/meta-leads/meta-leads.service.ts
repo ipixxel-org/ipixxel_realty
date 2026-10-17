@@ -228,6 +228,7 @@ export class MetaLeadsService implements OnModuleInit {
         'pages_manage_ads',
       ].join(','),
       response_type: 'code',
+      auth_type: 'rerequest',
     });
     return {
       url: `https://www.facebook.com/${GRAPH_VERSION}/dialog/oauth?${params}`,
