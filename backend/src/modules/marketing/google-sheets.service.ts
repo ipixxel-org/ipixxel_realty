@@ -850,6 +850,195 @@ export class GoogleSheetsService {
   }
 
   /**
+   * Directly pulls/imports leads from Google Sheets into the CRM application.
+   * Reads all rows from the spreadsheet, resolves the target project,
+   * sets the lead source to 'google_sheets', and upserts the leads.
+   */
+  async importLeadsFromSheet(
+    orgId: string,
+    projectId?: string,
+    connectionId?: string,
+    sheetName?: string,
+  ): Promise<{
+    ok: boolean;
+    totalRows: number;
+    created: number;
+    updated: number;
+    failed: number;
+    message: string;
+    details?: Array<{ row: number; leadId?: string; action: string }>;
+  }> {
+    const connection = await this.resolveConnection(orgId, connectionId);
+    const auth = await this.getValidAccessToken(orgId, connection.id);
+    if (!auth) {
+      throw new BadRequestException(
+        'Google account token is not available for this connection',
+      );
+    }
+    const { accessToken, metadata } = auth;
+    if (!metadata.spreadsheetId) {
+      throw new BadRequestException(
+        'No Google Sheet is currently linked to this connection',
+      );
+    }
+
+    const targetSheetName = sheetName || metadata.sheetName || 'Leads';
+    const spreadsheetId = metadata.spreadsheetId;
+
+    // Fetch all values from the spreadsheet
+    const range = `'${targetSheetName}'!A1:Z5000`;
+    const res = await fetch(
+      `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${encodeURIComponent(range)}`,
+      { headers: { Authorization: `Bearer ${accessToken}` } },
+    );
+    if (!res.ok) {
+      const errJson = await res.json().catch(() => ({}));
+      throw new BadRequestException(
+        `Failed to read Google Sheet values: ${JSON.stringify(errJson)}`,
+      );
+    }
+
+    const data = (await res.json()) as { values?: string[][] };
+    const rows = data.values || [];
+    if (rows.length <= 1) {
+      return {
+        ok: true,
+        totalRows: 0,
+        created: 0,
+        updated: 0,
+        failed: 0,
+        message: 'No data rows found in Google Sheet (only header row or empty).',
+      };
+    }
+
+    // Determine header mapping dynamically
+    const headerRow = (rows[0] || []).map((h) =>
+      String(h || '').trim().toLowerCase(),
+    );
+
+    const findCol = (candidates: string[]): number => {
+      return headerRow.findIndex((h) => candidates.some((c) => h.includes(c)));
+    };
+
+    const colCapturedAt = findCol(['captured', 'date', 'time', 'created']);
+    const colName = findCol(['name', 'contact', 'customer', 'lead name', 'full name']);
+    const colPhone = findCol(['phone', 'mobile', 'whatsapp', 'cell', 'tel']);
+    const colEmail = findCol(['email', 'mail']);
+    const colSource = findCol(['source', 'channel', 'medium']);
+    const colPlatform = findCol(['platform', 'ad platform']);
+    const colCampaign = findCol(['campaign', 'utm']);
+    const colProject = findCol(['project', 'property']);
+    const colStatus = findCol(['status', 'stage']);
+    const colNotes = findCol(['note', 'notes', 'message', 'comment', 'description']);
+    const colLeadId = findCol(['lead id', 'leadid', 'id']);
+
+    let createdCount = 0;
+    let updatedCount = 0;
+    let failedCount = 0;
+    const details: Array<{ row: number; leadId?: string; action: string }> = [];
+
+    // Target project priority: argument > connection.projectId
+    const assignedProjectId = projectId || connection.projectId || undefined;
+    const connWithProject = assignedProjectId
+      ? ({ ...connection, projectId: assignedProjectId } as ConnectionRow)
+      : connection;
+
+    for (let i = 1; i < rows.length; i++) {
+      const row = rows[i];
+      if (!row || row.every((c) => !c || !String(c).trim())) continue;
+
+      const rowNumber = i + 1;
+      const getVal = (colIdx: number, defaultIdx: number) => {
+        const idx = colIdx >= 0 ? colIdx : defaultIdx;
+        return row[idx] ? String(row[idx]).trim() : '';
+      };
+
+      const name = getVal(colName, 1);
+      const phone = getVal(colPhone, 2);
+      const email = getVal(colEmail, 3);
+      const rowSource = getVal(colSource, 4) || 'google_sheets';
+      const rowPlatform = getVal(colPlatform, 5) || 'google_sheets';
+      const rowCampaign = getVal(colCampaign, 6);
+      const rowProject = getVal(colProject, 7);
+      const rowStatus = getVal(colStatus, 8);
+      const rowNotes = getVal(colNotes, 9);
+      const rowLeadId = getVal(colLeadId, 10);
+      const rowCapturedAt = getVal(colCapturedAt, 0);
+
+      // Skip empty row with no contact info
+      if (!name && !phone && !email && !rowLeadId) {
+        continue;
+      }
+
+      const leadInput = {
+        name,
+        phone,
+        email,
+        source: rowSource,
+        platform: rowPlatform,
+        campaign: rowCampaign,
+        project: rowProject,
+        status: rowStatus,
+        notes: rowNotes,
+        id: rowLeadId,
+        capturedAt: rowCapturedAt,
+      };
+
+      try {
+        const syncRes = await this.syncSingleLeadFromSheet(
+          connWithProject,
+          leadInput,
+          spreadsheetId,
+          targetSheetName,
+          undefined,
+          rowNumber,
+        );
+
+        if (syncRes.action === 'created') createdCount++;
+        else if (syncRes.action === 'updated') updatedCount++;
+        else if (!syncRes.ok && syncRes.action !== 'skipped') failedCount++;
+
+        details.push({
+          row: rowNumber,
+          leadId: syncRes.leadId,
+          action: syncRes.action,
+        });
+      } catch (err) {
+        failedCount++;
+        this.logger.warn(
+          `Failed to import row ${rowNumber} from Google Sheet: ${String(err)}`,
+        );
+      }
+    }
+
+    // Update connection sync statistics
+    const newRecordsAdded = (metadata.recordsAdded ?? 0) + createdCount;
+    const newRecordsUpdated = (metadata.recordsUpdated ?? 0) + updatedCount;
+    await this.prisma.marketingConnection.update({
+      where: { id: connection.id },
+      data: {
+        lastSyncAt: new Date(),
+        metadata: {
+          ...metadata,
+          recordsAdded: newRecordsAdded,
+          recordsUpdated: newRecordsUpdated,
+          lastSyncAt: new Date().toISOString(),
+        } as any,
+      },
+    });
+
+    return {
+      ok: true,
+      totalRows: rows.length - 1,
+      created: createdCount,
+      updated: updatedCount,
+      failed: failedCount,
+      message: `Import complete: ${createdCount} new lead(s) created, ${updatedCount} updated from Google Sheet.`,
+      details,
+    };
+  }
+
+  /**
    * Creates a new Google Sheet inside the connected Google Drive.
    * With `connectionId`, replaces that connection's spreadsheet; without it,
    * replaces the first connection's spreadsheet (legacy behaviour).

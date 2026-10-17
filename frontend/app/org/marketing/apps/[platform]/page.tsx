@@ -17,6 +17,7 @@ import {
   getMarketingCredentials,
   getMarketingPlatform,
   getGoogleSheetsAppsScriptConfig,
+  importOrgGoogleSheetsLeads,
   regenerateGoogleSheetsWebhookToken,
   resetGoogleSheetsSyncStats,
   type GoogleSheetsAppsScriptConfig,
@@ -86,10 +87,13 @@ function PlatformDetailInner() {
   const [showRefreshToken, setShowRefreshToken] = useState(false);
   const [showLinkSheetModal, setShowLinkSheetModal] = useState(false);
   const [linkSheetInput, setLinkSheetInput] = useState("");
+  const [linkSheetProjectId, setLinkSheetProjectId] = useState("");
   const [showNewSheetModal, setShowNewSheetModal] = useState(false);
   const [newSheetTitle, setNewSheetTitle] = useState("");
+  const [newSheetProjectId, setNewSheetProjectId] = useState("");
   const [activeSheetConnectionId, setActiveSheetConnectionId] = useState("");
   const [syncingAllLeads, setSyncingAllLeads] = useState(false);
+  const [importingFromSheetId, setImportingFromSheetId] = useState<string | null>(null);
   const [sheetBusy, setSheetBusy] = useState(false);
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
   const [showAppsScriptModal, setShowAppsScriptModal] = useState(false);
@@ -417,9 +421,11 @@ function PlatformDetailInner() {
       await createOrgGoogleSheet(
         newSheetTitle.trim() || undefined,
         activeSheetConnectionId || undefined,
+        newSheetProjectId || undefined,
       );
       setShowNewSheetModal(false);
       setNewSheetTitle("");
+      setNewSheetProjectId("");
       setMessage("New Google Sheet created in your Google Drive! Auto-sync is active.");
       await load();
     } catch (err) {
@@ -438,9 +444,11 @@ function PlatformDetailInner() {
         linkSheetInput.trim(),
         undefined,
         activeSheetConnectionId || undefined,
+        linkSheetProjectId || undefined,
       );
       setShowLinkSheetModal(false);
       setLinkSheetInput("");
+      setLinkSheetProjectId("");
       setMessage("Google Sheet linked successfully! Auto-sync is active.");
       await load();
     } catch (err) {
@@ -517,6 +525,26 @@ function PlatformDetailInner() {
       setError(err instanceof Error ? err.message : "Failed to reset stats");
     } finally {
       setResettingStats(false);
+    }
+  };
+
+  const handleImportLeadsFromSheet = async (connId: string, projectId?: string | null) => {
+    setImportingFromSheetId(connId);
+    setError("");
+    setMessage("");
+    try {
+      const res = await importOrgGoogleSheetsLeads({
+        connectionId: connId,
+        projectId: projectId || undefined,
+      });
+      setMessage(res.message);
+      await load();
+    } catch (err) {
+      setError(
+        err instanceof Error ? err.message : "Failed to import leads from Google Sheet",
+      );
+    } finally {
+      setImportingFromSheetId(null);
     }
   };
 
@@ -933,8 +961,8 @@ function PlatformDetailInner() {
             ) : isGoogleSheets ? (
               <>
                 <p className="muted" style={{ marginTop: 0 }}>
-                  Connect Google Sheets &amp; Google Drive to automatically stream all incoming Lead Center leads
-                  into your spreadsheet in real time, or link any existing Google Sheet from your Drive.
+                  Bidirectional Google Sheets Integration: Automatically stream incoming CRM leads into your Google Sheet (Export),
+                  or import leads directly from any Google Sheet into Lead Center attributed to your chosen project (Import).
                 </p>
                 {!detail?.oauthConfigured && !detail?.configured ? (
                   <div
@@ -1207,7 +1235,22 @@ function PlatformDetailInner() {
                                 />
                                 {syncingAllLeads
                                   ? "Syncing…"
-                                  : "Sync All Leads to Sheet"}
+                                  : "Export All Leads to Sheet"}
+                              </button>
+                              <button
+                                type="button"
+                                className="btn btn-primary btn-sm"
+                                style={{
+                                  background: "#2563eb",
+                                  borderColor: "#2563eb",
+                                }}
+                                disabled={importingFromSheetId === c.id || sheetBusy}
+                                onClick={() => void handleImportLeadsFromSheet(c.id, c.projectId)}
+                              >
+                                <Icon name="download" size={13} />
+                                {importingFromSheetId === c.id
+                                  ? "Importing Leads…"
+                                  : "Import Leads from Sheet"}
                               </button>
                               <button
                                 type="button"
@@ -1291,6 +1334,7 @@ function PlatformDetailInner() {
                               className="btn btn-ghost btn-sm"
                               onClick={() => {
                                 setActiveSheetConnectionId(c.id);
+                                setNewSheetProjectId(c.projectId || "");
                                 setShowNewSheetModal(true);
                               }}
                             >
@@ -1302,6 +1346,7 @@ function PlatformDetailInner() {
                               className="btn btn-ghost btn-sm"
                               onClick={() => {
                                 setActiveSheetConnectionId(c.id);
+                                setLinkSheetProjectId(c.projectId || "");
                                 setShowLinkSheetModal(true);
                               }}
                             >
@@ -1944,6 +1989,25 @@ function PlatformDetailInner() {
             </span>
           </div>
 
+          <div className="field">
+            <label style={{ fontWeight: 600, fontSize: 13 }}>Target Project (Optional)</label>
+            <select
+              className="inp"
+              value={newSheetProjectId}
+              onChange={(e) => setNewSheetProjectId(e.target.value)}
+            >
+              <option value="">All Projects (Organisation-wide)</option>
+              {projects.map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.name}
+                </option>
+              ))}
+            </select>
+            <span className="hint">
+              If selected, only leads belonging to this project will stream to this spreadsheet.
+            </span>
+          </div>
+
           <ModalActions>
             <button
               type="button"
@@ -1984,6 +2048,25 @@ function PlatformDetailInner() {
             />
             <span className="hint">
               Make sure the connected Google account has &ldquo;Editor&rdquo; permissions on this sheet.
+            </span>
+          </div>
+
+          <div className="field">
+            <label style={{ fontWeight: 600, fontSize: 13 }}>Target Project (Optional)</label>
+            <select
+              className="inp"
+              value={linkSheetProjectId}
+              onChange={(e) => setLinkSheetProjectId(e.target.value)}
+            >
+              <option value="">All Projects (Organisation-wide)</option>
+              {projects.map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.name}
+                </option>
+              ))}
+            </select>
+            <span className="hint">
+              If selected, only leads belonging to this project will stream to this sheet.
             </span>
           </div>
 

@@ -1522,6 +1522,24 @@ export async function syncAllOrgGoogleSheetsLeads(opts?: {
   });
 }
 
+export async function importOrgGoogleSheetsLeads(opts?: {
+  connectionId?: string;
+  projectId?: string;
+  sheetName?: string;
+}): Promise<{
+  ok: boolean;
+  totalRows: number;
+  created: number;
+  updated: number;
+  failed: number;
+  message: string;
+}> {
+  return apiFetch("/org/marketing/google-sheets/import-leads", {
+    method: "POST",
+    body: JSON.stringify(opts ?? {}),
+  });
+}
+
 export async function updateOrgGoogleSheetSettings(settings: {
   autoSync?: boolean;
   sheetName?: string;
