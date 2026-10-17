@@ -1450,18 +1450,13 @@ export async function updateAdminMarketingCredentials(
 export async function getMarketingCredentials(): Promise<
   import("./types").MarketingCredentials
 > {
-  return apiFetch<import("./types").MarketingCredentials>("/org/marketing/credentials").catch(() =>
-    getAdminMarketingCredentials(),
-  );
+  return getAdminMarketingCredentials();
 }
 
 export async function updateMarketingCredentials(
   data: Partial<import("./types").MarketingCredentials>,
 ): Promise<import("./types").MarketingCredentials> {
-  return apiFetch<import("./types").MarketingCredentials>("/org/marketing/credentials", {
-    method: "PUT",
-    body: JSON.stringify(data),
-  }).catch(() => updateAdminMarketingCredentials(data));
+  return updateAdminMarketingCredentials(data);
 }
 
 export async function createOrgGoogleSheet(
@@ -1618,6 +1613,23 @@ export async function getOrgMetaConfig(): Promise<
   import("./types").MetaPublicConfig
 > {
   return apiFetch("/org/meta/config");
+}
+
+export async function getOrgMetaAppCredentials(): Promise<
+  import("./types").OrgMetaAppCredentials
+> {
+  return apiFetch("/org/meta/app-credentials");
+}
+
+export async function updateOrgMetaAppCredentials(data: {
+  metaAppId?: string;
+  metaAppSecret?: string;
+  metaWebhookVerifyToken?: string;
+}): Promise<import("./types").OrgMetaAppCredentials> {
+  return apiFetch("/org/meta/app-credentials", {
+    method: "PUT",
+    body: JSON.stringify(data),
+  });
 }
 
 export async function getMetaConnectUrl(): Promise<{

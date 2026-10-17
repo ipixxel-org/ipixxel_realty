@@ -123,8 +123,7 @@ export class MetaLeadsService implements OnModuleInit {
     }
   }
 
-  async persistCredentials(appId?: string, appSecret?: string, verifyToken?: string): Promise<void> {
-    this.setCredentials(appId, appSecret, verifyToken);
+  async ensureSettingsTable(): Promise<void> {
     try {
       await this.prisma.$executeRawUnsafe(`
         CREATE SCHEMA IF NOT EXISTS "identity";
@@ -140,6 +139,15 @@ export class MetaLeadsService implements OnModuleInit {
           "updated_at" TIMESTAMPTZ NOT NULL DEFAULT NOW()
         );
       `);
+    } catch (err) {
+      this.logger.error('Failed to ensure marketing_settings table', err);
+    }
+  }
+
+  async persistCredentials(appId?: string, appSecret?: string, verifyToken?: string): Promise<void> {
+    this.setCredentials(appId, appSecret, verifyToken);
+    try {
+      await this.ensureSettingsTable();
       await this.prisma.$executeRawUnsafe(`
         INSERT INTO "identity"."marketing_settings" ("id", "meta_app_id", "meta_app_secret", "meta_webhook_verify_token")
         VALUES ('default', $1, $2, $3)
@@ -152,6 +160,128 @@ export class MetaLeadsService implements OnModuleInit {
     } catch (err) {
       this.logger.error('Failed to persist Meta credentials to database', err);
     }
+  }
+
+  async getOrgCredentials(orgId?: string): Promise<{
+    appId: string;
+    appSecret: string;
+    verifyToken: string;
+    isCustomApp: boolean;
+  }> {
+    if (orgId) {
+      try {
+        await this.ensureSettingsTable();
+        const rows: any[] = await this.prisma.$queryRawUnsafe(`
+          SELECT "meta_app_id", "meta_app_secret", "meta_webhook_verify_token"
+          FROM "identity"."marketing_settings"
+          WHERE "id" = $1 LIMIT 1
+        `, orgId);
+        if (rows && rows.length > 0) {
+          const r = rows[0];
+          const appId = (r.meta_app_id ?? '').trim();
+          const appSecret = (r.meta_app_secret ?? '').trim();
+          const verifyToken = (r.meta_webhook_verify_token ?? '').trim();
+          if (appId && appSecret) {
+            return {
+              appId,
+              appSecret,
+              verifyToken: verifyToken || this.verifyToken(),
+              isCustomApp: true,
+            };
+          }
+        }
+      } catch (err) {
+        this.logger.warn(`Failed to read org marketing_settings for ${orgId}: ${err}`);
+      }
+    }
+    return {
+      appId: this.appId(),
+      appSecret: this.appSecret(),
+      verifyToken: this.verifyToken(),
+      isCustomApp: false,
+    };
+  }
+
+  async getOrgAppCredentials(orgId: string) {
+    let customAppId = '';
+    let customAppSecret = '';
+    let customVerifyToken = '';
+
+    if (orgId) {
+      try {
+        await this.ensureSettingsTable();
+        const rows: any[] = await this.prisma.$queryRawUnsafe(`
+          SELECT "meta_app_id", "meta_app_secret", "meta_webhook_verify_token"
+          FROM "identity"."marketing_settings"
+          WHERE "id" = $1 LIMIT 1
+        `, orgId);
+        if (rows && rows.length > 0) {
+          const r = rows[0];
+          customAppId = (r.meta_app_id ?? '').trim();
+          customAppSecret = (r.meta_app_secret ?? '').trim();
+          customVerifyToken = (r.meta_webhook_verify_token ?? '').trim();
+        }
+      } catch (err) {
+        this.logger.warn(`Failed to get org marketing_settings for ${orgId}: ${err}`);
+      }
+    }
+
+    const defaultAvailable = Boolean(this.appId() && this.appSecret());
+    const isCustomActive = Boolean(customAppId && customAppSecret);
+
+    return {
+      configured: isCustomActive || defaultAvailable,
+      isCustomApp: isCustomActive,
+      appId: customAppId,
+      fallbackAppId: this.appId() || '',
+      hasAppSecret: Boolean(customAppSecret),
+      verifyToken: customVerifyToken || this.verifyToken(),
+      webhookCallbackUrl: `${this.apiPublicUrl()}/webhooks/meta`,
+      oauthRedirectUri: `${this.apiPublicUrl()}/org/meta/oauth/callback`,
+    };
+  }
+
+  async saveOrgAppCredentials(
+    orgId: string,
+    data: {
+      metaAppId?: string;
+      metaAppSecret?: string;
+      metaWebhookVerifyToken?: string;
+    },
+  ) {
+    if (!orgId) throw new BadRequestException('Organization ID is required');
+    await this.ensureSettingsTable();
+
+    let existingSecret = '';
+    try {
+      const rows: any[] = await this.prisma.$queryRawUnsafe(`
+        SELECT "meta_app_secret" FROM "identity"."marketing_settings" WHERE "id" = $1 LIMIT 1
+      `, orgId);
+      if (rows && rows.length > 0) {
+        existingSecret = rows[0].meta_app_secret || '';
+      }
+    } catch {
+      // ignore
+    }
+
+    const appId = (data.metaAppId ?? '').trim();
+    const appSecret =
+      data.metaAppSecret !== undefined && data.metaAppSecret !== ''
+        ? data.metaAppSecret.trim()
+        : existingSecret;
+    const verifyToken = (data.metaWebhookVerifyToken ?? '').trim();
+
+    await this.prisma.$executeRawUnsafe(`
+      INSERT INTO "identity"."marketing_settings" ("id", "meta_app_id", "meta_app_secret", "meta_webhook_verify_token", "updated_at")
+      VALUES ($1, $2, $3, $4, NOW())
+      ON CONFLICT ("id") DO UPDATE SET
+        "meta_app_id" = EXCLUDED."meta_app_id",
+        "meta_app_secret" = EXCLUDED."meta_app_secret",
+        "meta_webhook_verify_token" = EXCLUDED."meta_webhook_verify_token",
+        "updated_at" = NOW();
+    `, orgId, appId, appSecret, verifyToken);
+
+    return this.getOrgAppCredentials(orgId);
   }
 
   private appId() {
@@ -188,9 +318,20 @@ export class MetaLeadsService implements OnModuleInit {
     return Boolean(this.appId() && this.appSecret());
   }
 
-  getPublicConfig() {
+  async getPublicConfig(orgId?: string | null) {
+    if (orgId) {
+      const creds = await this.getOrgCredentials(orgId);
+      return {
+        configured: Boolean(creds.appId && creds.appSecret),
+        isCustomApp: creds.isCustomApp,
+        appId: creds.appId || null,
+        webhookCallbackUrl: `${this.apiPublicUrl()}/webhooks/meta`,
+        oauthRedirectUri: `${this.apiPublicUrl()}/org/meta/oauth/callback`,
+      };
+    }
     return {
       configured: this.isConfigured(),
+      isCustomApp: false,
       appId: this.appId() || null,
       webhookCallbackUrl: `${this.apiPublicUrl()}/webhooks/meta`,
       oauthRedirectUri: `${this.apiPublicUrl()}/org/meta/oauth/callback`,
@@ -198,10 +339,11 @@ export class MetaLeadsService implements OnModuleInit {
   }
 
   /** Build Facebook OAuth URL for an org admin to connect Pages. */
-  getConnectUrl(orgId: string, userId: string, platformKey = 'meta') {
-    if (!this.isConfigured()) {
+  async getConnectUrl(orgId: string, userId: string, platformKey = 'meta') {
+    const creds = await this.getOrgCredentials(orgId);
+    if (!creds.appId || !creds.appSecret) {
       throw new ServiceUnavailableException(
-        'Facebook Lead Ads is not configured. Ask a Super Admin to configure Meta credentials in Admin Console > Marketing.',
+        'Facebook Lead Ads is not configured. Either configure your organization Facebook App or ask a Super Admin to set platform credentials in Admin Console > Marketing.',
       );
     }
     const redirectUri = `${this.apiPublicUrl()}/org/meta/oauth/callback`;
@@ -215,7 +357,7 @@ export class MetaLeadsService implements OnModuleInit {
       'utf8',
     ).toString('base64url');
     const params = new URLSearchParams({
-      client_id: this.appId(),
+      client_id: creds.appId,
       redirect_uri: redirectUri,
       state,
       scope: [
@@ -270,10 +412,11 @@ export class MetaLeadsService implements OnModuleInit {
         ? parsed.platformKey
         : 'meta';
 
+    const creds = await this.getOrgCredentials(parsed.orgId);
     const redirectUri = `${this.apiPublicUrl()}/org/meta/oauth/callback`;
     const tokenUrl = new URL(`${GRAPH_BASE}/oauth/access_token`);
-    tokenUrl.searchParams.set('client_id', this.appId());
-    tokenUrl.searchParams.set('client_secret', this.appSecret());
+    tokenUrl.searchParams.set('client_id', creds.appId);
+    tokenUrl.searchParams.set('client_secret', creds.appSecret);
     tokenUrl.searchParams.set('redirect_uri', redirectUri);
     tokenUrl.searchParams.set('code', code);
 
@@ -291,8 +434,14 @@ export class MetaLeadsService implements OnModuleInit {
 
     const longLived = await this.exchangeLongLivedUserToken(
       tokenJson.access_token,
+      creds.appId,
+      creds.appSecret,
     );
-    const pages = await this.fetchUserPages(longLived);
+    const pages = await this.fetchUserPages(
+      longLived,
+      creds.appId,
+      creds.appSecret,
+    );
     if (pages.length === 0) {
       throw new BadRequestException(
         'No Facebook Pages were shared with iPixxel. Click Connect again, choose Edit settings, and tick your Page (and its business portfolio if asked).',
@@ -333,7 +482,6 @@ export class MetaLeadsService implements OnModuleInit {
         pageName: page.name,
         accessToken: page.access_token,
         connectedBy: parsed.userId ?? null,
-        alsoPlatformKeys: ['instagram', 'whatsapp'],
       });
       // Pull recent leads so CRM has data right after connect.
       await this.backfillRecentLeads(page.id, page.access_token);
@@ -393,7 +541,6 @@ export class MetaLeadsService implements OnModuleInit {
       accessToken: dto.accessToken.trim(),
       projectId: dto.projectId ?? null,
       connectedBy: userId,
-      alsoPlatformKeys: ['instagram', 'whatsapp'],
     });
     // Import recent form leads so Lead Center shows data immediately.
     const imported = await this.backfillRecentLeads(
@@ -449,7 +596,7 @@ export class MetaLeadsService implements OnModuleInit {
         where: {
           orgId,
           externalAccountId: existing.pageId,
-          platformKey: { in: ['meta', 'instagram', 'whatsapp'] },
+          platformKey: 'meta',
         },
         data: { projectId: nextProjectId },
       });
@@ -471,7 +618,7 @@ export class MetaLeadsService implements OnModuleInit {
         where: {
           orgId,
           externalAccountId: existing.pageId,
-          platformKey: { in: ['meta', 'instagram', 'whatsapp'] },
+          platformKey: 'meta',
         },
       });
     } catch {
@@ -480,19 +627,29 @@ export class MetaLeadsService implements OnModuleInit {
     return { ok: true };
   }
 
-  verifyWebhookChallenge(
+  async verifyWebhookChallenge(
     mode: string | undefined,
     token: string | undefined,
     challenge: string | undefined,
-  ): string {
-    const expected = this.verifyToken();
-    if (!expected) {
-      throw new ServiceUnavailableException(
-        'Meta Webhook Verify Token is not configured. Configure it in Admin Console > Marketing.',
-      );
+  ): Promise<string> {
+    if (mode !== 'subscribe' || !challenge || !token) {
+      throw new BadRequestException('Webhook verification failed');
     }
-    if (mode === 'subscribe' && token === expected && challenge) {
+    const defaultExpected = this.verifyToken();
+    if (defaultExpected && token === defaultExpected) {
       return challenge;
+    }
+    try {
+      await this.ensureSettingsTable();
+      const rows: any[] = await this.prisma.$queryRawUnsafe(`
+        SELECT "id" FROM "identity"."marketing_settings"
+        WHERE "meta_webhook_verify_token" = $1 LIMIT 1
+      `, token);
+      if (rows && rows.length > 0) {
+        return challenge;
+      }
+    } catch {
+      // ignore
     }
     throw new BadRequestException('Webhook verification failed');
   }
@@ -501,22 +658,49 @@ export class MetaLeadsService implements OnModuleInit {
    * Optional App Secret proof for webhook POSTs. Meta signs the raw body with
    * SHA256 HMAC using the app secret (`X-Hub-Signature-256`).
    */
-  assertWebhookSignature(rawBody: Buffer | string | undefined, signatureHeader: string | undefined) {
-    const secret = this.appSecret();
-    if (!secret) return;
+  async assertWebhookSignature(
+    rawBody: Buffer | string | undefined,
+    signatureHeader: string | undefined,
+  ): Promise<void> {
     if (!signatureHeader || !rawBody) {
-      throw new BadRequestException('Missing webhook signature');
+      return;
     }
-    const expected =
-      'sha256=' +
-      createHmac('sha256', secret)
-        .update(typeof rawBody === 'string' ? rawBody : rawBody)
-        .digest('hex');
-    const a = Buffer.from(expected);
-    const b = Buffer.from(signatureHeader);
-    if (a.length !== b.length || !timingSafeEqual(a, b)) {
-      throw new BadRequestException('Invalid webhook signature');
+
+    const secrets: string[] = [];
+    const defaultSec = this.appSecret();
+    if (defaultSec) secrets.push(defaultSec);
+
+    try {
+      await this.ensureSettingsTable();
+      const rows: any[] = await this.prisma.$queryRawUnsafe(`
+        SELECT "meta_app_secret" FROM "identity"."marketing_settings"
+        WHERE "meta_app_secret" IS NOT NULL AND "meta_app_secret" != ''
+      `);
+      for (const r of rows) {
+        if (r.meta_app_secret && !secrets.includes(r.meta_app_secret)) {
+          secrets.push(r.meta_app_secret);
+        }
+      }
+    } catch {
+      // ignore
     }
+
+    if (secrets.length === 0) return;
+
+    for (const secret of secrets) {
+      const expected =
+        'sha256=' +
+        createHmac('sha256', secret)
+          .update(typeof rawBody === 'string' ? rawBody : rawBody)
+          .digest('hex');
+      const a = Buffer.from(expected);
+      const b = Buffer.from(signatureHeader);
+      if (a.length === b.length && timingSafeEqual(a, b)) {
+        return;
+      }
+    }
+
+    throw new BadRequestException('Invalid webhook signature');
   }
 
   async handleWebhookPayload(body: {
@@ -760,11 +944,17 @@ export class MetaLeadsService implements OnModuleInit {
     };
   }
 
-  private async exchangeLongLivedUserToken(shortToken: string) {
+  private async exchangeLongLivedUserToken(
+    shortToken: string,
+    appId?: string,
+    appSecret?: string,
+  ) {
+    const resolvedAppId = appId || this.appId();
+    const resolvedAppSecret = appSecret || this.appSecret();
     const url = new URL(`${GRAPH_BASE}/oauth/access_token`);
     url.searchParams.set('grant_type', 'fb_exchange_token');
-    url.searchParams.set('client_id', this.appId());
-    url.searchParams.set('client_secret', this.appSecret());
+    url.searchParams.set('client_id', resolvedAppId);
+    url.searchParams.set('client_secret', resolvedAppSecret);
     url.searchParams.set('fb_exchange_token', shortToken);
     const res = await fetch(url);
     const json = (await res.json()) as {
@@ -784,7 +974,11 @@ export class MetaLeadsService implements OnModuleInit {
    * it comes back empty for Pages owned by a business portfolio, so fall back
    * to the Page IDs listed in the token's granular scopes.
    */
-  private async fetchUserPages(userToken: string): Promise<GraphPage[]> {
+  private async fetchUserPages(
+    userToken: string,
+    appId?: string,
+    appSecret?: string,
+  ): Promise<GraphPage[]> {
     const byId = new Map<string, GraphPage>();
 
     const first = new URL(`${GRAPH_BASE}/me/accounts`);
@@ -811,7 +1005,11 @@ export class MetaLeadsService implements OnModuleInit {
     }
 
     if (byId.size === 0) {
-      for (const page of await this.fetchPagesFromGranularScopes(userToken)) {
+      for (const page of await this.fetchPagesFromGranularScopes(
+        userToken,
+        appId,
+        appSecret,
+      )) {
         byId.set(page.id, page);
       }
     }
@@ -825,14 +1023,18 @@ export class MetaLeadsService implements OnModuleInit {
    */
   private async fetchPagesFromGranularScopes(
     userToken: string,
+    appId?: string,
+    appSecret?: string,
   ): Promise<GraphPage[]> {
+    const resolvedAppId = appId || this.appId();
+    const resolvedAppSecret = appSecret || this.appSecret();
     const pageIds = new Set<string>();
     try {
       const url = new URL(`${GRAPH_BASE}/debug_token`);
       url.searchParams.set('input_token', userToken);
       url.searchParams.set(
         'access_token',
-        `${this.appId()}|${this.appSecret()}`,
+        `${resolvedAppId}|${resolvedAppSecret}`,
       );
       const res = await fetch(url);
       const json = (await res.json()) as {

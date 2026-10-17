@@ -40,8 +40,11 @@ export class InstagramAdapter implements PlatformAdapter {
     return true;
   }
 
-  getConnectUrl(orgId: string, userId: string): AdapterConnectResult {
-    return this.meta.getConnectUrl(orgId, userId, 'instagram');
+  async getConnectUrl(
+    orgId: string,
+    userId: string,
+  ): Promise<AdapterConnectResult> {
+    return await this.meta.getConnectUrl(orgId, userId, 'instagram');
   }
 
   handleOAuthCallback(code: string, state: string): Promise<AdapterOAuthResult> {

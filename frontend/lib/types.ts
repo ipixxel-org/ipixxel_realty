@@ -2853,7 +2853,19 @@ export interface AttributionLabel {
 
 export interface MetaPublicConfig {
   configured: boolean;
+  isCustomApp?: boolean;
   appId: string | null;
+  webhookCallbackUrl: string;
+  oauthRedirectUri: string;
+}
+
+export interface OrgMetaAppCredentials {
+  configured: boolean;
+  isCustomApp: boolean;
+  appId: string;
+  fallbackAppId?: string;
+  hasAppSecret: boolean;
+  verifyToken: string;
   webhookCallbackUrl: string;
   oauthRedirectUri: string;
 }

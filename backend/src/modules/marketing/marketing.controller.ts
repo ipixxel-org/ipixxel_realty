@@ -100,7 +100,12 @@ export class OrgMarketingController {
   ) {}
 
   @Get('credentials')
-  getCredentials() {
+  getCredentials(@CurrentUser() user: JwtPayload) {
+    if (!user.roles?.includes('super_admin')) {
+      throw new ForbiddenException(
+        'Platform credentials can only be accessed by Super Administrator in Admin Console > Marketing',
+      );
+    }
     return this.service.getMarketingCredentials();
   }
 
@@ -109,11 +114,9 @@ export class OrgMarketingController {
     @CurrentUser() user: JwtPayload,
     @Body() dto: UpdateMarketingCredentialsDto,
   ) {
-    const isAllowed =
-      user.roles?.includes('super_admin') || user.roles?.includes('admin');
-    if (!isAllowed) {
+    if (!user.roles?.includes('super_admin')) {
       throw new ForbiddenException(
-        'Only administrators can configure marketing platform credentials',
+        'Platform credentials can only be configured by Super Administrator in Admin Console > Marketing',
       );
     }
     return this.service.updateMarketingCredentials(dto);

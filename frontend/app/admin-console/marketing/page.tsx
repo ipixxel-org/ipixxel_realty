@@ -1515,11 +1515,59 @@ export default function SuperAdminMarketingPage() {
                     />
                   </div>
 
-                  <div style={{ marginTop: 6, padding: "10px 12px", background: "#f8fafc", borderRadius: 8, fontSize: 12, border: "1px solid #e2e8f0" }}>
-                    <div style={{ fontWeight: 600, color: "#334155", marginBottom: 4 }}>Authorized Redirect URI:</div>
-                    <code style={{ fontSize: 11.5, wordBreak: "break-all", color: "#2563eb" }}>
-                      {typeof window !== "undefined" ? window.location.origin : "http://localhost:3000"}/auth/google/callback
-                    </code>
+                  <div style={{ marginTop: 8, padding: "12px 14px", background: "#f8fafc", borderRadius: 8, fontSize: 12, border: "1px solid #e2e8f0", display: "flex", flexDirection: "column", gap: 10 }}>
+                    <div>
+                      <div style={{ fontWeight: 600, color: "#334155", marginBottom: 3 }}>
+                        1. Google Ads &amp; Sheets OAuth Callback URI:
+                      </div>
+                      <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+                        <code style={{ fontSize: 11.5, wordBreak: "break-all", color: "#2563eb", background: "#fff", padding: "4px 8px", borderRadius: 4, border: "1px solid #cbd5e1", flex: 1 }}>
+                          {typeof window !== "undefined" && window.location.port !== "3000" ? `${window.location.protocol}//${window.location.hostname}:3000` : (typeof window !== "undefined" ? window.location.origin : "http://localhost:3000")}/org/marketing/oauth/google/callback
+                        </code>
+                        <button
+                          type="button"
+                          className="btn btn-ghost btn-sm"
+                          style={{ padding: "3px 8px", height: "auto" }}
+                          onClick={() =>
+                            void handleCopy(
+                              "Google Ads Callback",
+                              `${typeof window !== "undefined" && window.location.port !== "3000" ? `${window.location.protocol}//${window.location.hostname}:3000` : (typeof window !== "undefined" ? window.location.origin : "http://localhost:3000")}/org/marketing/oauth/google/callback`,
+                            )
+                          }
+                          title="Copy Google Ads Callback URI"
+                        >
+                          <Icon name={copiedKey === "Google Ads Callback" ? "check" : "document"} size={13} />
+                        </button>
+                      </div>
+                    </div>
+
+                    <div>
+                      <div style={{ fontWeight: 600, color: "#334155", marginBottom: 3 }}>
+                        2. Google User SSO / Sign-in Callback URI:
+                      </div>
+                      <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+                        <code style={{ fontSize: 11.5, wordBreak: "break-all", color: "#2563eb", background: "#fff", padding: "4px 8px", borderRadius: 4, border: "1px solid #cbd5e1", flex: 1 }}>
+                          {typeof window !== "undefined" ? window.location.origin : "http://localhost:3000"}/auth/google/callback
+                        </code>
+                        <button
+                          type="button"
+                          className="btn btn-ghost btn-sm"
+                          style={{ padding: "3px 8px", height: "auto" }}
+                          onClick={() =>
+                            void handleCopy(
+                              "Google SSO Callback",
+                              `${typeof window !== "undefined" ? window.location.origin : "http://localhost:3000"}/auth/google/callback`,
+                            )
+                          }
+                          title="Copy Google SSO Callback URI"
+                        >
+                          <Icon name={copiedKey === "Google SSO Callback" ? "check" : "document"} size={13} />
+                        </button>
+                      </div>
+                    </div>
+                    <span className="hint" style={{ fontSize: 11, color: "#64748b" }}>
+                      Add both URIs to Google Cloud Console → APIs &amp; Services → Credentials → OAuth 2.0 Client ID → Authorized redirect URIs.
+                    </span>
                   </div>
                 </div>
 

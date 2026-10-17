@@ -23,6 +23,7 @@ import { MetaLeadsService } from './meta-leads.service';
 import {
   MetaManualTokenDto,
   MetaOAuthCallbackDto,
+  SaveOrgMetaAppCredentialsDto,
   UpdateMetaConnectionDto,
 } from './dto/meta-leads.dto';
 
@@ -31,14 +32,18 @@ export class MetaWebhookController {
   constructor(private readonly service: MetaLeadsService) { }
 
   @Get()
-  verify(
+  async verify(
     @Query('hub.mode') mode: string,
     @Query('hub.verify_token') token: string,
     @Query('hub.challenge') challenge: string,
     @Res() res: Response,
   ) {
-    const result = this.service.verifyWebhookChallenge(mode, token, challenge);
-    return res.status(200).send(result);
+    try {
+      const result = await this.service.verifyWebhookChallenge(mode, token, challenge);
+      return res.status(200).send(result);
+    } catch {
+      return res.status(403).send('Verification failed');
+    }
   }
 
   @Post()
@@ -49,7 +54,7 @@ export class MetaWebhookController {
     @Res() res: Response,
   ) {
     try {
-      this.service.assertWebhookSignature(req.rawBody, signature);
+      await this.service.assertWebhookSignature(req.rawBody, signature);
     } catch {
       return res.status(403).send('Invalid signature');
     }
@@ -112,17 +117,30 @@ export class MetaOAuthCallbackController {
 export class OrgMetaLeadsController {
   constructor(private readonly service: MetaLeadsService) { }
 
+  @Get('app-credentials')
+  getAppCredentials(@CurrentUser() user: JwtPayload) {
+    return this.service.getOrgAppCredentials(user.orgId as string);
+  }
+
+  @Put('app-credentials')
+  updateAppCredentials(
+    @CurrentUser() user: JwtPayload,
+    @Body() dto: SaveOrgMetaAppCredentialsDto,
+  ) {
+    return this.service.saveOrgAppCredentials(user.orgId as string, dto);
+  }
+
   @Get('config')
-  config() {
-    return this.service.getPublicConfig();
+  config(@CurrentUser() user: JwtPayload) {
+    return this.service.getPublicConfig(user.orgId ?? undefined);
   }
 
   @Get('connect')
-  connect(@CurrentUser() user: JwtPayload) {
+  async connect(@CurrentUser() user: JwtPayload) {
     if (!user.orgId) {
       return { url: null, error: 'Organisation required' };
     }
-    return this.service.getConnectUrl(user.orgId, user.sub);
+    return await this.service.getConnectUrl(user.orgId, user.sub);
   }
 
   @Post('connect-token')
