@@ -264,6 +264,24 @@ export class OrgMarketingController {
     );
   }
 
+  @Post('google-sheets/import-leads')
+  importGoogleSheetsLeads(
+    @CurrentUser() user: JwtPayload,
+    @Body()
+    dto?: {
+      connectionId?: string;
+      projectId?: string;
+      sheetName?: string;
+    },
+  ) {
+    return this.googleSheets.importLeadsFromSheet(
+      user.orgId as string,
+      dto?.projectId,
+      dto?.connectionId,
+      dto?.sheetName,
+    );
+  }
+
   @Patch('google-sheets/settings')
   updateGoogleSheetsSettings(
     @CurrentUser() user: JwtPayload,

@@ -47,6 +47,7 @@ const PLATFORM_LABEL: Record<string, string> = {
   Instagram: "Instagram",
   instagram: "Instagram",
   google_ads: "Google Ads",
+  google_sheets: "Google Sheets",
   linkedin: "LinkedIn",
   tiktok: "TikTok",
   whatsapp: "WhatsApp Ads",
@@ -77,6 +78,8 @@ const SOURCE_PLACE: Record<string, string> = {
   "meta lead ad": "Facebook",
   "CSV import": "CSV import",
   Landing: "Landing Page",
+  google_sheets: "Google Sheets",
+  "Google Sheets": "Google Sheets",
 };
 
 export function composeLeadSource(parts: {
@@ -119,7 +122,7 @@ export function leadDisplaySource(
 
   // Marketing-origin sources: show the channel only (no project·interest clutter).
   if (
-    ["Facebook", "Instagram", "Google Ads", "LinkedIn", "TikTok", "Webhook", "CRM", "Website", "Landing Page", "CSV import"].includes(
+    ["Facebook", "Instagram", "Google Ads", "Google Sheets", "LinkedIn", "TikTok", "Webhook", "CRM", "Website", "Landing Page", "CSV import"].includes(
       place,
     )
   ) {
