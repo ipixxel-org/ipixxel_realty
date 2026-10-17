@@ -14,8 +14,9 @@ import {
   disconnectMarketingConnection,
   disconnectOrgGoogleSheet,
   getMarketingConnectUrl,
-  getMarketingCredentials,
   getMarketingPlatform,
+  getOrgMetaAppCredentials,
+  updateOrgMetaAppCredentials,
   getGoogleSheetsAppsScriptConfig,
   importOrgGoogleSheetsLeads,
   regenerateGoogleSheetsWebhookToken,
@@ -25,12 +26,10 @@ import {
   syncAllOrgGoogleSheetsLeads,
   syncMarketingConnection,
   syncMarketingPlatform,
-  updateAdminMarketingCredentials,
   updateMarketingConnection,
-  updateMarketingCredentials,
   updateOrgGoogleSheetSettings,
 } from "@/lib/api";
-import type { MarketingConnection, MarketingCredentials, MarketingPlatformCard, MetaPublicConfig, Project } from "@/lib/types";
+import type { MarketingConnection, MarketingPlatformCard, MetaPublicConfig, OrgMetaAppCredentials, Project } from "@/lib/types";
 import { Modal, ModalActions } from "@/components/ui/modal";
 import { MetaLeadAdsCard } from "@/components/org/meta-lead-ads-card";
 import { PlatformBrandIcon } from "@/components/org/platform-brand-icon";
@@ -70,18 +69,13 @@ function PlatformDetailInner() {
   const [showCred, setShowCred] = useState(false);
   const [showAddAccountModal, setShowAddAccountModal] = useState(false);
   const [addAccountMode, setAddAccountMode] = useState<"oauth" | "manual">("oauth");
+  const [addAccountError, setAddAccountError] = useState("");
   const [editingAccount, setEditingAccount] = useState<MarketingConnection | null>(null);
   const [editName, setEditName] = useState("");
   const [editProjectId, setEditProjectId] = useState("");
   const [savingEdit, setSavingEdit] = useState(false);
   const [disconnectingAccount, setDisconnectingAccount] = useState<MarketingConnection | null>(null);
   const [disconnectingBusy, setDisconnectingBusy] = useState(false);
-  const [showAppCreds, setShowAppCreds] = useState(false);
-  const [savingAppCreds, setSavingAppCreds] = useState(false);
-  const [appCredsFeedback, setAppCredsFeedback] = useState("");
-  const [appCredsSuccess, setAppCredsSuccess] = useState("");
-  const [showSecret1, setShowSecret1] = useState(false);
-  const [showSecret2, setShowSecret2] = useState(false);
   const [showManualToken, setShowManualToken] = useState(false);
   const [showCredToken, setShowCredToken] = useState(false);
   const [showRefreshToken, setShowRefreshToken] = useState(false);
@@ -102,72 +96,81 @@ function PlatformDetailInner() {
   const [loadingAppsScript, setLoadingAppsScript] = useState(false);
   const [regeneratingToken, setRegeneratingToken] = useState(false);
   const [resettingStats, setResettingStats] = useState(false);
-  const [appCreds, setAppCreds] = useState({
+
+  // Organization Custom Facebook App state
+  const [showCustomAppModal, setShowCustomAppModal] = useState(false);
+  const [customAppCreds, setCustomAppCreds] = useState<OrgMetaAppCredentials | null>(null);
+  const [loadingCustomApp, setLoadingCustomApp] = useState(false);
+  const [savingCustomApp, setSavingCustomApp] = useState(false);
+  const [customAppForm, setCustomAppForm] = useState({
     metaAppId: "",
     metaAppSecret: "",
     metaWebhookVerifyToken: "",
-    googleAdsClientId: "",
-    googleAdsClientSecret: "",
-    googleAdsDeveloperToken: "",
   });
+  const [showCustomAppSecret, setShowCustomAppSecret] = useState(false);
 
-  const openAppCredsModal = useCallback(async () => {
-    setShowAppCreds(true);
-    setAppCredsFeedback("");
-    setAppCredsSuccess("");
+  const openCustomAppModal = async () => {
+    setShowCustomAppModal(true);
+    setLoadingCustomApp(true);
+    setError("");
     try {
-      const c = await getMarketingCredentials();
-      if (c) {
-        setAppCreds({
-          metaAppId: c.metaAppId ?? "",
-          metaAppSecret: c.metaAppSecret ?? "",
-          metaWebhookVerifyToken: c.metaWebhookVerifyToken ?? "",
-          googleAdsClientId: c.googleAdsClientId ?? "",
-          googleAdsClientSecret: c.googleAdsClientSecret ?? "",
-          googleAdsDeveloperToken: c.googleAdsDeveloperToken ?? "",
-        });
-      }
-    } catch {
-      // ignore
-    }
-  }, []);
-
-  const saveAppCreds = async () => {
-    setSavingAppCreds(true);
-    setAppCredsFeedback("");
-    setAppCredsSuccess("");
-    try {
-      await updateMarketingCredentials({
-        metaAppId: appCreds.metaAppId.trim(),
-        metaAppSecret: appCreds.metaAppSecret.trim(),
-        metaWebhookVerifyToken: appCreds.metaWebhookVerifyToken.trim(),
-        googleAdsClientId: appCreds.googleAdsClientId.trim(),
-        googleAdsClientSecret: appCreds.googleAdsClientSecret.trim(),
-        googleAdsDeveloperToken: appCreds.googleAdsDeveloperToken.trim(),
+      const data = await getOrgMetaAppCredentials();
+      setCustomAppCreds(data);
+      setCustomAppForm({
+        metaAppId: data.appId || "",
+        metaAppSecret: "",
+        metaWebhookVerifyToken: data.verifyToken || "",
       });
-      setAppCredsSuccess("Credentials saved to database! OAuth is now active.");
-      await load();
-      setTimeout(() => {
-        setShowAppCreds(false);
-        setAppCredsSuccess("");
-      }, 1200);
     } catch (err) {
-      setAppCredsFeedback(
-        err instanceof Error ? err.message : "Failed to save credentials",
-      );
+      setError(err instanceof Error ? err.message : "Failed to load Facebook App credentials");
     } finally {
-      setSavingAppCreds(false);
+      setLoadingCustomApp(false);
     }
   };
 
-  const generateRandomToken = () => {
-    const chars =
-      "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789_";
-    let token = "tok_";
-    for (let i = 0; i < 28; i++) {
-      token += chars.charAt(Math.floor(Math.random() * chars.length));
+  const handleSaveCustomApp = async () => {
+    setSavingCustomApp(true);
+    setError("");
+    try {
+      const res = await updateOrgMetaAppCredentials({
+        metaAppId: customAppForm.metaAppId.trim(),
+        metaAppSecret: customAppForm.metaAppSecret.trim() || undefined,
+        metaWebhookVerifyToken: customAppForm.metaWebhookVerifyToken.trim() || undefined,
+      });
+      setCustomAppCreds(res);
+      setMessage(
+        res.isCustomApp
+          ? "Custom Facebook App credentials saved successfully!"
+          : "Saved. Using platform default Facebook App.",
+      );
+      setShowCustomAppModal(false);
+      await load();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to save Facebook App credentials");
+    } finally {
+      setSavingCustomApp(false);
     }
-    setAppCreds((prev) => ({ ...prev, metaWebhookVerifyToken: token }));
+  };
+
+  const handleClearCustomApp = async () => {
+    setSavingCustomApp(true);
+    setError("");
+    try {
+      const res = await updateOrgMetaAppCredentials({
+        metaAppId: "",
+        metaAppSecret: "",
+        metaWebhookVerifyToken: "",
+      });
+      setCustomAppCreds(res);
+      setCustomAppForm({ metaAppId: "", metaAppSecret: "", metaWebhookVerifyToken: "" });
+      setMessage("Custom Facebook App removed. Now using platform default Facebook App.");
+      setShowCustomAppModal(false);
+      await load();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to clear custom Facebook App");
+    } finally {
+      setSavingCustomApp(false);
+    }
   };
 
   const handleCopy = async (label: string, text?: string | null) => {
@@ -305,6 +308,7 @@ function PlatformDetailInner() {
     if (!key) return;
     setBusy(true);
     setError("");
+    setAddAccountError("");
     setMessage("");
     try {
       const accountId = (cred.externalAccountId || manual.pageId).trim();
@@ -355,10 +359,13 @@ function PlatformDetailInner() {
       });
       setShowManual(false);
       setShowCred(false);
+      setAddAccountError("");
       setShowAddAccountModal(false);
       await load();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to connect account");
+      const msg = err instanceof Error ? err.message : "Failed to connect account";
+      setError(msg);
+      setAddAccountError(msg);
     } finally {
       setBusy(false);
     }
@@ -624,6 +631,15 @@ function PlatformDetailInner() {
           <div className="sub">{detail?.description}</div>
         </div>
         <div className="actions">
+          {key === "meta" ? (
+            <button
+              type="button"
+              className="btn btn-secondary"
+              onClick={() => void openCustomAppModal()}
+            >
+              <Icon name="key" size={14} /> Configure Facebook App
+            </button>
+          ) : null}
           <button
             type="button"
             className="btn btn-primary"
@@ -631,6 +647,7 @@ function PlatformDetailInner() {
               if (key === "google_sheets") {
                 void connectOAuth();
               } else {
+                setAddAccountError("");
                 setShowAddAccountModal(true);
               }
             }}
@@ -695,7 +712,7 @@ function PlatformDetailInner() {
                       ? "Connect via Meta Page OAuth (same as Facebook). Lead ads are labelled Instagram in Lead Center when Meta reports the placement; Lead Ads Testing Tool leads show as Facebook. Sync Now imports recent form leads."
                       : "Connect a Facebook Page so Lead Ad form submissions flow into Lead Center in realtime. Sync Now re-subscribes the Page and imports recent form leads so you can see them in Lead Center."}
                 </p>
-                {detail?.metaConfig && !detail.metaConfig.configured ? (
+                {key === "meta" && detail?.metaConfig && !detail.metaConfig.configured ? (
                   <div
                     style={{
                       background: "#fffbeb",
@@ -706,25 +723,77 @@ function PlatformDetailInner() {
                       display: "flex",
                       alignItems: "center",
                       justifyContent: "space-between",
-                      flexWrap: "wrap",
                       gap: 10,
+                      flexWrap: "wrap",
                     }}
                   >
                     <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                      <Icon name="alert" size={18} style={{ color: "#d97706" }} />
+                      <Icon name="alert" size={18} style={{ color: "#d97706", flexShrink: 0 }} />
                       <span style={{ fontSize: 13, color: "#92400e", fontWeight: 500 }}>
-                        Meta App credentials (App ID &amp; Secret) required for Facebook, Instagram, and WhatsApp. Configure them directly from the frontend.
+                        Facebook integration has not been enabled yet. You can connect your organization's own Facebook App or ask a Superadmin to enable platform defaults.
                       </span>
                     </div>
                     <button
                       type="button"
-                      className="btn btn-primary btn-sm"
-                      onClick={() => void openAppCredsModal()}
+                      className="btn btn-secondary btn-xs"
+                      onClick={() => void openCustomAppModal()}
                     >
-                      <Icon name="key" size={13} /> Configure App Credentials
+                      <Icon name="key" size={12} /> Configure Facebook App
                     </button>
                   </div>
-                ) : detail?.metaConfig?.configured ? (
+                ) : key === "meta" && detail?.metaConfig?.configured ? (
+                  <div
+                    style={{
+                      background: detail.metaConfig.isCustomApp ? "#f5f3ff" : "#f0fdf4",
+                      border: `1px solid ${detail.metaConfig.isCustomApp ? "#ddd6fe" : "#bbf7d0"}`,
+                      borderRadius: 10,
+                      padding: "10px 14px",
+                      marginBottom: 14,
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "space-between",
+                      gap: 8,
+                      fontSize: 12.5,
+                      color: detail.metaConfig.isCustomApp ? "#6b21a8" : "#166534",
+                      flexWrap: "wrap",
+                    }}
+                  >
+                    <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                      <Icon name={detail.metaConfig.isCustomApp ? "key" : "check"} size={14} style={{ verticalAlign: -2 }} />
+                      <span>
+                        {detail.metaConfig.isCustomApp
+                          ? `Organization Custom Facebook App active (App ID: ${detail.metaConfig.appId || "configured"})`
+                          : "Platform default Facebook App active"}
+                      </span>
+                    </div>
+                    <button
+                      type="button"
+                      className="btn btn-ghost btn-xs"
+                      style={{ fontSize: 11, padding: "2px 8px" }}
+                      onClick={() => void openCustomAppModal()}
+                    >
+                      <Icon name="settings" size={11} /> {detail.metaConfig.isCustomApp ? "Edit App Settings" : "Use Custom App"}
+                    </button>
+                  </div>
+                ) : key !== "meta" && !detail?.oauthConfigured ? (
+                  <div
+                    style={{
+                      background: "#fffbeb",
+                      border: "1px solid #fde68a",
+                      borderRadius: 10,
+                      padding: "12px 16px",
+                      marginBottom: 14,
+                      display: "flex",
+                      alignItems: "center",
+                      gap: 10,
+                    }}
+                  >
+                    <Icon name="alert" size={18} style={{ color: "#d97706", flexShrink: 0 }} />
+                    <span style={{ fontSize: 13, color: "#92400e", fontWeight: 500 }}>
+                      {key === "instagram" ? "Instagram" : "WhatsApp"} integration credentials have not been configured by the Super Administrator yet.
+                    </span>
+                  </div>
+                ) : key !== "meta" && detail?.oauthConfigured ? (
                   <div
                     style={{
                       background: "#f0fdf4",
@@ -734,32 +803,25 @@ function PlatformDetailInner() {
                       marginBottom: 14,
                       display: "flex",
                       alignItems: "center",
-                      justifyContent: "space-between",
-                      flexWrap: "wrap",
                       gap: 8,
                       fontSize: 12.5,
                       color: "#166534",
                     }}
                   >
-                    <span>
-                      <Icon name="check" size={14} style={{ verticalAlign: -2, marginRight: 6 }} />
-                      Meta App configured (ID: <code>{detail.metaConfig.appId}</code>)
-                    </span>
-                    <button
-                      type="button"
-                      className="btn btn-ghost btn-sm"
-                      style={{ height: 26, fontSize: 11.5 }}
-                      onClick={() => void openAppCredsModal()}
-                    >
-                      <Icon name="settings" size={12} /> Edit App Credentials
-                    </button>
+                    <Icon name="check" size={14} style={{ verticalAlign: -2 }} />
+                    <span>{key === "instagram" ? "Instagram" : "WhatsApp"} integration is enabled</span>
                   </div>
                 ) : null}
                 <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
                   <button
                     type="button"
                     className="btn btn-primary btn-sm"
-                    disabled={busy || !detail?.metaConfig?.configured}
+                    disabled={
+                      busy ||
+                      (key === "meta"
+                        ? !detail?.metaConfig?.configured
+                        : !detail?.oauthConfigured)
+                    }
                     onClick={() => void connectOAuth()}
                   >
                     {key === "instagram"
@@ -767,13 +829,6 @@ function PlatformDetailInner() {
                       : key === "whatsapp"
                         ? "Connect via Meta"
                         : "Connect with Facebook"}
-                  </button>
-                  <button
-                    type="button"
-                    className="btn btn-secondary btn-sm"
-                    onClick={() => void openAppCredsModal()}
-                  >
-                    <Icon name="key" size={13} /> App Credentials
                   </button>
                   <button
                     type="button"
@@ -883,24 +938,13 @@ function PlatformDetailInner() {
                       marginBottom: 14,
                       display: "flex",
                       alignItems: "center",
-                      justifyContent: "space-between",
-                      flexWrap: "wrap",
                       gap: 10,
                     }}
                   >
-                    <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                      <Icon name="alert" size={18} style={{ color: "#d97706" }} />
-                      <span style={{ fontSize: 13, color: "#92400e", fontWeight: 500 }}>
-                        Google Cloud OAuth credentials required for Google Ads OAuth. Configure them directly from the frontend.
-                      </span>
-                    </div>
-                    <button
-                      type="button"
-                      className="btn btn-primary btn-sm"
-                      onClick={() => void openAppCredsModal()}
-                    >
-                      <Icon name="key" size={13} /> Configure App Credentials
-                    </button>
+                    <Icon name="alert" size={18} style={{ color: "#d97706", flexShrink: 0 }} />
+                    <span style={{ fontSize: 13, color: "#92400e", fontWeight: 500 }}>
+                      Google Ads OAuth has not been configured by the Super Administrator yet. Please contact your platform administrator to configure Google OAuth credentials in the Superadmin Console.
+                    </span>
                   </div>
                 ) : detail?.oauthConfigured ? (
                   <div
@@ -912,25 +956,13 @@ function PlatformDetailInner() {
                       marginBottom: 14,
                       display: "flex",
                       alignItems: "center",
-                      justifyContent: "space-between",
-                      flexWrap: "wrap",
                       gap: 8,
                       fontSize: 12.5,
                       color: "#166534",
                     }}
                   >
-                    <span>
-                      <Icon name="check" size={14} style={{ verticalAlign: -2, marginRight: 6 }} />
-                      Google Ads OAuth credentials active
-                    </span>
-                    <button
-                      type="button"
-                      className="btn btn-ghost btn-sm"
-                      style={{ height: 26, fontSize: 11.5 }}
-                      onClick={() => void openAppCredsModal()}
-                    >
-                      <Icon name="settings" size={12} /> Edit App Credentials
-                    </button>
+                    <Icon name="check" size={14} style={{ verticalAlign: -2 }} />
+                    <span>Google Ads platform OAuth is enabled</span>
                   </div>
                 ) : null}
                 <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
@@ -941,13 +973,6 @@ function PlatformDetailInner() {
                     onClick={() => void connectOAuth()}
                   >
                     Connect with Google
-                  </button>
-                  <button
-                    type="button"
-                    className="btn btn-secondary btn-sm"
-                    onClick={() => void openAppCredsModal()}
-                  >
-                    <Icon name="key" size={13} /> App Credentials
                   </button>
                   <button
                     type="button"
@@ -974,24 +999,13 @@ function PlatformDetailInner() {
                       marginBottom: 14,
                       display: "flex",
                       alignItems: "center",
-                      justifyContent: "space-between",
-                      flexWrap: "wrap",
                       gap: 10,
                     }}
                   >
-                    <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                      <Icon name="alert" size={18} style={{ color: "#d97706" }} />
-                      <span style={{ fontSize: 13, color: "#92400e", fontWeight: 500 }}>
-                        Google Cloud OAuth Client ID &amp; Secret are required for Google Drive &amp; Sheets auth. Configure them directly from the frontend.
-                      </span>
-                    </div>
-                    <button
-                      type="button"
-                      className="btn btn-primary btn-sm"
-                      onClick={() => void openAppCredsModal()}
-                    >
-                      <Icon name="key" size={13} /> Configure App Credentials
-                    </button>
+                    <Icon name="alert" size={18} style={{ color: "#d97706", flexShrink: 0 }} />
+                    <span style={{ fontSize: 13, color: "#92400e", fontWeight: 500 }}>
+                      Google Cloud OAuth has not been configured by the Super Administrator yet. Please contact your platform administrator to configure Google credentials in the Superadmin Console.
+                    </span>
                   </div>
                 ) : null}
 
@@ -1000,17 +1014,10 @@ function PlatformDetailInner() {
                     <button
                       type="button"
                       className="btn btn-primary btn-sm"
-                      disabled={busy}
+                      disabled={busy || (!detail?.oauthConfigured && !detail?.configured)}
                       onClick={() => void connectOAuth()}
                     >
                       <Icon name="link" size={13} /> Connect with Google (Sheets &amp; Drive)
-                    </button>
-                    <button
-                      type="button"
-                      className="btn btn-secondary btn-sm"
-                      onClick={() => void openAppCredsModal()}
-                    >
-                      <Icon name="key" size={13} /> App Credentials
                     </button>
                   </div>
                 ) : (
@@ -1516,7 +1523,7 @@ function PlatformDetailInner() {
         </div>
       </Reveal>
 
-      {(detail?.connections.length ?? 0) > 0 ? (
+      {(detail?.connections.length ?? 0) > 0 && !isGoogleSheets ? (
         <Reveal delay={2}>
           <div className="card">
             <div
@@ -1677,296 +1684,13 @@ function PlatformDetailInner() {
         </Reveal>
       ) : null}
 
-      {isMetaFamily ? (
+      {key === "meta" ? (
         <div style={{ marginTop: 18 }}>
           <MetaLeadAdsCard />
         </div>
       ) : null}
 
-      {/* App Credentials Modal */}
-      <Modal
-        open={showAppCreds}
-        onClose={() => setShowAppCreds(false)}
-        title={
-          isGoogleAds || isGoogleSheets
-            ? "Configure Google Cloud OAuth Credentials"
-            : "Configure Meta Platform Credentials"
-        }
-        description={
-          isGoogleAds || isGoogleSheets
-            ? "Enter your Google Cloud Console OAuth 2.0 Client credentials. Stored securely in database without .env changes."
-            : "Enter credentials from developers.facebook.com for Facebook, Instagram, and WhatsApp. Stored securely in database without .env changes."
-        }
-        size="lg"
-      >
-        <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-          {appCredsSuccess ? (
-            <div className="badge b-green" style={{ padding: "8px 12px", width: "100%", borderRadius: 8 }}>
-              {appCredsSuccess}
-            </div>
-          ) : null}
-          {appCredsFeedback ? (
-            <div className="badge b-amber" style={{ padding: "8px 12px", width: "100%", borderRadius: 8, color: "#b91c1c" }}>
-              {appCredsFeedback}
-            </div>
-          ) : null}
 
-          {isMetaFamily ? (
-            <>
-              <div className="field">
-                <label style={{ fontWeight: 600, fontSize: 13 }}>Meta App ID</label>
-                <input
-                  className="inp inp-mono"
-                  placeholder="e.g. 109283746592019"
-                  value={appCreds.metaAppId}
-                  onChange={(e) =>
-                    setAppCreds((c) => ({ ...c, metaAppId: e.target.value }))
-                  }
-                />
-              </div>
-
-              <div className="field">
-                <label style={{ fontWeight: 600, fontSize: 13 }}>Meta App Secret</label>
-                <div style={{ display: "flex", gap: 6 }}>
-                  <input
-                    type={showSecret1 ? "text" : "password"}
-                    className="inp inp-mono"
-                    placeholder="e.g. 9f8e7d6c5b4a3..."
-                    value={appCreds.metaAppSecret}
-                    onChange={(e) =>
-                      setAppCreds((c) => ({ ...c, metaAppSecret: e.target.value }))
-                    }
-                  />
-                  <button
-                    type="button"
-                    className="btn btn-ghost btn-sm"
-                    onClick={() => setShowSecret1((v) => !v)}
-                  >
-                    <Icon name={showSecret1 ? "eye-off" : "eye"} size={14} />
-                  </button>
-                </div>
-              </div>
-
-              <div className="field">
-                <label style={{ fontWeight: 600, fontSize: 13 }}>Webhook Verify Token</label>
-                <div style={{ display: "flex", gap: 6 }}>
-                  <input
-                    type={showSecret2 ? "text" : "password"}
-                    className="inp inp-mono"
-                    placeholder="e.g. tok_sec_random_string"
-                    value={appCreds.metaWebhookVerifyToken}
-                    onChange={(e) =>
-                      setAppCreds((c) => ({
-                        ...c,
-                        metaWebhookVerifyToken: e.target.value,
-                      }))
-                    }
-                  />
-                  <button
-                    type="button"
-                    className="btn btn-ghost btn-sm"
-                    onClick={() => setShowSecret2((v) => !v)}
-                  >
-                    <Icon name={showSecret2 ? "eye-off" : "eye"} size={14} />
-                  </button>
-                  <button
-                    type="button"
-                    className="btn btn-secondary btn-sm"
-                    onClick={generateRandomToken}
-                    title="Generate Random Token"
-                  >
-                    Generate
-                  </button>
-                </div>
-              </div>
-
-              {/* Useful Developer URLs */}
-              <div
-                style={{
-                  background: "#f8fafc",
-                  border: "1px solid #e2e8f0",
-                  borderRadius: 10,
-                  padding: "12px 14px",
-                  display: "flex",
-                  flexDirection: "column",
-                  gap: 10,
-                }}
-              >
-                <div style={{ fontSize: 12.5, fontWeight: 700, color: "#334155" }}>
-                  Developer Portal Setup URLs
-                </div>
-                <div>
-                  <div style={{ fontSize: 11.5, color: "#64748b", marginBottom: 3 }}>
-                    Webhook Callback URL (Meta App → Webhooks → Page)
-                  </div>
-                  <div style={{ display: "flex", gap: 6 }}>
-                    <input
-                      className="inp inp-mono"
-                      readOnly
-                      style={{ fontSize: 12, height: 32, background: "#fff" }}
-                      value={detail?.metaConfig?.webhookCallbackUrl || (typeof window !== "undefined" ? `${window.location.origin}/api/webhooks/meta` : "")}
-                    />
-                    <button
-                      type="button"
-                      className="btn btn-ghost btn-sm"
-                      onClick={() =>
-                        void handleCopy(
-                          "webhook",
-                          detail?.metaConfig?.webhookCallbackUrl || (typeof window !== "undefined" ? `${window.location.origin}/api/webhooks/meta` : ""),
-                        )
-                      }
-                    >
-                      <Icon name={copiedKey === "webhook" ? "check" : "document"} size={13} />
-                    </button>
-                  </div>
-                </div>
-                <div>
-                  <div style={{ fontSize: 11.5, color: "#64748b", marginBottom: 3 }}>
-                    OAuth Redirect URI (Meta App → Facebook Login for Business)
-                  </div>
-                  <div style={{ display: "flex", gap: 6 }}>
-                    <input
-                      className="inp inp-mono"
-                      readOnly
-                      style={{ fontSize: 12, height: 32, background: "#fff" }}
-                      value={detail?.metaConfig?.oauthRedirectUri || (typeof window !== "undefined" ? `${window.location.origin}/api/org/meta/oauth/callback` : "")}
-                    />
-                    <button
-                      type="button"
-                      className="btn btn-ghost btn-sm"
-                      onClick={() =>
-                        void handleCopy(
-                          "redirect",
-                          detail?.metaConfig?.oauthRedirectUri || (typeof window !== "undefined" ? `${window.location.origin}/api/org/meta/oauth/callback` : ""),
-                        )
-                      }
-                    >
-                      <Icon name={copiedKey === "redirect" ? "check" : "document"} size={13} />
-                    </button>
-                  </div>
-                </div>
-              </div>
-            </>
-          ) : isGoogleAds || isGoogleSheets ? (
-            <>
-              <div className="field">
-                <label style={{ fontWeight: 600, fontSize: 13 }}>Google Cloud OAuth Client ID</label>
-                <input
-                  className="inp inp-mono"
-                  placeholder="e.g. 123456789-xxx.apps.googleusercontent.com"
-                  value={appCreds.googleAdsClientId}
-                  onChange={(e) =>
-                    setAppCreds((c) => ({
-                      ...c,
-                      googleAdsClientId: e.target.value,
-                    }))
-                  }
-                />
-              </div>
-
-              <div className="field">
-                <label style={{ fontWeight: 600, fontSize: 13 }}>Google Cloud OAuth Client Secret</label>
-                <div style={{ display: "flex", gap: 6 }}>
-                  <input
-                    type={showSecret1 ? "text" : "password"}
-                    className="inp inp-mono"
-                    placeholder="e.g. GOCSPX-..."
-                    value={appCreds.googleAdsClientSecret}
-                    onChange={(e) =>
-                      setAppCreds((c) => ({
-                        ...c,
-                        googleAdsClientSecret: e.target.value,
-                      }))
-                    }
-                  />
-                  <button
-                    type="button"
-                    className="btn btn-ghost btn-sm"
-                    onClick={() => setShowSecret1((v) => !v)}
-                  >
-                    <Icon name={showSecret1 ? "eye-off" : "eye"} size={14} />
-                  </button>
-                </div>
-              </div>
-
-              {isGoogleAds ? (
-                <div className="field">
-                  <label style={{ fontWeight: 600, fontSize: 13 }}>
-                    Developer Token <span className="hint">(Optional)</span>
-                  </label>
-                  <input
-                    className="inp inp-mono"
-                    placeholder="e.g. AbC123XyZ..."
-                    value={appCreds.googleAdsDeveloperToken}
-                    onChange={(e) =>
-                      setAppCreds((c) => ({
-                        ...c,
-                        googleAdsDeveloperToken: e.target.value,
-                      }))
-                    }
-                  />
-                </div>
-              ) : null}
-
-              <div
-                style={{
-                  background: "#f8fafc",
-                  border: "1px solid #e2e8f0",
-                  borderRadius: 10,
-                  padding: "12px 14px",
-                  display: "flex",
-                  flexDirection: "column",
-                  gap: 10,
-                }}
-              >
-                <div style={{ fontSize: 12.5, fontWeight: 700, color: "#334155" }}>
-                  Google Cloud Console Authorized Redirect URI
-                </div>
-                <div style={{ display: "flex", gap: 6 }}>
-                  <input
-                    className="inp inp-mono"
-                    readOnly
-                    style={{ fontSize: 12, height: 32, background: "#fff" }}
-                    value={typeof window !== "undefined" ? `${window.location.origin}/api/org/marketing/oauth/google/callback` : ""}
-                  />
-                  <button
-                    type="button"
-                    className="btn btn-ghost btn-sm"
-                    onClick={() =>
-                      void handleCopy(
-                        "google_redirect",
-                        typeof window !== "undefined" ? `${window.location.origin}/api/org/marketing/oauth/google/callback` : "",
-                      )
-                    }
-                  >
-                    <Icon name={copiedKey === "google_redirect" ? "check" : "document"} size={13} />
-                  </button>
-                </div>
-              </div>
-            </>
-          ) : null}
-
-          <ModalActions>
-            <button
-              type="button"
-              className="btn btn-ghost btn-sm"
-              disabled={savingAppCreds}
-              onClick={() => setShowAppCreds(false)}
-            >
-              Cancel
-            </button>
-            <button
-              type="button"
-              className="btn btn-primary btn-sm"
-              disabled={savingAppCreds}
-              onClick={() => void saveAppCreds()}
-            >
-              <Icon name={savingAppCreds ? "refresh" : "check"} size={13} />
-              {savingAppCreds ? "Saving…" : "Save Credentials"}
-            </button>
-          </ModalActions>
-        </div>
-      </Modal>
 
       {/* Create New Sheet Modal */}
       <Modal
@@ -2095,12 +1819,37 @@ function PlatformDetailInner() {
       {/* Add Account Modal */}
       <Modal
         open={showAddAccountModal}
-        onClose={() => setShowAddAccountModal(false)}
+        onClose={() => {
+          setShowAddAccountModal(false);
+          setAddAccountError("");
+        }}
         title={`Connect ${detail?.name ?? "Account"}`}
         description={`Add another account for this organization. Leads captured will be routed based on your settings.`}
         size="md"
       >
         <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+          {addAccountError ? (
+            <div
+              style={{
+                background: "#fef2f2",
+                border: "1px solid #fecaca",
+                color: "#991b1b",
+                padding: "10px 14px",
+                borderRadius: 8,
+                fontSize: 13,
+                display: "flex",
+                alignItems: "flex-start",
+                gap: 8,
+                lineHeight: 1.4,
+              }}
+            >
+              <Icon name="alert" size={16} style={{ flexShrink: 0, marginTop: 2, color: "#dc2626" }} />
+              <div>
+                <strong>Failed to connect:</strong> {addAccountError}
+              </div>
+            </div>
+          ) : null}
+
           <div style={{ display: "flex", gap: 8, borderBottom: "1px solid #e2e8f0", paddingBottom: 10 }}>
             {detail?.supportsOAuth ? (
               <button
@@ -2123,7 +1872,11 @@ function PlatformDetailInner() {
           {addAccountMode === "oauth" && detail?.supportsOAuth ? (
             <div style={{ display: "flex", flexDirection: "column", gap: 12, padding: "8px 0" }}>
               <p className="muted" style={{ margin: 0, fontSize: 13 }}>
-                Click below to authorize another account via OAuth. You will be redirected to complete authorization.
+                {key === "meta"
+                  ? detail?.metaConfig?.isCustomApp
+                    ? "Authorize another Facebook Page using your organization's custom Facebook Developer App. You will be redirected to Facebook to choose your Page."
+                    : "Authorize another Facebook Page using platform OAuth. You will be redirected to Facebook to choose your Page."
+                  : "Click below to authorize another account via OAuth. You will be redirected to complete authorization."}
               </p>
               <button
                 type="button"
@@ -2631,6 +2384,212 @@ function PlatformDetailInner() {
               </ModalActions>
             </>
           ) : null}
+        </div>
+      </Modal>
+
+      {/* Organization Custom Facebook App Modal */}
+      <Modal
+        open={showCustomAppModal}
+        onClose={() => setShowCustomAppModal(false)}
+        title="Configure Organization Facebook App"
+        description="Connect your organization's dedicated Meta Developer App to route OAuth dialogs, manage lead retrieval, and capture webhooks independently from platform defaults."
+        size="lg"
+      >
+        <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+          {loadingCustomApp ? (
+            <div className="muted" style={{ padding: 24, textAlign: "center" }}>
+              Loading app configuration…
+            </div>
+          ) : (
+            <>
+              {customAppCreds?.isCustomApp ? (
+                <div
+                  style={{
+                    background: "#f5f3ff",
+                    border: "1px solid #ddd6fe",
+                    borderRadius: 10,
+                    padding: "10px 14px",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "space-between",
+                    gap: 10,
+                  }}
+                >
+                  <div style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12.5, color: "#6b21a8" }}>
+                    <Icon name="key" size={16} />
+                    <span><b>Custom Facebook App is active</b> for your organization.</span>
+                  </div>
+                  <button
+                    type="button"
+                    className="btn btn-ghost btn-xs"
+                    disabled={savingCustomApp}
+                    style={{ color: "#b91c1c" }}
+                    onClick={() => void handleClearCustomApp()}
+                  >
+                    Reset to Platform Default
+                  </button>
+                </div>
+              ) : (
+                <div
+                  style={{
+                    background: "#f8fafc",
+                    border: "1px solid #e2e8f0",
+                    borderRadius: 10,
+                    padding: "10px 14px",
+                    fontSize: 12.5,
+                    color: "#475569",
+                  }}
+                >
+                  Currently using the <b>Platform Default Facebook App</b>. Enter your Meta Developer App details below to isolate your organization's Facebook login dialogs and lead capture under your own app branding.
+                </div>
+              )}
+
+              {/* Form Inputs */}
+              <div className="field">
+                <label style={{ fontWeight: 600, fontSize: 12.5 }}>Meta App ID</label>
+                <input
+                  className="inp inp-mono"
+                  placeholder="e.g. 1598273645102938"
+                  value={customAppForm.metaAppId}
+                  onChange={(e) =>
+                    setCustomAppForm((f) => ({ ...f, metaAppId: e.target.value }))
+                  }
+                />
+                <span className="hint" style={{ fontSize: 11.5, color: "#64748b" }}>
+                  Find this in your Meta App Dashboard under App settings &gt; Basic.
+                </span>
+              </div>
+
+              <div className="field">
+                <label style={{ fontWeight: 600, fontSize: 12.5 }}>
+                  Meta App Secret {customAppCreds?.hasAppSecret ? "(Configured - leave blank to keep existing secret)" : ""}
+                </label>
+                <div style={{ display: "flex", gap: 6 }}>
+                  <input
+                    className="inp inp-mono"
+                    type={showCustomAppSecret ? "text" : "password"}
+                    placeholder={customAppCreds?.hasAppSecret ? "••••••••••••••••••••••••••••••••" : "Paste your App Secret..."}
+                    value={customAppForm.metaAppSecret}
+                    onChange={(e) =>
+                      setCustomAppForm((f) => ({ ...f, metaAppSecret: e.target.value }))
+                    }
+                  />
+                  <button
+                    type="button"
+                    className="btn btn-ghost btn-sm"
+                    onClick={() => setShowCustomAppSecret((v) => !v)}
+                  >
+                    <Icon name={showCustomAppSecret ? "eye-off" : "eye"} size={14} />
+                  </button>
+                </div>
+              </div>
+
+              <div className="field">
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                  <label style={{ fontWeight: 600, fontSize: 12.5 }}>Meta Webhook Verify Token</label>
+                  <button
+                    type="button"
+                    className="btn btn-ghost btn-xs"
+                    style={{ fontSize: 11, padding: "1px 6px" }}
+                    onClick={() => {
+                      const randomToken = "ipixxel_meta_" + Math.random().toString(36).slice(2, 12) + "_" + Date.now().toString(36);
+                      setCustomAppForm((f) => ({ ...f, metaWebhookVerifyToken: randomToken }));
+                    }}
+                  >
+                    <Icon name="refresh" size={11} /> Generate Token
+                  </button>
+                </div>
+                <div style={{ display: "flex", gap: 6 }}>
+                  <input
+                    className="inp inp-mono"
+                    placeholder="Verify token for Meta webhook subscription..."
+                    value={customAppForm.metaWebhookVerifyToken}
+                    onChange={(e) =>
+                      setCustomAppForm((f) => ({ ...f, metaWebhookVerifyToken: e.target.value }))
+                    }
+                  />
+                  <button
+                    type="button"
+                    className="btn btn-ghost btn-sm"
+                    onClick={() => void handleCopy("custom_verify_token", customAppForm.metaWebhookVerifyToken)}
+                    title="Copy Verify Token"
+                  >
+                    <Icon name={copiedKey === "custom_verify_token" ? "check" : "copy"} size={13} />
+                  </button>
+                </div>
+              </div>
+
+              {/* Developer Portal Endpoints to Copy */}
+              <div style={{ background: "#f8fafc", border: "1px solid #e2e8f0", borderRadius: 10, padding: 14 }}>
+                <div style={{ fontWeight: 600, fontSize: 12.5, color: "#0f172a", marginBottom: 10 }}>
+                  Required Meta Developer App Settings
+                </div>
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 12 }}>
+                  <div className="field" style={{ margin: 0 }}>
+                    <label style={{ fontSize: 11.5, fontWeight: 600 }}>OAuth Valid Redirect URI</label>
+                    <div style={{ display: "flex", gap: 6 }}>
+                      <input
+                        className="inp inp-mono"
+                        readOnly
+                        style={{ fontSize: 11 }}
+                        value={customAppCreds?.oauthRedirectUri || ""}
+                      />
+                      <button
+                        type="button"
+                        className="btn btn-ghost btn-sm"
+                        onClick={() => void handleCopy("oauth_redirect_uri", customAppCreds?.oauthRedirectUri)}
+                      >
+                        <Icon name={copiedKey === "oauth_redirect_uri" ? "check" : "copy"} size={13} />
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="field" style={{ margin: 0 }}>
+                    <label style={{ fontSize: 11.5, fontWeight: 600 }}>Webhook Callback URL</label>
+                    <div style={{ display: "flex", gap: 6 }}>
+                      <input
+                        className="inp inp-mono"
+                        readOnly
+                        style={{ fontSize: 11 }}
+                        value={customAppCreds?.webhookCallbackUrl || ""}
+                      />
+                      <button
+                        type="button"
+                        className="btn btn-ghost btn-sm"
+                        onClick={() => void handleCopy("webhook_callback_url", customAppCreds?.webhookCallbackUrl)}
+                      >
+                        <Icon name={copiedKey === "webhook_callback_url" ? "check" : "copy"} size={13} />
+                      </button>
+                    </div>
+                  </div>
+                </div>
+
+                <div style={{ fontSize: 11.5, color: "#64748b", lineHeight: 1.5 }}>
+                  • <b>App Product:</b> Add <b>Facebook Login for Business</b> and paste the <i>OAuth Valid Redirect URI</i>.<br />
+                  • <b>Webhooks:</b> Subscribe to <b>Page</b> object with field <b>leadgen</b>, and paste the <i>Callback URL</i> and <i>Verify Token</i>.<br />
+                  • <b>Permissions:</b> Ensure your app has access to <code>pages_show_list</code>, <code>pages_read_engagement</code>, <code>pages_manage_metadata</code>, <code>leads_retrieval</code>, and <code>pages_manage_ads</code>.
+                </div>
+              </div>
+
+              <ModalActions>
+                <button
+                  type="button"
+                  className="btn btn-ghost"
+                  onClick={() => setShowCustomAppModal(false)}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  className="btn btn-primary"
+                  disabled={savingCustomApp || !customAppForm.metaAppId.trim()}
+                  onClick={() => void handleSaveCustomApp()}
+                >
+                  {savingCustomApp ? "Saving…" : "Save App Credentials"}
+                </button>
+              </ModalActions>
+            </>
+          )}
         </div>
       </Modal>
     </>

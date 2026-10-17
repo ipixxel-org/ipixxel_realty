@@ -64,26 +64,6 @@ export class MarketingSyncService {
       take: 50,
     });
     if (rows.length === 0) {
-      // Meta family: sync via shared Meta pages when sibling has no rows
-      if (platformKey === 'instagram' || platformKey === 'whatsapp') {
-        const metaRows = await this.prisma.marketingConnection.findMany({
-          where: { orgId, platformKey: 'meta', status: 'connected' },
-          take: 50,
-        });
-        const results: Array<AdapterSyncResult & { connectionId: string }> = [];
-        let failed = 0;
-        for (const row of metaRows) {
-          const r = await this.runSync(row);
-          results.push({ ...r, connectionId: row.id });
-          if (!r.ok) failed += 1;
-        }
-        return {
-          ok: failed === 0,
-          synced: results.length - failed,
-          failed,
-          results,
-        };
-      }
       return { ok: true, synced: 0, failed: 0, results: [] };
     }
 

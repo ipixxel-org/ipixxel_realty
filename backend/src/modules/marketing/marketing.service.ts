@@ -562,18 +562,9 @@ export class MarketingService implements OnModuleInit {
     return platforms
       .filter((p) => accessMap.get(p.key) !== false)
       .map((p) => {
-        let conns = (byPlatform.get(p.key) ?? []).map((c) =>
+        const conns = (byPlatform.get(p.key) ?? []).map((c) =>
           this.toPublicConnection(c),
         );
-        // Instagram / WhatsApp Ads share Meta Page OAuth — surface Meta
-        // accounts when the sibling has no dedicated rows yet.
-        if (
-          (p.key === 'instagram' || p.key === 'whatsapp') &&
-          conns.length === 0 &&
-          metaConnected
-        ) {
-          conns = metaConns.map((c) => this.toPublicConnection(c));
-        }
 
         const metrics = campaignAgg.get(p.key) ?? {
           spend: 0,
@@ -581,16 +572,10 @@ export class MarketingService implements OnModuleInit {
           impressions: 0,
           leads: 0,
         };
-        let leadsCount = leadCountMap.get(p.key) ?? 0;
-        if (
-          (p.key === 'instagram' || p.key === 'whatsapp' || p.key === 'meta') &&
-          leadsCount === 0
-        ) {
-          leadsCount =
-            p.key === 'meta'
-              ? metaLeadTotal
-              : leadCountMap.get(p.key) ?? 0;
-        }
+        const leadsCount =
+          p.key === 'meta'
+            ? metaLeadTotal || (leadCountMap.get('meta') ?? 0)
+            : leadCountMap.get(p.key) ?? 0;
         const effectiveLeads = Math.max(leadsCount, metrics.leads);
         const conversionRate =
           metrics.clicks > 0
@@ -605,10 +590,7 @@ export class MarketingService implements OnModuleInit {
           p.key === 'whatsapp' ||
           this.platformConfigured(p.key);
 
-        const connected =
-          conns.some((c) => c.status === 'connected') ||
-          (p.key === 'instagram' && metaConnected) ||
-          (p.key === 'whatsapp' && metaConnected);
+        const connected = conns.some((c) => c.status === 'connected');
 
         return {
           key: p.key,
@@ -683,15 +665,17 @@ export class MarketingService implements OnModuleInit {
     const platforms = await this.listPlatformsForOrg(orgId);
     const platform = platforms.find((p) => p.key === platformKey);
     if (!platform) throw new NotFoundException('Platform not available');
+    const metaConfig =
+      platformKey === 'meta'
+        ? await this.metaLeads.getPublicConfig(orgId)
+        : null;
     return {
       ...platform,
-      metaConfig:
-        platformKey === 'meta' ||
-        platformKey === 'instagram' ||
-        platformKey === 'whatsapp'
-          ? this.metaLeads.getPublicConfig()
-          : null,
-      oauthConfigured: this.platformConfigured(platformKey),
+      metaConfig,
+      oauthConfigured:
+        platformKey === 'meta'
+          ? (metaConfig?.configured ?? false)
+          : this.platformConfigured(platformKey),
     };
   }
 
@@ -702,7 +686,7 @@ export class MarketingService implements OnModuleInit {
         `${platformDisplayLabel(platformKey)} OAuth is not available. Configure API credentials in Admin Console > Marketing, or connect with an access token on the app detail page.`,
       );
     }
-    return adapter.getConnectUrl(orgId, userId);
+    return await adapter.getConnectUrl(orgId, userId);
   }
 
   async syncConnection(orgId: string, connectionId: string) {

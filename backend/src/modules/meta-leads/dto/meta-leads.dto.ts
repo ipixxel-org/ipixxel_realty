@@ -32,3 +32,17 @@ export class MetaManualTokenDto {
   @IsUUID()
   projectId?: string | null;
 }
+
+export class SaveOrgMetaAppCredentialsDto {
+  @IsOptional()
+  @IsString()
+  metaAppId?: string;
+
+  @IsOptional()
+  @IsString()
+  metaAppSecret?: string;
+
+  @IsOptional()
+  @IsString()
+  metaWebhookVerifyToken?: string;
+}

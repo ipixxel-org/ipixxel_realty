@@ -1,19 +1,17 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
+import { useAuth } from "@/lib/auth-context";
 import { Reveal } from "@/components/superadmin/reveal";
 import { Icon } from "@/components/icons";
 import { PlatformBrandIcon } from "@/components/org/platform-brand-icon";
 import {
   getMarketingAppsOverview,
   getMarketingConnectUrl,
-  getMarketingCredentials,
   syncMarketingPlatform,
-  updateMarketingCredentials,
 } from "@/lib/api";
 import type { MarketingAppsOverview, MarketingPlatformCard } from "@/lib/types";
-import { Modal, ModalActions } from "@/components/ui/modal";
 import "@/app/org/org.css";
 
 const HERO_KEYS = ["meta", "instagram", "google_sheets", "google_ads", "whatsapp"] as const;
@@ -45,25 +43,25 @@ const PLATFORM_COPY: Record<
     ],
     steps: [
       {
-        title: "Create Meta App",
-        body: "Create an app in Meta Developers console with Facebook Login and Webhooks products.",
+        title: "Platform Setup by Administrator",
+        body: "Meta App and Webhooks are configured globally by the Super Administrator in Admin Console.",
       },
       {
-        title: "Add Required Permissions",
-        body: "Lead Ads needs Page list, metadata, engagement, and leads retrieval permissions.",
+        title: "Connect Facebook Page",
+        body: "Click Connect with Facebook. Authorize the Facebook Pages you want to capture leads from.",
       },
       {
-        title: "Save App Credentials",
-        body: "Save your Meta App ID, App Secret, and Verify Token directly using the App Credentials modal.",
+        title: "Assign Projects",
+        body: "Map your connected pages and forms to CRM projects for lead assignment.",
       },
       {
-        title: "Connect in your dashboard",
-        body: "Click Connect with Facebook. Authorised Pages are linked for Lead Ads. Sync Now imports recent form leads into Lead Center.",
+        title: "Realtime Lead Streaming",
+        body: "Form submissions stream immediately into Lead Center with campaign and UTM attribution.",
       },
     ],
     guideHref: "/org/marketing/apps/meta",
     setupHint:
-      "Meta App credentials (App ID & Secret) are required to connect Facebook, Instagram, and WhatsApp. Configure them directly from the frontend.",
+      "Meta integration has not been enabled by your platform administrator yet. Please contact your Super Administrator to configure Meta platform credentials.",
   },
   instagram: {
     blurb:
@@ -79,25 +77,25 @@ const PLATFORM_COPY: Record<
     ],
     steps: [
       {
-        title: "Configure Meta App",
-        body: "Meta App ID & Secret saved directly from frontend.",
+        title: "Platform Setup by Administrator",
+        body: "Meta credentials configured globally by Super Administrator in Admin Console.",
       },
       {
         title: "Connect Facebook Page",
-        body: "Instagram Lead Ads require a linked Facebook Page.",
+        body: "Instagram Lead Ads flow via the linked Facebook Page OAuth connection.",
       },
       {
-        title: "Link Instagram account",
-        body: "Ensure the Page is linked to your Instagram professional account.",
+        title: "Link Instagram Account",
+        body: "Ensure your Instagram business account is connected to your Facebook Page.",
       },
       {
-        title: "Connect here",
-        body: "Use Connect with Instagram — OAuth reuses the Meta Graph flow. Leads appear as Instagram in Lead Center when Meta reports the placement; Lead Ads Testing Tool leads show as Facebook.",
+        title: "Capture & Attribution",
+        body: "Leads captured via Instagram ad placements appear with Instagram attribution in Lead Center.",
       },
     ],
     guideHref: "/org/marketing/apps/instagram",
     setupHint:
-      "Meta App credentials required before connecting Instagram. Configure them directly from the frontend.",
+      "Meta integration has not been enabled by your platform administrator yet. Please contact your Super Administrator to configure Meta platform credentials.",
   },
   whatsapp: {
     blurb:
@@ -113,25 +111,25 @@ const PLATFORM_COPY: Record<
     ],
     steps: [
       {
-        title: "Meta App ready",
-        body: "Use Meta app credentials configured directly from the frontend.",
+        title: "Platform Setup by Administrator",
+        body: "Meta platform credentials configured globally in Admin Console.",
       },
       {
         title: "Connect Page",
         body: "WhatsApp Ads connection rides on the connected Facebook Page.",
       },
       {
-        title: "Enable WhatsApp product",
-        body: "Confirm WhatsApp is set up on the Meta Business account when you run WhatsApp Ads.",
+        title: "Enable WhatsApp Business",
+        body: "Confirm WhatsApp is linked to your Meta Business account for Click-to-WhatsApp Ads.",
       },
       {
-        title: "Connect here",
-        body: "Click Connect via Meta. Expect connection status only — WhatsApp-labelled CRM leads are not live yet.",
+        title: "Attribution Ready",
+        body: "Status is stored for WhatsApp advertising attribution.",
       },
     ],
     guideHref: "/org/marketing/apps/whatsapp",
     setupHint:
-      "Meta App credentials required before connecting WhatsApp. Configure them directly from the frontend.",
+      "Meta integration has not been enabled by your platform administrator yet. Please contact your Super Administrator to configure Meta platform credentials.",
   },
   google_ads: {
     blurb:
@@ -147,25 +145,25 @@ const PLATFORM_COPY: Record<
     ],
     steps: [
       {
-        title: "Create Google Cloud OAuth client",
-        body: "Enable Google Ads API and create OAuth 2.0 client credentials.",
+        title: "Platform Setup by Administrator",
+        body: "Google OAuth credentials configured globally by Super Administrator in Admin Console.",
       },
       {
-        title: "Platform Setup",
-        body: "Client ID and Secret saved directly from frontend into database.",
+        title: "Authorize Account",
+        body: "Click Connect with Google and approve access for your Google Ads account.",
       },
       {
-        title: "Authorize account",
-        body: "Click Connect with Google and approve Ads access for your account.",
+        title: "Account Linked",
+        body: "Account connection is stored securely in Lead Center.",
       },
       {
-        title: "After connect",
-        body: "Connection is stored. Sync Now verifies health; campaign metrics and Google lead forms are not imported yet.",
+        title: "Attribution Ready",
+        body: "Prepares campaign tracking and click ID (GCLID) attribution.",
       },
     ],
     guideHref: "/org/marketing/apps/google_ads",
     setupHint:
-      "Google Cloud OAuth credentials required before connecting Google Ads. Configure them directly from the frontend.",
+      "Google Ads OAuth has not been enabled by your platform administrator yet. Please contact your Super Administrator to configure Google credentials.",
   },
   google_sheets: {
     blurb:
@@ -199,7 +197,7 @@ const PLATFORM_COPY: Record<
     ],
     guideHref: "/org/marketing/apps/google_sheets",
     setupHint:
-      "Google Cloud OAuth credentials (Client ID & Secret) are required. Configure them directly from the frontend.",
+      "Google OAuth has not been configured by your platform administrator yet. Please contact your Super Administrator to configure Google Cloud OAuth credentials.",
   },
 };
 
@@ -238,99 +236,15 @@ function FeatureIcon({ name }: { name: "sync" | "target" | "bolt" | "link" }) {
 }
 
 export default function OrgMarketingAppsPage() {
+  const { user } = useAuth();
+  const isSuperAdmin =
+    user?.role === "super_admin" || Boolean(user?.platformUnrestricted);
+
   const [data, setData] = useState<MarketingAppsOverview | null>(null);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(true);
   const [busyKey, setBusyKey] = useState<string | null>(null);
   const [syncKey, setSyncKey] = useState<string | null>(null);
-
-  // App Credentials Modal State
-  const [showCredsModal, setShowCredsModal] = useState(false);
-  const [credsTab, setCredsTab] = useState<"meta" | "google">("meta");
-  const [savingCreds, setSavingCreds] = useState(false);
-  const [credsFeedback, setCredsFeedback] = useState("");
-  const [credsSuccess, setCredsSuccess] = useState("");
-  const [showSecretMeta, setShowSecretMeta] = useState(false);
-  const [showSecretToken, setShowSecretToken] = useState(false);
-  const [showSecretGoogle, setShowSecretGoogle] = useState(false);
-  const [copiedKey, setCopiedKey] = useState<string | null>(null);
-  const [creds, setCreds] = useState({
-    metaAppId: "",
-    metaAppSecret: "",
-    metaWebhookVerifyToken: "",
-    googleAdsClientId: "",
-    googleAdsClientSecret: "",
-    googleAdsDeveloperToken: "",
-  });
-
-  const openCredsModal = useCallback(async (tab: "meta" | "google" = "meta") => {
-    setCredsTab(tab);
-    setShowCredsModal(true);
-    setCredsFeedback("");
-    setCredsSuccess("");
-    try {
-      const c = await getMarketingCredentials();
-      if (c) {
-        setCreds({
-          metaAppId: c.metaAppId ?? "",
-          metaAppSecret: c.metaAppSecret ?? "",
-          metaWebhookVerifyToken: c.metaWebhookVerifyToken ?? "",
-          googleAdsClientId: c.googleAdsClientId ?? "",
-          googleAdsClientSecret: c.googleAdsClientSecret ?? "",
-          googleAdsDeveloperToken: c.googleAdsDeveloperToken ?? "",
-        });
-      }
-    } catch {
-      // ignore
-    }
-  }, []);
-
-  const handleSaveCreds = async () => {
-    setSavingCreds(true);
-    setCredsFeedback("");
-    setCredsSuccess("");
-    try {
-      await updateMarketingCredentials({
-        metaAppId: creds.metaAppId.trim(),
-        metaAppSecret: creds.metaAppSecret.trim(),
-        metaWebhookVerifyToken: creds.metaWebhookVerifyToken.trim(),
-        googleAdsClientId: creds.googleAdsClientId.trim(),
-        googleAdsClientSecret: creds.googleAdsClientSecret.trim(),
-        googleAdsDeveloperToken: creds.googleAdsDeveloperToken.trim(),
-      });
-      setCredsSuccess("Credentials saved directly to database without .env!");
-      reload();
-      setTimeout(() => {
-        setShowCredsModal(false);
-        setCredsSuccess("");
-      }, 1200);
-    } catch (err) {
-      setCredsFeedback(
-        err instanceof Error ? err.message : "Failed to save credentials",
-      );
-    } finally {
-      setSavingCreds(false);
-    }
-  };
-
-  const generateRandomToken = () => {
-    const chars =
-      "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789_";
-    let token = "tok_";
-    for (let i = 0; i < 28; i++) {
-      token += chars.charAt(Math.floor(Math.random() * chars.length));
-    }
-    setCreds((prev) => ({ ...prev, metaWebhookVerifyToken: token }));
-  };
-
-  const handleCopy = async (label: string, text?: string | null) => {
-    if (!text) return;
-    try {
-      await navigator.clipboard.writeText(text);
-      setCopiedKey(label);
-      setTimeout(() => setCopiedKey(null), 2000);
-    } catch {}
-  };
 
   function reload() {
     setLoading(true);
@@ -415,19 +329,19 @@ export default function OrgMarketingAppsPage() {
           </div>
           <h1>Connected Apps</h1>
           <div className="sub">
-            Connect ad platforms so Facebook Lead Ads flow into Lead Center.
-            Instagram and WhatsApp share Meta login; Google Ads connect is ready
-            with metrics sync still upcoming.
+            Connect ad platforms and spreadsheets to capture leads into Lead Center.
+            Facebook, Instagram, WhatsApp, Google Ads, and Google Sheets manage their own dedicated accounts and attribution.
           </div>
         </div>
         <div className="actions">
-          <button
-            type="button"
-            className="btn btn-secondary"
-            onClick={() => void openCredsModal()}
-          >
-            <Icon name="key" size={14} /> Configure App Credentials
-          </button>
+          {isSuperAdmin && (
+            <Link
+              className="btn btn-secondary"
+              href="/admin-console/marketing?tab=settings"
+            >
+              <Icon name="key" size={14} /> Configure App Credentials
+            </Link>
+          )}
           <Link className="btn btn-ghost" href="/org/marketing/apps/logs">
             <Icon name="document" size={14} /> View Integration Logs
           </Link>
@@ -471,9 +385,8 @@ export default function OrgMarketingAppsPage() {
             </div>
             <h2>Connected Apps for Lead Capture</h2>
             <p>
-              Facebook Lead Ads are live into CRM with attribution. Instagram and
-              WhatsApp connect via the same Meta login; Google Ads stores the
-              account for the next metrics phase.
+              Connect your marketing channels to stream leads into CRM with clean attribution.
+              Each platform operates independently with dedicated account connections.
             </p>
             <div className="mkt-hub-hero-stats">
               <div>
@@ -537,24 +450,12 @@ export default function OrgMarketingAppsPage() {
                         className="mkt-hub-alert"
                         style={{
                           display: "flex",
-                          justifyContent: "space-between",
                           alignItems: "center",
-                          flexWrap: "wrap",
                           gap: 10,
                         }}
                       >
+                        <Icon name="alert" size={16} style={{ color: "#d97706", flexShrink: 0 }} />
                         <span>{copy.setupHint}</span>
-                        <button
-                          type="button"
-                          className="btn btn-secondary btn-sm"
-                          onClick={() =>
-                            void openCredsModal(
-                              p.key === "google_ads" ? "google" : "meta",
-                            )
-                          }
-                        >
-                          <Icon name="key" size={12} /> Configure Credentials
-                        </button>
                       </div>
                     ) : null}
 
@@ -588,19 +489,6 @@ export default function OrgMarketingAppsPage() {
                           >
                             {busyKey === p.key ? "Connecting…" : copy.primaryLabel}
                           </button>
-                          {!configured ? (
-                            <button
-                              type="button"
-                              className="btn btn-secondary"
-                              onClick={() =>
-                                void openCredsModal(
-                                  p.key === "google_ads" ? "google" : "meta",
-                                )
-                              }
-                            >
-                              <Icon name="key" size={13} /> Configure Credentials
-                            </button>
-                          ) : null}
                           <Link
                             className="btn btn-ghost"
                             href={copy.secondaryHref ?? copy.guideHref}
@@ -651,298 +539,7 @@ export default function OrgMarketingAppsPage() {
           <div className="muted">No marketing platforms available.</div>
         ) : null}
       </div>
-
-      {/* App Credentials Modal */}
-      <Modal
-        open={showCredsModal}
-        onClose={() => setShowCredsModal(false)}
-        title="Configure Marketing Platform Credentials"
-        description="Save Meta (Facebook, Instagram, WhatsApp) and Google Cloud credentials directly to database without .env changes."
-        size="lg"
-      >
-        <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-          {/* Tab selector */}
-          <div style={{ display: "flex", gap: 8, borderBottom: "1px solid #e2e8f0", paddingBottom: 10 }}>
-            <button
-              type="button"
-              className={`btn btn-sm ${credsTab === "meta" ? "btn-primary" : "btn-ghost"}`}
-              onClick={() => setCredsTab("meta")}
-            >
-              <PlatformBrandIcon platformKey="meta" size={16} /> Meta (Facebook, Insta, WhatsApp)
-            </button>
-            <button
-              type="button"
-              className={`btn btn-sm ${credsTab === "google" ? "btn-primary" : "btn-ghost"}`}
-              onClick={() => setCredsTab("google")}
-            >
-              <PlatformBrandIcon platformKey="google_ads" size={16} /> Google Ads
-            </button>
-          </div>
-
-          {credsSuccess ? (
-            <div className="badge b-green" style={{ padding: "8px 12px", width: "100%", borderRadius: 8 }}>
-              {credsSuccess}
-            </div>
-          ) : null}
-          {credsFeedback ? (
-            <div className="badge b-amber" style={{ padding: "8px 12px", width: "100%", borderRadius: 8, color: "#b91c1c" }}>
-              {credsFeedback}
-            </div>
-          ) : null}
-
-          {credsTab === "meta" ? (
-            <>
-              <div className="field">
-                <label style={{ fontWeight: 600, fontSize: 13 }}>Meta App ID</label>
-                <input
-                  className="inp inp-mono"
-                  placeholder="e.g. 109283746592019"
-                  value={creds.metaAppId}
-                  onChange={(e) =>
-                    setCreds((c) => ({ ...c, metaAppId: e.target.value }))
-                  }
-                />
-              </div>
-
-              <div className="field">
-                <label style={{ fontWeight: 600, fontSize: 13 }}>Meta App Secret</label>
-                <div style={{ display: "flex", gap: 6 }}>
-                  <input
-                    type={showSecretMeta ? "text" : "password"}
-                    className="inp inp-mono"
-                    placeholder="e.g. 9f8e7d6c5b4a3..."
-                    value={creds.metaAppSecret}
-                    onChange={(e) =>
-                      setCreds((c) => ({ ...c, metaAppSecret: e.target.value }))
-                    }
-                  />
-                  <button
-                    type="button"
-                    className="btn btn-ghost btn-sm"
-                    onClick={() => setShowSecretMeta((v) => !v)}
-                  >
-                    <Icon name={showSecretMeta ? "eye-off" : "eye"} size={14} />
-                  </button>
-                </div>
-              </div>
-
-              <div className="field">
-                <label style={{ fontWeight: 600, fontSize: 13 }}>Webhook Verify Token</label>
-                <div style={{ display: "flex", gap: 6 }}>
-                  <input
-                    type={showSecretToken ? "text" : "password"}
-                    className="inp inp-mono"
-                    placeholder="e.g. tok_sec_random_string"
-                    value={creds.metaWebhookVerifyToken}
-                    onChange={(e) =>
-                      setCreds((c) => ({
-                        ...c,
-                        metaWebhookVerifyToken: e.target.value,
-                      }))
-                    }
-                  />
-                  <button
-                    type="button"
-                    className="btn btn-ghost btn-sm"
-                    onClick={() => setShowSecretToken((v) => !v)}
-                  >
-                    <Icon name={showSecretToken ? "eye-off" : "eye"} size={14} />
-                  </button>
-                  <button
-                    type="button"
-                    className="btn btn-secondary btn-sm"
-                    onClick={generateRandomToken}
-                    title="Generate Random Token"
-                  >
-                    Generate
-                  </button>
-                </div>
-              </div>
-
-              <div
-                style={{
-                  background: "#f8fafc",
-                  border: "1px solid #e2e8f0",
-                  borderRadius: 10,
-                  padding: "12px 14px",
-                  display: "flex",
-                  flexDirection: "column",
-                  gap: 10,
-                }}
-              >
-                <div style={{ fontSize: 12.5, fontWeight: 700, color: "#334155" }}>
-                  Developer Portal Setup URLs
-                </div>
-                <div>
-                  <div style={{ fontSize: 11.5, color: "#64748b", marginBottom: 3 }}>
-                    Webhook Callback URL (Meta App → Webhooks → Page)
-                  </div>
-                  <div style={{ display: "flex", gap: 6 }}>
-                    <input
-                      className="inp inp-mono"
-                      readOnly
-                      style={{ fontSize: 12, height: 32, background: "#fff" }}
-                      value={typeof window !== "undefined" ? `${window.location.origin}/api/webhooks/meta` : ""}
-                    />
-                    <button
-                      type="button"
-                      className="btn btn-ghost btn-sm"
-                      onClick={() =>
-                        void handleCopy(
-                          "webhook",
-                          typeof window !== "undefined" ? `${window.location.origin}/api/webhooks/meta` : "",
-                        )
-                      }
-                    >
-                      <Icon name={copiedKey === "webhook" ? "check" : "document"} size={13} />
-                    </button>
-                  </div>
-                </div>
-                <div>
-                  <div style={{ fontSize: 11.5, color: "#64748b", marginBottom: 3 }}>
-                    OAuth Redirect URI (Meta App → Facebook Login for Business)
-                  </div>
-                  <div style={{ display: "flex", gap: 6 }}>
-                    <input
-                      className="inp inp-mono"
-                      readOnly
-                      style={{ fontSize: 12, height: 32, background: "#fff" }}
-                      value={typeof window !== "undefined" ? `${window.location.origin}/api/org/meta/oauth/callback` : ""}
-                    />
-                    <button
-                      type="button"
-                      className="btn btn-ghost btn-sm"
-                      onClick={() =>
-                        void handleCopy(
-                          "redirect",
-                          typeof window !== "undefined" ? `${window.location.origin}/api/org/meta/oauth/callback` : "",
-                        )
-                      }
-                    >
-                      <Icon name={copiedKey === "redirect" ? "check" : "document"} size={13} />
-                    </button>
-                  </div>
-                </div>
-              </div>
-            </>
-          ) : (
-            <>
-              <div className="field">
-                <label style={{ fontWeight: 600, fontSize: 13 }}>Google Ads Client ID</label>
-                <input
-                  className="inp inp-mono"
-                  placeholder="e.g. 123456789-xxx.apps.googleusercontent.com"
-                  value={creds.googleAdsClientId}
-                  onChange={(e) =>
-                    setCreds((c) => ({
-                      ...c,
-                      googleAdsClientId: e.target.value,
-                    }))
-                  }
-                />
-              </div>
-
-              <div className="field">
-                <label style={{ fontWeight: 600, fontSize: 13 }}>Google Ads Client Secret</label>
-                <div style={{ display: "flex", gap: 6 }}>
-                  <input
-                    type={showSecretGoogle ? "text" : "password"}
-                    className="inp inp-mono"
-                    placeholder="e.g. GOCSPX-..."
-                    value={creds.googleAdsClientSecret}
-                    onChange={(e) =>
-                      setCreds((c) => ({
-                        ...c,
-                        googleAdsClientSecret: e.target.value,
-                      }))
-                    }
-                  />
-                  <button
-                    type="button"
-                    className="btn btn-ghost btn-sm"
-                    onClick={() => setShowSecretGoogle((v) => !v)}
-                  >
-                    <Icon name={showSecretGoogle ? "eye-off" : "eye"} size={14} />
-                  </button>
-                </div>
-              </div>
-
-              <div className="field">
-                <label style={{ fontWeight: 600, fontSize: 13 }}>
-                  Developer Token <span className="hint">(Optional)</span>
-                </label>
-                <input
-                  className="inp inp-mono"
-                  placeholder="e.g. AbC123XyZ..."
-                  value={creds.googleAdsDeveloperToken}
-                  onChange={(e) =>
-                    setCreds((c) => ({
-                      ...c,
-                      googleAdsDeveloperToken: e.target.value,
-                    }))
-                  }
-                />
-              </div>
-
-              <div
-                style={{
-                  background: "#f8fafc",
-                  border: "1px solid #e2e8f0",
-                  borderRadius: 10,
-                  padding: "12px 14px",
-                  display: "flex",
-                  flexDirection: "column",
-                  gap: 10,
-                }}
-              >
-                <div style={{ fontSize: 12.5, fontWeight: 700, color: "#334155" }}>
-                  Google Cloud Console Authorized Redirect URI
-                </div>
-                <div style={{ display: "flex", gap: 6 }}>
-                  <input
-                    className="inp inp-mono"
-                    readOnly
-                    style={{ fontSize: 12, height: 32, background: "#fff" }}
-                    value={typeof window !== "undefined" ? `${window.location.origin}/api/org/marketing/oauth/google/callback` : ""}
-                  />
-                  <button
-                    type="button"
-                    className="btn btn-ghost btn-sm"
-                    onClick={() =>
-                      void handleCopy(
-                        "google_redirect",
-                        typeof window !== "undefined" ? `${window.location.origin}/api/org/marketing/oauth/google/callback` : "",
-                      )
-                    }
-                  >
-                    <Icon name={copiedKey === "google_redirect" ? "check" : "document"} size={13} />
-                  </button>
-                </div>
-              </div>
-            </>
-          )}
-
-          <ModalActions>
-            <button
-              type="button"
-              className="btn btn-ghost btn-sm"
-              disabled={savingCreds}
-              onClick={() => setShowCredsModal(false)}
-            >
-              Cancel
-            </button>
-            <button
-              type="button"
-              className="btn btn-primary btn-sm"
-              disabled={savingCreds}
-              onClick={() => void handleSaveCreds()}
-            >
-              <Icon name={savingCreds ? "refresh" : "check"} size={13} />
-              {savingCreds ? "Saving…" : "Save Credentials"}
-            </button>
-          </ModalActions>
-        </div>
-      </Modal>
     </>
   );
 }
+
