@@ -119,6 +119,7 @@ describe('AdminBillingService.savePlan', () => {
         prisma as never,
         {} as never,
         {} as never,
+        {} as never,
       ),
     };
   };

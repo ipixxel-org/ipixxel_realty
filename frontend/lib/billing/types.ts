@@ -616,7 +616,11 @@ export interface LifecycleSettings {
   afterGrace: AfterGraceBehavior;
   expiryMessage: string;
   reminders: ReminderRule[];
-  /** Super Admin switch: online (Razorpay) plan payments. Off = manual approval. */
+  /**
+   * Super Admin switch: online (Razorpay) plan payments. Off = manual approval.
+   * Read-only here: it's changed in Integrations → Online payments, and the
+   * lifecycle save leaves it out (omitted = unchanged).
+   */
   onlinePaymentsEnabled: boolean;
   /** Read-only: the effective mode (switch AND usable Razorpay keys) and why it is manual. */
   paymentMode: PaymentMode;

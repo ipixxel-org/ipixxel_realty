@@ -153,6 +153,17 @@ export interface ReminderRule {
   enabled: boolean;
 }
 
+/** GET/PUT /admin/billing/online-payments — Integrations → Online payments. */
+export interface OnlinePaymentsV2 {
+  /** The Super Admin switch (platform_configs.online_payments_enabled). */
+  enabled: boolean;
+  /** Effective mode: the switch AND a gateway with usable keys. */
+  paymentMode: PaymentMode;
+  paymentModeReason: ManualReason | null;
+  /** The gateway with usable keys (complete and switched on), or null. */
+  gateway: 'razorpay' | null;
+}
+
 export interface LifecycleSettingsV2 {
   notifyDaysBefore: number;
   graceDays: number;

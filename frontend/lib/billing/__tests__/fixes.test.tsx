@@ -172,18 +172,31 @@ describe("reminder schedule", () => {
     expect(screen.queryByText("Automatic renewal")).toBeNull();
     expect(screen.queryByRole("combobox")).toBeNull(); // no restrict / cancel choice
     expect(screen.getByText("Fall back to Basic")).toBeInTheDocument();
-    expect(screen.getAllByRole("switch").length).toBeGreaterThanOrEqual(5); // online payments + 4 reminders
+    expect(screen.getAllByRole("switch")).toHaveLength(4); // the 4 reminders only
     expect(screen.getByRole("button", { name: "Run now" })).toBeInTheDocument();
   });
 });
 
-describe("payment mode warning", () => {
-  it("says why it's manual when the switch is on but Razorpay can't be used", async () => {
+describe("online payments switch moved to Integrations", () => {
+  it("the lifecycle card no longer shows the switch or its warning, and its button is just Save", async () => {
     const client = createMockBillingClient();
     const s = await client.getLifecycleSettings();
     client.getLifecycleSettings = async () => ({ ...s, onlinePaymentsEnabled: true, paymentMode: "manual", paymentModeReason: "keys_missing" });
     inEnv(client, <LifecycleSettingsCard />);
-    expect(await screen.findByText(/customers can't pay online yet: no Razorpay keys are saved/)).toBeInTheDocument();
+    await screen.findByText("Reminder schedule");
+    expect(screen.queryByText("Online payments (Razorpay)")).toBeNull();
+    expect(screen.queryByText(/customers can't pay online yet/)).toBeNull();
+    expect(screen.getByRole("button", { name: "Save" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Save expiry/ })).toBeNull();
+  });
+
+  it("saving the lifecycle card leaves online_payments_enabled as it is", async () => {
+    const client = createMockBillingClient();
+    const save = vi.spyOn(client, "saveLifecycleSettings");
+    inEnv(client, <LifecycleSettingsCard />);
+    (await screen.findByRole("button", { name: "Save" })).click();
+    await screen.findByText(/Settings saved/);
+    expect(save.mock.calls[0][0]).not.toHaveProperty("onlinePaymentsEnabled");
   });
 });
 

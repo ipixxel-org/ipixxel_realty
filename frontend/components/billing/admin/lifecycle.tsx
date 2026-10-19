@@ -5,12 +5,11 @@ import Link from "next/link";
 import { formPageStyles } from "@/components/forms/form-page";
 import { Switch } from "@/components/superadmin/switch";
 import { useAuth } from "@/lib/auth-context";
-import type { LifecycleRunResult, LifecycleSettings, ManualReason, ReminderRule } from "@/lib/billing/types";
+import type { LifecycleRunResult, LifecycleSettings, ReminderRule } from "@/lib/billing/types";
 import { useBillingEnv, useBillingQuery } from "../context";
 import { ErrorNote, Loading, SampleDataTag } from "../ui";
 import { COMPANY_TAX_HREF } from "./company";
 
-const RAZORPAY_HREF = "/admin-console/integrations/razorpay";
 const days = (n: number) => `${n} ${n === 1 ? "day" : "days"}`;
 
 /**
@@ -36,23 +35,6 @@ export function reminderRows(s: Pick<LifecycleSettings, "notifyDaysBefore" | "gr
     }
   }
   return out;
-}
-
-const MANUAL_WHY: Record<ManualReason, string> = {
-  switched_off: "the switch is off",
-  keys_missing: "no Razorpay keys are saved in Integrations → Razorpay (or the server's RAZORPAY_* settings)",
-  gateway_disabled: "Razorpay is turned off in Integrations → Razorpay",
-};
-
-/** Switch on, but Razorpay can't be used: say why the platform is still in manual mode. */
-function PaymentModeWarning({ saved }: { saved: LifecycleSettings }) {
-  if (!saved.onlinePaymentsEnabled || saved.paymentMode === "online") return null;
-  return (
-    <div className="form-alert" role="status">
-      Online payments are switched on, but customers can&apos;t pay online yet: {MANUAL_WHY[saved.paymentModeReason ?? "keys_missing"]}. Until that&apos;s fixed the platform runs in manual
-      mode — upgrades are requests you approve in Package Requests. <Link href={RAZORPAY_HREF}>Open Razorpay settings</Link>
-    </div>
-  );
 }
 
 /** Shown to the super_admin role only; the backend refuses other roles too. */
@@ -130,8 +112,12 @@ function Editor({ initial }: { initial: LifecycleSettings }) {
   async function save() {
     setBusy(true);
     try {
-      // Billing v2 always falls back to Basic when grace ends.
-      const next = await client.saveLifecycleSettings({ ...s, afterGrace: "fall_back_to_basic" });
+      // Billing v2 always falls back to Basic when grace ends. The online
+      // payments switch lives in Integrations → Online payments: left out, so
+      // it stays as it is.
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
+      const { onlinePaymentsEnabled, ...rest } = s;
+      const next = await client.saveLifecycleSettings({ ...rest, afterGrace: "fall_back_to_basic" });
       setSaved(next);
       setS(next);
       setStatus({ tone: "ok", text: "Settings saved — they apply from the next check (hourly, and whenever an organisation opens Billing)." });
@@ -148,7 +134,7 @@ function Editor({ initial }: { initial: LifecycleSettings }) {
         Discard
       </button>
       <button className={formPageStyles.btnPrimary} type="button" onClick={() => void save()} disabled={busy || !canEdit}>
-        {busy ? "Saving…" : "Save expiry policy"}
+        {busy ? "Saving…" : "Save"}
       </button>
     </div>
   );
@@ -198,17 +184,6 @@ function Editor({ initial }: { initial: LifecycleSettings }) {
               and leads keep coming in. Buying again restores everything.
             </div>
           </div>
-          <div className="bl-between" style={{ padding: "12px 0", borderTop: "1px solid var(--line)", borderBottom: "1px solid var(--line)" }}>
-            <div style={{ minWidth: 0, flex: 1 }}>
-              <b style={{ fontSize: 13.5 }}>Online payments (Razorpay)</b>
-              <div className="hint" style={{ marginTop: 2 }}>
-                Customers pay online only when this is on <i>and</i> Razorpay keys are working. Otherwise upgrades are sent to Super Admin for manual approval.
-              </div>
-              {s.onlinePaymentsEnabled !== saved.onlinePaymentsEnabled ? <div className="hint" style={{ marginTop: 4 }}>Save to apply.</div> : null}
-            </div>
-            <Switch checked={s.onlinePaymentsEnabled} onChange={(on) => set({ onlinePaymentsEnabled: on })} />
-          </div>
-          <PaymentModeWarning saved={saved} />
           <div className="hint" style={{ marginTop: 0 }}>
             Company name, GSTIN, state and address for invoices: <Link href={COMPANY_TAX_HREF}>Company &amp; tax details</Link>.
           </div>
@@ -257,7 +232,7 @@ function Editor({ initial }: { initial: LifecycleSettings }) {
             </table>
           </div>
           <div className="hint" style={{ padding: "10px 16px" }}>
-            Switches are saved with “Save expiry policy”. Each reminder goes out once per renewal date.
+            Switches are saved with “Save”. Each reminder goes out once per renewal date.
           </div>
         </div>
       </div>

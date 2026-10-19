@@ -4,12 +4,18 @@ import { MarketingService } from '../marketing/marketing.service';
 import { AdminRolesService } from '../admin-roles/admin-roles.service';
 import { RazorpaySettingsService } from '../payments/razorpay-settings.service';
 import { AiSettingsService } from '../ai/ai-settings.service';
+import { PlatformConfigService } from '../platform-config/platform-config.service';
+import { readOnlinePayments } from '../billing/online-payments';
 import type { JwtPayload } from '../../common/types/jwt-payload.interface';
 
 export type IntegrationStatus = {
   key: string;
   configured: boolean;
   active: boolean;
+  /** Online payments only: the Super Admin switch (online_payments_enabled). */
+  enabled?: boolean;
+  /** Online payments only: the gateway with usable keys, or null. */
+  gateway?: 'razorpay' | null;
 };
 
 /**
@@ -17,12 +23,13 @@ export type IntegrationStatus = {
  * Integrations deliberately has no permission key of its own: each card stays
  * gated by the module whose endpoints it calls (/admin/email → admin_email;
  * the Google OAuth form → admin_settings, the module the Settings page used;
- * Razorpay → admin_subscriptions, the module of /admin/payments).
+ * Online payments → admin_subscriptions, the module of /admin/payments whose
+ * gateway settings it manages).
  */
 const INTEGRATION_MODULES: Record<string, string> = {
   smtp: 'admin_email',
   'social-login': 'admin_settings',
-  razorpay: 'admin_subscriptions',
+  payments: 'admin_subscriptions',
   ai: 'admin_settings',
 };
 
@@ -34,6 +41,7 @@ export class IntegrationsService {
     private readonly adminRoles: AdminRolesService,
     private readonly razorpay: RazorpaySettingsService,
     private readonly aiSettings: AiSettingsService,
+    private readonly platformConfig: PlatformConfigService,
   ) {}
 
   /**
@@ -57,12 +65,18 @@ export class IntegrationsService {
       out.push({ key: 'social-login', configured, active: configured });
     }
 
-    if (canView(INTEGRATION_MODULES.razorpay)) {
-      const rzp = await this.razorpay.getForAdmin();
+    if (canView(INTEGRATION_MODULES.payments)) {
+      // configured = a gateway has usable keys; active = customers can pay online.
+      const payments = await readOnlinePayments(
+        this.platformConfig,
+        this.razorpay,
+      );
       out.push({
-        key: 'razorpay',
-        configured: rzp.configured,
-        active: rzp.ready,
+        key: 'payments',
+        configured: payments.gateway !== null,
+        active: payments.paymentMode === 'online',
+        enabled: payments.enabled,
+        gateway: payments.gateway,
       });
     }
 

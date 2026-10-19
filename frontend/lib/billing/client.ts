@@ -139,7 +139,7 @@ export interface BillingClient {
   /** GET /admin/billing/lifecycle */
   getLifecycleSettings(): Promise<LifecycleSettings>;
   /** PUT /admin/billing/lifecycle */
-  saveLifecycleSettings(settings: LifecycleSettings): Promise<LifecycleSettings>;
+  saveLifecycleSettings(settings: Omit<LifecycleSettings, "onlinePaymentsEnabled"> & { onlinePaymentsEnabled?: boolean }): Promise<LifecycleSettings>;
   /** POST /admin/billing/lifecycle/run — run the lifecycle check now (super_admin only; audited). */
   runLifecycleCheck(): Promise<LifecycleRunResult>;
   /** GET /admin/billing/company — Settings → Company & tax details. */

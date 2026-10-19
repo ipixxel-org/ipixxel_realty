@@ -620,8 +620,9 @@ export function createMockBillingClient(opts: { initial?: Partial<MockState>; pe
     },
     saveLifecycleSettings(settings) {
       if (settings.graceDays < 0 || settings.notifyDaysBefore < 0) return fail("Days can't be negative.");
-      const on = settings.onlinePaymentsEnabled;
-      const lifecycle = { ...settings, paymentMode: on ? ("online" as const) : ("manual" as const), paymentModeReason: on ? null : ("switched_off" as const) };
+      // Omitted = unchanged (the switch lives in Integrations → Online payments).
+      const on = settings.onlinePaymentsEnabled ?? get().lifecycle.onlinePaymentsEnabled;
+      const lifecycle = { ...settings, onlinePaymentsEnabled: on, paymentMode: on ? ("online" as const) : ("manual" as const), paymentModeReason: on ? null : ("switched_off" as const) };
       set({ lifecycle });
       return ok(lifecycle);
     },

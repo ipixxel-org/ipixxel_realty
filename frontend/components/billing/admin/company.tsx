@@ -111,7 +111,7 @@ function Editor({ initial }: { initial: CompanyDetails }) {
             Discard
           </button>
           <button className={formPageStyles.btnPrimary} type="button" onClick={() => void save()} disabled={busy || !canEdit}>
-            {busy ? "Saving…" : "Save company details"}
+            {busy ? "Saving…" : "Save"}
           </button>
         </div>
       </div>

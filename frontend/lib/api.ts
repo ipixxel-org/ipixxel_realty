@@ -2463,6 +2463,19 @@ export async function testRazorpaySettings(input: {
   });
 }
 
+// --- Online payments switch (Integrations → Online payments) ---
+
+export async function getOnlinePayments(): Promise<import("./types").OnlinePaymentsView> {
+  return apiFetch<import("./types").OnlinePaymentsView>("/admin/billing/online-payments");
+}
+
+export async function saveOnlinePayments(enabled: boolean): Promise<import("./types").OnlinePaymentsView> {
+  return apiFetch<import("./types").OnlinePaymentsView>("/admin/billing/online-payments", {
+    method: "PUT",
+    body: JSON.stringify({ enabled }),
+  });
+}
+
 // --- Super Admin AI provider settings (OpenPage AI Template builder) ---
 
 export async function getAiSettings(): Promise<import("./types").AiSettingsView> {

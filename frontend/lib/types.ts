@@ -3184,6 +3184,17 @@ export interface RazorpaySettingsView {
   updatedAt: string | null;
 }
 
+/** GET/PUT /admin/billing/online-payments — Integrations → Online payments. */
+export interface OnlinePaymentsView {
+  /** The Super Admin switch (online_payments_enabled). */
+  enabled: boolean;
+  /** Effective mode: the switch AND a gateway with usable keys. */
+  paymentMode: "online" | "manual";
+  paymentModeReason: "switched_off" | "keys_missing" | "gateway_disabled" | null;
+  /** The gateway with usable keys, or null. */
+  gateway: "razorpay" | null;
+}
+
 export interface UpdateRazorpaySettingsInput {
   keyId?: string;
   keySecret?: string;
