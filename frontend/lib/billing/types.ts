@@ -66,7 +66,11 @@ export type RenewalMode = "auto" | "manual";
 
 /** "online" = pay with Razorpay; "manual" = upgrades are requests a Super Admin approves. */
 export type PaymentMode = "online" | "manual";
-/** Why payments are manual: Super Admin switch off, no usable Razorpay keys, or Razorpay turned off in Integrations. */
+/**
+ * Why payments are manual: Super Admin switch off, no usable Razorpay keys, or
+ * Razorpay saved as off (only by the old "Enable Razorpay payments" checkbox,
+ * since removed — saving the Razorpay form turns it back on).
+ */
 export type ManualReason = "switched_off" | "keys_missing" | "gateway_disabled";
 
 export interface PaymentMethodSummary {
