@@ -21,12 +21,12 @@ import type {
   OrgUserAssignableRole,
   OrgIndustry,
   OrgUsersListResponse,
-  Plan,
 } from "@/lib/types";
 import { COUNTRY_META, COUNTRIES } from "@/lib/countries";
 import { INDUSTRY_OPTIONS, ORG_ASSET_RULES, industryLabel, orgAssetTooLarge } from "@/lib/org-profile";
 import { ProfileAuditLog } from "@/components/org/profile-audit-log";
 import { OrgActivityFeed } from "@/components/superadmin/org-activity-feed";
+import { OrgSubscriptionSummary, type OrgSubscriptionRow } from "@/components/superadmin/org-subscription-summary";
 
 const TABS = ["Overview", "Subscription", "Templates", "Domains", "Activity"] as const;
 type Tab = (typeof TABS)[number];
@@ -404,9 +404,6 @@ export default function SuperAdminOrganisationDetailPage() {
   const canActivateOrganisation = hasPermission("admin_organisations", "add");
   const canDeactivateOrganisation = hasPermission("admin_organisations", "approve");
   const canDeleteOrganisation = hasPermission("admin_organisations", "delete");
-  // Deliberately its own module (not admin_organisations "Edit") — sharing
-  // that bit meant turning this off also turned off editing org details.
-  const canUpgradeSubscription = hasPermission("admin_org_upgrade_subscription", "edit");
   const canAddOrgTemplates = hasPermission("admin_org_templates_add", "add");
   const canRemoveOrgTemplates = hasPermission("admin_org_templates_remove", "delete");
 
@@ -446,11 +443,7 @@ export default function SuperAdminOrganisationDetailPage() {
     setTimeout(() => setToast(null), 3000);
   };
 
-  const [plans, setPlans] = useState<Plan[]>([]);
   const [assignedTemplates, setAssignedTemplates] = useState<any[]>([]);
-  const [upgradePlanId, setUpgradePlanId] = useState<string>("");
-  const [upgradeBillingCycle, setUpgradeBillingCycle] = useState<"monthly" | "yearly">("monthly");
-  const [upgrading, setUpgrading] = useState(false);
   const [templateSaving, setTemplateSaving] = useState(false);
   const [templateRemoveTarget, setTemplateRemoveTarget] = useState<any | null>(null);
   const [templateRemoveBlocked, setTemplateRemoveBlocked] = useState<{ name: string; count: number } | null>(null);
@@ -507,11 +500,6 @@ export default function SuperAdminOrganisationDetailPage() {
       .catch(() => setUsers(null))
       .finally(() => setUsersLoading(false));
   }, [accessToken, params.id, usersReloadTick]);
-
-  useEffect(() => {
-    if (!accessToken) return;
-    apiFetch<Plan[]>("/admin/plans", { headers: { Authorization: `Bearer ${accessToken}` } }).then(setPlans).catch(() => { });
-  }, [accessToken]);
 
   const [domainsData, setDomainsData] = useState<any | null>(null);
   const [domainsLoading, setDomainsLoading] = useState(false);
@@ -1383,84 +1371,8 @@ export default function SuperAdminOrganisationDetailPage() {
 
           {tab === "Subscription" ? (
             <Reveal delay={2}>
-              <div className="card">
-                <div className="card-h">
-                  <span className="t">Subscription</span>
-                  {org.subscription ? <span className={`badge ${(org.subscription as any).status === "active" ? "b-green" : "b-amber"}`}>{(org.subscription as any).status}</span> : <span className="badge b-gray">No subscription</span>}
-                </div>
-                <div className="card-b" style={{ display: "grid", gap: 16 }}>
-                  {org.subscription ? (
-                    <div style={{ display: "grid", gap: 10, padding: 14, border: "1px solid var(--line)", borderRadius: 12, background: "var(--surface-2)" }}>
-                      <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
-                        <span className={`badge ${(org as any).plan?.badge || "b-indigo"}`}>{(org as any).plan?.name ?? (org.subscription as any).plan?.name ?? "—"}</span>
-                        <span className="chip">{(org.subscription as any).billingCycle}</span>
-                        <span className="chip">₹{((org.subscription as any).amount ?? 0).toLocaleString("en-IN")}</span>
-                        {(org.subscription as any).mrr ? <span className="chip">MRR ₹{(org.subscription as any).mrr.toLocaleString("en-IN")}</span> : null}
-                      </div>
-                      <div className="grid g2" style={{ gap: 10, fontSize: 13 }}>
-                        <div><span className="muted" style={{ fontSize: 11 }}>Plan value</span><br /><b>₹{((org as any).planValue ?? (org.subscription as any).amount ?? 0).toLocaleString("en-IN")}</b></div>
-                        <div><span className="muted" style={{ fontSize: 11 }}>Renews</span><br /><b>{(org as any).subscriptionRenewsAt || (org.subscription as any).renewsAt ? new Date((org as any).subscriptionRenewsAt || (org.subscription as any).renewsAt).toLocaleDateString("en-GB") : "—"}</b></div>
-                        <div><span className="muted" style={{ fontSize: 11 }}>Templates</span><br /><b>{assignedTemplates.length} assigned</b></div>
-                        <div><span className="muted" style={{ fontSize: 11 }}>Created landing pages</span><br /><b>{(org as any).plan?.limits?.landingPagesCreate ?? "Unlimited"}</b></div>
-                        <div><span className="muted" style={{ fontSize: 11 }}>Published landing pages</span><br /><b>{(org as any).plan?.limits?.landingPages ?? "Unlimited"}</b></div>
-                        <div><span className="muted" style={{ fontSize: 11 }}>Status</span><br /><b>{(org.subscription as any).status}</b></div>
-                      </div>
-                    </div>
-                  ) : <div className="help">No subscription yet — approvals created one after package selection.</div>}
-
-                  <div>
-                    <div style={{ fontWeight: 700, marginBottom: 8 }}>Upgrade package</div>
-                    <div style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 10 }}>
-                      <span style={{ fontSize: 12, fontWeight: 600 }}>Billing:</span>
-                      <div style={{ display: "flex", gap: 4, background: "#eef1f6", borderRadius: 999, padding: 3 }}>
-                        {(["monthly", "yearly"] as const).map(c => (
-                          <button key={c} type="button" onClick={() => setUpgradeBillingCycle(c)} style={{ padding: "6px 12px", borderRadius: 999, border: "none", background: upgradeBillingCycle === c ? "#fff" : "transparent", fontWeight: 600, fontSize: 12, cursor: "pointer", textTransform: "capitalize", boxShadow: upgradeBillingCycle === c ? "0 1px 4px rgba(0,0,0,.1)" : "none" }}>{c}</button>
-                        ))}
-                      </div>
-                    </div>
-                    <div className="grid" style={{ gridTemplateColumns: "repeat(auto-fill,minmax(180px,1fr))", gap: 10 }}>
-                      {plans.map(p => {
-                        const isCurrent = (org as any).plan?.id === p.id || (org.subscription as any)?.planId === p.id;
-                        const isSelected = upgradePlanId === p.id;
-                        const price = upgradeBillingCycle === "monthly" ? p.priceMonthly : p.priceYearly;
-                        return (
-                          <div key={p.id} onClick={() => setUpgradePlanId(p.id)} style={{ border: "2px solid", borderColor: isSelected ? "var(--brand)" : isCurrent ? "var(--green)" : "var(--line)", borderRadius: 14, padding: 12, cursor: "pointer", background: isSelected ? "var(--brand-050)" : "#fff" }}>
-                            <div className={`badge ${p.badge}`}>{p.name}</div>
-                            <div style={{ fontWeight: 800, marginTop: 6 }}>₹{price.toLocaleString("en-IN")}<span style={{ fontSize: 11, color: "var(--muted)" }}>{upgradeBillingCycle === "monthly" ? "/mo" : "/yr"}</span></div>
-                            <div style={{ fontSize: 11, color: "var(--muted)" }}>{(p.limits as any)?.templates} templates · {p.limits?.projects} projects</div>
-                            <div style={{ fontSize: 11, color: "var(--muted)", marginTop: 3 }}>{p.limits?.users ?? "Unlimited"} users</div>
-                            <div style={{ fontSize: 11, color: "var(--muted)", marginTop: 3 }}>{p.limits?.landingPagesCreate ?? "Unlimited"} created · {p.limits?.landingPages ?? "Unlimited"} published pages</div>
-                            <div style={{ fontSize: 11, fontWeight: 700, color: isCurrent ? "var(--green)" : isSelected ? "var(--brand)" : "var(--muted)", marginTop: 6 }}>{isCurrent ? "Current" : isSelected ? "Selected" : "Select"}</div>
-                          </div>
-                        );
-                      })}
-                    </div>
-                    {canUpgradeSubscription ? (
-                      <div style={{ marginTop: 12, display: "flex", gap: 10 }}>
-                        <button className="btn btn-primary btn-sm" disabled={upgrading || !upgradePlanId} onClick={async () => {
-                          if (!upgradePlanId) return;
-                          setUpgrading(true);
-                          try {
-                            if (org.subscription) {
-                              await apiFetch(`/admin/subscriptions/${(org.subscription as any).id}`, { method: "PATCH", headers: { Authorization: `Bearer ${accessToken}` }, body: JSON.stringify({ planId: upgradePlanId, billingCycle: upgradeBillingCycle }) });
-                            } else {
-                              await apiFetch(`/admin/subscriptions`, { method: "POST", headers: { Authorization: `Bearer ${accessToken}` }, body: JSON.stringify({ orgId: org.id, planId: upgradePlanId, billingCycle: upgradeBillingCycle }) });
-                            }
-                            const fresh = await apiFetch<OrganisationDetail>(`/admin/organisations/${org.id}`, { headers: { Authorization: `Bearer ${accessToken}` } });
-                            setOrg(fresh);
-                            setUpgradePlanId("");
-                            notify("Subscription upgraded");
-                          } catch (e: any) { notify(e.message || "Upgrade failed"); }
-                          finally { setUpgrading(false); }
-                        }}>
-                          {upgrading ? "Upgrading…" : "Upgrade subscription"}
-                        </button>
-                        <span className="muted" style={{ fontSize: 12, alignSelf: "center" }}>Upgrade increases template limit — then add more in Templates tab.</span>
-                      </div>
-                    ) : null}
-                  </div>
-                </div>
-              </div>
+              {/* Read-only: plans are changed in Subscriptions → Organisation Subscriptions. */}
+              <OrgSubscriptionSummary orgId={org.id} subscription={(org.subscription as OrgSubscriptionRow | null) ?? null} />
             </Reveal>
           ) : null}
 
