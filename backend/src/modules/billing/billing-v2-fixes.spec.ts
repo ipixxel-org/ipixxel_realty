@@ -238,6 +238,7 @@ describe('"Run lifecycle check now"', () => {
       db as never,
       {} as never,
       {} as never,
+      {} as never,
     );
     const res = await service.runLifecycleNow('super-1');
     expect(res).toMatchObject({ scanned: 1, movedToFreePlan: 1 });

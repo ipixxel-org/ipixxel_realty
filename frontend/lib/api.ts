@@ -2408,31 +2408,6 @@ export async function getOrgPayments(page = 1, limit = 10): Promise<import("./ty
   return apiFetch<import("./types").PaymentsPage>(`/org/payments?page=${page}&limit=${limit}`);
 }
 
-export async function getAdminPayments(params: {
-  page?: number;
-  limit?: number;
-  status?: string;
-  organisationId?: string;
-}): Promise<import("./types").AdminPaymentsPage> {
-  const q = new URLSearchParams();
-  if (params.page) q.set("page", String(params.page));
-  if (params.limit) q.set("limit", String(params.limit));
-  if (params.status) q.set("status", params.status);
-  if (params.organisationId) q.set("organisationId", params.organisationId);
-  const s = q.toString();
-  return apiFetch<import("./types").AdminPaymentsPage>(`/admin/payments${s ? `?${s}` : ""}`);
-}
-
-export async function getAdminPaymentOrganisations(): Promise<{ id: string; name: string; status: string }[]> {
-  return apiFetch<{ id: string; name: string; status: string }[]>("/admin/payments/organisations");
-}
-
-export async function createAdminTestPaymentOrder(organisationId: string): Promise<import("./types").CheckoutOrder> {
-  return apiFetch<import("./types").CheckoutOrder>("/admin/payments/test-order", {
-    method: "POST",
-    body: JSON.stringify({ organisationId }),
-  });
-}
 
 export async function getRazorpaySettings(): Promise<import("./types").RazorpaySettingsView> {
   return apiFetch<import("./types").RazorpaySettingsView>("/admin/payments/settings");
@@ -2460,6 +2435,19 @@ export async function testRazorpaySettings(input: {
   return apiFetch<{ ok: boolean; mode: "test" | "live" | null }>("/admin/payments/settings/test", {
     method: "POST",
     body: JSON.stringify(input),
+  });
+}
+
+// --- Online payments switch (Integrations → Online payments) ---
+
+export async function getOnlinePayments(): Promise<import("./types").OnlinePaymentsView> {
+  return apiFetch<import("./types").OnlinePaymentsView>("/admin/billing/online-payments");
+}
+
+export async function saveOnlinePayments(enabled: boolean): Promise<import("./types").OnlinePaymentsView> {
+  return apiFetch<import("./types").OnlinePaymentsView>("/admin/billing/online-payments", {
+    method: "PUT",
+    body: JSON.stringify({ enabled }),
   });
 }
 

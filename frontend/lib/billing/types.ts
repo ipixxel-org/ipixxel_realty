@@ -66,7 +66,11 @@ export type RenewalMode = "auto" | "manual";
 
 /** "online" = pay with Razorpay; "manual" = upgrades are requests a Super Admin approves. */
 export type PaymentMode = "online" | "manual";
-/** Why payments are manual: Super Admin switch off, no usable Razorpay keys, or Razorpay turned off in Integrations. */
+/**
+ * Why payments are manual: Super Admin switch off, no usable Razorpay keys, or
+ * Razorpay saved as off (only by the old "Enable Razorpay payments" checkbox,
+ * since removed — saving the Razorpay form turns it back on).
+ */
 export type ManualReason = "switched_off" | "keys_missing" | "gateway_disabled";
 
 export interface PaymentMethodSummary {
@@ -449,6 +453,21 @@ export interface PaymentRecord {
   couponCode: string | null;
   reference: string;
   receiptUrl: string | null;
+  /** Razorpay order id; null for an offline payment. */
+  orderId: string | null;
+  /** Razorpay payment id (pay_…); null until paid, and for offline payments. */
+  gatewayPaymentId: string | null;
+  /** The GST invoice — the same document Billing → Invoices opens. */
+  invoice: InvoiceLink | null;
+  /** The credit note, once the payment is refunded. */
+  creditNote: InvoiceLink | null;
+}
+
+/** An invoice or credit note: its number and its signed printable document (valid for an hour). */
+export interface InvoiceLink {
+  id: string;
+  number: string;
+  url: string;
 }
 
 export interface UpdatePaymentMethodRequest {
@@ -587,6 +606,8 @@ export interface AdminCancelRequest {
 export interface ListAdminPaymentsRequest extends PageRequest {
   status?: PaymentStatus;
   orgId?: string;
+  /** Razorpay order id / payment id, or an offline reference (partial match). */
+  search?: string;
 }
 
 export interface AdminPaymentList extends Paged<AdminPaymentRow> {
@@ -616,7 +637,11 @@ export interface LifecycleSettings {
   afterGrace: AfterGraceBehavior;
   expiryMessage: string;
   reminders: ReminderRule[];
-  /** Super Admin switch: online (Razorpay) plan payments. Off = manual approval. */
+  /**
+   * Super Admin switch: online (Razorpay) plan payments. Off = manual approval.
+   * Read-only here: it's changed in Integrations → Online payments, and the
+   * lifecycle save leaves it out (omitted = unchanged).
+   */
   onlinePaymentsEnabled: boolean;
   /** Read-only: the effective mode (switch AND usable Razorpay keys) and why it is manual. */
   paymentMode: PaymentMode;

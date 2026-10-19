@@ -82,7 +82,6 @@ export function RazorpaySettings() {
   const [keyId, setKeyId] = useState("");
   const [keySecret, setKeySecret] = useState("");
   const [webhookSecret, setWebhookSecret] = useState("");
-  const [isActive, setIsActive] = useState(true);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [testing, setTesting] = useState(false);
@@ -94,7 +93,6 @@ export function RazorpaySettings() {
     setKeyId(v.keyId);
     setKeySecret(v.keySecret);
     setWebhookSecret(v.webhookSecret);
-    setIsActive(v.isActive);
   }
 
   useEffect(() => {
@@ -113,14 +111,18 @@ export function RazorpaySettings() {
         // Blank or the mask = keep the saved secret.
         keySecret: keySecret.trim() || SECRET_MASK,
         webhookSecret: webhookSecret.trim() || SECRET_MASK,
-        isActive,
+        // Always on: whether customers pay online is the Online payments switch
+        // in Integrations. Turning the gateway itself off would also stop
+        // confirmations, webhooks and refunds for payments already made. This
+        // also clears an "off" saved by the old checkbox.
+        isActive: true,
       });
       apply(res);
       setStatus({
         tone: "ok",
         text: res.ready
           ? `Razorpay credentials saved (${res.mode} mode). Payments use them immediately — no server restart needed.`
-          : "Saved. Payments are switched off until “Enable Razorpay payments” is ticked.",
+          : "Saved, but the keys aren't complete yet — add the key secret and webhook secret.",
       });
     } catch (e) {
       setStatus({ tone: "err", text: e instanceof Error ? e.message : "Save failed" });
@@ -178,7 +180,8 @@ export function RazorpaySettings() {
       text: `Active • ${view.mode === "live" ? "Live" : "Test"} mode${view.source === "env" ? " (.env)" : ""}`,
       style: { background: "#ecfdf5", color: "#065f46", border: "1px solid #a7f3d0" },
     };
-  else if (view?.configured) chip = { text: "Configured • Turned off", style: { background: "#fffbeb", color: "#92400e", border: "1px solid #fde68a" } };
+  // Keys saved but switched off by the old checkbox: saving turns them back on.
+  else if (view?.configured && !view.isActive) chip = { text: "Configured • Save to turn on", style: { background: "#fffbeb", color: "#92400e", border: "1px solid #fde68a" } };
   else chip = { text: "Setup Required", style: { background: "#fffbeb", color: "#92400e", border: "1px solid #fde68a" } };
 
   return (
@@ -265,19 +268,6 @@ export function RazorpaySettings() {
             This is a <strong>live</strong> key: payments will charge real money. The ₹1 test payment in Payments is disabled in live mode.
           </div>
         ) : null}
-
-        <div className="field" style={{ marginBottom: 0 }}>
-          <label style={{ display: "flex", alignItems: "center", gap: 8, cursor: canEdit ? "pointer" : "default" }}>
-            <input
-              type="checkbox"
-              checked={isActive}
-              onChange={(e) => setIsActive(e.target.checked)}
-              disabled={busy || !canEdit}
-              style={{ width: 16, height: 16, cursor: "pointer" }}
-            />
-            <span>Enable Razorpay payments across the platform</span>
-          </label>
-        </div>
 
         {/* Webhook setup instructions */}
         <div style={{ background: "#f8fafc", border: "1px solid #e2e8f0", borderRadius: 12, padding: "14px 16px", fontSize: 13, lineHeight: 1.5 }}>

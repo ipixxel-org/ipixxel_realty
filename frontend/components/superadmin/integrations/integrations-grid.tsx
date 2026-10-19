@@ -6,6 +6,7 @@ import { useAuth } from "@/lib/auth-context";
 import { getIntegrationsStatus } from "@/lib/api";
 import { Icon } from "@/components/icons";
 import { isUnrestrictedPlatformUser } from "@/components/superadmin/shell";
+import { OnlinePaymentsCard } from "./online-payments-card";
 import {
   INTEGRATIONS,
   type IntegrationDef,
@@ -65,6 +66,9 @@ export function IntegrationsGrid() {
       )}
       <div className="grid g3" style={{ marginBottom: 28 }}>
         {visible.map((it) => {
+          if (it.key === "payments") {
+            return <OnlinePaymentsCard key={it.key} it={it} status={statuses.payments} loading={loading} />;
+          }
           const badge = statusBadge(it, statuses[it.key], loading && it.statusSource === "api");
           return (
             <div key={it.key} className="card hover reveal in">

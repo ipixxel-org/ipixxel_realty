@@ -1384,8 +1384,8 @@ export default function SuperAdminSubscriptionsPage() {
           </div>
         )}
 
-        {/* Tab 5: Subscription Expiry Policy — billing v2: the new lifecycle card (incl. the
-            Online payments switch), the same one as Settings → Subscription Expiry & Lifecycle. */}
+        {/* Tab 5: Subscription Expiry Policy — billing v2: the new lifecycle card, the same one
+            as Settings → Subscription Expiry & Lifecycle (the Online payments switch is in Integrations). */}
         {/* Tab 4: Payments & Invoicing — billing v2: plan payments, offline payments and refunds. */}
         {tab === 4 && BILLING_V2 && (
           <div style={{ padding: 24 }}>

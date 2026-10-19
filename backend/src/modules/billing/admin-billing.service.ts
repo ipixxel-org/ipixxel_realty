@@ -14,8 +14,10 @@ import {
   REMINDER_IDS,
 } from '../../common/utils/subscription-lifecycle.util';
 import { PlatformConfigService } from '../platform-config/platform-config.service';
+import { RazorpaySettingsService } from '../payments/razorpay-settings.service';
 import { BillingModeService } from './billing-mode.service';
 import { expireStaleCheckouts } from './checkout-state';
+import { readOnlinePayments } from './online-payments';
 import {
   isFreePlan,
   sortPlans,
@@ -28,6 +30,7 @@ import type {
   CompanyDetailsV2,
   LifecycleRunResultV2,
   LifecycleSettingsV2,
+  OnlinePaymentsV2,
   SellerSettingsV2,
 } from './billing.types';
 import type { SaveAdminPlanDto } from './dto/save-admin-plan.dto';
@@ -134,6 +137,7 @@ export class AdminBillingService {
     private readonly prisma: PrismaService,
     private readonly platformConfig: PlatformConfigService,
     private readonly mode: BillingModeService,
+    private readonly razorpay: RazorpaySettingsService,
   ) {}
 
   /* ------------------------------------------------------------------ plans */
@@ -250,6 +254,7 @@ export class AdminBillingService {
       // afterGrace isn't written: v2 always falls back to Basic, and the
       // stored legacy value stays for the flag-off screens.
       billingExpiryMessage: dto.expiryMessage,
+      // Omitted by the current UI (the switch lives in Integrations now) — unchanged.
       onlinePaymentsEnabled: dto.onlinePaymentsEnabled,
     });
     if (dto.reminders) {
@@ -261,6 +266,29 @@ export class AdminBillingService {
     }
     if (seller) await this.platformConfig.saveSellerSettings(seller);
     return this.getLifecycle();
+  }
+
+  /* ------------------------------------------------------ online payments */
+
+  getOnlinePayments(): Promise<OnlinePaymentsV2> {
+    return readOnlinePayments(this.platformConfig, this.razorpay);
+  }
+
+  /**
+   * Integrations → Online payments switch. Turning it on needs a gateway with
+   * usable keys; turning it off always works.
+   */
+  async saveOnlinePayments(enabled: boolean): Promise<OnlinePaymentsV2> {
+    if (enabled) {
+      const current = await this.getOnlinePayments();
+      if (!current.gateway) {
+        throw new BadRequestException(
+          'No payment gateway is ready. Add Razorpay keys in Integrations → Online payments first.',
+        );
+      }
+    }
+    await this.platformConfig.updateConfig({ onlinePaymentsEnabled: enabled });
+    return this.getOnlinePayments();
   }
 
   /* ----------------------------------------------- company & tax details */

@@ -316,8 +316,10 @@ export const PLATFORM_ROUTE_MODULES: Array<{ prefix: string; module: string }> =
   { prefix: '/admin/plans', module: 'admin_subscriptions' },
   { prefix: '/admin/payments', module: 'admin_subscriptions' },
   // Billing v2. First match wins: lifecycle and company details live on the
-  // Settings page.
+  // Settings page. The online payments switch moved from the lifecycle card
+  // to Integrations → Online payments and keeps the module it had there.
   { prefix: '/admin/billing/lifecycle', module: 'admin_settings' },
+  { prefix: '/admin/billing/online-payments', module: 'admin_settings' },
   { prefix: '/admin/billing/company', module: 'admin_settings' },
   { prefix: '/admin/billing', module: 'admin_subscriptions' },
   { prefix: '/admin/email', module: 'admin_email' },

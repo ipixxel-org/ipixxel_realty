@@ -24,6 +24,7 @@ import { SaveAdminPlanDto } from './dto/save-admin-plan.dto';
 import {
   SaveCompanyDetailsDto,
   SaveLifecycleDto,
+  SaveOnlinePaymentsDto,
 } from './dto/save-lifecycle.dto';
 import { BillingProfileService } from './billing-profile.service';
 import { BillingCheckoutService } from './billing-checkout.service';
@@ -338,6 +339,18 @@ export class AdminBillingController {
   @Put('lifecycle')
   saveLifecycle(@Body() dto: SaveLifecycleDto) {
     return this.service.saveLifecycle(dto);
+  }
+
+  // Integrations → Online payments switch (admin_settings, like the
+  // lifecycle card it moved from).
+  @Get('online-payments')
+  getOnlinePayments() {
+    return this.service.getOnlinePayments();
+  }
+
+  @Put('online-payments')
+  saveOnlinePayments(@Body() dto: SaveOnlinePaymentsDto) {
+    return this.service.saveOnlinePayments(dto.enabled);
   }
 
   /**

@@ -29,7 +29,6 @@ import {
 } from './dto/razorpay-settings.dto';
 import {
   AdminListPaymentsQueryDto,
-  CreateTestOrderDto,
   ListPaymentsQueryDto,
   VerifyPaymentDto,
 } from './dto/payments.dto';
@@ -61,9 +60,9 @@ export class OrgPaymentsController {
 
 // --- Super Admin Endpoints ---
 // /admin/payments is mapped to admin_subscriptions in PLATFORM_ROUTE_MODULES,
-// so platform-team roles need that module's view/add permission. The test
-// order flow and changing the gateway credentials are additionally
-// restricted to the super_admin role.
+// so platform-team roles need that module's view/add permission. Changing the
+// gateway credentials and admin verify are additionally restricted to the
+// super_admin role.
 @UseGuards(JwtAuthGuard, SuperAdminGuard)
 @Controller('admin/payments')
 export class AdminPaymentsController {
@@ -116,15 +115,6 @@ export class AdminPaymentsController {
   @Get('organisations')
   listOrganisations() {
     return this.service.adminListOrganisations();
-  }
-
-  @Post('test-order')
-  createTestOrder(
-    @CurrentUser() user: JwtPayload,
-    @Body() dto: CreateTestOrderDto,
-  ) {
-    assertSuperAdmin(user);
-    return this.service.createTestOrder(dto.organisationId, user.sub);
   }
 
   @Post('verify')

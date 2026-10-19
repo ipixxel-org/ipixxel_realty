@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { ListPager } from "@/components/ui/list-pager";
 import { useToast } from "@/components/ui/toast";
 import { formatDate, formatINR } from "@/lib/billing/pricing";
@@ -8,6 +8,7 @@ import type { AdminPaymentRow, PaymentStatus } from "@/lib/billing/types";
 import { useBillingEnv, useBillingQuery } from "../context";
 import { BillingDialog, DialogActions } from "../dialog";
 import { BLink, Empty, ErrorNote, Loading, PAYMENT_STATUS_META, Section } from "../ui";
+import { OrderIdCell, PaymentDocuments } from "./payment-cells";
 
 export function RefundDialog({ payment, onClose, onRefunded }: { payment: AdminPaymentRow | null; onClose: () => void; onRefunded: () => void }) {
   const { client, canEdit } = useBillingEnv();
@@ -69,12 +70,25 @@ export function RefundDialog({ payment, onClose, onRefunded }: { payment: AdminP
 export function AdminPaymentsView({ initialRefundId }: { initialRefundId?: string }) {
   const [status, setStatus] = useState<PaymentStatus | "">("");
   const [orgId, setOrgId] = useState("");
+  // Search box text, and the search sent to the server once typing pauses.
+  const [searchText, setSearchText] = useState("");
+  const [search, setSearch] = useState("");
   const [page, setPage] = useState(1);
   const [picked, setPicked] = useState<AdminPaymentRow | null>(null);
   // Walkthrough: the refund dialog starts open for `initialRefundId` until it's closed once.
   const [initialDone, setInitialDone] = useState(!initialRefundId);
   const { data: orgs } = useBillingQuery((c) => c.listOrgOptions(), []);
-  const { data, error, reload } = useBillingQuery((c) => c.listAdminPayments({ status: status || undefined, orgId: orgId || undefined, page, pageSize: 10 }), [status, orgId, page]);
+  const { data, error, reload } = useBillingQuery(
+    (c) => c.listAdminPayments({ status: status || undefined, orgId: orgId || undefined, search: search || undefined, page, pageSize: 10 }),
+    [status, orgId, search, page],
+  );
+  useEffect(() => {
+    const t = setTimeout(() => {
+      setSearch(searchText.trim());
+      setPage(1);
+    }, 300);
+    return () => clearTimeout(t);
+  }, [searchText]);
   const refund = picked ?? (initialDone ? null : (data?.data.find((x) => x.id === initialRefundId) ?? null));
   const setRefund = (p: AdminPaymentRow | null) => {
     setInitialDone(true);
@@ -98,6 +112,15 @@ export function AdminPaymentsView({ initialRefundId }: { initialRefundId?: strin
         </div>
       ) : null}
       <div className="bl-row">
+        <input
+          className="inp"
+          type="search"
+          style={{ maxWidth: 260 }}
+          value={searchText}
+          onChange={(e) => setSearchText(e.target.value)}
+          placeholder="Search order ID / payment ID"
+          aria-label="Search by order ID or payment ID"
+        />
         <select
           className="inp"
           style={{ maxWidth: 240 }}
@@ -146,6 +169,7 @@ export function AdminPaymentsView({ initialRefundId }: { initialRefundId?: strin
                   <th>Date</th>
                   <th>Organisation</th>
                   <th>For</th>
+                  <th>Order ID</th>
                   <th>Method</th>
                   <th style={{ textAlign: "right" }}>Amount</th>
                   <th>Status</th>
@@ -168,7 +192,9 @@ export function AdminPaymentsView({ initialRefundId }: { initialRefundId?: strin
                           {p.couponCode}
                         </span>
                       ) : null}
-                      <div className="bl-muted bl-mono" style={{ fontSize: 11 }}>{p.reference}</div>
+                    </td>
+                    <td>
+                      <OrderIdCell payment={p} />
                     </td>
                     <td>{p.method}</td>
                     <td style={{ textAlign: "right", fontWeight: 700 }}>{formatINR(p.amount)}</td>
@@ -177,11 +203,14 @@ export function AdminPaymentsView({ initialRefundId }: { initialRefundId?: strin
                       {p.failureReason ? <div style={{ fontSize: 11, color: "var(--rose)", marginTop: 3 }}>{p.failureReason}</div> : null}
                     </td>
                     <td>
-                      {(p.status === "captured" || p.status === "offline") && p.amount > 0 ? (
-                        <button type="button" className="btn btn-ghost btn-sm" onClick={() => setRefund(p)}>
-                          Refund
-                        </button>
-                      ) : null}
+                      <div style={{ display: "flex", flexWrap: "wrap", gap: 4, justifyContent: "flex-end" }}>
+                        <PaymentDocuments payment={p} />
+                        {(p.status === "captured" || p.status === "offline") && p.amount > 0 ? (
+                          <button type="button" className="btn btn-ghost btn-sm" onClick={() => setRefund(p)}>
+                            Refund
+                          </button>
+                        ) : null}
+                      </div>
                     </td>
                   </tr>
                 ))}

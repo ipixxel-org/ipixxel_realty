@@ -128,7 +128,7 @@ export function BillingExpirySettings() {
             Discard
           </button>
           <button className={formPageStyles.btnPrimary} type="button" onClick={() => void save()} disabled={saving || loading}>
-            {saving ? "Saving…" : "Save expiry policy"}
+            {saving ? "Saving…" : "Save"}
           </button>
         </div>
       </div>

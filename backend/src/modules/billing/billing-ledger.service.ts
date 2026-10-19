@@ -20,6 +20,13 @@ export interface InvoiceV2 {
   checkoutId: string | null;
 }
 
+/** An invoice or credit note: its number and the signed printable document. */
+export interface InvoiceLinkV2 {
+  id: string;
+  number: string;
+  url: string;
+}
+
 /** The contract's PaymentRecord (+ org for the admin list). */
 export interface PaymentRecordV2 {
   id: string;
@@ -32,8 +39,31 @@ export interface PaymentRecordV2 {
   couponCode: string | null;
   reference: string;
   receiptUrl: string | null;
+  /** Razorpay order id; null for an offline payment. */
+  orderId: string | null;
+  /** Razorpay payment id (pay_…); null until paid, and for offline payments. */
+  gatewayPaymentId: string | null;
+  /** The GST invoice for this payment — the document Billing → Invoices opens. */
+  invoice: InvoiceLinkV2 | null;
+  /** The credit note, once the payment is refunded. */
+  creditNote: InvoiceLinkV2 | null;
   orgId: string;
   orgName: string;
+}
+
+const invoiceLink = (i: Invoice | undefined): InvoiceLinkV2 | null =>
+  i ? { id: i.id, number: i.number, url: invoiceDocumentUrl(i.id) } : null;
+
+/** Order id, payment id or offline reference contains `search` (case-insensitive). Pure. */
+export function paymentMatchesSearch(
+  r: Pick<PaymentRecordV2, 'orderId' | 'gatewayPaymentId' | 'reference'>,
+  search: string | undefined,
+): boolean {
+  const q = search?.trim().toLowerCase();
+  if (!q) return true;
+  return [r.orderId, r.gatewayPaymentId, r.reference].some((v) =>
+    v?.toLowerCase().includes(q),
+  );
 }
 
 export interface Paged<T> {
@@ -139,6 +169,16 @@ export class BillingLedgerService {
         .filter((i) => i.offlinePaymentId)
         .map((i) => [i.offlinePaymentId!, i]),
     );
+    // Credit notes point at the invoice they cancel.
+    const creditNotes = invoices.length
+      ? await this.prisma.invoice.findMany({
+          where: {
+            kind: 'credit_note',
+            creditForId: { in: invoices.map((i) => i.id) },
+          },
+        })
+      : [];
+    const creditFor = new Map(creditNotes.map((n) => [n.creditForId!, n]));
     const orgNames = new Map(
       (
         await this.prisma.organisation.findMany({
@@ -173,6 +213,10 @@ export class BillingLedgerService {
           couponCode: c?.coupon?.code ?? null,
           reference: x.razorpayPaymentId ?? x.razorpayOrderId,
           receiptUrl: inv ? invoiceDocumentUrl(inv.id) : null,
+          orderId: x.razorpayOrderId,
+          gatewayPaymentId: x.razorpayPaymentId,
+          invoice: invoiceLink(inv),
+          creditNote: invoiceLink(inv && creditFor.get(inv.id)),
           orgId: x.organisationId,
           orgName: x.organisation.name,
         };
@@ -190,6 +234,10 @@ export class BillingLedgerService {
           couponCode: null,
           reference: o.reference || '—',
           receiptUrl: inv ? invoiceDocumentUrl(inv.id) : null,
+          orderId: null,
+          gatewayPaymentId: null,
+          invoice: invoiceLink(inv),
+          creditNote: invoiceLink(inv && creditFor.get(inv.id)),
           orgId: o.organisationId,
           orgName: orgNames.get(o.organisationId) ?? '',
         };
@@ -205,6 +253,8 @@ export class BillingLedgerService {
   async adminListPayments(q: {
     status?: string;
     orgId?: string;
+    /** Razorpay order id / payment id, or an offline reference. */
+    search?: string;
     page?: number;
     pageSize?: number;
   }) {
@@ -212,7 +262,8 @@ export class BillingLedgerService {
     const rows = all.filter(
       (r) =>
         (!q.status || r.status === q.status) &&
-        (!q.orgId || r.orgId === q.orgId),
+        (!q.orgId || r.orgId === q.orgId) &&
+        paymentMatchesSearch(r, q.search),
     );
     const sum = (f: (r: PaymentRecordV2) => boolean) =>
       Math.round(all.filter(f).reduce((t, r) => t + r.amount * 100, 0)) / 100;

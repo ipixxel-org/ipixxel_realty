@@ -38,7 +38,7 @@ export default function SuperAdminSettingsPage() {
         {BILLING_V2 ? <AdminLifecycleSettings /> : <BillingExpirySettings />}
       </div>
 
-      {/* Billing v2: the platform as GST seller, linked from the Expiry card and Integrations → Razorpay. */}
+      {/* Billing v2: the platform as GST seller, linked from the Expiry card and the Razorpay settings. */}
       {BILLING_V2 ? (
         <section id="company-tax" style={{ scrollMarginTop: 80 }}>
           <h2 style={{ margin: "24px 0 6px" }}>Company &amp; tax details</h2>

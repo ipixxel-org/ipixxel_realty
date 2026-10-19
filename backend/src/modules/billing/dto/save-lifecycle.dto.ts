@@ -40,6 +40,11 @@ class ReminderRuleDto {
   @IsBoolean() enabled!: boolean;
 }
 
+/** PUT /admin/billing/online-payments — Integrations → Online payments switch. */
+export class SaveOnlinePaymentsDto {
+  @IsBoolean() enabled!: boolean;
+}
+
 /** PUT /admin/billing/lifecycle — the LifecycleSettings shape from the contract. */
 export class SaveLifecycleDto {
   @IsInt() @Min(0) @Max(90) notifyDaysBefore!: number;
@@ -51,7 +56,11 @@ export class SaveLifecycleDto {
   @IsIn(['fall_back_to_basic', 'restrict', 'cancel'])
   afterGrace?: 'fall_back_to_basic' | 'restrict' | 'cancel';
   @IsString() @MaxLength(500) expiryMessage!: string;
-  @IsBoolean() onlinePaymentsEnabled!: boolean;
+  /**
+   * Moved to Integrations → Online payments (PUT /admin/billing/online-payments).
+   * Still accepted for older clients; omitted = unchanged.
+   */
+  @IsOptional() @IsBoolean() onlinePaymentsEnabled?: boolean;
   /** Which reminders are on; omitted = unchanged. */
   @IsOptional()
   @IsArray()

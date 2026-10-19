@@ -7,7 +7,7 @@ import type { IconName } from "@/components/icons";
  * under app/admin-console/integrations/<key>/, and (once it has settings)
  * report it from GET /admin/integrations/status.
  */
-export type IntegrationKey = "smtp" | "social-login" | "razorpay" | "ai";
+export type IntegrationKey = "smtp" | "social-login" | "payments" | "ai";
 
 export type IntegrationDef = {
   key: IntegrationKey;
@@ -31,15 +31,25 @@ export type IntegrationDef = {
    */
   statusSource: "api" | null;
   comingSoon?: boolean;
+  /** Pages below `href`, for a third breadcrumb level ("Integrations / Payments / Razorpay"). */
+  subPages?: { href: string; crumb: string }[];
 };
 
 export type IntegrationStatus = {
   key: IntegrationKey;
   configured: boolean;
   active: boolean;
+  /** Online payments only: the Super Admin switch (online_payments_enabled). */
+  enabled?: boolean;
+  /** Online payments only: the gateway with usable keys, or null. */
+  gateway?: "razorpay" | null;
 };
 
 export const INTEGRATIONS_HREF = "/admin-console/integrations";
+/** Integrations → Online payments → Payment gateways. */
+export const PAYMENT_GATEWAYS_HREF = `${INTEGRATIONS_HREF}/payments`;
+/** The Razorpay settings form (keys, webhook secret, test connection). */
+export const RAZORPAY_SETTINGS_HREF = `${PAYMENT_GATEWAYS_HREF}/razorpay`;
 
 export const INTEGRATIONS: IntegrationDef[] = [
   {
@@ -65,16 +75,18 @@ export const INTEGRATIONS: IntegrationDef[] = [
     statusSource: "api",
   },
   {
-    key: "razorpay",
-    name: "Razorpay",
-    crumb: "Razorpay",
-    description: "Payment gateway for online payments (Razorpay Checkout).",
+    key: "payments",
+    name: "Online payments",
+    crumb: "Payments",
+    description: "Let organisations pay online. When off, upgrades go to Super Admin for approval.",
     icon: "billing",
     tone: "ic-violet",
-    href: `${INTEGRATIONS_HREF}/razorpay`,
-    // Same module as /admin/payments. Saving keys is additionally super_admin-only.
+    href: PAYMENT_GATEWAYS_HREF,
+    // Same module as /admin/payments (the gateway settings). Saving keys is
+    // additionally super_admin-only; the switch itself needs admin_settings edit.
     permission: "admin_subscriptions",
     statusSource: "api",
+    subPages: [{ href: RAZORPAY_SETTINGS_HREF, crumb: "Razorpay" }],
   },
   {
     key: "ai",
