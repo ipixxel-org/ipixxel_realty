@@ -9,6 +9,7 @@ import type { SubscriptionDetail, SubscriptionStatus, TimelineEvent } from "@/li
 import { useBillingEnv, useBillingQuery } from "../context";
 import { BillingDialog, DialogActions } from "../dialog";
 import { BLink, Empty, ErrorNote, Kv, Loading, PAYMENT_STATUS_META, Section, STATUS_META } from "../ui";
+import { OrderIdCell, PaymentDocuments } from "./payment-cells";
 
 const ADMIN_STATUS_LABEL: Record<SubscriptionStatus, string> = {
   ...Object.fromEntries(Object.entries(STATUS_META).map(([k, v]) => [k, v.label])),
@@ -417,24 +418,29 @@ export function SubscriptionDetailView({ orgId, initialAction = null }: { orgId:
                 <tr>
                   <th>Date</th>
                   <th>For</th>
+                  <th>Order ID</th>
                   <th>Method</th>
                   <th style={{ textAlign: "right" }}>Amount</th>
                   <th>Status</th>
+                  <th>Documents</th>
                 </tr>
               </thead>
               <tbody>
                 {d.payments.map((p) => (
                   <tr key={p.id}>
                     <td style={{ whiteSpace: "nowrap" }}>{formatDate(p.createdAt)}</td>
+                    <td>{p.description}</td>
                     <td>
-                      {p.description}
-                      <div className="bl-muted bl-mono" style={{ fontSize: 11 }}>{p.reference}</div>
+                      <OrderIdCell payment={p} />
                     </td>
                     <td>{p.method}</td>
                     <td style={{ textAlign: "right", fontWeight: 700 }}>{formatINR(p.amount)}</td>
                     <td>
                       <span className={`badge ${PAYMENT_STATUS_META[p.status].badge}`}>{PAYMENT_STATUS_META[p.status].label}</span>
                       {p.failureReason ? <div style={{ fontSize: 11, color: "var(--rose)", marginTop: 3 }}>{p.failureReason}</div> : null}
+                    </td>
+                    <td>
+                      <PaymentDocuments payment={p} />
                     </td>
                   </tr>
                 ))}

@@ -1,7 +1,6 @@
 import {
   BadGatewayException,
   BadRequestException,
-  ForbiddenException,
   Injectable,
   Logger,
   NotFoundException,
@@ -52,7 +51,6 @@ export interface CheckoutOrder {
 
 /** Razorpay's minimum order amount is ₹1 (100 paise). */
 export const MIN_AMOUNT_PAISE = 100;
-export const TEST_PAYMENT_AMOUNT_PAISE = 100;
 
 const HANDLED_WEBHOOK_EVENTS = new Set([
   'payment.captured',
@@ -178,26 +176,6 @@ export class PaymentsService {
         contact: creator.phoneNumber ?? undefined,
       },
     };
-  }
-
-  /** Super Admin ₹1 test order. Only in Razorpay test mode. */
-  async createTestOrder(organisationId: string, createdById: string) {
-    await this.assertTestMode();
-    return this.createOrder({
-      organisationId,
-      amountPaise: TEST_PAYMENT_AMOUNT_PAISE,
-      purpose: 'test',
-      referenceType: 'test',
-      createdById,
-    });
-  }
-
-  async assertTestMode(): Promise<void> {
-    if ((await this.gateway.config()).mode !== 'test') {
-      throw new ForbiddenException(
-        'Test payments are only available with a Razorpay test key (rzp_test_…).',
-      );
-    }
   }
 
   // -------------------------------------------------------------------------

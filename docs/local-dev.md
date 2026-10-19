@@ -95,17 +95,17 @@ card. Manager-facing overview: `docs/social-media-connection.md`.
 ## Razorpay payments (test mode)
 
 The payments module (`backend/src/modules/payments`) is a generic Razorpay
-Orders + Checkout integration. It isn't wired to plans yet: features call
+Orders + Checkout integration. Plan purchases (billing v2) use it: features call
 `PaymentsService.createOrder()` and subscribe to `PaymentEventsService`
 (`payment.captured` / `payment.failed` / `payment.refunded`). Amounts are
 integer paise.
 
 ### Keys
 
-Preferred: Super Admin → **Integrations → Razorpay**. Enter the Key ID and
-Key Secret (Dashboard (Test Mode) > Account & Settings > API Keys) and the
-Webhook Secret (the separate secret you type when creating the webhook), click
-**Test connection**, then **Save**. Saved keys apply immediately (no restart),
+Preferred: Super Admin → **Integrations → Online payments → Manage → Razorpay
+→ Edit**. Enter the Key ID and Key Secret (Dashboard (Test Mode) > Account &
+Settings > API Keys) and the Webhook Secret (the separate secret you type when
+creating the webhook), click **Test connection**, then **Save Razorpay**. Saved keys apply immediately (no restart),
 are stored in `billing.razorpay_settings`, and are never returned by the API
 (masked). Only `super_admin` can change them; `admin_subscriptions` can view.
 
@@ -134,25 +134,40 @@ public and anyone could then forge webhooks.
    capture). With manual capture, `/verify` leaves the payment `pending` until
    you capture it in the dashboard and the `payment.captured` webhook arrives.
 
-### End-to-end check
+### End-to-end check (a real plan purchase in test mode)
 
-1. Log in to the admin console as Super Admin → **Payments** → **Test payment**,
-   pick an org → Checkout opens for ₹1.00. The button is disabled (and the
-   API returns 403) unless the key is `rzp_test_…`.
-2. Pay with a test method:
+Test with an actual plan purchase on test keys (`rzp_test_…`) — no money moves.
+There is no separate ₹1 test payment any more.
+
+1. Super Admin → **Integrations**: the **Online payments** card should say
+   "Off" (keys usable) — turn it on. If it says "No gateway configured", fix the
+   keys first.
+2. Log in as an organisation admin → **Settings → Billing → Plans**, pick a
+   paid plan and go through checkout (billing details, then Pay). Razorpay
+   Checkout opens for the plan price + GST. To keep the amount small, give the
+   org a coupon first (Super Admin → Coupons) — Razorpay's minimum is ₹1.
+3. Pay with a test method:
    - Domestic test card, e.g. Mastercard `5267 3181 8797 5449` or Visa
      `4386 2894 0766 0153`, any future expiry, any CVV; pick Success on the mock
      OTP page. Razorpay's "Test Card Details" docs page has the current list.
    - UPI ID `success@razorpay` (succeeds) or `failure@razorpay` (fails).
    - Netbanking: pick any bank, choose Success/Failure on the mock page.
-3. Expect: the success notice, the row `captured` in Admin → Payments and in
-   the org's Settings → Billing → Payment History, and a row in
-   `billing.webhook_events` with `processed_at` set (or `error` explaining why
-   not). Re-sending the webhook from the dashboard does not reprocess it.
-4. Failure path: use `failure@razorpay`, close Checkout → "payment failed"
-   notice; the `payment.failed` webhook marks the row `failed` with the reason.
-5. Refund: refund the payment in the dashboard → `refund.processed` marks it
-   `refunded` (full refunds only for now).
+4. Expect:
+   - the success page, and the organisation now on the new plan;
+   - the GST invoice in the org's **Billing → Invoices**;
+   - the payment in Super Admin → **Subscriptions → Organisation
+     Subscriptions → Open → Payments** and in **Subscriptions → Payments &
+     Invoicing**, with its Razorpay order ID (searchable) and a Download
+     invoice action that opens the same invoice;
+   - a row in `billing.webhook_events` with `processed_at` set (or `error`
+     explaining why not). Re-sending the webhook from the dashboard does not
+     reprocess it.
+5. Failure path: pay with `failure@razorpay` → "payment failed"; the
+   `payment.failed` webhook marks the payment `failed` with the reason, and the
+   plan doesn't change.
+6. Refund: Super Admin → **Payments & Invoicing → Refund** on the payment (or
+   refund it in the Razorpay dashboard) → it shows `refunded`, with a Credit
+   note download next to the invoice. Full refunds only.
 
 Applying the migration on a DB whose history has drifted (see
 `schema-drift-notes.md`): the payments migration is guarded and idempotent, so

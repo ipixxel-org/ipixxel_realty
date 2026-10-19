@@ -453,6 +453,21 @@ export interface PaymentRecord {
   couponCode: string | null;
   reference: string;
   receiptUrl: string | null;
+  /** Razorpay order id; null for an offline payment. */
+  orderId: string | null;
+  /** Razorpay payment id (pay_…); null until paid, and for offline payments. */
+  gatewayPaymentId: string | null;
+  /** The GST invoice — the same document Billing → Invoices opens. */
+  invoice: InvoiceLink | null;
+  /** The credit note, once the payment is refunded. */
+  creditNote: InvoiceLink | null;
+}
+
+/** An invoice or credit note: its number and its signed printable document (valid for an hour). */
+export interface InvoiceLink {
+  id: string;
+  number: string;
+  url: string;
 }
 
 export interface UpdatePaymentMethodRequest {
@@ -591,6 +606,8 @@ export interface AdminCancelRequest {
 export interface ListAdminPaymentsRequest extends PageRequest {
   status?: PaymentStatus;
   orgId?: string;
+  /** Razorpay order id / payment id, or an offline reference (partial match). */
+  search?: string;
 }
 
 export interface AdminPaymentList extends Paged<AdminPaymentRow> {

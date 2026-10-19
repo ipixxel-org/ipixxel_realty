@@ -261,6 +261,17 @@ export function createMockBillingClient(opts: { initial?: Partial<MockState>; pe
     };
   }
 
+  /** Razorpay ids for a mock payment (offline ones have none). Mock invoices have no document. */
+  function paymentRefs(p: MockPayment) {
+    const online = p.reference.startsWith("pay_");
+    return {
+      orderId: online ? `order_${p.reference.slice(4)}` : null,
+      gatewayPaymentId: online && p.status !== "failed" ? p.reference : null,
+      invoice: null,
+      creditNote: null,
+    };
+  }
+
   function paymentRow(p: MockPayment): AdminPaymentRow {
     return {
       id: p.id,
@@ -275,6 +286,7 @@ export function createMockBillingClient(opts: { initial?: Partial<MockState>; pe
       couponCode: p.couponCode ?? null,
       reference: p.reference,
       receiptUrl: null,
+      ...paymentRefs(p),
     };
   }
 
@@ -433,6 +445,7 @@ export function createMockBillingClient(opts: { initial?: Partial<MockState>; pe
                   couponCode: p.couponCode ?? null,
                   reference: p.reference,
                   receiptUrl: null,
+                  ...paymentRefs(p),
                 })),
           req.page,
           req.pageSize,
@@ -583,7 +596,9 @@ export function createMockBillingClient(opts: { initial?: Partial<MockState>; pe
 
     listAdminPayments(req) {
       const all = [...get().payments].sort((a, b) => b.createdAt.localeCompare(a.createdAt)).map(paymentRow);
-      const rows = all.filter((p) => (!req.status || p.status === req.status) && (!req.orgId || p.orgId === req.orgId));
+      const q = req.search?.trim().toLowerCase();
+      const found = (p: AdminPaymentRow) => !q || [p.orderId, p.gatewayPaymentId, p.reference].some((v) => v?.toLowerCase().includes(q));
+      const rows = all.filter((p) => (!req.status || p.status === req.status) && (!req.orgId || p.orgId === req.orgId) && found(p));
       const sum = (f: (p: AdminPaymentRow) => boolean) => round2(all.filter(f).reduce((t, p) => t + p.amount, 0));
       return ok({
         ...paged(rows, req.page, req.pageSize),

@@ -53,8 +53,3 @@ export class AdminListPaymentsQueryDto extends ListPaymentsQueryDto {
   @IsUUID()
   organisationId?: string;
 }
-
-export class CreateTestOrderDto {
-  @IsUUID()
-  organisationId!: string;
-}

@@ -3136,33 +3136,11 @@ export interface PaymentRow {
   updatedAt: string;
 }
 
-export interface AdminPaymentRow extends PaymentRow {
-  organisation: { id: string; name: string; slug: string };
-  createdBy: { id: string; firstName: string | null; lastName: string | null; email: string };
-}
-
 export interface PaymentsPage<T = PaymentRow> {
   data: T[];
   total: number;
   page: number;
   limit: number;
-}
-
-export interface AdminPaymentsPage extends PaymentsPage<AdminPaymentRow> {
-  /** Razorpay key mode, or null when payments are not configured. */
-  mode: "test" | "live" | null;
-}
-
-/** POST /admin/payments/test-order — everything Checkout needs. */
-export interface CheckoutOrder {
-  paymentId: string;
-  orderId: string;
-  amount: number;
-  currency: string;
-  keyId: string;
-  name: string;
-  description: string;
-  prefill: { name?: string; email?: string; contact?: string };
 }
 
 /** GET/PUT /admin/payments/settings — secrets come back masked, never in clear. */

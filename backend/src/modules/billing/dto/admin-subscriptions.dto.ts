@@ -72,6 +72,8 @@ export class ListAdminPaymentsQueryDto extends PageQueryDto {
   @IsIn(['captured', 'failed', 'refunded', 'offline'])
   status?: string;
   @IsOptional() @IsString() orgId?: string;
+  /** Razorpay order id / payment id, or an offline reference (partial match). */
+  @IsOptional() @IsString() @MaxLength(100) search?: string;
 }
 
 /** POST /admin/billing/payments/:id/refund */

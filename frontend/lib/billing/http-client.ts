@@ -90,7 +90,7 @@ export const httpBilling: Impl = {
   applyCoupon: ({ orgId, ...body }) => call(`/admin/billing/subscriptions/${encodeURIComponent(orgId)}/coupon`, post(body)),
   cancelSubscription: ({ orgId, ...body }) => call(`/admin/billing/subscriptions/${encodeURIComponent(orgId)}/cancel`, post(body)),
   listAdminPayments: (req) =>
-    call(`/admin/billing/payments${qs({ status: req.status, orgId: req.orgId, page: req.page, pageSize: req.pageSize })}`),
+    call(`/admin/billing/payments${qs({ status: req.status, orgId: req.orgId, search: req.search, page: req.page, pageSize: req.pageSize })}`),
   refundPayment: ({ paymentId, ...body }) => call(`/admin/billing/payments/${encodeURIComponent(paymentId)}/refund`, post(body)),
 
   // Fixes after testing: org coupons, company & tax details, run the lifecycle check now

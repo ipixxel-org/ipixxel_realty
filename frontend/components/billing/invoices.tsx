@@ -20,9 +20,22 @@ export function useInvoiceDownload() {
   };
 }
 
+/**
+ * The one "download invoice" control: opens the signed invoice / credit note
+ * document. Billing → Invoices, the Super Admin organisation page and Payments
+ * & Invoicing all use it, so they open the identical document.
+ */
+export function InvoiceDownloadButton({ url, name, children }: { url: string | null; name: string; children: React.ReactNode }) {
+  const download = useInvoiceDownload();
+  return (
+    <button type="button" className="btn btn-ghost btn-sm" onClick={() => download(url, name)} title={`Download ${name}`}>
+      <Icon name="download" size={14} /> {children}
+    </button>
+  );
+}
+
 export function InvoicesTable({ pageSize = 10, paged = true, action }: { pageSize?: number; paged?: boolean; action?: React.ReactNode }) {
   const [page, setPage] = useState(1);
-  const download = useInvoiceDownload();
   const { data, error } = useBillingQuery((c) => c.listInvoices({ page, pageSize }), [page, pageSize]);
 
   return (
@@ -64,9 +77,9 @@ export function InvoicesTable({ pageSize = 10, paged = true, action }: { pageSiz
                       <span className={`badge ${i.status === "paid" ? "b-green" : "b-gray"}`}>{i.status === "paid" ? "Paid" : i.status === "refunded" ? "Refunded" : "Void"}</span>
                     </td>
                     <td>
-                      <button type="button" className="btn btn-ghost btn-sm" onClick={() => download(i.pdfUrl, i.number)}>
-                        <Icon name="download" size={14} /> PDF
-                      </button>
+                      <InvoiceDownloadButton url={i.pdfUrl} name={i.number}>
+                        PDF
+                      </InvoiceDownloadButton>
                     </td>
                   </tr>
                 ))}
@@ -82,7 +95,6 @@ export function InvoicesTable({ pageSize = 10, paged = true, action }: { pageSiz
 
 export function PaymentHistoryTable({ pageSize = 10 }: { pageSize?: number }) {
   const [page, setPage] = useState(1);
-  const download = useInvoiceDownload();
   const { data, error } = useBillingQuery((c) => c.listPayments({ page, pageSize }), [page, pageSize]);
   return (
     <>
@@ -124,9 +136,9 @@ export function PaymentHistoryTable({ pageSize = 10 }: { pageSize?: number }) {
                     </td>
                     <td>
                       {p.status === "captured" ? (
-                        <button type="button" className="btn btn-ghost btn-sm" onClick={() => download(p.receiptUrl, `Receipt ${p.reference}`)}>
-                          <Icon name="download" size={14} /> Receipt
-                        </button>
+                        <InvoiceDownloadButton url={p.receiptUrl} name={`Receipt ${p.reference}`}>
+                          Receipt
+                        </InvoiceDownloadButton>
                       ) : null}
                     </td>
                   </tr>

@@ -1,7 +1,6 @@
 import { createHmac } from 'crypto';
 import {
   BadRequestException,
-  ForbiddenException,
   NotFoundException,
   ServiceUnavailableException,
 } from '@nestjs/common';
@@ -315,22 +314,6 @@ describe('PaymentsService', () => {
       await expect(newOrder()).rejects.toBeInstanceOf(
         ServiceUnavailableException,
       );
-    });
-  });
-
-  describe('createTestOrder', () => {
-    it('creates a ₹1 test order in test mode', async () => {
-      const order = await service.createTestOrder(ORG, USER);
-      expect(order.amount).toBe(100);
-      expect(fake.payments.get(order.paymentId)!.purpose).toBe('test');
-    });
-
-    it('is forbidden with a live key', async () => {
-      build({ ...TEST_CFG, keyId: 'rzp_live_KEY', mode: 'live' });
-      await expect(service.createTestOrder(ORG, USER)).rejects.toBeInstanceOf(
-        ForbiddenException,
-      );
-      expect(gateway.createOrder).not.toHaveBeenCalled();
     });
   });
 
