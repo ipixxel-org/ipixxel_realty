@@ -4,7 +4,10 @@ import { PaymentEventsService } from '../payments/payment-events';
 import { PackageChangeRequestsService } from '../package-change-requests/package-change-requests.service';
 import { BillingCheckoutService } from './billing-checkout.service';
 import { BillingInvoiceMailer } from './billing-invoice-mailer.service';
-import { createFakeBillingDb } from '../../../test/fakes/fake-billing-db';
+import {
+  createFakeBillingDb,
+  giveBillingDetails,
+} from '../../../test/fakes/fake-billing-db';
 
 const DAY = 86_400_000;
 // Some tests switch the server flag off; put it back afterwards.
@@ -35,18 +38,6 @@ const PRO = {
   priceYearly: 50000,
   limits: { users: 10 },
 };
-const PROFILE = {
-  organisationId: 'org-1',
-  legalName: 'Acme Pvt Ltd',
-  addressLine1: '1 Road',
-  addressLine2: null,
-  city: 'Bengaluru',
-  state: '29',
-  pincode: '560001',
-  country: 'IN',
-  gstin: null,
-};
-
 function setup(
   opts: {
     mode?: 'online' | 'manual';
@@ -70,8 +61,8 @@ function setup(
             ...opts.sub,
           },
   });
-  if (opts.profile !== false)
-    db.billingProfile.rows.push({ id: 'p1', ...PROFILE });
+  // Billing details are the org profile (Settings → General).
+  if (opts.profile !== false) giveBillingDetails(db);
 
   const events = new PaymentEventsService();
   let order = 0;
@@ -145,7 +136,6 @@ function setup(
     }),
   };
   // The invoice email goes through the real mailer; only SMTP is faked.
-  db.organisation = { findUnique: async () => ({ name: 'Acme Realty' }) };
   const email = {
     sendMail: jest.fn<Promise<{ success: boolean }>, [Record<string, any>]>(
       async () => ({ success: true }),
@@ -179,13 +169,38 @@ const capturedEvent = (payment: Record<string, any>) => ({
 });
 
 describe('startCheckout (online)', () => {
-  it('requires a billing profile', async () => {
-    const { service } = setup({ profile: false });
+  it('is blocked until the org profile has every invoice field', async () => {
+    const { service, payments } = setup({ profile: false });
     await expect(
       service.start('org-1', 'u1', { planId: 'growth', interval: 'monthly' }),
     ).rejects.toMatchObject({
-      response: { code: 'billing_profile_required' },
+      response: {
+        code: 'billing_details_incomplete',
+        message: 'Complete your organisation details to continue.',
+      },
     });
+    expect(payments.createOrder).not.toHaveBeenCalled();
+  });
+
+  it('is blocked when only one required field is missing (PIN code)', async () => {
+    const { service, db } = setup();
+    giveBillingDetails(db, { postalCode: '  ' });
+    await expect(
+      service.start('org-1', 'u1', { planId: 'growth', interval: 'monthly' }),
+    ).rejects.toMatchObject({
+      response: { code: 'billing_details_incomplete' },
+    });
+  });
+
+  it('takes the buyer from the org profile (state decides the GST split)', async () => {
+    const { service, db } = setup();
+    giveBillingDetails(db, { state: '27' });
+    const p = await service.preview('org-1', {
+      planId: 'growth',
+      interval: 'monthly',
+    });
+    expect(p.billingState).toBe('27');
+    expect(p.gst.kind).toBe('inter');
   });
 
   it('refuses before any payment when the org has more than the plan allows', async () => {

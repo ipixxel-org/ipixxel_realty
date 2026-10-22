@@ -2,7 +2,8 @@
 
 import { useState } from "react";
 import { formPageStyles } from "@/components/forms/form-page";
-import { checkGstin, INDIAN_STATES } from "@/lib/billing/pricing";
+import { StateSelect } from "@/components/ui/state-select";
+import { checkGstin } from "@/lib/billing/pricing";
 import type { CompanyDetails, SellerSettings } from "@/lib/billing/types";
 import { useBillingEnv, useBillingQuery } from "../context";
 import { ErrorNote, Loading } from "../ui";
@@ -37,14 +38,14 @@ function SellerFields({ value, onChange }: { value: SellerSettings; onChange: (p
         {text("city", "City", "Bengaluru")}
         <div className="field">
           <label htmlFor="bl-seller-state">State</label>
-          <select id="bl-seller-state" value={value.state ?? ""} onChange={(e) => onChange({ state: e.target.value || null })}>
-            <option value="">Not set — every checkout is charged IGST</option>
-            {INDIAN_STATES.map((st) => (
-              <option key={st.code} value={st.code}>
-                {st.name} ({st.code})
-              </option>
-            ))}
-          </select>
+          <StateSelect
+            id="bl-seller-state"
+            className=""
+            value={value.state}
+            showCodes
+            emptyLabel="Not set — every checkout is charged IGST"
+            onChange={(code) => onChange({ state: code || null })}
+          />
         </div>
       </div>
       <div className="row2">

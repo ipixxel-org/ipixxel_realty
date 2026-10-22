@@ -30,11 +30,14 @@ describe("mock billing client", () => {
     expect(p.total).toBe(2055.48);
   });
 
-  it("first purchase: profile, coupon, payment, then the plan is active", async () => {
-    const c = createMockBillingClient({ initial: { situation: "basic", billingProfile: null, redeemed: [] } });
-    await expect(c.startCheckout({ planId: "growth", interval: "monthly", purpose: "purchase" })).rejects.toThrow(/billing details/);
-    await expect(c.saveBillingProfile({ legalName: "X", addressLine1: "Y", addressLine2: null, city: "Z", state: "29", pincode: "123", country: "IN", gstin: null })).rejects.toThrow(/PIN/);
-    await c.saveBillingProfile({ legalName: "Acme", addressLine1: "1 Road", addressLine2: null, city: "Mysuru", state: "29", pincode: "570001", country: "IN", gstin: null });
+  it("first purchase: blocked until the org details are complete, then coupon, payment and the plan is active", async () => {
+    const empty = createMockBillingClient({ initial: { situation: "basic", billingProfile: null, redeemed: [] } });
+    expect((await empty.getBillingOverview()).billingDetailsMissing).toEqual(["legalName", "addressLine1", "city", "state", "pincode"]);
+    await expect(empty.startCheckout({ planId: "growth", interval: "monthly", purpose: "purchase" })).rejects.toThrow(/Complete your organisation details/);
+    const c = createMockBillingClient({
+      initial: { situation: "basic", redeemed: [], billingProfile: { legalName: "Acme", addressLine1: "1 Road", addressLine2: null, city: "Mysuru", state: "29", pincode: "570001", country: "IN", gstin: null } },
+    });
+    expect((await c.getBillingOverview()).billingDetailsMissing).toEqual([]);
     const start = await c.startCheckout({ planId: "growth", interval: "monthly", couponCode: "LAUNCH20", purpose: "purchase" });
     expect(start.status).toBe("payment_required");
     if (start.status !== "payment_required") return;

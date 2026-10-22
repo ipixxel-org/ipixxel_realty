@@ -43,7 +43,8 @@ const overview = (over: Partial<BillingOverview> = {}): BillingOverview => ({
   autoRenewAvailable: false,
   renewalMode: "manual",
   paymentMethod: null,
-  billingProfile: null,
+  billingProfile: { legalName: "Acme Realty Pvt Ltd", addressLine1: "1 Road", addressLine2: null, city: "Mysuru", state: "29", pincode: "570001", country: "IN", gstin: null },
+  billingDetailsMissing: [],
   periodStart: null,
   periodEnd: null,
   daysLeftInPeriod: 0,
@@ -104,11 +105,6 @@ const apiFetch = vi.fn(async (path: string, init?: RequestInit): Promise<unknown
   if (path === "/org/billing/access") return backend.access;
   if (path === "/org/billing/plans") return [BASIC, GROWTH];
   if (path === "/org/billing/checkout/preview") return preview();
-  if (path === "/org/billing/profile" && init?.method === "PUT") {
-    const profile = JSON.parse(String(init.body));
-    backend.overview = { ...backend.overview, billingProfile: profile };
-    return profile;
-  }
   if (path.startsWith("/org/billing/v2/invoices") || path.startsWith("/org/billing/v2/payments")) {
     return { data: [], total: 0, page: 1, pageSize: 5 };
   }
@@ -277,7 +273,7 @@ describe("billing v2 flag", () => {
     expect(errors).toEqual([]);
   });
 
-  it("on, manual mode: sending the request saves billing details, then the upgrade shows as pending", async () => {
+  it("on, manual mode: billing details are a read-only summary of General settings; sending the request, then the upgrade shows as pending", async () => {
     const { BillingV2Root, CheckoutScreen, PlansScreen, ToastProvider } = await load("true");
     const view = render(
       <ToastProvider>
@@ -287,19 +283,16 @@ describe("billing v2 flag", () => {
       </ToastProvider>,
     );
     await settle();
-    const type = (label: string, value: string) => fireEvent.change(screen.getByLabelText(label), { target: { value } });
-    type("Legal name", "Acme Realty Pvt Ltd");
-    type("Address", "12 MG Road");
-    type("City", "Bengaluru");
-    type("State", "29");
-    type("PIN code", "560001");
-    type("GSTIN", "29AABCA1234F1Z5");
-    await settle();
+    const summary = screen.getByTestId("billing-details-summary");
+    expect(summary).toHaveTextContent("Acme Realty Pvt Ltd");
+    expect(summary).toHaveTextContent("Karnataka");
+    expect(summary.querySelector("input, select, textarea")).toBeNull();
+    expect(screen.queryByRole("button", { name: /Use saved details/ })).toBeNull();
+    expect(screen.getByRole("link", { name: "Edit in General settings" })).toHaveAttribute("href", "/org/settings?section=general");
     fireEvent.click(screen.getByRole("button", { name: /Send upgrade request/ }));
     await settle();
 
-    const put = apiFetch.mock.calls.find(([p, i]) => p === "/org/billing/profile" && i?.method === "PUT");
-    expect(JSON.parse(String(put![1]!.body))).toMatchObject({ legalName: "Acme Realty Pvt Ltd", addressLine1: "12 MG Road", state: "29", country: "IN", gstin: "29AABCA1234F1Z5" });
+    expect(apiFetch.mock.calls.some(([p]) => p === "/org/billing/profile")).toBe(false);
     const start = apiFetch.mock.calls.find(([p, i]) => p === "/org/billing/checkout" && i?.method === "POST");
     expect(JSON.parse(String(start![1]!.body))).toMatchObject({ planId: "uuid-growth", interval: "monthly", purpose: "purchase" });
     expect(screen.getByText("Request sent")).toBeInTheDocument();
@@ -335,12 +328,14 @@ describe("billing v2 flag", () => {
     await settle();
     expect(screen.getByText("Upgrade to Growth requested")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /Request pending/ })).toBeDisabled();
-    expect(screen.getByText(/1 Road, Mysuru, Karnataka 570001/)).toBeInTheDocument();
+    expect(screen.getByTestId("billing-details-summary")).toHaveTextContent(/1 Road.*Mysuru.*Karnataka.*570001/);
     expect(errors).toEqual([]);
   });
 
-  it("on, online mode: Pay now is live; without saved billing details it opens the renewal checkout", async () => {
+  it("on, online mode: Pay now is live; with incomplete organisation details it opens the renewal checkout", async () => {
     backend.overview = overview({
+      billingProfile: { legalName: "", addressLine1: "", addressLine2: null, city: "", state: "", pincode: "", country: "IN", gstin: null },
+      billingDetailsMissing: ["legalName", "addressLine1", "city", "state", "pincode"],
       plan: GROWTH,
       paidPlan: GROWTH,
       status: "renewal_due",
@@ -483,8 +478,6 @@ describe("billing v2 flag", () => {
         "saveAdminPlan",
         "saveLifecycleSettings",
         // step 2
-        "getBillingProfile",
-        "saveBillingProfile",
         "previewCheckout",
         "startCheckout",
         "confirmCheckout",
@@ -523,5 +516,68 @@ describe("billing v2 flag", () => {
     // Only the saved-payment-method flow stays unimplemented (renewals are "pay each time").
     expect(billingClient.isReal("updatePaymentMethod")).toBe(false);
     expect(BillingError).toBeDefined();
+  });
+});
+
+describe("billing details come from General settings", () => {
+  const incomplete = () =>
+    overview({
+      billingProfile: { legalName: "", addressLine1: "12 MG Road", addressLine2: null, city: "Bengaluru", state: "", pincode: "", country: "IN", gstin: null },
+      billingDetailsMissing: ["legalName", "state", "pincode"],
+    });
+
+  it("Settings → Billing shows a read-only summary with a link to General settings", async () => {
+    const { BillingV2Root, BillingDetailsCard, ToastProvider } = await load("true");
+    render(
+      <ToastProvider>
+        <BillingV2Root canEdit>
+          <BillingDetailsCard overview={backend.overview} />
+        </BillingV2Root>
+      </ToastProvider>,
+    );
+    await settle();
+    const summary = screen.getByTestId("billing-details-summary");
+    for (const text of ["Acme Realty Pvt Ltd", "1 Road", "Mysuru", "Karnataka", "570001"]) expect(summary).toHaveTextContent(text);
+    expect(summary.querySelector("input, select, textarea")).toBeNull();
+    expect(screen.getByRole("link", { name: "Edit in General settings" })).toHaveAttribute("href", "/org/settings?section=general");
+    expect(screen.queryByRole("alert")).toBeNull();
+  });
+
+  it("checkout is blocked while a required field is missing — with a link for those who can edit General settings", async () => {
+    backend.overview = incomplete();
+    const { BillingV2Root, CheckoutScreen, ToastProvider } = await load("true");
+    render(
+      <ToastProvider>
+        <BillingV2Root canEdit canEditOrgProfile>
+          <CheckoutScreen planId="uuid-growth" interval="monthly" />
+        </BillingV2Root>
+      </ToastProvider>,
+    );
+    await settle();
+    expect(screen.getByText(/Complete your organisation details to continue\. Missing: organisation name, state, PIN code\./)).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Complete organisation details" })).toHaveAttribute("href", "/org/settings?section=general");
+    expect(screen.queryByText(/Ask your organisation admin/)).toBeNull();
+    const send = screen.getByRole("button", { name: /Send upgrade request/ });
+    expect(send).toBeDisabled();
+    fireEvent.click(send);
+    await settle();
+    expect(apiFetch.mock.calls.some(([p, i]) => p === "/org/billing/checkout" && i?.method === "POST")).toBe(false);
+  });
+
+  it("users who can't edit General settings are told to ask their admin", async () => {
+    backend.overview = incomplete();
+    const { BillingV2Root, CheckoutScreen, ToastProvider } = await load("true");
+    render(
+      <ToastProvider>
+        <BillingV2Root canEdit canEditOrgProfile={false}>
+          <CheckoutScreen planId="uuid-growth" interval="monthly" />
+        </BillingV2Root>
+      </ToastProvider>,
+    );
+    await settle();
+    expect(screen.getByText(/Complete your organisation details to continue/)).toBeInTheDocument();
+    expect(screen.getByText("Ask your organisation admin to complete these details.")).toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: /Complete organisation details|Edit in General settings/ })).toBeNull();
+    expect(screen.getByRole("button", { name: /Send upgrade request/ })).toBeDisabled();
   });
 });

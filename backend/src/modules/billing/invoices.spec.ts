@@ -15,7 +15,10 @@ import {
   nextInvoiceNumber,
   verifyInvoiceDocumentSig,
 } from './invoice.util';
-import { createFakeBillingDb } from '../../../test/fakes/fake-billing-db';
+import {
+  createFakeBillingDb,
+  giveBillingDetails,
+} from '../../../test/fakes/fake-billing-db';
 
 const DAY = 86_400_000;
 const BASIC = {
@@ -113,21 +116,14 @@ function setup(sub: Record<string, unknown> = {}) {
       ...sub,
     },
   });
-  db.billingProfile.rows.push({
-    id: 'p1',
-    organisationId: 'org-1',
-    legalName: 'Acme Pvt Ltd',
-    addressLine1: '1 Road',
+  // Billing details are the org profile (Settings → General).
+  giveBillingDetails(db, {
+    name: 'Acme Pvt Ltd',
     city: 'Mysuru',
-    state: '29',
-    pincode: '570001',
-    country: 'IN',
+    postalCode: '570001',
     gstin: '29AABCA1234F1Z5',
   });
-  db.organisation = {
-    findUnique: async () => ({ id: 'org-1', name: 'Acme', city: 'Mysuru' }),
-    findMany: async () => [{ id: 'org-1', name: 'Acme' }],
-  };
+  db.organisation.findMany = async () => [{ id: 'org-1', name: 'Acme' }];
   const ledger = new BillingLedgerService(db as never);
   const payments = {
     refundInFull: jest.fn(async (id: string) => {
@@ -152,10 +148,6 @@ function setup(sub: Record<string, unknown> = {}) {
   };
   // The invoice / credit note email: the real mailer, SMTP faked. `mailed()`
   // waits for the emails the service started without awaiting.
-  db.organisation = {
-    ...db.organisation,
-    findUnique: async () => ({ name: 'Acme Realty' }),
-  };
   const email = {
     sendMail: jest.fn<Promise<{ success: boolean }>, [Record<string, any>]>(
       async () => ({ success: true }),

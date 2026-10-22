@@ -10,7 +10,10 @@ import {
   renewalsCoveredAfterFirst,
   type CouponRule,
 } from './coupon-rules';
-import { createFakeBillingDb } from '../../../test/fakes/fake-billing-db';
+import {
+  createFakeBillingDb,
+  giveBillingDetails,
+} from '../../../test/fakes/fake-billing-db';
 
 const DAY = 86_400_000;
 const NOW = new Date('2026-10-15T10:00:00Z');
@@ -180,14 +183,7 @@ function setup(sub: Record<string, unknown> = {}) {
       ...sub,
     },
   });
-  db.billingProfile.rows.push({
-    id: 'p1',
-    organisationId: 'org-1',
-    legalName: 'Acme',
-    state: '29',
-    country: 'IN',
-    gstin: null,
-  });
+  giveBillingDetails(db, { name: 'Acme' });
   const coupon = (over: Record<string, unknown>) =>
     db.coupon.rows.push({
       id: `cp_${String(over.code)}`,

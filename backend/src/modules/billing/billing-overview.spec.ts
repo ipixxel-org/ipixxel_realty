@@ -231,7 +231,6 @@ describe('OrgBillingV2Service.getOverview', () => {
       organisationTemplate: { count: jest.fn().mockResolvedValue(6) },
       platformConfig: { findUnique: jest.fn().mockResolvedValue(null) },
       notification: {},
-      billingProfile: { findUnique: jest.fn().mockResolvedValue(null) },
       billingCheckout: {
         updateMany: jest.fn().mockResolvedValue({ count: 0 }),
         findFirst: jest.fn().mockResolvedValue(null),

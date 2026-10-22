@@ -123,6 +123,8 @@ model Organisation {
   website         String?
   addressLine1    String? @map("address_line1")
   addressLine2    String? @map("address_line2")
+  // 2-digit GST state code ("29" = Karnataka) — billing uses it to split GST
+  // and checks the GSTIN against it. Picked from the Indian states list.
   state           String?
   postalCode      String? @map("postal_code")
   country         String?
@@ -1222,6 +1224,11 @@ model Payment {
 // ---------------------------------------------------------------------------
 
 // The organisation as GST buyer — printed on its invoices. One per org.
+// DEPRECATED (2026-10-22): billing details come from the organisation profile
+// (Organisation.legalName / addressLine1 / city / state / postalCode / gstin,
+// Settings → General). Copied into empty org fields once by migration
+// 20261022090000_org_profile_billing_details; no longer read or written.
+// Kept so no data is dropped.
 model BillingProfile {
   id             String   @id @default(uuid())
   organisationId String   @unique @map("organisation_id")

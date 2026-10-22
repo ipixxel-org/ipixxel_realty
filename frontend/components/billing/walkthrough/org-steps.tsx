@@ -185,8 +185,8 @@ export const ORG_STEPS: WalkStep[] = [
   },
   {
     title: "First purchase: billing details",
-    caption: "The first time they buy, we ask for the company details that go on the tax invoice. The GST number is optional and checked as they type.",
-    behind: "We check the GST number's format and that it matches the chosen state.",
+    caption: "The tax invoice uses the organisation's name, address, state, PIN code and GST number from Settings → General. If anything is missing, checkout asks them to complete it there first.",
+    behind: "General settings check the GST number's format and that it matches the chosen state.",
     render: () => (
       <AppFrame url="/org/settings/billing/checkout?plan=growth">
         <Sandbox initial={FRESH_SIGNUP}>

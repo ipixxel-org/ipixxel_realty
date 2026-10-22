@@ -25,7 +25,9 @@ export type BillingRoute =
   | "adminSubscriptions"
   | "adminSubscription"
   | "adminPlanEdit"
-  | "coupons";
+  | "coupons"
+  /** Settings → General: the org profile that billing details come from. */
+  | "generalSettings";
 
 export type RouteParams = Record<string, string | number | null | undefined>;
 
@@ -45,6 +47,8 @@ export function billingHref(to: BillingRoute, params: RouteParams = {}): string 
   switch (to) {
     case "overview":
       return "/org/settings?section=billing";
+    case "generalSettings":
+      return "/org/settings?section=general";
     case "plans":
       return `${ORG}/plans${query(params)}`;
     case "checkout":
@@ -94,6 +98,8 @@ interface BillingEnv {
   nav: BillingNav;
   /** Whether the viewer may change billing (billing:edit / admin_subscriptions:edit). */
   canEdit: boolean;
+  /** Whether the viewer may edit Settings → General (where billing details live). */
+  canEditOrgProfile: boolean;
   /** Draw dialogs inside the surrounding frame instead of over the page (walkthroughs). */
   inlineDialogs: boolean;
 }
@@ -114,12 +120,14 @@ function useRouterNav(): BillingNav {
 export function BillingEnvProvider({
   client,
   canEdit = true,
+  canEditOrgProfile = true,
   inlineDialogs = false,
   onNavigate,
   children,
 }: {
   client: BillingClient;
   canEdit?: boolean;
+  canEditOrgProfile?: boolean;
   inlineDialogs?: boolean;
   /** Return true to swallow a navigation (presentation pages). */
   onNavigate?: (to: BillingRoute, params?: RouteParams) => boolean;
@@ -139,7 +147,10 @@ export function BillingEnvProvider({
         : routerNav,
     [onNavigate, routerNav],
   );
-  const value = useMemo(() => ({ client, nav, canEdit, inlineDialogs }), [client, nav, canEdit, inlineDialogs]);
+  const value = useMemo(
+    () => ({ client, nav, canEdit, canEditOrgProfile, inlineDialogs }),
+    [client, nav, canEdit, canEditOrgProfile, inlineDialogs],
+  );
   return <EnvContext.Provider value={value}>{children}</EnvContext.Provider>;
 }
 

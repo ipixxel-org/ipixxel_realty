@@ -1036,7 +1036,7 @@ export function OrgAdminShell({ children }: { children: ReactNode }) {
         ) : null}
         <div className="page">
           <LeadStagesProvider>
-            <BillingV2Root canEdit={hasPermission("billing", "edit")}>{children}</BillingV2Root>
+            <BillingV2Root canEdit={hasPermission("billing", "edit")} canEditOrgProfile={hasPermission("settings", SETTINGS_ACTIONS.editProfile)}>{children}</BillingV2Root>
           </LeadStagesProvider>
         </div>
 

@@ -35,6 +35,7 @@ import type {
   SubscriptionRow,
   SubscriptionStatus,
 } from "../types";
+import { missingBillingDetails } from "../details";
 import { DEFAULT_BILLING_DETAILS, DEMO_ORG, MOCK_SELLER, TODAY, type MockOrg, type MockPayment } from "./data";
 import { deriveAccess, deriveDates, deriveOverview, deriveRetention, freePlan, initialMockState, planById, planNames, type MockState } from "./state";
 
@@ -101,7 +102,7 @@ export function createMockBillingClient(opts: { initial?: Partial<MockState>; pe
 
   /* ------------------------------------------------------------ pricing */
 
-  function preview(planId: string, interval: BillingInterval, couponCode: string | undefined, billingState: string | undefined, purpose: "purchase" | "renewal"): CheckoutPreview {
+  function preview(planId: string, interval: BillingInterval, couponCode: string | undefined, purpose: "purchase" | "renewal" = "purchase"): CheckoutPreview {
     const s = get();
     const plan = planById(s, planId);
     const ov = overview();
@@ -109,7 +110,7 @@ export function createMockBillingClient(opts: { initial?: Partial<MockState>; pe
     const inGrace = ov.status === "past_due" || ov.status === "grace_ending";
     const isUpgrade = purpose === "purchase" && !onFree && plan.rank > ov.plan.rank;
     const midCycle = isUpgrade && !inGrace && interval === ov.interval && ov.daysLeftInPeriod > 0;
-    const stateName = billingState || (s.billingProfile ?? DEFAULT_BILLING_DETAILS).state || COMPANY_STATE;
+    const stateName = (s.billingProfile ?? DEFAULT_BILLING_DETAILS).state || COMPANY_STATE;
     const fromPlanRow = ov.paidPlan && !onFree ? ov.paidPlan : ov.plan;
 
     let coupon: Coupon | null = null;
@@ -166,7 +167,7 @@ export function createMockBillingClient(opts: { initial?: Partial<MockState>; pe
     const s = get();
     const ov = overview();
     const plan = planById(s, p.planId);
-    const pv = preview(p.planId, p.interval, p.couponCode ?? undefined, undefined, p.purpose);
+    const pv = preview(p.planId, p.interval, p.couponCode ?? undefined, p.purpose);
     let periodStart = s.periodStart;
     if (p.purpose === "renewal") periodStart = ov.dueDate ?? ov.periodEnd ?? today;
     else if (pv.kind === "new") periodStart = today;
@@ -325,32 +326,15 @@ export function createMockBillingClient(opts: { initial?: Partial<MockState>; pe
     getBillingOverview: () => ok(overview()),
     listPlans: () => ok([...get().plans].sort((a, b) => a.rank - b.rank)),
 
-    getBillingProfile: () => ok(get().billingProfile),
     listAdminCheckouts: () => ok([]),
 
-    previewCheckout: (req) => ok(preview(req.planId, req.interval, req.couponCode, req.billingState, req.purpose ?? "purchase")),
-
-    saveBillingProfile(profile) {
-      const required: [keyof typeof profile, string][] = [
-        ["legalName", "legal name"],
-        ["addressLine1", "address"],
-        ["city", "city"],
-        ["state", "state"],
-      ];
-      const missing = required.find(([k]) => !String(profile[k] ?? "").trim());
-      if (missing) return fail(`Enter the ${missing[1]}.`);
-      if (!/^[1-9][0-9]{5}$/.test(profile.pincode.trim())) return fail("Enter a 6-digit PIN code.");
-      const gstErr = checkGstin(profile.gstin, profile.state);
-      if (gstErr) return fail(gstErr);
-      const clean = { ...profile, country: profile.country || "IN", addressLine2: profile.addressLine2?.trim() || null, gstin: profile.gstin?.trim().toUpperCase() || null };
-      set({ billingProfile: clean });
-      return ok(clean);
-    },
+    previewCheckout: (req) => ok(preview(req.planId, req.interval, req.couponCode, req.purpose ?? "purchase")),
 
     startCheckout(req) {
       const s = get();
-      if (!s.billingProfile) return fail("Add your billing details first.");
-      const pv = preview(req.planId, req.interval, req.couponCode, undefined, req.purpose);
+      // Same rule as the API: the org profile must have every invoice field.
+      if (missingBillingDetails(s.billingProfile).length) return fail("Complete your organisation details to continue.");
+      const pv = preview(req.planId, req.interval, req.couponCode, req.purpose);
       if (req.couponCode && pv.couponError) return fail(pv.couponError);
       const p: PendingCheckout = { planId: req.planId, interval: req.interval, couponCode: pv.coupon?.code ?? null, purpose: req.purpose, amount: pv.total };
       if (pv.total === 0) return ok({ status: "activated" as const, receipt: activate(p, "free_coupon") });

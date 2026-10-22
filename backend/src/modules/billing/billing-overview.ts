@@ -14,6 +14,10 @@ import type {
   RetentionSummaryV2,
   SubscriptionStatusV2,
 } from './billing.types';
+import {
+  billingDetailsFromOrg,
+  missingBillingDetails,
+} from './org-billing-details';
 
 const DAY_MS = 86_400_000;
 export const GST_RATE = 0.18;
@@ -28,6 +32,7 @@ export interface OverviewInput {
   now: Date;
   orgName: string;
   ownerName: string;
+  /** From the org profile (billingDetailsFromOrg); left out = nothing filled in. */
   billingProfile?: BillingProfileV2 | null;
   pendingUpgrade?: PendingUpgradeV2 | null;
   /** The org's plan (subscription plan, or the free plan when it has none). */
@@ -107,6 +112,7 @@ export function buildOverview(input: OverviewInput): BillingOverviewV2 {
   const status = deriveStatus(input);
   const paid = !plan.isFree;
   const moved = input.movedToBasic ?? null;
+  const billingProfile = input.billingProfile ?? billingDetailsFromOrg(null);
   const interval: BillingInterval =
     moved?.interval ?? sub?.billingCycle ?? 'monthly';
   // renewsAt is set to now + 30 / 365 days by the existing subscription code.
@@ -139,7 +145,8 @@ export function buildOverview(input: OverviewInput): BillingOverviewV2 {
     autoRenewAvailable: false,
     renewalMode: 'manual',
     paymentMethod: null,
-    billingProfile: input.billingProfile ?? null,
+    billingProfile,
+    billingDetailsMissing: missingBillingDetails(billingProfile),
     pendingUpgrade: input.pendingUpgrade ?? null,
     periodStart: periodStart ? isoDate(periodStart) : null,
     periodEnd: periodEnd ? isoDate(periodEnd) : null,

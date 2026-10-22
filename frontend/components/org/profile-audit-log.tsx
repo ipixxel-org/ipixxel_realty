@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { apiFetch } from "@/lib/api";
 import { Icon } from "@/components/icons";
 import { industryShortLabel } from "@/lib/org-profile";
+import { stateName } from "@/lib/billing/pricing";
 
 // Audit trail of organisation profile ("General" details) changes. The backend
 // writes one entry per save that actually changes something — from the Org
@@ -70,6 +71,8 @@ function formatDateTime(iso: string): string {
 function displayValue(field: string, value: string | null): string {
   if (!value) return "Not set";
   if (field === "industry") return industryShortLabel(value) ?? value;
+  // State is stored as a GST state code ("29"); older rows hold the name.
+  if (field === "state") return stateName(value);
   return value;
 }
 

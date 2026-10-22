@@ -121,7 +121,7 @@ export class AdminSubscriptionsService {
   > {
     await applyOrgSubscriptionLifecycle(this.prisma);
     const now = billingNow();
-    const [orgs, active, cfg, seats, coupons, profiles] = await Promise.all([
+    const [orgs, active, cfg, seats, coupons] = await Promise.all([
       this.prisma.organisation.findMany({
         where: { status: { in: ['active', 'pending'] } },
         orderBy: { name: 'asc' },
@@ -129,6 +129,7 @@ export class AdminSubscriptionsService {
           id: true,
           name: true,
           city: true,
+          state: true,
           subscriptions: {
             where: { status: { not: 'cancelled' } },
             include: { plan: true },
@@ -148,9 +149,6 @@ export class AdminSubscriptionsService {
         _count: { _all: true },
       }),
       this.prisma.coupon.findMany({ select: { id: true, code: true } }),
-      this.prisma.billingProfile.findMany({
-        select: { organisationId: true, state: true },
-      }),
     ]);
     const ranked = sortPlans(active);
     const rankOf = (id: string) => {
@@ -160,7 +158,6 @@ export class AdminSubscriptionsService {
     const free = ranked.find(isFreePlan) ?? null;
     const seatsBy = new Map(seats.map((s) => [s.orgId, s._count._all]));
     const codeOf = new Map(coupons.map((c) => [c.id, c.code]));
-    const stateOf = new Map(profiles.map((p) => [p.organisationId, p.state]));
     const planById = new Map(active.map((p) => [p.id, p]));
 
     const rows: SubscriptionRowV2[] = [];
@@ -210,7 +207,7 @@ export class AdminSubscriptionsService {
               : status === 'free'
                 ? null
                 : sub?.renewsAt;
-      const stateCode = stateOf.get(o.id) ?? null;
+      const stateCode = o.state ?? null;
       rows.push({
         orgId: o.id,
         orgName: o.name,
@@ -252,16 +249,13 @@ export class AdminSubscriptionsService {
   async detail(orgId: string) {
     const org = await this.prisma.organisation.findUnique({
       where: { id: orgId },
-      select: { id: true, name: true, city: true },
+      select: { id: true, name: true, city: true, state: true },
     });
     if (!org) throw new NotFoundException('Organisation not found');
-    const [ov, sub, profile, payments, audits] = await Promise.all([
+    const [ov, sub, payments, audits] = await Promise.all([
       this.overview.getOverview(orgId),
       this.prisma.subscription.findFirst({
         where: { orgId, status: { not: 'cancelled' } },
-      }),
-      this.prisma.billingProfile.findUnique({
-        where: { organisationId: orgId },
       }),
       this.ledger.payments(orgId),
       this.prisma.auditLog.findMany({
@@ -300,7 +294,7 @@ export class AdminSubscriptionsService {
       orgId: org.id,
       orgName: org.name,
       city: org.city ?? '',
-      state: profile?.state ? (GST_STATES[profile.state] ?? profile.state) : '',
+      state: org.state ? (GST_STATES[org.state] ?? org.state) : '',
       plan: ov.plan,
       interval: ov.interval,
       status: ov.status,

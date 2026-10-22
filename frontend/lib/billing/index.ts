@@ -19,9 +19,7 @@ export const REAL_FUNCTIONS: Record<BillingFunction, boolean> = {
   saveAdminPlan: true,
   getLifecycleSettings: true,
   saveLifecycleSettings: true,
-  // Step 2 — billing profile and checkout (online via Razorpay, or a manual request)
-  getBillingProfile: true,
-  saveBillingProfile: true,
+  // Step 2 — checkout (online via Razorpay, or a manual request)
   previewCheckout: true,
   startCheckout: true,
   confirmCheckout: true,

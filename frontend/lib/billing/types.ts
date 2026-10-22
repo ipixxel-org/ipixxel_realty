@@ -79,7 +79,15 @@ export interface PaymentMethodSummary {
   detail: string;
 }
 
+/** Invoice fields that must be filled in before checkout. */
+export type BillingDetailsField = "legalName" | "addressLine1" | "city" | "state" | "pincode";
+
+/**
+ * The org as invoice buyer. Read-only in billing: it is the organisation
+ * profile (Settings → General), with "" for anything not filled in.
+ */
 export interface BillingProfile {
+  /** The organisation name — printed as the name on GST invoices. */
   legalName: string;
   addressLine1: string;
   addressLine2: string | null;
@@ -167,7 +175,10 @@ export interface BillingOverview {
   autoRenewAvailable: boolean;
   renewalMode: RenewalMode;
   paymentMethod: PaymentMethodSummary | null;
-  billingProfile: BillingProfile | null;
+  /** From Settings → General; "" where not filled in. */
+  billingProfile: BillingProfile;
+  /** Required invoice fields still empty — checkout is blocked until they're filled in General settings. */
+  billingDetailsMissing: BillingDetailsField[];
   /** A pending upgrade request, or a paid upgrade under review. */
   pendingUpgrade: PendingUpgrade | null;
   periodStart: string | null;
@@ -205,8 +216,6 @@ export interface PreviewCheckoutRequest {
   planId: PlanId;
   interval: BillingInterval;
   couponCode?: string;
-  /** Billing state typed in the (unsaved) billing form; defaults to the saved profile. */
-  billingState?: string;
   /** "renewal": one more term of the current plan (planId + interval must be the current ones). */
   purpose?: "purchase" | "renewal";
 }

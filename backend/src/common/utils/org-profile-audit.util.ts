@@ -1,9 +1,12 @@
+import { BadRequestException } from '@nestjs/common';
 import type { PrismaClient } from '@prisma/client';
 import {
   ORGANISATION_EDITABLE_FIELDS,
   buildOrganisationUpdateData,
 } from './mappers.util';
 import type { UpdateOrganisationDto } from '../../modules/admin-organisations/dto/update-organisation.dto';
+import { orgTaxDetailsProblem } from '../../modules/billing/org-billing-details';
+import { normaliseGstin } from '../../modules/billing/gst';
 
 // Organisation profile ("General" details) can be edited by the Org Admin
 // (Settings → General) or a Super Admin (Organisations → Edit). Every save
@@ -56,9 +59,22 @@ export async function updateOrganisationProfile(
       where: { id: orgId },
     });
 
+    // The profile is the billing source of truth: state is a GST state code
+    // and the GSTIN (optional) must be valid and registered in that state.
+    const data = buildOrganisationUpdateData(dto);
+    if (dto.gstin !== undefined) data.gstin = normaliseGstin(dto.gstin) || null;
+    if (dto.state !== undefined) data.state = dto.state.trim() || null;
+    if (dto.state !== undefined || dto.gstin !== undefined) {
+      const problem = orgTaxDetailsProblem(
+        dto.state !== undefined ? dto.state : before.state,
+        dto.gstin !== undefined ? dto.gstin : before.gstin,
+      );
+      if (problem) throw new BadRequestException(problem);
+    }
+
     const updated = await tx.organisation.update({
       where: { id: orgId },
-      data: buildOrganisationUpdateData(dto),
+      data,
     });
 
     const changes: ProfileFieldChange[] = [];

@@ -13,7 +13,6 @@ import type {
   ApplyCouponRequest,
   BillingOverview,
   BillingPlan,
-  BillingProfile,
   CancelPlanRequest,
   CheckoutPreview,
   CompanyDetails,
@@ -50,7 +49,7 @@ import type {
 } from "./types";
 
 export class BillingError extends Error {
-  /** Machine-readable reason from the API (e.g. "same_plan", "billing_profile_required"). */
+  /** Machine-readable reason from the API (e.g. "same_plan", "billing_details_incomplete"). */
   readonly code: string | null;
   constructor(message: string, code: string | null = null) {
     super(message);
@@ -74,10 +73,6 @@ export interface BillingClient {
   listPlans(): Promise<BillingPlan[]>;
   /** POST /org/billing/checkout/preview */
   previewCheckout(req: PreviewCheckoutRequest): Promise<CheckoutPreview>;
-  /** PUT /org/billing/profile */
-  /** GET /org/billing/profile — null until the first purchase saves one. */
-  getBillingProfile(): Promise<BillingProfile | null>;
-  saveBillingProfile(profile: BillingProfile): Promise<BillingProfile>;
   /** POST /org/billing/checkout — creates the Razorpay order (or activates a ₹0 checkout). */
   startCheckout(req: StartCheckoutRequest): Promise<StartCheckoutResponse>;
   /** POST /org/billing/checkout/confirm — verifies the Razorpay signature server-side. */

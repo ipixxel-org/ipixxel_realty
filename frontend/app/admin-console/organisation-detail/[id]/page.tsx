@@ -25,6 +25,8 @@ import type {
 import { COUNTRY_META, COUNTRIES } from "@/lib/countries";
 import { INDUSTRY_OPTIONS, ORG_ASSET_RULES, industryLabel, orgAssetTooLarge } from "@/lib/org-profile";
 import { ProfileAuditLog } from "@/components/org/profile-audit-log";
+import { StateSelect } from "@/components/ui/state-select";
+import { stateName } from "@/lib/billing/pricing";
 import { OrgActivityFeed } from "@/components/superadmin/org-activity-feed";
 import { OrgSubscriptionSummary, type OrgSubscriptionRow } from "@/components/superadmin/org-subscription-summary";
 
@@ -1093,12 +1095,7 @@ export default function SuperAdminOrganisationDetailPage() {
                       <div className="row2">
                         <div className="field">
                           <label>State</label>
-                          <input
-                            className="inp"
-                            value={editForm.state}
-                            onChange={(e) => setEditForm((f) => ({ ...f, state: e.target.value }))}
-                            placeholder="Karnataka"
-                          />
+                          <StateSelect value={editForm.state} onChange={(state) => setEditForm((f) => ({ ...f, state }))} />
                         </div>
                         <div className="field">
                           <label>Postal code</label>
@@ -1291,7 +1288,7 @@ export default function SuperAdminOrganisationDetailPage() {
                         iconBg="#eff6ff"
                         iconColor="#2563eb"
                         label="State"
-                        value={org.state || "Not added"}
+                        value={stateName(org.state) || "Not added"}
                       />
                       <DetailRowItem
                         icon="mail"
