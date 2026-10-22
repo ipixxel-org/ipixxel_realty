@@ -41,8 +41,9 @@ export function usePayNow(overview: BillingOverview) {
     onFailed: (reason) => toast({ variant: "error", title: "Payment failed", description: reason }),
     onClosed: () => toast({ variant: "info", title: "Payment cancelled", description: "The payment window was closed. Nothing was charged." }),
   });
+  // Incomplete organisation details: the renewal checkout shows what to fill in.
   const renew = () =>
-    overview.billingProfile
+    overview.billingDetailsMissing.length === 0
       ? payment.start({ planId: plan.id, interval: overview.interval, purpose: "renewal" })
       : Promise.resolve(nav.go("checkout", { plan: plan.id, interval: overview.interval, renew: 1 }));
   return { ...payment, renew };

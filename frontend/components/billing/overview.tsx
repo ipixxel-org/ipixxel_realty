@@ -6,7 +6,7 @@ import type { BillingOverview } from "@/lib/billing/types";
 import { BillingBanner, PayNowButton, RenewalReminderPopup, UpdatePaymentMethodButton } from "./banners";
 
 export { RenewalReminderPopup };
-import { BillingDetailsSummary, PendingUpgradeBanner } from "./checkout";
+import { BillingDetailsSection, PendingUpgradeBanner } from "./checkout";
 import { useOrgBilling } from "./context";
 import { InvoicesTable, PaymentHistoryTable } from "./invoices";
 import { BLink, countLabel, ErrorNote, Kv, Loading, RenewalPrice, SampleDataTag, Section, StatusBadge, UsageMeter } from "./ui";
@@ -108,17 +108,9 @@ export function PaymentMethodCard({ overview: o }: { overview: BillingOverview }
   );
 }
 
+/** Read-only: the org profile from Settings → General, edited there. */
 export function BillingDetailsCard({ overview: o }: { overview: BillingOverview }) {
-  const p = o.billingProfile;
-  return (
-    <Section title="Billing details" sub="Printed on your GST invoices">
-      {p ? (
-        <BillingDetailsSummary profile={p} />
-      ) : (
-        <div className="bl-muted">Added at your first purchase.</div>
-      )}
-    </Section>
-  );
+  return <BillingDetailsSection overview={o} sub="From your General settings — printed on your GST invoices" />;
 }
 
 /** Settings → Billing & Subscription (v2). */

@@ -13,7 +13,6 @@ import {
   OrgBillingV2Controller,
 } from './billing.controller';
 import { OrgBillingV2Service } from './org-billing-v2.service';
-import { BillingProfileService } from './billing-profile.service';
 import { BillingCheckoutService } from './billing-checkout.service';
 import { BillingPlanChangeService } from './billing-plan-change.service';
 import { AdminCouponsService } from './admin-coupons.service';
@@ -43,7 +42,6 @@ import { BillingInvoiceMailer } from './billing-invoice-mailer.service';
     BillingModeService,
     OrgBillingV2Service,
     AdminBillingService,
-    BillingProfileService,
     BillingCheckoutService,
     BillingPlanChangeService,
     AdminCouponsService,

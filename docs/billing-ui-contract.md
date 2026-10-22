@@ -18,13 +18,14 @@ client is the reference behaviour (see `frontend/lib/billing/__tests__/mock-clie
 | Step | Real now | Backend |
 |---|---|---|
 | 1 | `getBillingOverview`, `listPlans`, `getAccessStatus`, `listAdminPlans`, `saveAdminPlan`, `getLifecycleSettings`, `saveLifecycleSettings` | `backend/src/modules/billing/` |
-| 2 | `getBillingProfile`, `saveBillingProfile`, `previewCheckout`, `startCheckout`, `confirmCheckout`, `listAdminCheckouts` | `billing-profile.service.ts`, `billing-checkout.service.ts`, `checkout-quote.ts`, `common/utils/plan-change.util.ts` |
+| 2 | `previewCheckout`, `startCheckout`, `confirmCheckout`, `listAdminCheckouts` (`getBillingProfile` / `saveBillingProfile` removed — see "Billing details from the org profile") | `billing-checkout.service.ts`, `checkout-quote.ts`, `common/utils/plan-change.util.ts` |
 | 3 | Renewals through the same functions: `previewCheckout` / `startCheckout` with `purpose: "renewal"` (no new client function) | `quoteRenewal` in `checkout-quote.ts`, `renewalPeriodEnd` in `plan-change.util.ts` |
 | 4 | `cancelPlan`, `undoCancel`, `scheduleDowngrade`, `undoDowngrade` | `billing-plan-change.service.ts`; applied by the lifecycle sweep (`subscription-lifecycle.util.ts`) |
 | 5 | `listCoupons`, `getCoupon`, `saveCoupon`, `listOrgOptions`; coupons in `previewCheckout` / `startCheckout` | `coupon-rules.ts`, `coupon-settlement.ts`, `admin-coupons.service.ts` |
 | 6 | `getRetentionChoices`, `saveRetentionChoices`; pausing behind `getAccessStatus` / the overview | `common/utils/retention.util.ts`, `billing-retention.service.ts`, `common/guards/project-editable.guard.ts` |
 | 7 | `listInvoices`, `listPayments`, `listSubscriptions`, `getSubscription`, `extendGrace`, `markPaidOffline`, `applyCoupon`, `cancelSubscription`, `listAdminPayments`, `refundPayment` | `invoice.util.ts`, `billing-ledger.service.ts`, `admin-subscriptions.service.ts`, `invoice-document.controller.ts`; `PaymentsService.refundInFull` |
 | Fixes after testing | `listOrgCoupons`, `getCompanyDetails`, `saveCompanyDetails`, `runLifecycleCheck`; `BillingOverview.renewalBreakdown`, `Invoice.checkoutId`, `Coupon.showToCustomers`; reminders stored | `subscription-lifecycle.util.ts` (grace rule, reminders), `common/utils/billing-clock.util.ts`, `admin-billing.service.ts`, `admin-coupons.service.ts` (`orgCoupons`); migration `20261015114705_billing_v2_fixes` |
+| Billing details from the org profile | `BillingOverview.billingProfile` (always set) + `billingDetailsMissing`; GSTIN and the state dropdown in Settings → General (invoice name = organisation name); `saveBillingProfile` / `getBillingProfile` and `PreviewCheckoutRequest.billingState` removed | `billing/org-billing-details.ts`, `common/utils/org-profile-audit.util.ts` (save check); frontend `components/ui/state-select.tsx`, `lib/billing/details.ts`; migration `20261022090000_org_profile_billing_details` |
 | Fixes after testing (2) | one `plan_locked` error; list filters `viewOnly` / `offline` / `paused` / `needsReassign`; invoice email; `packagePriceText` | `common/utils/plan-lock.util.ts`, `billing-invoice-mailer.service.ts`, `lead-assignee.util.ts`; frontend `lib/plan-lock.ts`, `PlanLockBadge` (`components/billing/locked.tsx`); migration `20261016093000_billing_invoice_email` |
 
 Every function is real except `updatePaymentMethod`, which stays unimplemented on purpose: renewals are
@@ -39,7 +40,7 @@ Subscriptions), and the overview says `autoRenewAvailable: false`, which hides t
 it is `manual` with `paymentModeReason`: `switched_off`, `keys_missing` or `gateway_disabled`
 (`BillingModeService`). Confirmed after testing — no behaviour change. When the switch is on but
 Razorpay can't be used, the settings card shows a warning saying why it is running in manual mode
-(no keys, or Razorpay turned off), with a link to Integrations → Razorpay. In manual mode the checkout screen is the same (billing details + price
+(no keys, or Razorpay turned off), with a link to Integrations → Razorpay. In manual mode the checkout screen is the same (billing details summary + price
 summary) but its button is "Send upgrade request": `startCheckout` creates a legacy
 `PackageChangeRequest` plus a `manual` `BillingCheckout` and returns `pending_approval`. The
 Super Admin approves it in the existing Package Requests tab; approval applies the checkout's
@@ -150,14 +151,40 @@ period rule (`applyPlanChange`).
   the email logs under the org (template `billing`). A ₹0 checkout and an approval without
   payment have no invoice, so no email.
 
+### Billing details from the org profile
+
+- **Single source of truth:** Settings → General (`PATCH /org/settings`, Super Admin `PATCH
+  /admin/organisations/:id`). Mapping `Organisation` → `BillingProfile`: `name` (the organisation name) → `legalName` (the name on invoices; the separate, hidden `Organisation.legalName` is not used),
+  `addressLine1` / `addressLine2` → same, `city` → `city`, `state` → `state` (GST state code),
+  `postalCode` → `pincode`, `gstin` → `gstin`, `country` ("India" or empty → `"IN"`).
+- **Overview:** `BillingOverview.billingProfile` is always set (`""` where not filled in) and
+  `billingDetailsMissing` lists the empty required fields, in this order: `legalName`,
+  `addressLine1`, `city`, `state`, `pincode`. Billing shows them read-only with "Edit in General
+  settings" (`/org/settings?section=general`).
+- **Checkout blocked** while anything is missing: `startCheckout` → 400 `billing_details_incomplete`
+  "Complete your organisation details to continue." The UI shows that with a link to General settings,
+  or "Ask your organisation admin to complete these details." for users without
+  permission to edit Settings → General (`settings:edit`).
+- **General Settings save check** (both admin paths): `state` must be a GST state code or empty;
+  a GSTIN (optional, stored upper-case, `""` → null) must be well-formed and start with the state
+  code — same messages as the old billing form. Only checked when `state` or `gstin` is in the save.
+- **State picker:** one `StateSelect` (`components/ui/state-select.tsx`) in Settings → General,
+  Super Admin → edit organisation and Super Admin → Company & tax details.
+- **Invoices** snapshot the buyer when issued (`buyerFor` in `invoice.util.ts`): name, GSTIN and
+  state from the checkout (taken when the purchase started), address from the org profile.
+- **Data migration** `20261022090000_org_profile_billing_details` (guarded, re-runnable): free-text
+  `organisations.state` → code (names, common spellings and abbreviations, case- and
+  spacing-insensitive); anything unmatched → NULL so the org picks one. Then each
+  `billing_profiles` row fills the org fields that are still empty (never overwriting), GSTIN
+  included; its legal name is not copied (invoices use the organisation name).
+- **Deprecated:** `billing.billing_profiles` (Prisma `BillingProfile`) is no longer read or
+  written. The table is kept (not dropped). `GET` / `PUT /org/billing/profile` are removed.
+
 ### Step 2 notes
 
-- **Billing profile:** `BillingProfile.state` is a 2-digit **GST state code** (`"29"` =
-  Karnataka; list in `pricing.ts` `INDIAN_STATES` / backend `gst.ts`), `addressLine1` required,
-  `addressLine2` and `gstin` nullable, `country` `"IN"`. A GSTIN must match the format and its
-  first two digits must equal `state`. `GET` returns `null` until the first save.
-  `startCheckout` without a profile → `billing_profile_required`. Foreign buyers: accepted
-  without GSTIN, still taxed as IGST (TODO: export of services).
+- **Billing details:** superseded — they now come from the organisation profile (see "Billing
+  details from the org profile" below). `BillingProfile.state` is still a 2-digit **GST state code**
+  (`"29"` = Karnataka; list in `pricing.ts` `INDIAN_STATES` / backend `gst.ts`).
 - **Seller (company tax settings):** `CompanyDetails.seller` (`SellerSettings`), saved with
   `PUT /admin/billing/company` (Settings → Company & tax details; until the fixes it was part of
   `LifecycleSettings`). Its `state` decides the split:
@@ -172,7 +199,7 @@ period rule (`applyPlanChange`).
   computes a real amount — it shows the preview.
 - **Refusals** (400 `{ code, message }` → `BillingError.code`): `plan_not_found`, `free_plan`,
   `same_plan` (same plan + interval, even when lapsed), `lower_plan` (only while a paid plan is
-  active — that's a downgrade), `yearly_to_monthly`, `billing_profile_required`,
+  active — that's a downgrade), `yearly_to_monthly`, `billing_details_incomplete` (was `billing_profile_required`),
   `request_pending` (online start while a manual request waits), `amount_too_small` (online
   total under ₹1), renewal codes (step 3 notes), and on the old endpoints
   `paid_plan_requires_checkout` / `paid_renewal_requires_checkout`.
@@ -320,7 +347,7 @@ period rule (`applyPlanChange`).
   the same transaction that applies the plan (online), or when a Super Admin records an offline
   payment. ₹0 checkouts and `needs_review` payments get none. Amounts come from the checkout
   (offline: the amount is GST-inclusive, taxable = total ÷ 1.18 rounded half up). Seller and
-  buyer are snapshots (seller settings; billing profile). Numbers run per Indian financial year
+  buyer are snapshots (seller settings; the org profile — Settings → General — when the invoice is issued; later edits never change an issued invoice). Numbers run per Indian financial year
   (April–March): `INV/26-27/0001`; credit notes `CN/26-27/0001` (`billing.invoice_counters`).
 - **Document:** `pdfUrl` / `receiptUrl` is a signed link valid for an hour,
   `/api/billing/invoices/:id/document?exp=&sig=` (through the frontend's /api proxy): a
@@ -395,9 +422,7 @@ period rule (`applyPlanChange`).
 |---|---|---|---|
 | `getBillingOverview()` | `GET /org/billing/v2` | — | `BillingOverview` |
 | `listPlans()` | `GET /org/billing/plans` | — | `BillingPlan[]` (sorted by `rank`) |
-| `previewCheckout(req)` | `POST /org/billing/checkout/preview` (`billing:view`) | `PreviewCheckoutRequest` (`billingState` = the unsaved form's state code; `purpose: "renewal"` for a renewal) | `CheckoutPreview` (an invalid coupon is **not** an error: return `couponError`) |
-| `getBillingProfile()` | `GET /org/billing/profile` | — | `BillingProfile \| null` |
-| `saveBillingProfile(p)` | `PUT /org/billing/profile` | `BillingProfile` | `BillingProfile` |
+| `previewCheckout(req)` | `POST /org/billing/checkout/preview` (`billing:view`) | `PreviewCheckoutRequest` (`purpose: "renewal"` for a renewal; the buyer state comes from the org profile) | `CheckoutPreview` (an invalid coupon is **not** an error: return `couponError`) |
 | `startCheckout(req)` | `POST /org/billing/checkout` (`billing:edit`) | `StartCheckoutRequest` | `StartCheckoutResponse` — online: `payment_required` with a Razorpay order (`keyId`, `orderId`, `amountPaise`, `name`, `description`, `prefill`); manual: `pending_approval` with `requestId`; `activated` when the total is ₹0 (coupons, later) |
 | `confirmCheckout(req)` | `POST /org/billing/checkout/confirm` | body is Razorpay's success payload: `razorpay_order_id`, `razorpay_payment_id`, `razorpay_signature` (the HTTP client maps `ConfirmCheckoutRequest`) | `ConfirmCheckoutResponse` `{ checkoutId, checkoutStatus, paymentStatus, toPlanId, toInterval }` — the signature is verified server-side; `checkoutStatus: "paid"` once the plan is applied |
 | `updatePaymentMethod(req)` | `POST /org/billing/payment-method` | `UpdatePaymentMethodRequest` | `PaymentMethodSummary` |

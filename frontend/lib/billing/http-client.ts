@@ -42,9 +42,7 @@ export const httpBilling: Impl = {
   getLifecycleSettings: () => call("/admin/billing/lifecycle"),
   saveLifecycleSettings: (settings) => call("/admin/billing/lifecycle", put(settings)),
 
-  // Step 2 — billing profile and checkout
-  getBillingProfile: () => call("/org/billing/profile"),
-  saveBillingProfile: (profile) => call("/org/billing/profile", put(profile)),
+  // Step 2 — checkout (billing details come from the org profile, in the overview)
   previewCheckout: (req) => call("/org/billing/checkout/preview", post(req)),
   startCheckout: (req) => call("/org/billing/checkout", post(req)),
   // The backend takes Razorpay Checkout's own success payload; the order id identifies the checkout.

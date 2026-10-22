@@ -4,6 +4,7 @@
  * dates are derived from it and the mock clock (TODAY), so every screen agrees.
  */
 import { defaultPicks, rankLandingPages, rankProjects, rankUsers } from "../default-picks";
+import { EMPTY_BILLING_DETAILS, missingBillingDetails } from "../details";
 import { addCycle, addDays, addMonths, daysBetween, planPrice, round2, withGst } from "../pricing";
 import type {
   AccessStatus,
@@ -271,7 +272,8 @@ export function deriveOverview(s: MockState, today: string): BillingOverview {
     autoRenewAvailable: true,
     renewalMode: s.renewalMode,
     paymentMethod: paidPlan && s.renewalMode === "auto" ? s.paymentMethod : null,
-    billingProfile: s.billingProfile,
+    billingProfile: s.billingProfile ?? EMPTY_BILLING_DETAILS,
+    billingDetailsMissing: missingBillingDetails(s.billingProfile),
     periodStart: d.periodStart,
     periodEnd: d.periodEnd,
     daysLeftInPeriod: d.periodEnd && !inGrace && !onFree ? Math.max(0, daysBetween(today, d.periodEnd)) : 0,

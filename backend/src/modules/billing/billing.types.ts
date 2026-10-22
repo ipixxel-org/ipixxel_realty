@@ -69,7 +69,12 @@ export interface BillingOverviewV2 {
   autoRenewAvailable: boolean;
   renewalMode: 'auto' | 'manual';
   paymentMethod: null;
-  billingProfile: BillingProfileV2 | null;
+  /** The org profile (Settings → General) as invoice buyer; empty strings where not filled in. */
+  billingProfile: BillingProfileV2;
+  /** Required invoice fields still empty — checkout is blocked until they're filled in. */
+  billingDetailsMissing: (
+    'legalName' | 'addressLine1' | 'city' | 'state' | 'pincode'
+  )[];
   /** A pending upgrade request, or a paid upgrade under review (step 2). */
   pendingUpgrade: PendingUpgradeV2 | null;
   periodStart: string | null;
@@ -222,7 +227,7 @@ export interface OrgCouponV2 {
 
 /* ------------------------------------------------------------ Step 2 */
 
-/** The org as GST buyer. `state` is the 2-digit GST state code. */
+/** The org as GST buyer, read from the org profile (Settings → General). `state` is the 2-digit GST state code ("" = not chosen). */
 export interface BillingProfileV2 {
   legalName: string;
   addressLine1: string;

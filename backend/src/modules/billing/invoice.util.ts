@@ -1,10 +1,14 @@
 import { createHmac, timingSafeEqual } from 'crypto';
 import type { Invoice, Prisma } from '@prisma/client';
 import { roundHalfUp } from './checkout-quote';
+import {
+  billingDetailsFromOrg,
+  ORG_BILLING_SELECT,
+} from './org-billing-details';
 
 type Tx = Pick<
   Prisma.TransactionClient,
-  'invoice' | 'invoiceCounter' | 'billingProfile' | 'plan'
+  'invoice' | 'invoiceCounter' | 'organisation' | 'plan'
 >;
 
 /**
@@ -89,23 +93,30 @@ export function checkoutDescription(
   return `${base} · ${monthLabel(at)}`;
 }
 
-/** Buyer snapshot: the checkout's (name, GSTIN, state) plus the profile address. */
-async function buyerFor(
-  tx: Pick<Tx, 'billingProfile'>,
+/**
+ * Buyer snapshot, stored on the invoice: the checkout's (name, GSTIN, state,
+ * taken when the purchase started) plus the address from the org profile
+ * (Settings → General) as it is when the invoice is issued. Editing the
+ * profile later never changes an issued invoice.
+ */
+export async function buyerFor(
+  tx: Pick<Tx, 'organisation'>,
   orgId: string,
   fallback: { legalName: string; gstin: string | null; state: string | null },
 ): Promise<InvoiceParty> {
-  const p = await tx.billingProfile.findUnique({
-    where: { organisationId: orgId },
+  const org = await tx.organisation.findUnique({
+    where: { id: orgId },
+    select: ORG_BILLING_SELECT,
   });
+  const p = billingDetailsFromOrg(org);
   return {
-    legalName: fallback.legalName || p?.legalName || '',
-    gstin: fallback.gstin ?? p?.gstin ?? null,
-    state: fallback.state ?? p?.state ?? null,
-    addressLine1: p?.addressLine1 ?? null,
-    addressLine2: p?.addressLine2 ?? null,
-    city: p?.city ?? null,
-    pincode: p?.pincode ?? null,
+    legalName: fallback.legalName || p.legalName,
+    gstin: fallback.gstin ?? p.gstin,
+    state: fallback.state ?? (p.state || null),
+    addressLine1: p.addressLine1 || null,
+    addressLine2: p.addressLine2,
+    city: p.city || null,
+    pincode: p.pincode || null,
   };
 }
 

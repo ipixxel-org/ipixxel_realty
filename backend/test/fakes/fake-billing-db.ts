@@ -130,6 +130,33 @@ function table(
   };
 }
 
+/** A complete org profile for invoices (Settings → General fields). */
+export const ORG_BILLING_DETAILS = {
+  name: 'Acme Pvt Ltd',
+  addressLine1: '1 Road',
+  addressLine2: null,
+  city: 'Bengaluru',
+  state: '29',
+  postalCode: '560001',
+  country: 'India',
+  gstin: null,
+};
+
+/** Fill in org-1's billing details (they live on the organisation row). */
+export function giveBillingDetails(
+  db: Row, // createFakeBillingDb().db
+  over: Row = {},
+  orgId = 'org-1',
+) {
+  const rows = (db.organisation as { rows: Row[] }).rows;
+  let org = rows.find((r) => r.id === orgId);
+  if (!org) {
+    org = { id: orgId, name: 'Acme Realty' };
+    rows.push(org);
+  }
+  Object.assign(org, ORG_BILLING_DETAILS, over);
+}
+
 export interface Seed {
   plans: Row[];
   subscription?: Row | null;
@@ -191,7 +218,8 @@ export function createFakeBillingDb(seed: Seed) {
   db.billingCheckout = table([], 'chk', (r, inc) =>
     inc?.toPlan ? { ...r, toPlan: planById(r.toPlanId) } : r,
   );
-  db.billingProfile = table([], 'prof');
+  // Billing details are fields on the org (no billing profile table any more).
+  db.organisation = table([{ id: 'org-1', name: 'Acme Realty' }], 'org');
   db.coupon = table([], 'cpn');
   db.invoice = table([], 'inv');
   db.invoiceCounter = table([], 'ctr');

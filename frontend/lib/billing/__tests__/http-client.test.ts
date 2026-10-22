@@ -33,17 +33,14 @@ const lastCall = () => {
 };
 
 describe("billing http client — step 2", () => {
-  it("billing profile: GET and PUT /org/billing/profile", async () => {
-    await httpBilling.getBillingProfile!();
-    expect(lastCall()).toEqual({ path: "/org/billing/profile", method: "GET", body: undefined });
-    const profile = { legalName: "Acme", addressLine1: "1 Road", addressLine2: null, city: "Mysuru", state: "29", pincode: "570001", country: "IN", gstin: null };
-    await httpBilling.saveBillingProfile!(profile);
-    expect(lastCall()).toEqual({ path: "/org/billing/profile", method: "PUT", body: profile });
+  it("has no billing-profile calls (details come from the org profile)", () => {
+    expect(httpBilling).not.toHaveProperty("getBillingProfile");
+    expect(httpBilling).not.toHaveProperty("saveBillingProfile");
   });
 
   it("checkout: preview and start POST the request as-is", async () => {
-    await httpBilling.previewCheckout!({ planId: "p1", interval: "yearly", billingState: "27" });
-    expect(lastCall()).toEqual({ path: "/org/billing/checkout/preview", method: "POST", body: { planId: "p1", interval: "yearly", billingState: "27" } });
+    await httpBilling.previewCheckout!({ planId: "p1", interval: "yearly" });
+    expect(lastCall()).toEqual({ path: "/org/billing/checkout/preview", method: "POST", body: { planId: "p1", interval: "yearly" } });
     await httpBilling.startCheckout!({ planId: "p1", interval: "yearly", purpose: "purchase" });
     expect(lastCall()).toEqual({ path: "/org/billing/checkout", method: "POST", body: { planId: "p1", interval: "yearly", purpose: "purchase" } });
   });
@@ -123,10 +120,12 @@ describe("billing http client — step 2", () => {
   });
 
   it("API errors become BillingError with the message and code", async () => {
-    apiFetch.mockRejectedValueOnce(new ApiError("Add your billing details first.", 400, { code: "billing_profile_required", message: "Add your billing details first." }));
+    apiFetch.mockRejectedValueOnce(
+      new ApiError("Complete your organisation details to continue.", 400, { code: "billing_details_incomplete", message: "Complete your organisation details to continue." }),
+    );
     const err = await httpBilling.startCheckout!({ planId: "p1", interval: "monthly", purpose: "purchase" }).catch((e: unknown) => e);
     expect(err).toBeInstanceOf(BillingError);
-    expect(err).toMatchObject({ message: "Add your billing details first.", code: "billing_profile_required" });
+    expect(err).toMatchObject({ message: "Complete your organisation details to continue.", code: "billing_details_incomplete" });
 
     apiFetch.mockRejectedValueOnce(new Error("Network down"));
     await expect(httpBilling.previewCheckout!({ planId: "p1", interval: "monthly" })).rejects.toMatchObject({ message: "Network down", code: null });

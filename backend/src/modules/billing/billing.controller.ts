@@ -26,7 +26,6 @@ import {
   SaveLifecycleDto,
   SaveOnlinePaymentsDto,
 } from './dto/save-lifecycle.dto';
-import { BillingProfileService } from './billing-profile.service';
 import { BillingCheckoutService } from './billing-checkout.service';
 import {
   ConfirmCheckoutDto,
@@ -34,7 +33,6 @@ import {
   PreviewCheckoutDto,
   StartCheckoutDto,
 } from './dto/checkout.dto';
-import { SaveBillingProfileDto } from './dto/save-billing-profile.dto';
 import { BillingPlanChangeService } from './billing-plan-change.service';
 import { CancelPlanDto, ScheduleDowngradeDto } from './dto/plan-change.dto';
 import { BillingRetentionService } from './billing-retention.service';
@@ -67,7 +65,6 @@ import {
 export class OrgBillingV2Controller {
   constructor(
     private readonly service: OrgBillingV2Service,
-    private readonly profiles: BillingProfileService,
     private readonly checkouts: BillingCheckoutService,
     private readonly changes: BillingPlanChangeService,
     private readonly retention: BillingRetentionService,
@@ -153,21 +150,6 @@ export class OrgBillingV2Controller {
   @HttpCode(200)
   confirm(@CurrentUser() user: JwtPayload, @Body() dto: ConfirmCheckoutDto) {
     return this.checkouts.confirm(user.orgId as string, dto);
-  }
-
-  @RequirePermission('billing', 'view')
-  @Get('profile')
-  getProfile(@CurrentUser() user: JwtPayload) {
-    return this.profiles.get(user.orgId as string);
-  }
-
-  @RequirePermission('billing', 'edit')
-  @Put('profile')
-  saveProfile(
-    @CurrentUser() user: JwtPayload,
-    @Body() dto: SaveBillingProfileDto,
-  ) {
-    return this.profiles.save(user.orgId as string, dto);
   }
 
   // Step 4: cancel / downgrade at the end of the term (and undo). Each returns the overview.

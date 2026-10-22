@@ -14,7 +14,10 @@ import { PlatformConfigService } from '../platform-config/platform-config.servic
 import { BillingModeService } from './billing-mode.service';
 import { BillingRetentionService } from './billing-retention.service';
 import { buildOverview } from './billing-overview';
-import { toProfileV2 } from './billing-profile.service';
+import {
+  billingDetailsFromOrg,
+  ORG_BILLING_SELECT,
+} from './org-billing-details';
 import { expireStaleCheckouts, findPendingUpgrade } from './checkout-state';
 import { toRupees } from './checkout-quote';
 import { renewalCharge } from './coupon-rules';
@@ -72,12 +75,11 @@ export class OrgBillingV2Service {
       templates,
       cfg,
       mode,
-      profile,
       pendingUpgrade,
     ] = await Promise.all([
       this.prisma.organisation.findUnique({
         where: { id: orgId },
-        select: { name: true },
+        select: ORG_BILLING_SELECT, // includes name
       }),
       // The signup user — the first account created in the org.
       this.prisma.user.findFirst({
@@ -96,9 +98,6 @@ export class OrgBillingV2Service {
       this.prisma.organisationTemplate.count({ where: { orgId } }),
       getBillingExpiryConfig(this.prisma),
       this.mode.getMode(),
-      this.prisma.billingProfile.findUnique({
-        where: { organisationId: orgId },
-      }),
       findPendingUpgrade(this.prisma, orgId),
     ]);
     // Step 6: what's paused, what will stay, and the plan moved down from.
@@ -118,6 +117,8 @@ export class OrgBillingV2Service {
       ? await this.platformConfig.getSellerSettings()
       : null;
     if (!org) throw new NotFoundException('Organisation not found');
+    // Billing details are the org profile (Settings → General).
+    const profile = billingDetailsFromOrg(org);
 
     // Rank comes from the active catalogue; a subscription on a since-archived
     // plan still gets a sensible rank (after the active ones).
@@ -162,8 +163,8 @@ export class OrgBillingV2Service {
       seller && price > 0
         ? renewalCharge(price * 100, couponApplies ? coupon : null, {
             buyer: {
-              state: profile?.state ?? null,
-              country: profile?.country ?? 'IN',
+              state: profile.state || null,
+              country: profile.country,
             },
             seller: { state: seller.state },
           })
@@ -190,7 +191,7 @@ export class OrgBillingV2Service {
       now,
       orgName: org.name,
       ownerName,
-      billingProfile: profile ? toProfileV2(profile) : null,
+      billingProfile: profile,
       pendingUpgrade,
       plan: toBillingPlan(planRow, rankOf(planRow.id)),
       subscription: subscription

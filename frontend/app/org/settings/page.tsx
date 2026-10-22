@@ -28,6 +28,8 @@ import {
   type OrgBrandingChangeDetail,
 } from "@/lib/org-profile";
 import { ProfileAuditLog } from "@/components/org/profile-audit-log";
+import { StateSelect } from "@/components/ui/state-select";
+import { checkGstin } from "@/lib/billing/pricing";
 import { BillingOverviewPanel } from "@/components/billing/overview";
 import { BILLING_V2 } from "@/lib/billing/flag";
 
@@ -141,6 +143,7 @@ interface GeneralBrandingForm {
   name: string; legalName: string; industry: OrgIndustry | "";
   supportEmail: string; supportPhone: string;
   city: string; country: string; addressLine1: string; addressLine2: string; state: string; postalCode: string;
+  gstin: string;
   timezone: string; currency: string; defaultLanguage: string; brandColour: string;
   logoUrl: string; faviconUrl: string;
 }
@@ -150,7 +153,7 @@ function formToOrg(org: SafeOrganisation): GeneralBrandingForm {
     name: org.name, legalName: org.legal_name ?? "", industry: org.industry ?? "",
     supportEmail: org.support_email ?? "", supportPhone: org.support_phone ?? "",
     city: org.city, country: org.country ?? "", addressLine1: org.address_line1 ?? "", addressLine2: org.address_line2 ?? "",
-    state: org.state ?? "", postalCode: org.postal_code ?? "", timezone: org.timezone, currency: org.currency,
+    state: org.state ?? "", postalCode: org.postal_code ?? "", gstin: org.gstin ?? "", timezone: org.timezone, currency: org.currency,
     defaultLanguage: org.default_language, brandColour: org.brand_colour ?? "#0f1424",
     logoUrl: org.logo_url ?? "", faviconUrl: org.favicon_url ?? "",
   };
@@ -1767,11 +1770,15 @@ export default function OrgSettingsPage() {
 
   async function handleSave() {
     if (!form || !accessToken) return;
+    // Same GSTIN rules as billing: these details go on GST invoices.
+    const gstinError = checkGstin(form.gstin, form.state);
+    if (gstinError) { setSaveError(gstinError); return; }
     setSaveError(null); setSaving(true);
     try {
       const body: UpdateOrganisationSettingsInput = {
         name: form.name, city: form.city, country: form.country, addressLine1: form.addressLine1,
         addressLine2: form.addressLine2, state: form.state, postalCode: form.postalCode,
+        gstin: form.gstin.trim().toUpperCase(),
         timezone: form.timezone, currency: form.currency,
         defaultLanguage: form.defaultLanguage, brandColour: form.brandColour,
         logoUrl: form.logoUrl, faviconUrl: form.faviconUrl,
@@ -2020,6 +2027,8 @@ export default function OrgSettingsPage() {
                   {/*
                     Legal / registered name is hidden for now. form.legalName is still loaded
                     from the org and sent unchanged on save, so existing values are preserved.
+                    GST invoices use the organisation name above; the address, city, state,
+                    PIN and GSTIN below are the rest of the billing details.
 
                     <div className="set-field">
                       <label>Legal / registered name</label>
@@ -2121,12 +2130,7 @@ export default function OrgSettingsPage() {
                       <label>State</label>
                       <div className="set-input-box">
                         <span className="set-field-ic"><Icon name="building" size={16} /></span>
-                        <input
-                          className="inp"
-                          value={form.state}
-                          onChange={(e) => updateForm({ state: e.target.value })}
-                          placeholder="Karnataka"
-                        />
+                        <StateSelect value={form.state} onChange={(state) => updateForm({ state })} />
                       </div>
                     </div>
                     <div className="set-field">
@@ -2141,6 +2145,26 @@ export default function OrgSettingsPage() {
                         />
                       </div>
                     </div>
+                  </div>
+
+                  <div className="set-field">
+                    <label>GSTIN <span className="set-field-hint" style={{ display: "inline" }}>(optional)</span></label>
+                    <div className="set-input-box">
+                      <span className="set-field-ic"><Icon name="document" size={16} /></span>
+                      <input
+                        className="inp inp-mono"
+                        aria-label="GSTIN"
+                        maxLength={15}
+                        value={form.gstin}
+                        onChange={(e) => updateForm({ gstin: e.target.value.toUpperCase() })}
+                        placeholder="29ABCDE1234F1Z5"
+                      />
+                    </div>
+                    {checkGstin(form.gstin, form.state) ? (
+                      <div className="set-field-hint" style={{ color: "#e11d48" }}>{checkGstin(form.gstin, form.state)}</div>
+                    ) : (
+                      <div className="set-field-hint">Printed on your GST invoices. We check the format and that it matches the state.</div>
+                    )}
                   </div>
 
                   <div className="set-field">

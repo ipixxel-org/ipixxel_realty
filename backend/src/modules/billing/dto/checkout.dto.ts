@@ -14,8 +14,6 @@ export class PreviewCheckoutDto {
   @IsIn(['monthly', 'yearly']) interval!: 'monthly' | 'yearly';
   /** Coupons arrive in step 5; accepted and ignored until then. */
   @IsOptional() @IsString() @MaxLength(40) couponCode?: string;
-  /** GST state code typed in the (unsaved) billing form. */
-  @IsOptional() @IsString() @MaxLength(50) billingState?: string;
   /** 'renewal' quotes one more term of the current plan. */
   @IsOptional() @IsIn(['purchase', 'renewal']) purpose?: 'purchase' | 'renewal';
 }

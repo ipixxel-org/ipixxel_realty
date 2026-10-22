@@ -3,82 +3,73 @@
 import { useEffect, useRef, useState } from "react";
 import { Icon } from "@/components/icons";
 import { useToast } from "@/components/ui/toast";
-import { checkGstin, formatDate, formatINR, INDIAN_STATES, packagePriceText, stateName } from "@/lib/billing/pricing";
-import type { BillingInterval, BillingOverview, BillingProfile, CheckoutPreview, PendingUpgrade } from "@/lib/billing/types";
+import { BILLING_FIELD_LABEL } from "@/lib/billing/details";
+import { formatDate, formatINR, packagePriceText, stateName } from "@/lib/billing/pricing";
+import type { BillingDetailsField, BillingInterval, BillingOverview, BillingProfile, CheckoutPreview, PendingUpgrade } from "@/lib/billing/types";
 import { useBillingEnv, useBillingQuery, useOrgBilling } from "./context";
 import { usePayment } from "./payment";
 import { Banner, BLink, ErrorNote, Loading, Section, useCheckoutLive } from "./ui";
 
-export const EMPTY_PROFILE: BillingProfile = { legalName: "", addressLine1: "", addressLine2: null, city: "", state: "", pincode: "", country: "IN", gstin: null };
-
-export function profileErrors(d: BillingProfile): Partial<Record<keyof BillingProfile, string>> {
-  const e: Partial<Record<keyof BillingProfile, string>> = {};
-  if (!d.legalName.trim()) e.legalName = "Enter the legal name for invoices.";
-  if (!d.addressLine1.trim()) e.addressLine1 = "Enter the billing address.";
-  if (!d.city.trim()) e.city = "Enter the city.";
-  if (!d.state) e.state = "Choose the state — it decides how GST is split.";
-  if (!/^[1-9][0-9]{5}$/.test(d.pincode.trim())) e.pincode = "Enter a 6-digit PIN code.";
-  const g = checkGstin(d.gstin, d.state);
-  if (g) e.gstin = g;
-  return e;
-}
-
 /* ---------------------------------------------------------- Billing details */
 
-export function BillingDetailsForm({
-  value,
-  onChange,
-  showErrors,
-}: {
-  value: BillingProfile;
-  onChange: (v: BillingProfile) => void;
-  showErrors: boolean;
-}) {
-  const errors = profileErrors(value);
-  const [touched, setTouched] = useState<Partial<Record<keyof BillingProfile, boolean>>>({});
-  const err = (k: keyof BillingProfile) => ((showErrors || touched[k]) && errors[k] ? <div className="bl-field-err">{errors[k]}</div> : null);
-  const input = (key: keyof BillingProfile, label: string, placeholder: string, optional = false) => (
-    <div className="field" style={{ marginBottom: 0 }}>
-      <label>
+/** Read-only: billing details are the org profile, edited in Settings → General. */
+export function BillingDetailsSummary({ profile: p }: { profile: BillingProfile }) {
+  const row = (label: string, value: string | null) => (
+    <div style={{ display: "flex", gap: 12 }}>
+      <span className="bl-muted" style={{ minWidth: 92 }}>
         {label}
-        {optional ? <span className="bl-muted"> (optional)</span> : null}
-      </label>
-      <input
-        className="inp"
-        aria-label={label}
-        value={value[key] ?? ""}
-        placeholder={placeholder}
-        onChange={(e) => onChange({ ...value, [key]: key === "gstin" ? e.target.value.toUpperCase() : e.target.value })}
-        maxLength={key === "gstin" ? 15 : key === "pincode" ? 6 : undefined}
-        onBlur={() => setTouched((t) => ({ ...t, [key]: true }))}
-      />
-      {err(key)}
+      </span>
+      <span>{value?.trim() ? value : <span className="bl-muted">Not added</span>}</span>
     </div>
   );
   return (
-    <div className="bl-stack" style={{ gap: 12 }}>
-      {input("legalName", "Legal name", "Skyline Developers Pvt. Ltd.")}
-      {input("addressLine1", "Address", "Building, street, area")}
-      {input("addressLine2", "Address line 2", "Landmark, locality", true)}
-      <div className="bl-grid3" style={{ gap: 12 }}>
-        {input("city", "City", "Bengaluru")}
-        <div className="field" style={{ marginBottom: 0 }}>
-          <label>State</label>
-          <select className="inp" aria-label="State" value={value.state} onChange={(e) => onChange({ ...value, state: e.target.value })}>
-            <option value="">Choose…</option>
-            {INDIAN_STATES.map((s) => (
-              <option key={s.code} value={s.code}>
-                {s.name}
-              </option>
-            ))}
-          </select>
-          {err("state")}
-        </div>
-        {input("pincode", "PIN code", "560103")}
-      </div>
-      {input("gstin", "GSTIN", "29ABCDE1234F1Z5", true)}
-      <div className="hint">Add a GSTIN to claim input tax credit. We check the format and that it matches the state.</div>
+    <div data-testid="billing-details-summary" style={{ display: "grid", gap: 4, fontSize: 13 }}>
+      {row("Name", p.legalName)}
+      {row("Address", [p.addressLine1, p.addressLine2].filter(Boolean).join(", "))}
+      {row("City", p.city)}
+      {row("State", stateName(p.state))}
+      {row("PIN code", p.pincode)}
+      {row("GSTIN", p.gstin)}
     </div>
+  );
+}
+
+/** Shown when an invoice field is missing: checkout can't go ahead until it's filled in. */
+export function MissingDetailsNote({ missing }: { missing: BillingDetailsField[] }) {
+  const { canEditOrgProfile } = useBillingEnv();
+  if (!missing.length) return null;
+  return (
+    <div className="bl-stack" style={{ gap: 8, marginTop: 10 }} role="alert">
+      <ErrorNote message={`Complete your organisation details to continue. Missing: ${missing.map((k) => BILLING_FIELD_LABEL[k]).join(", ")}.`} />
+      {canEditOrgProfile ? (
+        <BLink to="generalSettings" className="btn btn-ghost btn-sm">
+          Complete organisation details
+        </BLink>
+      ) : (
+        <div className="bl-muted">Ask your organisation admin to complete these details.</div>
+      )}
+    </div>
+  );
+}
+
+/** The billing details card: a summary of Settings → General, with a link to edit it there. */
+export function BillingDetailsSection({ overview: o, sub = "From your General settings — printed on your GST invoices" }: { overview: BillingOverview; sub?: string }) {
+  const { canEditOrgProfile } = useBillingEnv();
+  return (
+    <Section
+      title="Billing details"
+      sub={sub}
+      action={
+        canEditOrgProfile ? (
+          <BLink to="generalSettings" className="btn btn-ghost btn-sm">
+            Edit in General settings
+          </BLink>
+        ) : null
+      }
+    >
+      <BillingDetailsSummary profile={o.billingProfile} />
+      <MissingDetailsNote missing={o.billingDetailsMissing} />
+    </Section>
   );
 }
 
@@ -211,7 +202,7 @@ export function PriceSummary({ preview: p, renewalMode }: { preview: CheckoutPre
       </div>
       <div className="bl-muted" style={{ marginTop: 6 }}>
         {!p.billingState
-          ? "Add your billing state to see how GST is split."
+          ? "Choose your state in General settings to see how GST is split."
           : p.gst.kind === "intra"
             ? `Billing state ${stateName(p.billingState)} is the same as ours, so GST is split into CGST and SGST.`
             : `Billing state ${stateName(p.billingState)} is outside ours, so it's charged as IGST.`}
@@ -255,7 +246,7 @@ export function CheckoutScreen({
 }: {
   planId: string;
   interval: BillingInterval;
-  /** Pay for the next term of the current plan (Pay now without saved billing details). */
+  /** Pay for the next term of the current plan (Pay now while organisation details are incomplete). */
   renewal?: boolean;
   /** Walkthrough steps show one part at a time. */
   parts?: Part[];
@@ -267,29 +258,20 @@ export function CheckoutScreen({
   const { overview, refresh } = useOrgBilling();
   const { toast } = useToast();
   const { data: plans } = useBillingQuery((c) => c.listPlans(), []);
-  const [editDetails, setEditDetails] = useState(false);
-  const [profile, setProfile] = useState<BillingProfile | null>(null);
-  const [showErrors, setShowErrors] = useState(false);
   const [coupon, setCoupon] = useState<string | null>(null);
   const [couponError, setCouponError] = useState<string | null>(null);
   const [preview, setPreview] = useState<CheckoutPreview | null>(null);
   const [previewError, setPreviewError] = useState<string | null>(null);
   const [checking, setChecking] = useState(false);
-  const [saving, setSaving] = useState(false);
   const autoDone = useRef(false);
   const purpose = renewal ? "renewal" : "purchase";
   // Online = Razorpay Checkout; otherwise the order is a request our team approves.
   const online = useCheckoutLive(overview);
 
-  const firstPurchase = !!overview && !overview.billingProfile;
-  const showForm = firstPurchase || editDetails;
-  const form = profile ?? overview?.billingProfile ?? EMPTY_PROFILE;
-  const billingState = showForm ? form.state || undefined : undefined;
-
   useEffect(() => {
     let active = true;
     client
-      .previewCheckout({ planId, interval, couponCode: coupon ?? undefined, billingState, purpose })
+      .previewCheckout({ planId, interval, couponCode: coupon ?? undefined, purpose })
       .then((p) => {
         if (!active) return;
         setPreview(p);
@@ -301,7 +283,7 @@ export function CheckoutScreen({
     return () => {
       active = false;
     };
-  }, [client, planId, interval, coupon, billingState, purpose]);
+  }, [client, planId, interval, coupon, purpose]);
 
   const target = plans?.find((p) => p.id === planId);
 
@@ -343,7 +325,7 @@ export function CheckoutScreen({
     }
     setChecking(true);
     try {
-      const p = await client.previewCheckout({ planId, interval, couponCode: code, billingState });
+      const p = await client.previewCheckout({ planId, interval, couponCode: code });
       if (p.couponError) setCouponError(p.couponError);
       else {
         setCoupon(p.coupon!.code);
@@ -358,27 +340,6 @@ export function CheckoutScreen({
   }
 
   async function pay() {
-    setShowErrors(true);
-    if (showForm) {
-      if (Object.keys(profileErrors(form)).length) {
-        toast({
-          variant: "warning",
-          title: "Check your billing details",
-          description: online ? "A few fields need fixing before you pay." : "A few fields need fixing before you send the request.",
-        });
-        return;
-      }
-      setSaving(true);
-      try {
-        await client.saveBillingProfile(form);
-        await refresh();
-      } catch (e) {
-        toast({ variant: "error", title: "Couldn't save billing details", description: e instanceof Error ? e.message : undefined });
-        return;
-      } finally {
-        setSaving(false);
-      }
-    }
     await payment.start({ planId, interval, couponCode: coupon ?? undefined, purpose });
   }
 
@@ -447,7 +408,9 @@ export function CheckoutScreen({
   const right = parts.includes("summary");
   // Over the plan's limits: never let them pay for a plan that can't be applied.
   const tooSmall = preview?.usageError ?? null;
-  const disabled = !canEdit || saving || payment.busy || !!pendingUpgrade || manualRenewal || !!tooSmall;
+  // Every invoice field must be filled in (Settings → General) before paying.
+  const missingDetails = overview.billingDetailsMissing;
+  const disabled = !canEdit || payment.busy || !!pendingUpgrade || manualRenewal || !!tooSmall || missingDetails.length > 0;
 
   return (
     <div className="bl-stack">
@@ -455,21 +418,7 @@ export function CheckoutScreen({
       <div className={left && right ? "bl-split" : "bl-stack"}>
         {left ? (
           <div className="bl-stack">
-            {parts.includes("details") ? (
-              <Section
-                title="Billing details"
-                sub={firstPurchase ? "First purchase — these go on your GST invoices" : "From your last purchase"}
-                action={
-                  !firstPurchase ? (
-                    <button type="button" className="btn btn-ghost btn-sm" onClick={() => setEditDetails((v) => !v)}>
-                      {editDetails ? "Use saved details" : "Edit"}
-                    </button>
-                  ) : null
-                }
-              >
-                {showForm ? <BillingDetailsForm value={form} onChange={setProfile} showErrors={showErrors} /> : <BillingDetailsSummary profile={overview.billingProfile!} />}
-              </Section>
-            ) : null}
+            {parts.includes("details") ? <BillingDetailsSection overview={overview} /> : null}
             {showCoupon ? (
               <Section title="Coupon" sub="Taken off before GST">
                 <CouponField
@@ -495,7 +444,9 @@ export function CheckoutScreen({
             {preview ? (
               <>
                 <PriceSummary preview={preview} renewalMode={overview.renewalMode} />
-                {tooSmall ? (
+                {missingDetails.length && !parts.includes("details") ? (
+                  <MissingDetailsNote missing={missingDetails} />
+                ) : tooSmall ? (
                   <div className="bl-stack" style={{ gap: 8, marginTop: 10 }}>
                     <ErrorNote message={tooSmall} />
                     <BLink to="plans" className="btn btn-ghost btn-sm">
@@ -517,7 +468,15 @@ export function CheckoutScreen({
                   className="btn btn-primary"
                   style={{ width: "100%", justifyContent: "center", marginTop: 14, padding: 12 }}
                   disabled={disabled}
-                  title={pendingUpgrade ? "An upgrade request is already waiting for approval" : canEdit ? undefined : "Ask an admin with billing access to buy a plan"}
+                  title={
+                    pendingUpgrade
+                      ? "An upgrade request is already waiting for approval"
+                      : !canEdit
+                        ? "Ask an admin with billing access to buy a plan"
+                        : missingDetails.length
+                          ? "Complete your organisation details to continue"
+                          : undefined
+                  }
                   onClick={() => void pay()}
                 >
                   {pendingUpgrade ? (
@@ -560,18 +519,6 @@ export function CheckoutScreen({
         ) : null}
         {payment.popup}
       </div>
-    </div>
-  );
-}
-
-export function BillingDetailsSummary({ profile: p }: { profile: BillingProfile }) {
-  return (
-    <div style={{ display: "grid", gap: 3, fontSize: 13 }}>
-      <b>{p.legalName}</b>
-      <span className="bl-muted">
-        {[p.addressLine1, p.addressLine2, p.city].filter(Boolean).join(", ")}, {stateName(p.state)} {p.pincode}
-      </span>
-      <span className="bl-muted">GSTIN {p.gstin || "—"}</span>
     </div>
   );
 }

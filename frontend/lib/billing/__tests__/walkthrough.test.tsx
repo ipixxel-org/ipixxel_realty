@@ -51,7 +51,7 @@ const show = (ui: React.ReactNode) => render(<ToastProvider>{ui}</ToastProvider>
 const ORG_EXPECT: (RegExp | string)[] = [
   "Upgrade to add more users",
   "Compare plans",
-  "Legal name",
+  "PIN code",
   /LAUNCH20 applied/,
   "CGST 9%",
   /SIMULATED PAYMENT/,

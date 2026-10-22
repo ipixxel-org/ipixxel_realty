@@ -43,6 +43,11 @@ import {
 } from './coupon-rules';
 import { settleCoupon } from './coupon-settlement';
 import { issueCheckoutInvoice } from './invoice.util';
+import {
+  BILLING_DETAILS_INCOMPLETE,
+  loadOrgBillingDetails,
+  type BillingDetailsField,
+} from './org-billing-details';
 import { BillingInvoiceMailer } from './billing-invoice-mailer.service';
 import { isFreePlan, sortPlans } from './plan-modules';
 import type {
@@ -104,7 +109,8 @@ export interface QuoteContext {
     gstin: string | null;
   };
   seller: Awaited<ReturnType<PlatformConfigService['getSellerSettings']>>;
-  hasProfile: boolean;
+  /** Required invoice fields still empty in Settings → General. */
+  missingDetails: BillingDetailsField[];
   /** Why the entered coupon can't be used; null when none or it applied. */
   couponError: string | null;
   /**
@@ -160,15 +166,14 @@ export class BillingCheckoutService implements OnModuleInit {
       orgId,
       dto.planId,
       dto.interval,
-      null,
       billingNow(),
       renewal ? 'renewal' : 'purchase',
       renewal ? null : dto.couponCode,
     );
-    if (!ctx.hasProfile) {
+    if (ctx.missingDetails.length) {
       throw billingError(
-        'billing_profile_required',
-        'Add your billing details first — they go on your GST invoice.',
+        'billing_details_incomplete',
+        BILLING_DETAILS_INCOMPLETE,
       );
     }
     if (renewal && ctx.mode.mode === 'manual') {
@@ -636,7 +641,6 @@ export class BillingCheckoutService implements OnModuleInit {
     orgId: string,
     planId: string,
     interval: Interval,
-    billingState?: string | null,
     now = billingNow(),
     purpose: 'purchase' | 'renewal' = 'purchase',
     couponCode?: string | null,
@@ -645,15 +649,13 @@ export class BillingCheckoutService implements OnModuleInit {
       // A lapsed term must read as past_due / expired before deciding.
       await applyOrgSubscriptionLifecycle(this.prisma, orgId);
     }
-    const [active, sub, profile, seller, mode, expiry] = await Promise.all([
+    const [active, sub, org, seller, mode, expiry] = await Promise.all([
       this.prisma.plan.findMany({ where: { isActive: true } }),
       this.prisma.subscription.findFirst({
         where: { orgId, status: { not: 'cancelled' } },
         include: { plan: true },
       }),
-      this.prisma.billingProfile.findUnique({
-        where: { organisationId: orgId },
-      }),
+      loadOrgBillingDetails(this.prisma, orgId),
       this.platformConfig.getSellerSettings(),
       this.mode.getMode(),
       getBillingExpiryConfig(this.prisma),
@@ -671,11 +673,12 @@ export class BillingCheckoutService implements OnModuleInit {
         isFree: isFreePlan(p),
       };
     };
+    // The buyer is the org profile (Settings → General) as it is right now.
     const buyer = {
-      legalName: profile?.legalName ?? null,
-      state: billingState?.trim() || profile?.state || null,
-      country: profile?.country ?? 'IN',
-      gstin: profile?.gstin ?? null,
+      legalName: org.details.legalName || null,
+      state: org.details.state || null,
+      country: org.details.country,
+      gstin: org.details.gstin,
     };
     const scheduledRow = sub?.scheduledPlanId
       ? active.find((p) => p.id === sub.scheduledPlanId)
@@ -699,7 +702,7 @@ export class BillingCheckoutService implements OnModuleInit {
       buyer: { state: buyer.state, country: buyer.country },
       seller: { state: seller.state },
     };
-    const base = { mode, buyer, seller, hasProfile: !!profile };
+    const base = { mode, buyer, seller, missingDetails: org.missing };
     try {
       if (purpose === 'renewal') {
         let quote = quoteRenewal({
@@ -826,7 +829,6 @@ export class BillingCheckoutService implements OnModuleInit {
       orgId,
       dto.planId,
       dto.interval,
-      dto.billingState,
       billingNow(),
       renewal ? 'renewal' : 'purchase',
       renewal ? null : dto.couponCode,

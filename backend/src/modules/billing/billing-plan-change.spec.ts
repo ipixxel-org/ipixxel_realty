@@ -4,7 +4,10 @@ import { PaymentEventsService } from '../payments/payment-events';
 import { BillingCheckoutService } from './billing-checkout.service';
 import { BillingPlanChangeService } from './billing-plan-change.service';
 import { buildOverview } from './billing-overview';
-import { createFakeBillingDb } from '../../../test/fakes/fake-billing-db';
+import {
+  createFakeBillingDb,
+  giveBillingDetails,
+} from '../../../test/fakes/fake-billing-db';
 
 const DAY = 86_400_000;
 // Some tests switch the server flag off; put it back afterwards.
@@ -268,14 +271,7 @@ describe('the lifecycle sweep applies scheduled changes when the term ends', () 
 describe('renewal with a scheduled change', () => {
   function checkoutSetup(sub: Record<string, unknown>) {
     const ctx = setup({ renewsAt: new Date(Date.now() + 2 * DAY), ...sub });
-    ctx.db.billingProfile.rows.push({
-      id: 'p1',
-      organisationId: 'org-1',
-      legalName: 'Acme',
-      state: '29',
-      country: 'IN',
-      gstin: null,
-    });
+    giveBillingDetails(ctx.db, { name: 'Acme' });
     const payments = {
       createOrder: jest.fn(async (input: any) => {
         const pay = await ctx.db.payment.create({

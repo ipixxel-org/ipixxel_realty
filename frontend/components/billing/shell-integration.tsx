@@ -32,10 +32,10 @@ function ShellBanners() {
  * off it renders the children untouched; on, it provides the billing data
  * layer, the account-wide banners/popups and the locked-state access info.
  */
-export function BillingV2Root({ canEdit, children }: { canEdit: boolean; children: ReactNode }) {
+export function BillingV2Root({ canEdit, canEditOrgProfile = true, children }: { canEdit: boolean; canEditOrgProfile?: boolean; children: ReactNode }) {
   if (!BILLING_V2) return <>{children}</>;
   return (
-    <BillingEnvProvider client={billingClient} canEdit={canEdit}>
+    <BillingEnvProvider client={billingClient} canEdit={canEdit} canEditOrgProfile={canEditOrgProfile}>
       <OrgBillingProvider>
         <BillingAccessProvider>
           <ShellBanners />
