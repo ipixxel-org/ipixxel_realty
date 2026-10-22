@@ -32,6 +32,8 @@ interface NavbarProps {
   ctaBorderColor?: string;
   ctaRadius?: number | string;
   ctaTarget?: "_self" | "_blank";
+  /** Internal scope used to keep CTA overrides isolated between navbars. */
+  scope?: string;
   phone?: string;
   email?: string;
   badge?: string;
@@ -190,8 +192,27 @@ function CtaButton({
 }) {
   const backgroundColor = styleProps.ctaButtonColor || undefined;
   const radius = Number(styleProps.ctaRadius);
+  const ctaClassName = `op-navbar-cta-${(styleProps.scope || "default").replace(/[^a-zA-Z0-9_-]/g, "_")}`;
   return (
-    <a
+    <>
+      {(styleProps.ctaTextColor ||
+        styleProps.ctaButtonColor ||
+        styleProps.ctaBorderColor ||
+        styleProps.ctaHoverColor ||
+        styleProps.ctaHoverTextColor) ? (
+        <style>{`.${ctaClassName} { ${
+          styleProps.ctaTextColor ? `color:${styleProps.ctaTextColor} !important;` : ""
+        } ${
+          styleProps.ctaButtonColor ? `background-color:${styleProps.ctaButtonColor} !important;` : ""
+        } ${
+          styleProps.ctaBorderColor ? `border-color:${styleProps.ctaBorderColor} !important;` : ""
+        } }${styleProps.ctaHoverColor || styleProps.ctaHoverTextColor ? ` .${ctaClassName}:hover { ${
+          styleProps.ctaHoverColor ? `background-color:${styleProps.ctaHoverColor} !important;` : ""
+        } ${
+          styleProps.ctaHoverTextColor ? `color:${styleProps.ctaHoverTextColor} !important;` : ""
+        } }` : ""}`}</style>
+      ) : null}
+      <a
       href={href}
       onClick={(e) => {
         if (styleProps.ctaTarget !== "_blank") handleNavClick(e, href, onClick);
@@ -213,10 +234,11 @@ function CtaButton({
         borderColor: styleProps.ctaBorderColor || undefined,
         borderRadius: Number.isFinite(radius) && radius >= 0 ? `${radius}px` : undefined,
       }}
-      className={className || "px-4 py-2 rounded-full border border-transparent bg-green text-white text-[13px] font-semibold hover:opacity-90 transition-all hover:accent-glow-md"}
-    >
-      {text}
-    </a>
+      className={`${ctaClassName} ${className || "px-4 py-2 rounded-full border border-transparent bg-green text-white text-[13px] font-semibold hover:opacity-90 transition-all hover:accent-glow-md"}`}
+      >
+        {text}
+      </a>
+    </>
   );
 }
 
@@ -528,7 +550,10 @@ function NavbarMinimal({ props, sticky }: { props: NavbarProps; sticky?: boolean
 }
 
 export function NavbarBlock({ block }: { block: BlockConfig }) {
-  const props = block.props as unknown as NavbarProps;
+  const props = {
+    ...(block.props as unknown as NavbarProps),
+    scope: block.id,
+  };
   const sticky = block.variant === "static" ? false : props.sticky !== false;
   switch (block.variant) {
     case "centered":
