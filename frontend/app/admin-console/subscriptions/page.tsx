@@ -15,13 +15,14 @@ import {
   updatePlatformConfig,
 } from "@/lib/api";
 import { Icon } from "@/components/icons";
-import { Modal } from "@/components/ui/modal";
 import { ConfirmModal } from "@/components/ui/confirm-modal";
 import { useAuth } from "@/lib/auth-context";
 import { useRouter } from "next/navigation";
 import { useFlash } from "@/lib/flash";
 import { LIST_PAGE_SIZE, ListPager } from "@/components/ui/list-pager";
-import { ORG_SUBS_TAB, SUBS_FLASH_KEY, SUBS_PATH } from "./subscriptions-shared";
+import { ORG_SUBS_TAB, readListQuery, replaceListQuery, REQUEST_STATUS_FILTERS, SUBS_FLASH_KEY, SUBS_PATH, tabIndex, tabSlug } from "./subscriptions-shared";
+import { RejectRequestDialog } from "@/components/billing/admin/reject-request-dialog";
+import { PACKAGE_REQUESTS_ANCHOR } from "@/components/billing/admin/package-requests";
 import { ChangeSubscriptionModal } from "./change-subscription-modal";
 import { AdminCheckoutsNeedingReview, AdminLifecycleSettings, AdminPaymentsV2, AdminPlansV2, AdminSubscriptionsV2 } from "@/components/billing/admin/admin-pages";
 import { BILLING_V2 } from "@/lib/billing/flag";
@@ -124,7 +125,7 @@ export default function SuperAdminSubscriptionsPage() {
   const [requestsLoading, setRequestsLoading] = useState(false);
   const [requestFilterStatus, setRequestFilterStatus] = useState<string>("pending");
   const [rejectModalReq, setRejectModalReq] = useState<PackageChangeRequestRow | null>(null);
-  const [rejectionReason, setRejectionReason] = useState("");
+  const [rejectError, setRejectError] = useState<string | null>(null);
   const [actionLoadingId, setActionLoadingId] = useState<string | null>(null);
 
   const [capabilities, setCapabilities] = useState<PlanCapability[]>([]);
@@ -154,9 +155,28 @@ export default function SuperAdminSubscriptionsPage() {
   };
 
   const router = useRouter();
+  // The tab (and the Package Requests filter / page) live in the URL: reload,
+  // browser Back and an org page's Back link return to the same place.
+  const selectTab = (i: number) => {
+    setTab(i);
+    replaceListQuery(
+      i === 3 ? { tab: tabSlug(i), status: requestFilterStatus, page: requestsPage } : { tab: i === 0 ? null : tabSlug(i) },
+    );
+  };
+  const requestsUrl = (status: string, page: number) => replaceListQuery({ tab: tabSlug(3), status, page });
+  // Package Requests → the org's page, at its Package requests section; Back returns to this filter.
+  const openRequestHref = (orgId: string) =>
+    billingHref("adminSubscription", {
+      orgId,
+      from: tabSlug(3),
+      status: requestFilterStatus,
+      page: requestsPage > 1 ? requestsPage : undefined,
+      _hash: PACKAGE_REQUESTS_ANCHOR,
+    });
+
   useFlash(SUBS_FLASH_KEY, (flash) => {
     const t = Number(flash.tab);
-    if (Number.isInteger(t)) setTab(t);
+    if (Number.isInteger(t)) selectTab(t);
     notify(flash.message);
   });
 
@@ -260,7 +280,16 @@ export default function SuperAdminSubscriptionsPage() {
     fetchCapabilities();
     fetchSubs(1, "", 0);
     fetchOverview();
-    fetchPackageChangeRequests("pending", 1);
+    // ?tab=package-requests&status=…&page=…: restore the tab and the request list.
+    const url = readListQuery();
+    const urlTab = tabIndex(url.get("tab"));
+    const onRequests = urlTab === 3;
+    const urlStatus = url.get("status") ?? "";
+    const reqStatus = onRequests && (REQUEST_STATUS_FILTERS as readonly string[]).includes(urlStatus) ? urlStatus : "pending";
+    const reqPage = onRequests ? Math.max(1, Number(url.get("page")) || 1) : 1;
+    if (urlTab !== null) setTab(urlTab);
+    setRequestFilterStatus(reqStatus);
+    fetchPackageChangeRequests(reqStatus, reqPage);
     loadExpiryPolicy();
   }, [canViewSubscriptions]);
 
@@ -273,7 +302,7 @@ export default function SuperAdminSubscriptionsPage() {
     apiFetch<Subscription>(`/admin/subscriptions/${encodeURIComponent(changeId)}`)
       .then((s) => {
         if (cancelled) return;
-        setTab(Number(ORG_SUBS_TAB));
+        selectTab(Number(ORG_SUBS_TAB));
         setChangeSub(s);
       })
       .catch((e: unknown) => {
@@ -349,17 +378,17 @@ export default function SuperAdminSubscriptionsPage() {
     }
   };
 
-  const handleRejectRequest = async () => {
+  const handleRejectRequest = async (reason: string) => {
     if (!rejectModalReq) return;
     setActionLoadingId(rejectModalReq.id);
+    setRejectError(null);
     try {
-      await rejectPackageChangeRequest(rejectModalReq.id, rejectionReason.trim() || undefined);
+      await rejectPackageChangeRequest(rejectModalReq.id, reason);
       notify("Package change request rejected.");
       setRejectModalReq(null);
-      setRejectionReason("");
       void fetchPackageChangeRequests(requestFilterStatus, requestsPage);
     } catch (e: any) {
-      notify(e.message || "Failed to reject request.");
+      setRejectError(e.message || "Failed to reject request.");
     } finally {
       setActionLoadingId(null);
     }
@@ -656,7 +685,7 @@ export default function SuperAdminSubscriptionsPage() {
               <button
                 key={label}
                 type="button"
-                onClick={() => setTab(i)}
+                onClick={() => selectTab(i)}
                 style={{
                   padding: "10px 16px",
                   borderRadius: 10,
@@ -1222,6 +1251,7 @@ export default function SuperAdminSubscriptionsPage() {
                     type="button"
                     onClick={() => {
                       setRequestFilterStatus(st.val);
+                      requestsUrl(st.val, 1);
                       void fetchPackageChangeRequests(st.val, 1);
                     }}
                     style={{
@@ -1276,7 +1306,7 @@ export default function SuperAdminSubscriptionsPage() {
                           <td style={{ padding: "12px 16px" }}>
                             {/* Billing v2: the org's billing page (Subscriptions → org); otherwise the org page. */}
                             <Link
-                              href={BILLING_V2 ? billingHref("adminSubscription", { orgId: r.orgId }) : `/admin-console/organisation-detail/${r.orgId}`}
+                              href={BILLING_V2 ? openRequestHref(r.orgId) : `/admin-console/organisation-detail/${r.orgId}`}
                               style={{ textDecoration: "none", color: "#0f172a", fontWeight: 700 }}
                             >
                               {r.organisation?.name ?? r.orgId}
@@ -1328,7 +1358,12 @@ export default function SuperAdminSubscriptionsPage() {
                             </span>
                           </td>
                           <td style={{ padding: "12px 16px", textAlign: "right" }}>
-                            {r.status === "pending" ? (
+                            {BILLING_V2 ? (
+                              // Approve / reject happen on the org's page (Package requests section).
+                              <Link href={openRequestHref(r.orgId)} className="btn btn-ghost btn-sm">
+                                Open
+                              </Link>
+                            ) : r.status === "pending" ? (
                               <div style={{ display: "flex", gap: 6, justifyContent: "flex-end" }}>
                                 {canApproveRequest ? <button
                                   type="button"
@@ -1350,8 +1385,8 @@ export default function SuperAdminSubscriptionsPage() {
                                 {canRejectRequest ? <button
                                   type="button"
                                   onClick={() => {
+                                    setRejectError(null);
                                     setRejectModalReq(r);
-                                    setRejectionReason("");
                                   }}
                                   disabled={actionLoadingId === r.id}
                                   style={{
@@ -1383,7 +1418,10 @@ export default function SuperAdminSubscriptionsPage() {
               page={requestsPage}
               total={requestsTotal}
               loading={requestsLoading}
-              onPageChange={(p) => void fetchPackageChangeRequests(requestFilterStatus, p)}
+              onPageChange={(p) => {
+                requestsUrl(requestFilterStatus, p);
+                void fetchPackageChangeRequests(requestFilterStatus, p);
+              }}
               noun="requests"
             />
           </div>
@@ -1492,48 +1530,15 @@ export default function SuperAdminSubscriptionsPage() {
       </div>
 
       {/* Reject Request Modal */}
-      <Modal
+      <RejectRequestDialog
+        key={rejectModalReq?.id ?? "none"}
         open={!!rejectModalReq}
-        onClose={() => {
-          setRejectModalReq(null);
-          setRejectionReason("");
-        }}
-        title="Reject Package Change Request"
-        description={rejectModalReq ? `Rejecting request from ${rejectModalReq.organisation?.name ?? "Organisation"}` : undefined}
-        size="md"
-        footer={
-          <>
-            <button
-              className="btn btn-ghost"
-              onClick={() => {
-                setRejectModalReq(null);
-                setRejectionReason("");
-              }}
-            >
-              Cancel
-            </button>
-            <button
-              className="btn btn-danger"
-              onClick={() => void handleRejectRequest()}
-              disabled={actionLoadingId === rejectModalReq?.id}
-            >
-              {actionLoadingId === rejectModalReq?.id ? "Rejecting…" : "Reject Request"}
-            </button>
-          </>
-        }
-      >
-        <div className="field">
-          <label>Rejection Reason (Optional)</label>
-          <textarea
-            className="inp"
-            rows={3}
-            value={rejectionReason}
-            onChange={(e) => setRejectionReason(e.target.value)}
-            placeholder="Enter reason for rejecting this request..."
-            style={{ width: "100%", padding: 10 }}
-          />
-        </div>
-      </Modal>
+        orgName={rejectModalReq?.organisation?.name ?? "Organisation"}
+        busy={!!rejectModalReq && actionLoadingId === rejectModalReq.id}
+        error={rejectError}
+        onReject={(reason) => void handleRejectRequest(reason)}
+        onClose={() => setRejectModalReq(null)}
+      />
 
       {changeSub && !plansLoading ? (
         <ChangeSubscriptionModal

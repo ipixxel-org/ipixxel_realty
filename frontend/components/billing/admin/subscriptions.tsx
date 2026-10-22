@@ -1,6 +1,7 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { readListQuery, replaceListQuery } from "@/app/admin-console/subscriptions/subscriptions-shared";
 import { Icon } from "@/components/icons";
 import { ListPager } from "@/components/ui/list-pager";
 import { useToast } from "@/components/ui/toast";
@@ -45,11 +46,24 @@ const ALL: SubscriptionStatus[] = ["free", "active", "renewal_due", "past_due", 
 
 /* ------------------------------------------------------------------- List */
 
-export function SubscriptionsList() {
-  const [status, setStatus] = useState<SubscriptionStatus | "">("");
-  const [planId, setPlanId] = useState("");
-  const [q, setQ] = useState("");
-  const [page, setPage] = useState(1);
+/**
+ * `syncUrl` (the Subscriptions studio tab): the status / plan / search / page
+ * live in the URL (?tab=org-subscriptions&status=…&plan=…&q=…&page=…), so a
+ * reload or Back from an org page restores them.
+ */
+export function SubscriptionsList({ syncUrl = false }: { syncUrl?: boolean } = {}) {
+  const initial = (key: string) => (syncUrl ? (readListQuery().get(key) ?? "") : "");
+  const [status, setStatus] = useState<SubscriptionStatus | "">(() => {
+    const s = initial("status");
+    return (ALL as string[]).includes(s) ? (s as SubscriptionStatus) : "";
+  });
+  const [planId, setPlanId] = useState(() => initial("plan"));
+  const [q, setQ] = useState(() => initial("q"));
+  const [page, setPage] = useState(() => Math.max(1, Number(initial("page")) || 1));
+  const listState = { status, plan: planId, q, page };
+  useEffect(() => {
+    if (syncUrl) replaceListQuery({ tab: "org-subscriptions", status, plan: planId, q, page });
+  }, [syncUrl, status, planId, q, page]);
   const { data: plans } = useBillingQuery((c) => c.listAdminPlans(), []);
   const { data, error } = useBillingQuery((c) => c.listSubscriptions({ status: status || undefined, planId: planId || undefined, q, page, pageSize: 10 }), [status, planId, q, page]);
   const filter = (fn: () => void) => {
@@ -141,7 +155,7 @@ export function SubscriptionsList() {
                     <td>{o.users}</td>
                     <td>{o.couponCode ? <span className="badge b-violet">{o.couponCode}</span> : <span className="bl-muted">—</span>}</td>
                     <td>
-                      <BLink to="adminSubscription" params={{ orgId: o.orgId }} className="btn btn-ghost btn-sm">
+                      <BLink to="adminSubscription" params={{ orgId: o.orgId, ...(syncUrl ? { from: "org-subscriptions", ...listState } : {}) }} className="btn btn-ghost btn-sm">
                         Open
                       </BLink>
                     </td>

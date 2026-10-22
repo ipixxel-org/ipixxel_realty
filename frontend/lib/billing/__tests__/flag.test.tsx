@@ -70,6 +70,7 @@ const overview = (over: Partial<BillingOverview> = {}): BillingOverview => ({
   locked: { users: 0, projects: 0, landingPages: 0 },
   retention: null,
   pendingUpgrade: null,
+  rejectedUpgrade: null,
   ...over,
 });
 

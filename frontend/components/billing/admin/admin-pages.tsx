@@ -1,6 +1,6 @@
 "use client";
 
-import type { ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 import { Icon } from "@/components/icons";
 import { useAuth } from "@/lib/auth-context";
 import { BLink, PageHead } from "../ui";
@@ -14,6 +14,7 @@ import { AdminEditPlan, AdminPlansEditor } from "./plans-editor";
 import { CompanyTaxDetailsCard } from "./company";
 import { AdminPaymentsView } from "./payments";
 import { SubscriptionDetailView, SubscriptionsList } from "./subscriptions";
+import { OrgPackageRequests } from "./package-requests";
 
 /** Super Admin billing pages (v2). Mounted only with NEXT_PUBLIC_BILLING_V2=true. */
 
@@ -69,7 +70,7 @@ export function AdminEditPlanPage({ planId }: { planId: string }) {
 export function AdminSubscriptionsV2() {
   return (
     <Guard>
-      <SubscriptionsList />
+      <SubscriptionsList syncUrl />
     </Guard>
   );
 }
@@ -83,11 +84,28 @@ export function AdminPaymentsV2() {
   );
 }
 
-export function AdminSubscriptionDetailPage({ orgId }: { orgId: string }) {
+/** Which Subscriptions list opened an org page (?from=…&status=…&q=…&page=…), for its Back link. */
+export interface SubscriptionsListOrigin {
+  from?: string | null;
+  status?: string | null;
+  plan?: string | null;
+  q?: string | null;
+  page?: string | null;
+}
+
+export function AdminSubscriptionDetailPage({ orgId, origin = {} }: { orgId: string; origin?: SubscriptionsListOrigin }) {
+  // Approving / rejecting a request changes the plan: reload the billing view.
+  const [version, setVersion] = useState(0);
+  const back = origin.from
+    ? { tab: origin.from, status: origin.status, plan: origin.plan, q: origin.q, page: origin.page }
+    : {};
   return (
     <Guard>
-      <PageHead eyebrow="Subscriptions" icon="organisation" title="Organisation billing" back={{ to: "adminSubscriptions", label: "Subscriptions" }} sampleFns={["getSubscription"]} />
-      <SubscriptionDetailView orgId={orgId} />
+      <PageHead eyebrow="Subscriptions" icon="organisation" title="Organisation billing" back={{ to: "adminSubscriptions", params: back, label: "Subscriptions" }} sampleFns={["getSubscription"]} />
+      <div className="bl-stack">
+        <SubscriptionDetailView key={version} orgId={orgId} />
+        <OrgPackageRequests orgId={orgId} onChanged={() => setVersion((v) => v + 1)} />
+      </div>
     </Guard>
   );
 }

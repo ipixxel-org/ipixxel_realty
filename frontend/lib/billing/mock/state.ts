@@ -319,6 +319,7 @@ export function deriveOverview(s: MockState, today: string): BillingOverview {
           createdAt: s.pendingRequest.createdAt,
         }
       : null,
+    rejectedUpgrade: null,
   };
 }
 

@@ -225,6 +225,22 @@ export function PriceSummary({ preview: p, renewalMode }: { preview: CheckoutPre
 
 type Part = "details" | "coupon" | "summary";
 
+/** The org's latest upgrade request was rejected: say so, with the Super Admin's reason. */
+export function RejectedUpgradeBanner({ rejected: r }: { rejected: NonNullable<BillingOverview["rejectedUpgrade"]> }) {
+  return (
+    <Banner tone="rose" icon="info" title={`Upgrade to ${r.toPlan.name} was not approved`}>
+      Your request for {r.toPlan.name} ({r.interval}) was rejected{r.rejectedAt ? ` on ${formatDate(r.rejectedAt)}` : ""}.
+      {r.reason ? (
+        <>
+          {" "}
+          <b>Reason:</b> {r.reason}
+        </>
+      ) : null}{" "}
+      You can send a new request from Plans.
+    </Banner>
+  );
+}
+
 /** An upgrade request (manual mode) or a paid order waiting on our team. */
 export function PendingUpgradeBanner({ pending: u }: { pending: PendingUpgrade }) {
   return (

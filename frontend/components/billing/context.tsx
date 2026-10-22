@@ -74,9 +74,11 @@ export function billingHref(to: BillingRoute, params: RouteParams = {}): string 
     case "adminCouponEdit":
       return `/admin-console/coupons/${encodeURIComponent(String(params.code))}/edit`;
     case "adminSubscriptions":
-      return "/admin-console/subscriptions";
+      // tab / status / q / page: the Subscriptions studio restores them (Back from an org page).
+      return `/admin-console/subscriptions${query(params)}`;
     case "adminSubscription":
-      return `/admin-console/subscriptions/org/${encodeURIComponent(String(params.orgId))}`;
+      // from / status / … say which list opened it (for Back); _hash scrolls to a section.
+      return `/admin-console/subscriptions/org/${encodeURIComponent(String(params.orgId))}${query(params, ["orgId", "_hash"])}${params._hash ? `#${params._hash}` : ""}`;
     case "adminPlanEdit":
       return `/admin-console/subscriptions/plans/${encodeURIComponent(String(params.id))}/edit`;
     case "coupons":

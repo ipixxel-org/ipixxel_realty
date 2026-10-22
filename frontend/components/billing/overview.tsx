@@ -6,7 +6,7 @@ import type { BillingOverview } from "@/lib/billing/types";
 import { BillingBanner, PayNowButton, RenewalReminderPopup, UpdatePaymentMethodButton } from "./banners";
 
 export { RenewalReminderPopup };
-import { BillingDetailsSection, PendingUpgradeBanner } from "./checkout";
+import { BillingDetailsSection, PendingUpgradeBanner, RejectedUpgradeBanner } from "./checkout";
 import { useOrgBilling } from "./context";
 import { InvoicesTable, PaymentHistoryTable } from "./invoices";
 import { BLink, countLabel, ErrorNote, Kv, Loading, RenewalPrice, SampleDataTag, Section, StatusBadge, UsageMeter } from "./ui";
@@ -124,6 +124,7 @@ export function BillingOverviewPanel({ showInvoices = true }: { showInvoices?: b
     <div className="bl-stack">
       <BillingBanner overview={o} />
       {o.pendingUpgrade ? <PendingUpgradeBanner pending={o.pendingUpgrade} /> : null}
+      {o.rejectedUpgrade && !o.pendingUpgrade ? <RejectedUpgradeBanner rejected={o.rejectedUpgrade} /> : null}
       <CurrentPlanCard overview={o} />
       <div className="bl-row">
         <BLink to="plans" className="btn btn-primary">

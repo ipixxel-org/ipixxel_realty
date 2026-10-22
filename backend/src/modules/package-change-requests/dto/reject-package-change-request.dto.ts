@@ -1,7 +1,11 @@
-import { IsOptional, IsString } from 'class-validator';
+import { IsString, MaxLength } from 'class-validator';
+
+export const REJECTION_REASON_MIN = 10;
+export const REJECTION_REASON_MAX = 500;
 
 export class RejectPackageChangeRequestDto {
-  @IsOptional()
+  /** Required: shown to the organisation and in the rejection notification. */
   @IsString()
-  rejectionReason?: string;
+  @MaxLength(REJECTION_REASON_MAX)
+  rejectionReason!: string;
 }

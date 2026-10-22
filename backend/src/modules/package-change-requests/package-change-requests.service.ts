@@ -7,8 +7,28 @@ import { settleCoupon } from '../billing/coupon-settlement';
 import { applyOrgSubscriptionLifecycle } from '../../common/utils/subscription-lifecycle.util';
 import { orgBillingRecipientsWhere } from '../../common/utils/notification-recipients.util';
 import { CreatePackageChangeRequestDto } from './dto/create-package-change-request.dto';
-import { RejectPackageChangeRequestDto } from './dto/reject-package-change-request.dto';
+import {
+  REJECTION_REASON_MAX,
+  REJECTION_REASON_MIN,
+  RejectPackageChangeRequestDto,
+} from './dto/reject-package-change-request.dto';
 import { ListPackageChangeRequestsDto } from './dto/list-package-change-requests.dto';
+
+/** Trimmed reason, or 400 when it is missing, too short or too long. */
+export function rejectionReasonOrThrow(raw: string | null | undefined): string {
+  const reason = (raw ?? '').trim();
+  if (reason.length < REJECTION_REASON_MIN) {
+    throw new BadRequestException(
+      `Enter a reason for rejection (at least ${REJECTION_REASON_MIN} characters).`,
+    );
+  }
+  if (reason.length > REJECTION_REASON_MAX) {
+    throw new BadRequestException(
+      `Keep the reason under ${REJECTION_REASON_MAX} characters.`,
+    );
+  }
+  return reason;
+}
 
 @Injectable()
 export class PackageChangeRequestsService {
@@ -197,6 +217,9 @@ export class PackageChangeRequestsService {
     if (query.status) {
       where.status = query.status;
     }
+    if (query.orgId) {
+      where.orgId = query.orgId;
+    }
     if (query.search?.trim()) {
       const term = query.search.trim();
       where.OR = [
@@ -355,7 +378,9 @@ export class PackageChangeRequestsService {
       throw new BadRequestException('Request is no longer pending approval');
     }
 
-    const rejectionReason = dto.rejectionReason?.trim() || undefined;
+    // Required: the organisation sees it on its Billing page and in the
+    // rejection notification.
+    const rejectionReason = rejectionReasonOrThrow(dto?.rejectionReason);
 
     const rejectedRequest = await this.prisma.$transaction(async (tx) => {
       // Conditional, so a concurrent approve/reject can't both succeed.
@@ -377,7 +402,7 @@ export class PackageChangeRequestsService {
       // Billing v2: close the manual-mode checkout behind it, if any.
       await tx.billingCheckout.updateMany({
         where: { packageChangeRequestId: requestId, status: 'pending' },
-        data: { status: 'rejected', reviewReason: rejectionReason ?? null },
+        data: { status: 'rejected', reviewReason: rejectionReason },
       });
 
       await tx.auditLog.create({
@@ -407,9 +432,7 @@ export class PackageChangeRequestsService {
             recipientId: u.id,
             type: 'package_change_rejected',
             title: 'Package Change Request Rejected',
-            body: `Your request to change package to "${request.targetPlan.name}" was rejected by Super Admin.${
-              rejectionReason ? ` Reason: ${rejectionReason}` : ''
-            }`,
+            body: `Your request to change package to "${request.targetPlan.name}" was rejected by Super Admin. Reason: ${rejectionReason}`,
             entity: 'PackageChangeRequest',
             entityId: requestId,
           })),

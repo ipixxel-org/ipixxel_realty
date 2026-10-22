@@ -4,6 +4,7 @@ import { PaymentEventsService } from '../payments/payment-events';
 import { PackageChangeRequestsService } from '../package-change-requests/package-change-requests.service';
 import { BillingCheckoutService } from './billing-checkout.service';
 import { BillingInvoiceMailer } from './billing-invoice-mailer.service';
+import { findRejectedUpgrade } from './checkout-state';
 import {
   createFakeBillingDb,
   giveBillingDetails,
@@ -673,5 +674,53 @@ describe('manual mode', () => {
       reviewReason: 'Pay by NEFT first',
     });
     expect(db.subscription.rows[0].planId).toBe('basic');
+  });
+
+  it('reject needs a reason of 10–500 characters; nothing changes without one', async () => {
+    const { service, db } = setup({ mode: 'manual' });
+    const res = await service.start('org-1', 'u1', {
+      planId: 'growth',
+      interval: 'monthly',
+    });
+    const requestId = (res as { requestId: string }).requestId;
+    const pcr = new PackageChangeRequestsService(db as never);
+    for (const reason of [undefined, '', '   ', 'too short', 'x'.repeat(501)]) {
+      await expect(
+        pcr.adminRejectRequest(requestId, 'admin-1', {
+          rejectionReason: reason as string,
+        }),
+      ).rejects.toBeInstanceOf(BadRequestException);
+    }
+    expect(db.packageChangeRequest.rows[0].status).toBe('pending');
+    expect(db.billingCheckout.rows[0].status).toBe('pending');
+  });
+
+  it('the reason is stored, sent in the notification and shown on the org overview', async () => {
+    const { service, db } = setup({ mode: 'manual' });
+    const res = await service.start('org-1', 'u1', {
+      planId: 'growth',
+      interval: 'monthly',
+    });
+    const requestId = (res as { requestId: string }).requestId;
+    expect(await findRejectedUpgrade(db as never, 'org-1')).toBeNull();
+    const pcr = new PackageChangeRequestsService(db as never);
+    await pcr.adminRejectRequest(requestId, 'admin-1', {
+      rejectionReason: '  Please pay by NEFT first  ',
+    });
+    expect(db.packageChangeRequest.rows[0]).toMatchObject({
+      status: 'rejected',
+      rejectionReason: 'Please pay by NEFT first',
+      reviewedById: 'admin-1',
+    });
+    const notes = db.notification.rows.filter(
+      (n: { type: string }) => n.type === 'package_change_rejected',
+    );
+    expect(notes.length).toBeGreaterThan(0);
+    expect(notes[0].body).toContain('Reason: Please pay by NEFT first');
+    expect(await findRejectedUpgrade(db as never, 'org-1')).toMatchObject({
+      requestId,
+      toPlan: { id: 'growth' },
+      reason: 'Please pay by NEFT first',
+    });
   });
 });
