@@ -90,6 +90,14 @@ describe("per-section style independence", () => {
     expect(cssA).not.toBe(cssB);
   });
 
+  it("does not apply block typography to navbar CTA controls", () => {
+    const css = blockStyleTag("navbar-a", { typography: { color: "#18181b" } });
+    expect(css).toContain('[data-block-id="navbar-a"] a:not(.op-navbar-cta)');
+    expect(css).toContain('[data-block-id="navbar-a"] button:not(.op-navbar-cta)');
+    expect(css).not.toContain('[data-block-id="navbar-a"] a,');
+    expect(css).not.toContain('[data-block-id="navbar-a"] button,');
+  });
+
   it("element keys are namespaced by block id so equal ids never collide", () => {
     expect(elementKey("sec-a", "title")).toBe("sec-a|title");
     expect(elementKey("sec-b", "title")).toBe("sec-b|title");

@@ -234,7 +234,7 @@ function CtaButton({
         borderColor: styleProps.ctaBorderColor || undefined,
         borderRadius: Number.isFinite(radius) && radius >= 0 ? `${radius}px` : undefined,
       }}
-      className={`${ctaClassName} ${className || "px-4 py-2 rounded-full border border-transparent bg-green text-white text-[13px] font-semibold hover:opacity-90 transition-all hover:accent-glow-md"}`}
+      className={`op-navbar-cta ${ctaClassName} ${className || "px-4 py-2 rounded-full border border-transparent bg-green text-white text-[13px] font-semibold hover:opacity-90 transition-all hover:accent-glow-md"}`}
       >
         {text}
       </a>
