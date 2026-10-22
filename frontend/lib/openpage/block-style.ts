@@ -437,7 +437,9 @@ function allDecls(style: BlockStyle): string[] {
  * order in which the `<style>` tags happen to appear in the DOM.
  */
 function specificity(base: string, depth: number): string {
-  return `${Array.from({ length: Math.max(1, depth) }, () => base).join("")}`;
+  // Element rules must outrank block typography selectors such as
+  // `[data-block-id="..."] h1`, including for root-level elements.
+  return `${Array.from({ length: Math.max(2, depth + 1) }, () => base).join("")}`;
 }
 
 /**

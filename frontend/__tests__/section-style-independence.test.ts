@@ -98,6 +98,11 @@ describe("per-section style independence", () => {
     expect(css).not.toContain('[data-block-id="navbar-a"] button,');
   });
 
+  it("gives element typography precedence over block typography", () => {
+    const css = elementStyleTag("sec-a|title", { typography: { fontSize: "15px" } });
+    expect(css).toContain('[data-el-id="sec-a|title"][data-el-id="sec-a|title"]');
+  });
+
   it("element keys are namespaced by block id so equal ids never collide", () => {
     expect(elementKey("sec-a", "title")).toBe("sec-a|title");
     expect(elementKey("sec-b", "title")).toBe("sec-b|title");
