@@ -25,6 +25,7 @@ import { ORG_SUBS_TAB, SUBS_FLASH_KEY, SUBS_PATH } from "./subscriptions-shared"
 import { ChangeSubscriptionModal } from "./change-subscription-modal";
 import { AdminCheckoutsNeedingReview, AdminLifecycleSettings, AdminPaymentsV2, AdminPlansV2, AdminSubscriptionsV2 } from "@/components/billing/admin/admin-pages";
 import { BILLING_V2 } from "@/lib/billing/flag";
+import { billingHref } from "@/components/billing/context";
 import { formatPaise } from "@/lib/razorpay";
 import type {
   Plan,
@@ -1273,7 +1274,11 @@ export default function SuperAdminSubscriptionsPage() {
                       requests.map((r) => (
                         <tr key={r.id} style={{ borderBottom: "1px solid #f8fafc" }}>
                           <td style={{ padding: "12px 16px" }}>
-                            <Link href={`/admin-console/organisation-detail/${r.orgId}`} style={{ textDecoration: "none", color: "#0f172a", fontWeight: 700 }}>
+                            {/* Billing v2: the org's billing page (Subscriptions → org); otherwise the org page. */}
+                            <Link
+                              href={BILLING_V2 ? billingHref("adminSubscription", { orgId: r.orgId }) : `/admin-console/organisation-detail/${r.orgId}`}
+                              style={{ textDecoration: "none", color: "#0f172a", fontWeight: 700 }}
+                            >
                               {r.organisation?.name ?? r.orgId}
                             </Link>
                           </td>
