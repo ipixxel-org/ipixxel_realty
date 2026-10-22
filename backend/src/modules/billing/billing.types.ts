@@ -77,6 +77,8 @@ export interface BillingOverviewV2 {
   )[];
   /** A pending upgrade request, or a paid upgrade under review (step 2). */
   pendingUpgrade: PendingUpgradeV2 | null;
+  /** Set while the org's latest package request is a rejected one (shown with its reason). */
+  rejectedUpgrade: RejectedUpgradeV2 | null;
   periodStart: string | null;
   periodEnd: string | null;
   daysLeftInPeriod: number;
@@ -362,6 +364,15 @@ export interface ConfirmCheckoutResultV2 {
   paymentStatus: 'created' | 'pending' | 'captured' | 'failed' | 'refunded';
   toPlanId: string;
   toInterval: BillingInterval;
+}
+
+/** The org's most recent package request, when a Super Admin rejected it (with the reason). */
+export interface RejectedUpgradeV2 {
+  requestId: string;
+  toPlan: { id: string; name: string };
+  interval: BillingInterval;
+  rejectedAt: string | null;
+  reason: string | null;
 }
 
 /** An upgrade waiting on someone: a request for approval, or a paid checkout under review. */

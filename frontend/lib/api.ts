@@ -535,8 +535,11 @@ export async function getAdminPackageChangeRequests(params?: {
   search?: string;
   page?: number;
   limit?: number;
+  /** One organisation's requests (its subscription page). */
+  orgId?: string;
 }): Promise<PackageChangeRequestsListResponse> {
   const q = new URLSearchParams();
+  if (params?.orgId) q.set("orgId", params.orgId);
   if (params?.status) q.set("status", params.status);
   if (params?.search) q.set("search", params.search);
   if (params?.page) q.set("page", String(params.page));
@@ -558,9 +561,13 @@ export async function approvePackageChangeRequest(
   );
 }
 
+/** Bounds of the required rejection reason (the API checks them too). */
+export const REJECTION_REASON_MIN = 10;
+export const REJECTION_REASON_MAX = 500;
+
 export async function rejectPackageChangeRequest(
   id: string,
-  rejectionReason?: string,
+  rejectionReason: string,
 ): Promise<{ success: boolean; message: string }> {
   return apiFetch<{ success: boolean; message: string }>(
     `/admin/package-change-requests/${id}/reject`,

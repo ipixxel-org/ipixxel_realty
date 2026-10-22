@@ -4,7 +4,7 @@
  * module) can call them without a Nest dependency.
  */
 import type { PrismaClient } from '@prisma/client';
-import type { PendingUpgradeV2 } from './billing.types';
+import type { PendingUpgradeV2, RejectedUpgradeV2 } from './billing.types';
 
 type Db = Pick<PrismaClient, 'billingCheckout' | 'packageChangeRequest'>;
 
@@ -70,5 +70,29 @@ export async function findPendingUpgrade(
     toPlan: review.toPlan,
     interval: review.toInterval,
     createdAt: review.createdAt.toISOString(),
+  };
+}
+
+/**
+ * The org's latest package request, when it was rejected — so its Billing
+ * page can say so and show the Super Admin's reason. A newer request (or an
+ * approval) replaces it.
+ */
+export async function findRejectedUpgrade(
+  db: Pick<PrismaClient, 'packageChangeRequest'>,
+  orgId: string,
+): Promise<RejectedUpgradeV2 | null> {
+  const latest = await db.packageChangeRequest.findFirst({
+    where: { orgId },
+    orderBy: { createdAt: 'desc' },
+    include: { targetPlan: { select: { id: true, name: true } } },
+  });
+  if (!latest || latest.status !== 'rejected') return null;
+  return {
+    requestId: latest.id,
+    toPlan: latest.targetPlan,
+    interval: latest.billingCycle,
+    rejectedAt: latest.reviewedAt?.toISOString() ?? null,
+    reason: latest.rejectionReason ?? null,
   };
 }

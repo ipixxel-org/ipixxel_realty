@@ -10,6 +10,7 @@ import type {
   PaymentMode,
   ManualReason,
   PendingUpgradeV2,
+  RejectedUpgradeV2,
   RenewalBreakdownV2,
   RetentionSummaryV2,
   SubscriptionStatusV2,
@@ -35,6 +36,7 @@ export interface OverviewInput {
   /** From the org profile (billingDetailsFromOrg); left out = nothing filled in. */
   billingProfile?: BillingProfileV2 | null;
   pendingUpgrade?: PendingUpgradeV2 | null;
+  rejectedUpgrade?: RejectedUpgradeV2 | null;
   /** The org's plan (subscription plan, or the free plan when it has none). */
   plan: BillingPlanV2;
   subscription: {
@@ -148,6 +150,7 @@ export function buildOverview(input: OverviewInput): BillingOverviewV2 {
     billingProfile,
     billingDetailsMissing: missingBillingDetails(billingProfile),
     pendingUpgrade: input.pendingUpgrade ?? null,
+    rejectedUpgrade: input.rejectedUpgrade ?? null,
     periodStart: periodStart ? isoDate(periodStart) : null,
     periodEnd: periodEnd ? isoDate(periodEnd) : null,
     daysLeftInPeriod:

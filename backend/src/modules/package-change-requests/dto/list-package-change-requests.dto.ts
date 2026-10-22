@@ -23,4 +23,9 @@ export class ListPackageChangeRequestsDto {
   @IsOptional()
   @IsString()
   search?: string;
+
+  /** One organisation's requests (the org subscription page). */
+  @IsOptional()
+  @IsString()
+  orgId?: string;
 }

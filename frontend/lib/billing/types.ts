@@ -119,6 +119,15 @@ export interface BillingWarning {
   message: string;
 }
 
+/** The org's latest package request, when a Super Admin rejected it — shown with the reason. */
+export interface RejectedUpgrade {
+  requestId: string;
+  toPlan: { id: PlanId; name: string };
+  interval: BillingInterval;
+  rejectedAt: string | null;
+  reason: string | null;
+}
+
 /** An upgrade waiting on someone: a request awaiting approval, or a paid checkout under review. */
 export interface PendingUpgrade {
   status: "pending_approval" | "needs_review";
@@ -181,6 +190,8 @@ export interface BillingOverview {
   billingDetailsMissing: BillingDetailsField[];
   /** A pending upgrade request, or a paid upgrade under review. */
   pendingUpgrade: PendingUpgrade | null;
+  /** Set while the latest package request is a rejected one (null otherwise). */
+  rejectedUpgrade: RejectedUpgrade | null;
   periodStart: string | null;
   /** Renewal date (end of the current or unpaid period). */
   periodEnd: string | null;

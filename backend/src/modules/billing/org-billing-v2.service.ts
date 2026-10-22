@@ -18,7 +18,11 @@ import {
   billingDetailsFromOrg,
   ORG_BILLING_SELECT,
 } from './org-billing-details';
-import { expireStaleCheckouts, findPendingUpgrade } from './checkout-state';
+import {
+  expireStaleCheckouts,
+  findPendingUpgrade,
+  findRejectedUpgrade,
+} from './checkout-state';
 import { toRupees } from './checkout-quote';
 import { renewalCharge } from './coupon-rules';
 import {
@@ -76,6 +80,7 @@ export class OrgBillingV2Service {
       cfg,
       mode,
       pendingUpgrade,
+      rejectedUpgrade,
     ] = await Promise.all([
       this.prisma.organisation.findUnique({
         where: { id: orgId },
@@ -99,6 +104,7 @@ export class OrgBillingV2Service {
       getBillingExpiryConfig(this.prisma),
       this.mode.getMode(),
       findPendingUpgrade(this.prisma, orgId),
+      findRejectedUpgrade(this.prisma, orgId),
     ]);
     // Step 6: what's paused, what will stay, and the plan moved down from.
     const [paused, retentionSummary] = this.retention
@@ -193,6 +199,7 @@ export class OrgBillingV2Service {
       ownerName,
       billingProfile: profile,
       pendingUpgrade,
+      rejectedUpgrade,
       plan: toBillingPlan(planRow, rankOf(planRow.id)),
       subscription: subscription
         ? {
