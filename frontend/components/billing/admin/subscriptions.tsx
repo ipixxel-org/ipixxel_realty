@@ -352,22 +352,31 @@ export function SubscriptionDetailView({ orgId, initialAction = null }: { orgId:
   if (!d) return <Loading what="subscription" />;
   const inGrace = d.status === "past_due" || d.status === "grace_ending";
   const paid = !d.plan.isFree;
+  // Why each action is unavailable (null = available). Shown as the hover text.
+  const noEdit = canEdit ? null : "You don't have permission to change billing";
+  const onBasic = `Not available on ${d.plan.name} — the organisation isn't on a paid plan`;
+  const blocked: Record<SubscriptionAction, string | null> = {
+    grace: noEdit ?? (inGrace ? null : "Only for an organisation in its grace period (payment due after the renewal date)"),
+    offline: noEdit ?? (paid ? null : onBasic),
+    coupon: noEdit ?? (paid ? null : onBasic),
+    cancel: noEdit ?? (!paid ? onBasic : d.status === "cancellation_scheduled" ? "Cancellation is already scheduled" : null),
+  };
+  const actionButton = (a: SubscriptionAction, className: string, label: React.ReactNode) => (
+    // The wrapper carries the hover text: browsers don't reliably show a disabled button's title.
+    <span title={blocked[a] ?? undefined} style={{ display: "inline-flex" }}>
+      <button type="button" className={className} disabled={blocked[a] !== null} onClick={() => setAction(a)}>
+        {label}
+      </button>
+    </span>
+  );
 
   return (
     <div className="bl-stack">
       <div className="bl-row">
-        <button type="button" className="btn btn-ghost" disabled={!canEdit || !inGrace} title={inGrace ? undefined : "Only for an organisation in its grace period"} onClick={() => setAction("grace")}>
-          <Icon name="clock" size={15} /> Extend grace
-        </button>
-        <button type="button" className="btn btn-ghost" disabled={!canEdit || !paid} onClick={() => setAction("offline")}>
-          <Icon name="check" size={15} /> Mark paid offline
-        </button>
-        <button type="button" className="btn btn-ghost" disabled={!canEdit || !paid} onClick={() => setAction("coupon")}>
-          <Icon name="tag" size={15} /> Apply coupon
-        </button>
-        <button type="button" className="btn btn-danger" disabled={!canEdit || !paid || d.status === "cancellation_scheduled"} onClick={() => setAction("cancel")}>
-          Cancel
-        </button>
+        {actionButton("grace", "btn btn-ghost", <><Icon name="clock" size={15} /> Extend grace</>)}
+        {actionButton("offline", "btn btn-ghost", <><Icon name="check" size={15} /> Mark paid offline</>)}
+        {actionButton("coupon", "btn btn-ghost", <><Icon name="tag" size={15} /> Apply coupon</>)}
+        {actionButton("cancel", "btn btn-danger", "Cancel")}
       </div>
       <Section title={d.orgName} sub={`${d.city}, ${d.state} · ${d.users} users`}>
         <div className="bl-grid4">

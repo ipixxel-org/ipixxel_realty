@@ -310,6 +310,8 @@
   cursor: pointer;
 }
 .bl-rzp-pay:disabled { opacity: 0.6; cursor: progress; }
+/* Same disabled look as the console's other buttons (.fb-btn-save, .lc-btn-outline). */
+.bl-row .btn:disabled { opacity: 0.65; cursor: not-allowed; }
 .bl-rzp-close { margin-left: 6px; background: none; border: 0; color: #fff; cursor: pointer; opacity: 0.8; font-size: 18px; line-height: 1; }
 .bl-spinner {
   width: 38px;
