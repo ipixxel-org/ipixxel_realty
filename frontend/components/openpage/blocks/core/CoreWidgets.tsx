@@ -15,7 +15,16 @@ export function HeadingBlock({ block }: { block: BlockConfig }) {
   const p = block.props;
   const Tag = (str(p.tag, "h2") || "h2") as "h1" | "h2" | "h3" | "h4";
   const href = str(p.url);
-  const heading = <Tag className="font-display font-semibold tracking-tight text-3xl @md:text-4xl text-center">{str(p.text, "Heading")}</Tag>;
+  const heading = (
+    <El
+      block={block}
+      id="heading:title"
+      as={Tag}
+      className="font-display font-semibold tracking-tight text-3xl @md:text-4xl text-center"
+    >
+      {str(p.text, "Heading")}
+    </El>
+  );
   return (
     <section className="px-6 @md:px-10 py-6">
       {href ? (
@@ -32,7 +41,14 @@ export function HeadingBlock({ block }: { block: BlockConfig }) {
 export function TextBlock({ block }: { block: BlockConfig }) {
   return (
     <section className="px-6 @md:px-10 py-4">
-      <p className="max-w-3xl mx-auto text-text-1 leading-relaxed text-center whitespace-pre-wrap">{str(block.props.body, "Write your copy here.")}</p>
+      <El
+        block={block}
+        id="text:body"
+        as="p"
+        className="max-w-3xl mx-auto text-text-1 leading-relaxed text-center whitespace-pre-wrap"
+      >
+        {str(block.props.body, "Write your copy here.")}
+      </El>
     </section>
   );
 }

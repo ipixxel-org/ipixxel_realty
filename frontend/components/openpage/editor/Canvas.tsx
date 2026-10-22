@@ -66,7 +66,11 @@ function CanvasDropZone({
         e.preventDefault();
         setIsOver(false);
         useEditorStore.getState().setDraggedItem(null);
-        const raw = e.dataTransfer.getData("application/x-openpage-drag");
+        // Some browsers do not expose custom MIME types during a native
+        // drop. The sidebar also writes text/plain for this reason.
+        const raw =
+          e.dataTransfer.getData("application/x-openpage-drag") ||
+          e.dataTransfer.getData("text/plain");
         if (!raw) return;
         try {
           const payload = JSON.parse(raw);

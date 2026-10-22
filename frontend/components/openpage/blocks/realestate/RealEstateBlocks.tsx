@@ -158,6 +158,7 @@ function Title({
 }
 
 function HeroCopy({
+  block,
   p,
   onPrimary,
   onSecondary,
@@ -165,6 +166,7 @@ function HeroCopy({
   centered,
   stats,
 }: {
+  block: BlockConfig;
   p: Record<string, unknown>;
   onPrimary: () => void;
   onSecondary: () => void;
@@ -188,15 +190,24 @@ function HeroCopy({
           {str(p.badge)}
         </div>
       ) : null}
-      <h1 className={`font-display text-4xl @md:text-6xl font-semibold tracking-tight mb-4 leading-[1.1] ${text}`}>
+      <El
+        block={block}
+        id={part(block, "title")}
+        as="h1"
+        className={`font-display text-4xl @md:text-6xl font-semibold tracking-tight mb-4 leading-[1.1] ${text}`}
+      >
         {str(p.headline, "Project name")}
-      </h1>
+      </El>
       {str(p.location) ? (
         <p className={`flex items-center gap-2 text-sm mb-3 ${muted} ${centered ? "justify-center" : ""}`}>
           <MapPin size={14} /> {str(p.location)}
         </p>
       ) : null}
-      {str(p.description) ? <p className={`text-base @md:text-lg leading-relaxed max-w-xl mb-4 ${muted}`}>{str(p.description)}</p> : null}
+      {str(p.description) ? (
+        <El block={block} id={part(block, "subtitle")} as="p" className={`text-base @md:text-lg leading-relaxed max-w-xl mb-4 ${muted}`}>
+          {str(p.description)}
+        </El>
+      ) : null}
       {str(p.price) ? <p className="text-xl font-semibold mb-7 text-green">{str(p.price)}</p> : null}
       <div className={`flex flex-wrap gap-3 ${centered ? "justify-center" : ""}`}>
         {str(p.primaryCta) ? (
@@ -272,7 +283,7 @@ export function ProjectBannerBlock({ block }: { block: BlockConfig }) {
         )}
         <div className="absolute inset-0 bg-gradient-to-r from-black/75 via-black/50 to-black/25" />
         <div className="relative z-10 grid @lg:grid-cols-[1.15fr_0.85fr] gap-8 items-center px-6 @md:px-12 py-16 @md:py-24 max-w-6xl mx-auto">
-          <HeroCopy p={p} onPrimary={onPrimary} onSecondary={onSecondary} light stats={stats} />
+          <HeroCopy block={block} p={p} onPrimary={onPrimary} onSecondary={onSecondary} light stats={stats} />
           <div id="hero-enquire" className="rounded-2xl bg-bg-1/95 backdrop-blur-md border border-border-default p-6 shadow-[0_24px_80px_rgba(0,0,0,0.35)]">
             <h3 className="text-lg font-semibold mb-1">{str(p.formTitle, "Enquire now")}</h3>
             <p className="text-text-2 text-sm mb-4">{str(p.formSubtitle, "A relationship manager will call you shortly.")}</p>
@@ -306,7 +317,7 @@ export function ProjectBannerBlock({ block }: { block: BlockConfig }) {
         )}
         <div className="absolute inset-0 bg-black/55" />
         <div className="relative z-10 px-6 @md:px-12 py-24 max-w-3xl mx-auto flex flex-col items-center">
-          <HeroCopy p={p} onPrimary={onPrimary} onSecondary={onSecondary} light centered stats={stats} />
+          <HeroCopy block={block} p={p} onPrimary={onPrimary} onSecondary={onSecondary} light centered stats={stats} />
         </div>
       </section>
     );
@@ -323,7 +334,7 @@ export function ProjectBannerBlock({ block }: { block: BlockConfig }) {
         )}
         <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/45 to-black/20" />
         <div className="relative z-10 px-6 @md:px-12 pt-24 pb-10 max-w-5xl">
-          <HeroCopy p={p} onPrimary={onPrimary} onSecondary={onSecondary} light />
+          <HeroCopy block={block} p={p} onPrimary={onPrimary} onSecondary={onSecondary} light />
         </div>
         {stats.length ? (
           <div className="relative z-10 border-t border-white/15 bg-black/35 backdrop-blur-md">
@@ -637,7 +648,7 @@ export function ProjectBannerBlock({ block }: { block: BlockConfig }) {
       )}
       <div className="absolute inset-0 bg-gradient-to-r from-black/70 via-black/45 to-black/20" />
       <div className="relative z-10 px-6 @md:px-12 py-24 max-w-3xl">
-        <HeroCopy p={p} onPrimary={onPrimary} onSecondary={onSecondary} light stats={stats} />
+        <HeroCopy block={block} p={p} onPrimary={onPrimary} onSecondary={onSecondary} light stats={stats} />
       </div>
     </section>
   );

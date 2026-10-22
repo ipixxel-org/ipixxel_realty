@@ -287,8 +287,8 @@ export function blockStyleTag(blockId: string, style?: BlockStyle): string {
       `[data-block-id="${blockId}"] span`,
       `[data-block-id="${blockId}"] li`,
       `[data-block-id="${blockId}"] label`,
-      `[data-block-id="${blockId}"] a`,
-      `[data-block-id="${blockId}"] button`,
+      `[data-block-id="${blockId}"] a:not(.op-navbar-cta)`,
+      `[data-block-id="${blockId}"] button:not(.op-navbar-cta)`,
       `[data-block-id="${blockId}"] strong`,
       `[data-block-id="${blockId}"] em`,
       `[data-block-id="${blockId}"] small`,
@@ -437,7 +437,9 @@ function allDecls(style: BlockStyle): string[] {
  * order in which the `<style>` tags happen to appear in the DOM.
  */
 function specificity(base: string, depth: number): string {
-  return `${Array.from({ length: Math.max(1, depth) }, () => base).join("")}`;
+  // Element rules must outrank block typography selectors such as
+  // `[data-block-id="..."] h1`, including for root-level elements.
+  return `${Array.from({ length: Math.max(2, depth + 1) }, () => base).join("")}`;
 }
 
 /**

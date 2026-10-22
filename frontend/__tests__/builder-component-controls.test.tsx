@@ -2,6 +2,7 @@ import { render, screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 import { IconBoxBlock } from "@/components/openpage/blocks/core/CoreWidgets";
 import { GalleryBlock } from "@/components/openpage/blocks/gallery/GalleryBlock";
+import { HeroBlock } from "@/components/openpage/blocks/hero/HeroBlock";
 import { NavbarBlock } from "@/components/openpage/blocks/navbar/NavbarBlock";
 import { PricingBlock } from "@/components/openpage/blocks/pricing/PricingBlock";
 import { AmenitiesBlock } from "@/components/openpage/blocks/realestate/RealEstateBlocks";
@@ -27,6 +28,27 @@ describe("builder component controls", () => {
     );
     const image = container.querySelector("img");
     expect(image).toHaveStyle({ width: "180px", height: "42px" });
+  });
+
+  it("applies hero heading and subtitle typography independently", () => {
+    const { container } = render(
+      <HeroBlock
+        block={{
+          ...block("hero", { headline: "Find a home", subheadline: "Explore the collection" }),
+          elementStyles: {
+            "hero:title": { typography: { fontSize: "48px", fontWeight: "900", color: "#123456" } },
+            "hero:subtitle": { typography: { fontSize: "18px", color: "#654321" } },
+          },
+        }}
+      />,
+    );
+
+    expect(container.querySelector('[data-el-name="hero:title"]')).toBeInTheDocument();
+    expect(container.querySelector('[data-el-name="hero:subtitle"]')).toBeInTheDocument();
+    expect(container.innerHTML).toContain("font-size:48px !important");
+    expect(container.innerHTML).toContain("font-weight:900 !important");
+    expect(container.innerHTML).toContain("font-size:18px !important");
+    expect(container.innerHTML).toContain("color:#654321 !important");
   });
 
   it("renders multiple icon boxes with per-item background colors", () => {
