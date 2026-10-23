@@ -225,6 +225,50 @@ function parseJsonOrFail(text: string, provider: string, model: string): any {
   }
 }
 
+/**
+ * Runs one model call, retrying transient failures (429 / 503 / 529) against
+ * the same model with exponential backoff (or the server's Retry-After).
+ * Every failure is logged with provider, model and status — never the key.
+ */
+async function withTransientRetry<T>(
+  provider: { name: string; model: string },
+  retry: AiRetryOptions,
+  call: (onResponse: (res: Response) => void) => Promise<T>,
+): Promise<T> {
+  const maxAttempts = Math.max(1, retry.maxAttempts);
+  for (let attempt = 1; ; attempt++) {
+    let lastResponse: Response | undefined;
+    try {
+      return await call((res) => {
+        lastResponse = res;
+      });
+    } catch (err: unknown) {
+      if (!(err instanceof AiProviderError)) throw err;
+      logger.warn(
+        `AI request failed provider=${provider.name} model=${provider.model} ` +
+          `status=${err.status ?? 'none'} kind=${err.kind} ` +
+          `attempt=${attempt}/${maxAttempts} message="${err.message}"`,
+      );
+      if (!err.transient || attempt >= maxAttempts) {
+        throw new AiProviderError(
+          err.kind,
+          err.provider,
+          err.model,
+          err.status,
+          err.message,
+          attempt,
+        );
+      }
+      const backoff = retry.baseDelayMs * 2 ** (attempt - 1);
+      const wait = Math.min(
+        retryAfterMs(lastResponse) ?? backoff,
+        retry.maxDelayMs,
+      );
+      await retry.sleep(wait);
+    }
+  }
+}
+
 export class GeminiProvider implements AiProvider {
   readonly name = 'gemini';
   readonly model: string;
@@ -240,39 +284,10 @@ export class GeminiProvider implements AiProvider {
     return this.config.geminiApiKey.trim().length > 0 && this.model.length > 0;
   }
 
-  async generateJson(request: AiJsonRequest): Promise<any> {
-    const maxAttempts = Math.max(1, this.retry.maxAttempts);
-    for (let attempt = 1; ; attempt++) {
-      let lastResponse: Response | undefined;
-      try {
-        return await this.callModel(request, (res) => {
-          lastResponse = res;
-        });
-      } catch (err: unknown) {
-        if (!(err instanceof AiProviderError)) throw err;
-        logger.warn(
-          `AI request failed provider=${this.name} model=${this.model} ` +
-            `status=${err.status ?? 'none'} kind=${err.kind} ` +
-            `attempt=${attempt}/${maxAttempts} message="${err.message}"`,
-        );
-        if (!err.transient || attempt >= maxAttempts) {
-          throw new AiProviderError(
-            err.kind,
-            err.provider,
-            err.model,
-            err.status,
-            err.message,
-            attempt,
-          );
-        }
-        const backoff = this.retry.baseDelayMs * 2 ** (attempt - 1);
-        const wait = Math.min(
-          retryAfterMs(lastResponse) ?? backoff,
-          this.retry.maxDelayMs,
-        );
-        await this.retry.sleep(wait);
-      }
-    }
+  generateJson(request: AiJsonRequest): Promise<any> {
+    return withTransientRetry(this, this.retry, (onResponse) =>
+      this.callModel(request, onResponse),
+    );
   }
 
   private async callModel(
@@ -343,11 +358,32 @@ export class GeminiProvider implements AiProvider {
   }
 }
 
+/**
+ * Output budget for one Claude call. Newer Claude models think before
+ * answering and those thinking tokens count against max_tokens, so a full
+ * page needs more room than the visible JSON alone.
+ */
+export const ANTHROPIC_DEFAULT_MAX_TOKENS = 16000;
+
+/**
+ * Models that answered "`temperature` is deprecated / not supported" — newer
+ * Claude models (e.g. claude-sonnet-5-5) reject the parameter with HTTP 400.
+ * Remembered per process so only the first request pays for the retry.
+ */
+const anthropicNoTemperature = new Set<string>();
+
+function rejectsTemperature(err: AiProviderError): boolean {
+  return err.status === 400 && /\btemperature\b/i.test(err.message);
+}
+
 export class AnthropicProvider implements AiProvider {
   readonly name = 'anthropic';
   readonly model: string;
 
-  constructor(private readonly config: AiProviderConfig) {
+  constructor(
+    private readonly config: AiProviderConfig,
+    private readonly retry: AiRetryOptions = DEFAULT_RETRY_OPTIONS,
+  ) {
     this.model = config.anthropicModel.trim();
   }
 
@@ -357,7 +393,35 @@ export class AnthropicProvider implements AiProvider {
     );
   }
 
-  async generateJson(request: AiJsonRequest): Promise<any> {
+  generateJson(request: AiJsonRequest): Promise<any> {
+    return withTransientRetry(this, this.retry, async (onResponse) => {
+      const sendTemperature =
+        request.temperature !== undefined &&
+        !anthropicNoTemperature.has(this.model);
+      try {
+        return await this.callModel(request, sendTemperature, onResponse);
+      } catch (err: unknown) {
+        if (
+          !sendTemperature ||
+          !(err instanceof AiProviderError) ||
+          !rejectsTemperature(err)
+        ) {
+          throw err;
+        }
+        anthropicNoTemperature.add(this.model);
+        logger.log(
+          `Model ${this.model} does not accept temperature; retrying without it`,
+        );
+        return this.callModel(request, false, onResponse);
+      }
+    });
+  }
+
+  private async callModel(
+    request: AiJsonRequest,
+    sendTemperature: boolean,
+    onResponse: (res: Response) => void,
+  ): Promise<unknown> {
     const key = this.config.anthropicApiKey.trim();
     let response: Response;
     try {
@@ -370,8 +434,8 @@ export class AnthropicProvider implements AiProvider {
         },
         body: JSON.stringify({
           model: this.model,
-          max_tokens: request.maxTokens ?? 8192,
-          temperature: request.temperature ?? 0.7,
+          max_tokens: request.maxTokens ?? ANTHROPIC_DEFAULT_MAX_TOKENS,
+          ...(sendTemperature ? { temperature: request.temperature } : {}),
           ...(request.system ? { system: request.system } : {}),
           messages: [{ role: 'user', content: request.prompt }],
         }),
@@ -379,16 +443,30 @@ export class AnthropicProvider implements AiProvider {
     } catch (err: unknown) {
       throw networkError(this.name, this.model, err, [key]);
     }
+    onResponse(response);
 
     const body = await response.text();
     if (!response.ok) {
       throw upstreamError(this.name, this.model, response, body, [key]);
     }
 
-    const data = parseJsonOrFail(body, this.name, this.model);
-    const text: string = (data?.content || [])
-      .filter((block: { type?: string }) => block?.type === 'text')
-      .map((block: { text?: string }) => block?.text || '')
+    const data = parseJsonOrFail(body, this.name, this.model) as {
+      stop_reason?: string;
+      content?: Array<{ type?: string; text?: string }>;
+    } | null;
+    if (data?.stop_reason === 'max_tokens') {
+      throw new AiProviderError(
+        'invalid_response',
+        this.name,
+        this.model,
+        response.status,
+        `Claude (${this.model}) ran out of output space before finishing the page. ` +
+          'Try a shorter prompt or fewer sections.',
+      );
+    }
+    const text = (data?.content || [])
+      .filter((block) => block?.type === 'text')
+      .map((block) => block?.text || '')
       .join('\n');
     if (!text) {
       throw new AiProviderError(
@@ -462,7 +540,7 @@ export function resolveAiProvider(
 ): AiProvider | null {
   const registry: Record<string, AiProvider> = {
     gemini: new GeminiProvider(config, retry),
-    anthropic: new AnthropicProvider(config),
+    anthropic: new AnthropicProvider(config, retry),
     external: new CustomProvider(config),
     custom: new CustomProvider(config),
   };
