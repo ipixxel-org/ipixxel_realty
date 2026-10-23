@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { Modal } from "@/components/ui/modal";
 import { REJECTION_REASON_MAX, REJECTION_REASON_MIN } from "@/lib/api";
+import { formatINR } from "@/lib/billing/pricing";
 
 /** The problem with a rejection reason, or null when it can be sent. Same rule as the API. */
 export function rejectionReasonProblem(reason: string): string | null {
@@ -19,6 +20,7 @@ export function rejectionReasonProblem(reason: string): string | null {
 export function RejectRequestDialog({
   open,
   orgName,
+  paidAmount = null,
   busy = false,
   error,
   onReject,
@@ -26,6 +28,8 @@ export function RejectRequestDialog({
 }: {
   open: boolean;
   orgName: string;
+  /** Marked paid (rupees): the customer has to be refunded outside the app. */
+  paidAmount?: number | null;
   busy?: boolean;
   /** From the API (shown under the box). */
   error?: string | null;
@@ -67,6 +71,11 @@ export function RejectRequestDialog({
         </>
       }
     >
+      {paidAmount != null ? (
+        <div role="alert" data-testid="reject-paid-warning" style={{ marginBottom: 12, padding: "10px 12px", borderRadius: 10, background: "var(--amber-050, #fffbeb)", color: "var(--amber-700, #b45309)" }}>
+          This request was marked paid ({formatINR(paidAmount)}). Refund the customer outside the app.
+        </div>
+      ) : null}
       <div className="field">
         <label htmlFor="pcr-reject-reason">Reason for rejection</label>
         <textarea

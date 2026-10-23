@@ -146,7 +146,7 @@ describe("Settings → Billing → Requests", () => {
     const [pending, withdrawn, rejected, approved] = screen.getAllByTestId("org-plan-request");
     expect(pending).toHaveTextContent("Starter → Pro");
     expect(pending).toHaveTextContent("₹500 + GST · prorated");
-    expect(pending).toHaveTextContent("Pending");
+    expect(pending).toHaveTextContent("Waiting for payment");
     expect(within(pending).getByRole("button", { name: "Withdraw" })).toBeInTheDocument();
     expect(withdrawn).toHaveTextContent("Withdrawn");
     expect(withdrawn).toHaveTextContent("₹2,000 + GST");

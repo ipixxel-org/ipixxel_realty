@@ -120,11 +120,15 @@ export async function buyerFor(
   };
 }
 
-/** Tax invoice for a paid checkout (once per checkout; ₹0 checkouts get none). */
+/**
+ * Tax invoice for a paid checkout (once per checkout; ₹0 checkouts get none).
+ * `offlinePaymentId`: a manual-mode request paid outside Razorpay.
+ */
 export async function issueCheckoutInvoice(
   tx: Tx,
   c: InvoicedCheckout,
   at = new Date(),
+  offlinePaymentId: string | null = null,
 ): Promise<Invoice | null> {
   if (c.totalPaise <= 0) return null;
   const existing = await tx.invoice.findFirst({
@@ -140,6 +144,7 @@ export async function issueCheckoutInvoice(
       organisationId: c.organisationId,
       checkoutId: c.id,
       paymentId: c.paymentId,
+      offlinePaymentId,
       issuedAt: at,
       description: checkoutDescription(plan?.name ?? 'Plan', c, at),
       seller: c.sellerSnapshot ?? {},
@@ -173,6 +178,8 @@ export async function issueOfflineInvoice(
     description: string;
     seller: InvoiceParty;
     at: Date;
+    /** The manual-mode request's checkout, when the payment was for one. */
+    checkoutId?: string | null;
   },
 ): Promise<Invoice> {
   const buyer = await buyerFor(tx, input.organisationId, {
@@ -191,6 +198,7 @@ export async function issueOfflineInvoice(
       status: 'paid',
       organisationId: input.organisationId,
       offlinePaymentId: input.offlinePaymentId,
+      checkoutId: input.checkoutId ?? null,
       issuedAt: input.at,
       description: input.description,
       seller: input.seller as unknown as Prisma.InputJsonValue,

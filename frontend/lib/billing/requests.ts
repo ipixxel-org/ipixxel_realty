@@ -1,4 +1,5 @@
-import type { BillingOverview, OrgPlanRequest, PendingUpgrade } from "./types";
+import { formatINR } from "./pricing";
+import type { BillingOverview, OrgPlanRequest, PendingUpgrade, RequestPayment, RequestQuote } from "./types";
 
 /** "22 Oct" (UTC calendar day, like the API). */
 function shortDay(iso: string): string {
@@ -19,6 +20,41 @@ export function pendingRequestText(p: Pick<PendingUpgrade, "fromPlan" | "toPlan"
 export function blockingRequest(o: Pick<BillingOverview, "pendingUpgrade"> | null | undefined): PendingUpgrade | null {
   return o?.pendingUpgrade?.status === "pending_approval" ? o.pendingUpgrade : null;
 }
+
+/** How the Super Admin can be paid for a request (Mark as paid). */
+export const REQUEST_PAYMENT_METHODS = ["Bank transfer", "UPI", "Cheque", "Cash", "Other"] as const;
+
+/** "Paid · ₹1,178.82 · UPI · UTR 12345 · 23 Oct" */
+export function requestPaymentText(p: Pick<RequestPayment, "amount" | "method" | "reference" | "receivedOn">): string {
+  const ref = p.reference ? ` · ${p.method === "Cheque" ? "Cheque" : "UTR"} ${p.reference}` : "";
+  return `Paid · ${formatINR(p.amount)} · ${p.method}${ref} · ${shortDay(p.receivedOn)}`;
+}
+
+/** Where a request is: "Waiting for payment", "Payment received – waiting for approval", or the decision. */
+export function requestStage(r: Pick<OrgPlanRequest, "status" | "payment">): string {
+  if (r.status !== "pending") return REQUEST_STATUS_LABEL[r.status];
+  return r.payment ? "Payment received – waiting for approval" : "Waiting for payment";
+}
+
+/** "Renewal of Pro" / "Change to Starter" (older rows: "Change to Pro"). */
+export function requestTitle(r: { label?: string; toPlan: { name: string } }): string {
+  return r.label ?? `Change to ${r.toPlan.name}`;
+}
+
+/** "₹1,499 − ₹300 coupon + GST" (no coupon: "₹1,499 + GST"). */
+export function requestPriceText(q: RequestQuote): string {
+  const coupon = q.couponCode ? ` − ${formatINR(q.couponDiscount)} coupon` : "";
+  return `${formatINR(q.price)}${coupon} + GST`;
+}
+
+/** "₹1,499 − ₹300 coupon (CODE) + GST ₹215.82 = ₹1,414.82" */
+export function requestBreakdownText(q: RequestQuote): string {
+  const coupon = q.couponCode ? ` − ${formatINR(q.couponDiscount)} coupon (${q.couponCode})` : "";
+  return `${formatINR(q.price)}${coupon} + GST ${formatINR(q.gst)} = ${formatINR(q.total)}`;
+}
+
+/** Shown on a request when the org fell back to Basic while it waited. */
+export const MOVED_TO_BASIC_WHILE_WAITING = "Org moved to Basic while waiting";
 
 export const REQUEST_STATUS_LABEL: Record<OrgPlanRequest["status"], string> = {
   pending: "Pending",

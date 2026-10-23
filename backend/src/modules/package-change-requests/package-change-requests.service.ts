@@ -1,5 +1,5 @@
 import { BadRequestException, ConflictException, Injectable, NotFoundException } from '@nestjs/common';
-import type { Prisma } from '@prisma/client';
+import { Prisma, type OfflinePayment } from '@prisma/client';
 import { PrismaService } from '../../database/prisma.service';
 import {
   assertPlanFitsAfterRetention,
@@ -8,6 +8,22 @@ import {
 import { applyPlanChange } from '../../common/utils/plan-change.util';
 import { whatStaysFor } from '../../common/utils/retention.util';
 import { settleCoupon } from '../billing/coupon-settlement';
+import { findCouponFor } from '../billing/coupon-lookup';
+import { normaliseCouponCode } from '../billing/coupon-rules';
+import {
+  amountsOf,
+  isIntraState,
+  requestQuoteView,
+  requoteWithCoupon,
+  type CheckoutAmounts,
+} from '../billing/request-coupon';
+import {
+  issueCheckoutInvoice,
+  issueOfflineInvoice,
+  type InvoiceParty,
+} from '../billing/invoice.util';
+import { isFreePlan } from '../billing/plan-modules';
+import { billingNow } from '../../common/utils/billing-clock.util';
 import { applyOrgSubscriptionLifecycle } from '../../common/utils/subscription-lifecycle.util';
 import { orgBillingRecipientsWhere } from '../../common/utils/notification-recipients.util';
 import { CreatePackageChangeRequestDto } from './dto/create-package-change-request.dto';
@@ -17,6 +33,46 @@ import {
   RejectPackageChangeRequestDto,
 } from './dto/reject-package-change-request.dto';
 import { ListPackageChangeRequestsDto } from './dto/list-package-change-requests.dto';
+import type { MarkRequestPaidDto } from './dto/mark-request-paid.dto';
+
+/** A 400 the UI can branch on (same shape as billing's billingError). */
+function requestError(code: string, message: string) {
+  return new BadRequestException({
+    statusCode: 400,
+    error: 'Bad Request',
+    code,
+    message,
+  });
+}
+
+/** Offline payment statuses for a payment marked against a request. */
+export const REQUEST_PAYMENT_STATUS = {
+  /** Marked paid; the request is still pending. */
+  awaiting: 'awaiting_approval',
+  /** The request was rejected after being marked paid: refund outside the app. */
+  refundDue: 'refund_due',
+} as const;
+
+/**
+ * How a request reads: "Renewal of Pro" (same plan, a renewal) or "Change to
+ * Starter", and whether it was sent while the renewal was overdue.
+ */
+export function requestLabel(
+  checkout: {
+    kind: string;
+    fromPlanId: string | null;
+    toPlanId: string;
+    overdue?: boolean | null;
+  } | null,
+  targetName: string,
+): { label: string; overdue: boolean } {
+  const renewal =
+    checkout?.kind === 'renewal' && checkout.fromPlanId === checkout.toPlanId;
+  return {
+    label: renewal ? `Renewal of ${targetName}` : `Change to ${targetName}`,
+    overdue: !!checkout?.overdue,
+  };
+}
 
 /**
  * The one "already waiting" message (API and UI say the same):
@@ -58,6 +114,12 @@ export function rejectionReasonOrThrow(raw: string | null | undefined): string {
 @Injectable()
 export class PackageChangeRequestsService {
   constructor(private readonly prisma: PrismaService) {}
+
+  /**
+   * Set by the billing module (BillingInvoiceMailer): emails an invoice issued
+   * on approval. Not awaited — the approval doesn't wait for SMTP.
+   */
+  invoiceIssued?: (invoiceId: string) => Promise<unknown>;
 
   async getOrgRequest(orgId: string) {
     await applyOrgSubscriptionLifecycle(this.prisma, orgId);
@@ -105,7 +167,11 @@ export class PackageChangeRequestsService {
     orgId: string,
     userId: string,
     dto: CreatePackageChangeRequestDto,
-    opts: { usage?: 'strict' | 'after_retention' } = {},
+    opts: {
+      usage?: 'strict' | 'after_retention';
+      /** A renewal (or overdue change) request may be for the current plan. */
+      renewal?: boolean;
+    } = {},
   ) {
     await applyOrgSubscriptionLifecycle(this.prisma, orgId);
 
@@ -147,13 +213,16 @@ export class PackageChangeRequestsService {
     }
 
     const requestedCycle = dto.billingCycle ?? sub.billingCycle;
-    if (sub.planId === targetPlan.id && sub.billingCycle === requestedCycle) {
+    const samePlan = sub.planId === targetPlan.id;
+    if (samePlan && sub.billingCycle === requestedCycle && !opts.renewal) {
       throw new BadRequestException(
         'Your organisation is already on this plan and billing cycle.',
       );
     }
 
-    if (opts.usage === 'after_retention') {
+    if (opts.renewal && samePlan) {
+      // Renewing what the org already has: nothing to check.
+    } else if (opts.usage === 'after_retention') {
       await assertPlanFitsAfterRetention(this.prisma, orgId, targetPlan);
     } else {
       await assertPlanFitsCurrentUsage(this.prisma, orgId, targetPlan);
@@ -224,6 +293,16 @@ export class PackageChangeRequestsService {
     }
     if (request.status !== 'pending') {
       throw new BadRequestException('Only pending package change requests can be cancelled');
+    }
+    const paid = await this.prisma.offlinePayment.findUnique({
+      where: { packageChangeRequestId: requestId },
+      select: { id: true },
+    });
+    if (paid) {
+      throw requestError(
+        'request_paid',
+        "We've already received the payment for this request, so it can't be withdrawn here. Contact us to withdraw it.",
+      );
     }
 
     const updated = await this.prisma.$transaction(async (tx) => {
@@ -318,10 +397,14 @@ export class PackageChangeRequestsService {
             select: { id: true, firstName: true, lastName: true, email: true },
           },
           // Billing v2: set when the request came from a manual-mode checkout.
+          offlinePayment: true,
           billingCheckout: {
             select: {
               id: true,
               kind: true,
+              fromPlanId: true,
+              toPlanId: true,
+              overdue: true,
               taxablePaise: true,
               cgstPaise: true,
               sgstPaise: true,
@@ -330,6 +413,10 @@ export class PackageChangeRequestsService {
               buyerLegalName: true,
               buyerGstin: true,
               buyerState: true,
+              couponId: true,
+              couponDiscountPaise: true,
+              quoteBeforeCoupon: true,
+              coupon: { select: { code: true } },
             },
           },
         },
@@ -337,7 +424,292 @@ export class PackageChangeRequestsService {
       this.prisma.packageChangeRequest.count({ where }),
     ]);
 
-    return { data: rows, total, page, limit };
+    return {
+      data: rows.map((r) => {
+        const { offlinePayment, ...rest } = r;
+        return {
+          ...rest,
+          ...requestLabel(r.billingCheckout, r.targetPlan.name),
+          payment: offlinePayment ? requestPaymentView(offlinePayment) : null,
+          quote: r.billingCheckout ? requestQuoteView(r.billingCheckout) : null,
+        };
+      }),
+      total,
+      page,
+      limit,
+    };
+  }
+
+  /* ------------------------------------------------------ Mark as paid */
+
+  /**
+   * Super Admin, manual mode: record the payment received for a pending
+   * request (an offline payment linked to it). The amount is always the
+   * request's current total incl. GST (any amount sent is ignored). Can be
+   * edited or cleared until the request is approved or rejected. Approval
+   * then invoices it.
+   */
+  async markPaid(
+    requestId: string,
+    adminUserId: string,
+    dto: MarkRequestPaidDto,
+  ) {
+    const { request, checkout } = await this.pendingWithCheckout(requestId);
+    const amountPaise = checkout.totalPaise;
+    if (!(amountPaise > 0)) {
+      throw requestError(
+        'nothing_to_pay',
+        'This request comes to ₹0, so there is nothing to mark paid. Approve it directly.',
+      );
+    }
+    const reference = (dto.reference ?? '').trim();
+    if (!reference && dto.method !== 'Cash') {
+      throw requestError(
+        'reference_required',
+        'Enter the UTR or cheque number (only cash needs none).',
+      );
+    }
+    const receivedOn = new Date(`${dto.receivedOn}T00:00:00.000Z`);
+    if (Number.isNaN(receivedOn.getTime())) {
+      throw requestError(
+        'date_invalid',
+        'Enter the date the payment was received.',
+      );
+    }
+    if (dto.receivedOn > billingNow().toISOString().slice(0, 10)) {
+      throw requestError(
+        'date_in_future',
+        "The payment date can't be in the future.",
+      );
+    }
+    const data = {
+      amountPaise,
+      method: dto.method,
+      reference,
+      receivedOn,
+      note: dto.note?.trim() || null,
+      recordedById: adminUserId,
+    };
+    const payment = await this.prisma.offlinePayment.upsert({
+      where: { packageChangeRequestId: requestId },
+      create: {
+        ...data,
+        organisationId: request.orgId,
+        packageChangeRequestId: requestId,
+        status: REQUEST_PAYMENT_STATUS.awaiting,
+      },
+      update: data,
+    });
+    await this.audit(
+      request.orgId,
+      adminUserId,
+      'request_marked_paid',
+      requestId,
+      {
+        amount: amountPaise / 100,
+        method: dto.method,
+        reference,
+        receivedOn: dto.receivedOn,
+      },
+    );
+    return { success: true, payment: requestPaymentView(payment) };
+  }
+
+  /** Undo "Mark as paid" while the request is still pending. */
+  async clearPayment(requestId: string, adminUserId: string) {
+    const { request } = await this.pendingWithCheckout(requestId);
+    const { count } = await this.prisma.offlinePayment.deleteMany({
+      where: {
+        packageChangeRequestId: requestId,
+        status: REQUEST_PAYMENT_STATUS.awaiting,
+      },
+    });
+    if (count > 0) {
+      await this.audit(
+        request.orgId,
+        adminUserId,
+        'request_payment_cleared',
+        requestId,
+        {},
+      );
+    }
+    return { success: true, payment: null };
+  }
+
+  private async pendingWithCheckout(
+    requestId: string,
+    notPending = 'Only a pending request can be marked paid.',
+  ) {
+    const request = await this.prisma.packageChangeRequest.findUnique({
+      where: { id: requestId },
+      include: { billingCheckout: { include: { coupon: true } } },
+    });
+    if (!request)
+      throw new NotFoundException('Package change request not found');
+    if (request.status !== 'pending') {
+      throw requestError('request_not_pending', notPending);
+    }
+    const { billingCheckout: checkout, ...rest } = request;
+    if (!checkout) {
+      throw requestError(
+        'request_without_checkout',
+        'This older request has no price to pay. Approve it as before.',
+      );
+    }
+    return { request: rest, checkout };
+  }
+
+  /* ------------------------------------------------------------ Coupon */
+
+  /**
+   * Super Admin, manual mode: take a coupon off a pending request. Checked
+   * with the checkout's rules and wording (plan, interval, dates, uses), then
+   * the request is re-quoted (coupon before GST) and the new amounts saved
+   * on its checkout, so the request total, the org's Requests tab and the
+   * invoice all use them. Replaces any coupon the quote had. A payment
+   * already marked is cleared (it was for the old total).
+   */
+  async applyCoupon(requestId: string, adminUserId: string, rawCode: string) {
+    const { request, checkout } = await this.pendingWithCheckout(
+      requestId,
+      'Coupons can only be changed on a pending request.',
+    );
+    const code = normaliseCouponCode(rawCode ?? '');
+    if (!code) throw requestError('coupon_required', 'Enter a coupon code.');
+    const plans = await this.prisma.plan.findMany({
+      select: { id: true, name: true },
+    });
+    const found = await findCouponFor(this.prisma, code, {
+      orgId: request.orgId,
+      planId: checkout.toPlanId,
+      interval: checkout.toInterval,
+      now: billingNow(),
+      plans,
+    });
+    if ('error' in found) throw requestError('coupon_invalid', found.error);
+    const original =
+      (checkout.quoteBeforeCoupon as CheckoutAmounts | null) ??
+      amountsOf(checkout);
+    const next = requoteWithCoupon(
+      original,
+      found.coupon,
+      isIntraState(checkout),
+    );
+    const paymentCleared = await this.saveQuote(
+      checkout.id,
+      requestId,
+      next,
+      original,
+    );
+    await this.audit(
+      request.orgId,
+      adminUserId,
+      'request_coupon_applied',
+      requestId,
+      {
+        code: found.coupon.code,
+        discount: next.couponDiscountPaise / 100,
+        total: next.totalPaise / 100,
+        paymentCleared,
+      },
+    );
+    return {
+      success: true,
+      quote: requestQuoteView({
+        ...next,
+        coupon: found.coupon,
+        quoteBeforeCoupon: original,
+      }),
+      paymentCleared,
+    };
+  }
+
+  /** Undo applyCoupon: the request's original quote comes back. */
+  async removeCoupon(requestId: string, adminUserId: string) {
+    const { request, checkout } = await this.pendingWithCheckout(
+      requestId,
+      'Coupons can only be changed on a pending request.',
+    );
+    const original = checkout.quoteBeforeCoupon as CheckoutAmounts | null;
+    if (!original) {
+      return {
+        success: true,
+        quote: requestQuoteView(checkout),
+        paymentCleared: false,
+      };
+    }
+    const paymentCleared = await this.saveQuote(
+      checkout.id,
+      requestId,
+      original,
+      null,
+    );
+    await this.audit(
+      request.orgId,
+      adminUserId,
+      'request_coupon_removed',
+      requestId,
+      { total: original.totalPaise / 100, paymentCleared },
+    );
+    const coupon = original.couponId
+      ? await this.prisma.coupon.findUnique({
+          where: { id: original.couponId },
+          select: { code: true },
+        })
+      : null;
+    return {
+      success: true,
+      quote: requestQuoteView({ ...original, coupon }),
+      paymentCleared,
+    };
+  }
+
+  /** New amounts on the checkout; a payment marked for the old total is cleared. */
+  private async saveQuote(
+    checkoutId: string,
+    requestId: string,
+    amounts: CheckoutAmounts,
+    original: CheckoutAmounts | null,
+  ): Promise<boolean> {
+    return this.prisma.$transaction(async (tx) => {
+      await tx.billingCheckout.update({
+        where: { id: checkoutId },
+        data: {
+          ...amounts,
+          quoteBeforeCoupon: original
+            ? (original as unknown as Prisma.InputJsonValue)
+            : Prisma.DbNull,
+        },
+      });
+      const { count } = await tx.offlinePayment.deleteMany({
+        where: {
+          packageChangeRequestId: requestId,
+          status: REQUEST_PAYMENT_STATUS.awaiting,
+        },
+      });
+      return count > 0;
+    });
+  }
+
+  private audit(
+    orgId: string,
+    actorId: string,
+    action: string,
+    entityId: string,
+    metadata: Record<string, unknown>,
+  ) {
+    return this.prisma.auditLog
+      .create({
+        data: {
+          orgId,
+          actorId,
+          action,
+          entity: 'PackageChangeRequest',
+          entityId,
+          metadata: metadata as Prisma.InputJsonValue,
+        },
+      })
+      .catch(() => undefined);
   }
 
   async adminApproveRequest(requestId: string, adminUserId: string) {
@@ -362,15 +734,31 @@ export class PackageChangeRequestsService {
     // a new cycle now, exactly as before.
     const checkout = await this.prisma.billingCheckout.findUnique({
       where: { packageChangeRequestId: requestId },
-      select: {
-        id: true,
-        kind: true,
-        organisationId: true,
-        toPlanId: true,
-        couponId: true,
-        couponDiscountPaise: true,
-      },
     });
+    // Manual mode: Mark as paid comes first (unless there's nothing to pay).
+    const payment = checkout
+      ? await this.prisma.offlinePayment.findUnique({
+          where: { packageChangeRequestId: requestId },
+        })
+      : null;
+    if (checkout && !payment && checkout.totalPaise > 0) {
+      throw requestError(
+        'payment_required',
+        'Mark this request as paid before approving it.',
+      );
+    }
+    // Option A: the org fell back to Basic while waiting — the new term starts
+    // on the day the payment was received, not at the old renewal date.
+    const sub = checkout
+      ? await this.prisma.subscription.findFirst({
+          where: { orgId: request.orgId, status: { not: 'cancelled' } },
+          include: { plan: true },
+        })
+      : null;
+    const periodStart =
+      sub && isFreePlan(sub.plan)
+        ? (payment?.receivedOn ?? billingNow())
+        : null;
     if (checkout) {
       // Billing v2: users / projects / published pages over the target's
       // limits are paused by applyPlanChange → applyRetention, using the org's
@@ -408,14 +796,24 @@ export class PackageChangeRequestsService {
         checkoutId: checkout?.id ?? null,
         requestId,
         requestedById: request.requestedById,
+        periodStart,
       });
+      let invoiceId: string | null = null;
       if (checkout) {
-        // Billing v2: record its coupon and keep the renewal coupon in step.
-        await settleCoupon(tx, checkout);
-        await tx.billingCheckout.update({
-          where: { id: checkout.id },
+        // Applied once: a second approval finds the checkout fulfilled.
+        const { count } = await tx.billingCheckout.updateMany({
+          where: { id: checkout.id, fulfilledAt: null },
           data: { status: 'approved', fulfilledAt: new Date() },
         });
+        if (count === 0) {
+          throw new ConflictException('Request is no longer pending approval');
+        }
+        // Billing v2: record its coupon and keep the renewal coupon in step.
+        await settleCoupon(tx, checkout);
+        if (payment) {
+          invoiceId = (await this.invoiceRequestPayment(tx, checkout, payment))
+            .id;
+        }
       } else {
         // An older request: no coupon, and a plan change drops a renewal coupon.
         await tx.subscription.updateMany({
@@ -426,8 +824,10 @@ export class PackageChangeRequestsService {
       const approvedRequest = await tx.packageChangeRequest.findUniqueOrThrow({
         where: { id: requestId },
       });
-      return { approvedRequest, updatedSub: subscription };
+      return { approvedRequest, updatedSub: subscription, invoiceId };
     });
+    // The GST invoice by email to the owner and admins (not awaited).
+    if (result.invoiceId) void this.invoiceIssued?.(result.invoiceId);
 
     return {
       success: true,
@@ -477,6 +877,14 @@ export class PackageChangeRequestsService {
         where: { packageChangeRequestId: requestId, status: 'pending' },
         data: { status: 'rejected', reviewReason: rejectionReason },
       });
+      // Marked paid: kept, to be refunded outside the app. No invoice.
+      await tx.offlinePayment.updateMany({
+        where: {
+          packageChangeRequestId: requestId,
+          status: REQUEST_PAYMENT_STATUS.awaiting,
+        },
+        data: { status: REQUEST_PAYMENT_STATUS.refundDue },
+      });
 
       await tx.auditLog.create({
         data: {
@@ -521,4 +929,61 @@ export class PackageChangeRequestsService {
       request: rejectedRequest,
     };
   }
+
+  /**
+   * The GST invoice for a request's payment, issued on approval: the request's
+   * quoted breakdown when the amount received equals its total, otherwise the
+   * offline rule (the amount is GST-inclusive). The payment becomes received.
+   */
+  private async invoiceRequestPayment(
+    tx: Prisma.TransactionClient,
+    checkout: NonNullable<
+      Awaited<ReturnType<PrismaService['billingCheckout']['findUnique']>>
+    >,
+    payment: OfflinePayment,
+  ) {
+    await tx.offlinePayment.update({
+      where: { id: payment.id },
+      data: { status: 'received' },
+    });
+    if (payment.amountPaise === checkout.totalPaise) {
+      const inv = await issueCheckoutInvoice(
+        tx,
+        checkout,
+        payment.receivedOn,
+        payment.id,
+      );
+      if (inv) return inv;
+    }
+    const plan = await tx.plan.findUnique({ where: { id: checkout.toPlanId } });
+    const seller = (checkout.sellerSnapshot ?? {}) as Partial<InvoiceParty>;
+    return issueOfflineInvoice(tx, {
+      organisationId: checkout.organisationId,
+      offlinePaymentId: payment.id,
+      checkoutId: checkout.id,
+      totalPaise: payment.amountPaise,
+      description: `${plan?.name ?? 'Plan'} · ${checkout.toInterval} · ${checkout.kind === 'renewal' ? 'renewal' : 'purchase'} (paid offline)`,
+      seller: {
+        ...seller,
+        legalName: seller.legalName ?? '',
+        gstin: seller.gstin ?? null,
+        state: seller.state ?? null,
+      },
+      at: payment.receivedOn,
+    });
+  }
+}
+
+/** A payment marked against a request, as the APIs return it (rupees, YYYY-MM-DD). */
+export function requestPaymentView(p: OfflinePayment) {
+  return {
+    id: p.id,
+    amount: p.amountPaise / 100,
+    method: p.method,
+    reference: p.reference,
+    receivedOn: p.receivedOn.toISOString().slice(0, 10),
+    note: p.note,
+    status: p.status as
+      'awaiting_approval' | 'received' | 'refund_due' | 'refunded',
+  };
 }

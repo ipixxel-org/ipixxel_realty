@@ -17,6 +17,23 @@ import {
  */
 
 const DAY = 86_400_000;
+
+/** Mark as paid (the request's total) — approval needs it first. */
+async function markPaid(
+  requests: PackageChangeRequestsService,
+  db: any,
+  requestId: string,
+) {
+  const c = db.billingCheckout.rows.find(
+    (x: any) => x.packageChangeRequestId === requestId,
+  );
+  await requests.markPaid(requestId, 'admin-1', {
+    amount: c.totalPaise / 100,
+    method: 'UPI',
+    reference: 'UTR123',
+    receivedOn: new Date().toISOString().slice(0, 10),
+  });
+}
 const BASIC = {
   id: 'basic',
   name: 'Basic',
@@ -175,9 +192,11 @@ describe("manual mode: a request over the target plan's limits", () => {
     expect(res).toMatchObject({ status: 'pending_approval' });
     expect(submitOrgRequest.mock.calls[0][3]).toEqual({
       usage: 'after_retention',
+      renewal: false,
     });
     expect(paused()).toEqual([]); // nothing changes until it's approved
 
+    await markPaid(requests, db, (res as { requestId: string }).requestId);
     await requests.adminApproveRequest(
       (res as { requestId: string }).requestId,
       'admin-1',
@@ -196,6 +215,7 @@ describe("manual mode: a request over the target plan's limits", () => {
     });
     const res = await service.start('org-1', 'u-1', toStarter);
     db.retentionChoice.rows.length = 0; // choices cleared before approval
+    await markPaid(requests, db, (res as { requestId: string }).requestId);
     await requests.adminApproveRequest(
       (res as { requestId: string }).requestId,
       'admin-1',
@@ -242,6 +262,7 @@ describe('the request keeps what they chose to keep', () => {
       expect.objectContaining({ id: 'u-3' }),
     ]);
 
+    await markPaid(requests, db, res.requestId);
     await requests.adminApproveRequest(res.requestId, 'admin-1');
     expect(request().whatStays).toMatchObject({
       applied: true,

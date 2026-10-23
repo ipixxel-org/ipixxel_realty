@@ -219,8 +219,8 @@ describe("billing v2 flag", () => {
     await settle();
     expect(apiFetch).toHaveBeenCalledWith("/org/billing/v2");
     expect(screen.getByText("Your Growth plan has expired")).toBeInTheDocument();
-    // Manual mode: Pay now is shown but disabled with an explanation.
-    expect(screen.getByRole("button", { name: /Pay now/ })).toBeDisabled();
+    // Manual mode: the renewal is a request (Request renewal → the renewal request screen).
+    expect(screen.getByRole("link", { name: /Request renewal/ })).toHaveAttribute("href", expect.stringContaining("renew=1"));
     expect(screen.queryByLabelText("composer")).toBeNull();
     expect(screen.getByText(/Team chat isn't included in Basic/)).toBeInTheDocument();
     expect(errors).toEqual([]);
@@ -366,7 +366,7 @@ describe("billing v2 flag", () => {
     expect(apiFetch.mock.calls.some(([p]) => p === "/org/billing/checkout")).toBe(false);
   });
 
-  it("renewal checkout: previews with purpose renewal and pays the full term; manual mode says our team renews it", async () => {
+  it("renewal checkout: previews with purpose renewal and pays the full term; manual mode sends a renewal request", async () => {
     const renewing = overview({
       plan: GROWTH,
       paidPlan: GROWTH,
@@ -406,8 +406,9 @@ describe("billing v2 flag", () => {
       </ToastProvider>,
     );
     await settle();
-    expect(screen.getByRole("button", { name: /Renewed by our team/ })).toBeDisabled();
-    expect(screen.getByText(/our team renews your plan/)).toBeInTheDocument();
+    expect(screen.getByText("Request renewal of Growth")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Send renewal request/ })).toBeEnabled();
+    expect(screen.getByText(/Send a renewal request and our team will confirm how to pay/)).toBeInTheDocument();
     expect(errors).toEqual([]);
   });
 

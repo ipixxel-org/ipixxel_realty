@@ -294,21 +294,27 @@ export function PendingUpgradeBanner({ pending: u }: { pending: PendingUpgrade }
     <Banner
       tone="info"
       icon="clock"
-      title={u.status === "needs_review" ? "Your payment is being checked" : `Change to ${u.toPlan.name} requested`}
+      title={u.status === "needs_review" ? "Your payment is being checked" : `${u.label ?? `Change to ${u.toPlan.name}`} requested`}
       actions={
         u.status === "pending_approval" && u.requestId ? (
           <>
             <BLink to="requests" className="btn btn-ghost btn-sm">
               View requests
             </BLink>
-            <WithdrawRequestButton requestId={u.requestId} toPlan={u.toPlan.name} />
+            {u.paid ? (
+              <span className="bl-muted bl-small">Contact us to withdraw</span>
+            ) : (
+              <WithdrawRequestButton requestId={u.requestId} toPlan={u.toPlan.name} />
+            )}
           </>
         ) : undefined
       }
     >
       {u.status === "needs_review"
         ? `We received your payment for ${u.toPlan.name} (${u.interval}). Our team is finishing the setup — nothing more to do on your side.`
-        : `Sent on ${formatDate(u.createdAt)} for ${u.toPlan.name} (${u.interval}). Our team will approve it shortly; you keep everything on your current plan until then.`}
+        : `Sent on ${formatDate(u.createdAt)} for ${u.toPlan.name} (${u.interval}). ${
+            u.paid ? "Payment received – waiting for approval." : "Waiting for payment — our team will confirm how to pay."
+          }${u.movedToBasicAt ? " You moved to Basic while it was waiting; everything that fits comes back once it's approved." : " You keep everything on your current plan until then."}`}
     </Banner>
   );
 }
@@ -390,7 +396,11 @@ export function CheckoutScreen({
     onClosed: () => toast({ variant: "info", title: "Payment not completed", description: "You closed the payment window. Nothing was charged — try again when you're ready." }),
     onRequested: () => {
       void refresh();
-      toast({ variant: "success", title: "Request sent", description: "Our team will approve it shortly. You keep everything on your current plan until then." });
+      toast({
+        variant: "success",
+        title: renewal ? "Renewal requested" : "Request sent",
+        description: "Our team will confirm how to pay, then approve it. You keep everything on your current plan until then.",
+      });
       nav.go("overview");
     },
   });
@@ -476,10 +486,13 @@ export function CheckoutScreen({
     );
   }
 
-  // A waiting upgrade request doesn't block paying a renewal.
-  const pendingUpgrade = renewal ? null : overview.pendingUpgrade;
-  // Manual mode has no online renewal: our team renews the plan.
+  // A waiting upgrade request doesn't block paying a renewal online. In manual
+  // mode a renewal is a request too, so one waiting request blocks it.
+  const pendingUpgrade = renewal && online ? null : overview.pendingUpgrade;
+  // Manual mode: the renewal is a request our team approves once it's paid.
   const manualRenewal = renewal && !online;
+  // Manual mode, renewal overdue: any plan is a request at its full price.
+  const overdueChange = !online && !renewal && preview?.kind === "renewal";
   const showCoupon = parts.includes("coupon") && preview?.couponsEnabled !== false;
   const left = parts.includes("details") || showCoupon;
   const right = parts.includes("summary");
@@ -504,7 +517,7 @@ export function CheckoutScreen({
           : mustChoose
             ? "Choose what stays on the new plan first"
             : undefined;
-  const disabled = !canEdit || payment.busy || !!pendingUpgrade || manualRenewal || !!tooSmall || missingDetails.length > 0 || mustChoose;
+  const disabled = !canEdit || payment.busy || !!pendingUpgrade || !!tooSmall || missingDetails.length > 0 || mustChoose;
 
   return (
     <div className="bl-stack">
@@ -532,8 +545,8 @@ export function CheckoutScreen({
         ) : null}
         {right ? (
           <Section
-            title={renewal ? `Renew ${target.name}` : online ? "Order summary" : `Request a change to ${target.name}`}
-            sub={online || renewal ? `${target.name} · ${interval === "yearly" ? "billed yearly" : "billed monthly"}` : "Approved by our team"}
+            title={renewal ? (online ? `Renew ${target.name}` : `Request renewal of ${target.name}`) : online ? "Order summary" : `Request a change to ${target.name}`}
+            sub={online ? `${target.name} · ${interval === "yearly" ? "billed yearly" : "billed monthly"}` : "Approved by our team once it's paid"}
           >
             {preview ? (
               <>
@@ -550,7 +563,16 @@ export function CheckoutScreen({
                   </div>
                 ) : manualRenewal ? (
                   <div className="bl-muted" style={{ marginTop: 10, padding: "10px 12px", background: "var(--bg)", borderRadius: 10, lineHeight: 1.55 }}>
-                    Online payment isn&apos;t available for your account, so our team renews your plan. We&apos;ll contact you before it&apos;s due.
+                    Online payment isn&apos;t available for your account. Send a renewal request and our team will confirm how to pay; the new period continues from your
+                    renewal date once it&apos;s paid and approved.
+                  </div>
+                ) : overdueChange ? (
+                  <div className="bl-muted" style={{ marginTop: 10, padding: "10px 12px", background: "var(--bg)", borderRadius: 10, lineHeight: 1.55 }} data-testid="overdue-note">
+                    <span className="badge b-amber" style={{ marginRight: 6 }}>
+                      overdue renewal
+                    </span>
+                    Your renewal is overdue, so this is {target.name}&apos;s full price (nothing was paid for the overdue days). Once it&apos;s paid and approved the new period
+                    continues from {overview.dueDate ? formatDate(overview.dueDate) : "your renewal date"}.
                   </div>
                 ) : !online ? (
                   <div className="bl-muted" style={{ marginTop: 10, padding: "10px 12px", background: "var(--bg)", borderRadius: 10, lineHeight: 1.55 }}>
@@ -573,7 +595,7 @@ export function CheckoutScreen({
                       </>
                     ) : manualRenewal ? (
                       <>
-                        <Icon name="clock" size={15} /> Renewed by our team
+                        <Icon name="arrow-up" size={15} /> Send renewal request
                       </>
                     ) : !online ? (
                       <>
@@ -591,7 +613,7 @@ export function CheckoutScreen({
                   </button>
                 </div>
                 <div className="bl-muted bl-small" style={{ textAlign: "center", marginTop: 8 }}>
-                  {online ? "Secure payment by Razorpay. GST invoice by email." : manualRenewal ? "Nothing to pay here." : "No payment is taken now."}
+                  {online ? "Secure payment by Razorpay. GST invoice by email." : "No payment is taken now. GST invoice by email once it's approved."}
                 </div>
               </>
             ) : previewError ? (

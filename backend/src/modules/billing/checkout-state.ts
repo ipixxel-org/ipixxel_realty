@@ -5,6 +5,7 @@
  */
 import type { PrismaClient } from '@prisma/client';
 import type { PendingUpgradeV2, RejectedUpgradeV2 } from './billing.types';
+import { requestLabel } from '../package-change-requests/package-change-requests.service';
 
 type Db = Pick<PrismaClient, 'billingCheckout' | 'packageChangeRequest'>;
 
@@ -45,7 +46,16 @@ export async function findPendingUpgrade(
     include: {
       currentPlan: { select: { id: true, name: true } },
       targetPlan: { select: { id: true, name: true } },
-      billingCheckout: { select: { id: true } },
+      billingCheckout: {
+        select: {
+          id: true,
+          kind: true,
+          fromPlanId: true,
+          toPlanId: true,
+          overdue: true,
+        },
+      },
+      offlinePayment: { select: { id: true } },
     },
   });
   if (request) {
@@ -57,6 +67,9 @@ export async function findPendingUpgrade(
       toPlan: request.targetPlan,
       interval: request.billingCycle,
       createdAt: request.createdAt.toISOString(),
+      ...requestLabel(request.billingCheckout ?? null, request.targetPlan.name),
+      paid: !!request.offlinePayment,
+      movedToBasicAt: request.movedToBasicAt?.toISOString() ?? null,
     };
   }
   const review = await db.billingCheckout.findFirst({

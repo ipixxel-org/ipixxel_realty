@@ -1,10 +1,16 @@
-import { Injectable, Logger } from '@nestjs/common';
+import {
+  Injectable,
+  Logger,
+  Optional,
+  type OnModuleInit,
+} from '@nestjs/common';
 import type { Invoice } from '@prisma/client';
 import { PrismaService } from '../../database/prisma.service';
 import { frontendBaseUrl } from '../../common/utils/app-url.util';
 import { EmailService } from '../email/email.service';
 import { getPaymentReceivedEmailHtml } from '../email/email.templates';
 import { renderInvoiceHtml } from './billing-ledger.service';
+import { PackageChangeRequestsService } from '../package-change-requests/package-change-requests.service';
 
 const DAY_MS = 86_400_000;
 const CYCLE_DAYS = { monthly: 30, yearly: 365 } as const;
@@ -74,13 +80,21 @@ export function invoiceEmailRows(
  * Never throws: a mail problem must not undo a payment.
  */
 @Injectable()
-export class BillingInvoiceMailer {
+export class BillingInvoiceMailer implements OnModuleInit {
   private readonly logger = new Logger(BillingInvoiceMailer.name);
 
   constructor(
     private readonly prisma: PrismaService,
     private readonly email: EmailService,
+    // Approving a paid request (manual mode) issues an invoice there.
+    @Optional() private readonly requests?: PackageChangeRequestsService,
   ) {}
+
+  onModuleInit() {
+    if (this.requests) {
+      this.requests.invoiceIssued = (id) => this.sendForInvoice(id);
+    }
+  }
 
   /** The invoice for a paid checkout, if it has one (a ₹0 checkout has none). */
   async sendForCheckout(checkoutId: string): Promise<number> {

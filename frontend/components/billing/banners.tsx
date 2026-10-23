@@ -4,6 +4,7 @@ import { useState } from "react";
 import { Icon } from "@/components/icons";
 import { useToast } from "@/components/ui/toast";
 import { formatDate, formatINR, packagePriceText, planPrice, renewalPriceNote, renewalPriceText, round2 } from "@/lib/billing/pricing";
+import { blockingRequest, pendingRequestText } from "@/lib/billing/requests";
 import type { BillingOverview, RetentionSummary } from "@/lib/billing/types";
 import { useBillingEnv, useOptionalOrgBilling } from "./context";
 import { BillingDialog, DialogActions } from "./dialog";
@@ -49,10 +50,46 @@ export function usePayNow(overview: BillingOverview) {
   return { ...payment, renew };
 }
 
+/** Statuses where the renewal can be paid (or, in manual mode, requested). */
+export const RENEWAL_OPEN = ["renewal_due", "past_due", "grace_ending", "expired"] as const;
+
+/**
+ * Manual mode: "Request renewal" opens the renewal request (today's price,
+ * renewal coupon, GST) — our team approves it once it's paid. While a request
+ * waits it's disabled with the same message as everywhere else.
+ */
+export function RequestRenewalButton({ overview, className = "btn btn-primary btn-sm" }: { overview: BillingOverview; className?: string }) {
+  const { canEdit } = useBillingEnv();
+  const waiting = blockingRequest(overview);
+  const plan = overview.paidPlan ?? overview.plan;
+  if (waiting || !canEdit) {
+    const renewalAsked = !!waiting?.label?.startsWith("Renewal of");
+    return (
+      <span title={waiting ? pendingRequestText(waiting) : "Ask an admin with billing access to request the renewal"} style={{ display: "inline-flex" }}>
+        <button type="button" className={className} disabled style={{ opacity: 0.65, cursor: "not-allowed" }}>
+          {renewalAsked ? "Renewal requested" : `Request renewal · ${renewalPriceText(overview)}`}
+        </button>
+      </span>
+    );
+  }
+  return (
+    <BLink to="checkout" params={{ plan: plan.id, interval: overview.interval, renew: 1 }} className={className} title={renewalPriceNote(overview) ?? undefined}>
+      Request renewal · {renewalPriceText(overview)}
+    </BLink>
+  );
+}
+
+/** Pay the renewal online; in manual mode, request it instead. */
 export function PayNowButton({ overview, className = "btn btn-primary btn-sm" }: { overview: BillingOverview; className?: string }) {
+  const live = useRenewalLive(overview);
+  // Manual mode (online payments off): the renewal is a request.
+  if (!live && overview.paymentMode === "manual") return <RequestRenewalButton overview={overview} className={className} />;
+  return <OnlinePayNowButton overview={overview} className={className} live={live} />;
+}
+
+function OnlinePayNowButton({ overview, className, live }: { overview: BillingOverview; className: string; live: boolean }) {
   const { canEdit } = useBillingEnv();
   const pay = usePayNow(overview);
-  const live = useRenewalLive(overview);
   return (
     <>
       <button
@@ -190,6 +227,9 @@ function UndoButton({ label, run, done }: { label: string; run: () => Promise<un
 /** The banner for the org's billing situation, or nothing when all is well. */
 export function BillingBanner({ overview }: { overview: BillingOverview }) {
   const { client } = useBillingEnv();
+  const live = useRenewalLive(overview);
+  // Manual mode: renewing and changing plan are both requests to our team.
+  const manual = !live && overview.paymentMode === "manual";
   const o = overview;
   const plan = o.paidPlan ?? o.plan;
   // Auto-renew copy only when the backend offers it (it doesn't yet: "pay each time").
@@ -241,6 +281,11 @@ export function BillingBanner({ overview }: { overview: BillingOverview }) {
           actions={
             <>
               <PayNowButton overview={o} />
+              {manual ? (
+                <BLink to="plans" className="btn btn-ghost btn-sm">
+                  Change plan
+                </BLink>
+              ) : null}
               {auto && !tomorrow ? <UpdatePaymentMethodButton overview={o} /> : null}
               <BLink to="chooseWhatStays" className="btn btn-ghost btn-sm">
                 Choose what stays
@@ -250,7 +295,7 @@ export function BillingBanner({ overview }: { overview: BillingOverview }) {
         >
           {tomorrow ? (
             <>
-              Pay now to keep {plan.name}. Otherwise only what&apos;s listed below stays active; everything else is paused, never deleted.
+              {manual ? `Request the renewal (or a different plan) to keep a paid plan.` : `Pay now to keep ${plan.name}.`} Otherwise only what&apos;s listed below stays active; everything else is paused, never deleted.
               {o.retention ? <PicksSummary retention={o.retention} /> : null}
             </>
           ) : (
@@ -346,6 +391,7 @@ export function BillingBanner({ overview }: { overview: BillingOverview }) {
 /** Option B: the "renews in N days" popup (from the reminder setting). Opens on its own once per renewal date. */
 export function RenewalReminderPopup({ overview, alwaysOpen = false }: { overview: BillingOverview; alwaysOpen?: boolean }) {
   const pay = usePayNow(overview);
+  const { nav, canEdit } = useBillingEnv();
   const key = `billing-v2:reminder-dismissed:${overview.periodEnd}`;
   const [dismissed, setDismissed] = useState(() => {
     if (alwaysOpen || typeof window === "undefined") return false;
@@ -368,8 +414,10 @@ export function RenewalReminderPopup({ overview, alwaysOpen = false }: { overvie
   const price = b?.price ?? (overview.interval === "yearly" ? plan.priceYearly : plan.priceMonthly);
   const left = overview.daysLeftInPeriod;
   const live = useRenewalLive(overview);
-  // Only when the customer can actually pay online.
-  const show = live && overview.renewalMode === "manual" && overview.status === "renewal_due" && (!dismissed || alwaysOpen);
+  // Manual mode: the popup offers "Request renewal" (not while a request already waits).
+  const manual = !live && overview.paymentMode === "manual";
+  const show =
+    (live || (manual && canEdit && !blockingRequest(overview))) && overview.renewalMode === "manual" && overview.status === "renewal_due" && (!dismissed || alwaysOpen);
 
   return (
     <>
@@ -377,7 +425,7 @@ export function RenewalReminderPopup({ overview, alwaysOpen = false }: { overvie
         open={show && !pay.busy}
         onClose={dismiss}
         title={left > 0 ? `Your ${plan.name} plan renews in ${left} ${left === 1 ? "day" : "days"}` : `Your ${plan.name} plan renews today`}
-        description={`Renewal date: ${overview.periodEnd ? formatDate(overview.periodEnd) : ""}. Pay now so nothing is interrupted.`}
+        description={`Renewal date: ${overview.periodEnd ? formatDate(overview.periodEnd) : ""}. ${manual ? "Send a renewal request so nothing is interrupted — our team confirms how to pay." : "Pay now so nothing is interrupted."}`}
         footer={
           <DialogActions>
             <button type="button" className="btn btn-ghost btn-sm" onClick={dismiss}>
@@ -388,10 +436,11 @@ export function RenewalReminderPopup({ overview, alwaysOpen = false }: { overvie
               className="btn btn-primary btn-sm"
               onClick={() => {
                 dismiss();
-                void pay.renew();
+                if (manual) nav.go("checkout", { plan: plan.id, interval: overview.interval, renew: 1 });
+                else void pay.renew();
               }}
             >
-              Pay now · {renewalPriceText(overview)}
+              {manual ? "Request renewal" : "Pay now"} · {renewalPriceText(overview)}
             </button>
           </DialogActions>
         }

@@ -1,4 +1,14 @@
-import { Body, Controller, Get, Param, Post, Query, UseGuards } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Delete,
+  Get,
+  Param,
+  Post,
+  Put,
+  Query,
+  UseGuards,
+} from '@nestjs/common';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { OrgApprovedGuard } from '../../common/guards/org-approved.guard';
 import { PermissionGuard } from '../../common/guards/permission.guard';
@@ -10,6 +20,10 @@ import { PackageChangeRequestsService } from './package-change-requests.service'
 import { CreatePackageChangeRequestDto } from './dto/create-package-change-request.dto';
 import { RejectPackageChangeRequestDto } from './dto/reject-package-change-request.dto';
 import { ListPackageChangeRequestsDto } from './dto/list-package-change-requests.dto';
+import {
+  MarkRequestPaidDto,
+  RequestCouponDto,
+} from './dto/mark-request-paid.dto';
 
 // --- Organisation Endpoints ---
 @UseGuards(JwtAuthGuard, OrgApprovedGuard, PermissionGuard)
@@ -45,6 +59,36 @@ export class AdminPackageChangeRequestsController {
   @Get()
   listRequests(@Query() query: ListPackageChangeRequestsDto) {
     return this.service.adminListRequests(query);
+  }
+
+  /** Manual mode: "Mark as paid" (edit by sending it again) before approving. */
+  @Put(':id/payment')
+  markPaid(
+    @Param('id') id: string,
+    @Body() dto: MarkRequestPaidDto,
+    @CurrentUser() user: JwtPayload,
+  ) {
+    return this.service.markPaid(id, user.sub, dto);
+  }
+
+  @Delete(':id/payment')
+  clearPayment(@Param('id') id: string, @CurrentUser() user: JwtPayload) {
+    return this.service.clearPayment(id, user.sub);
+  }
+
+  /** Manual mode: a coupon on a pending request (re-quotes it; clears a marked payment). */
+  @Put(':id/coupon')
+  applyCoupon(
+    @Param('id') id: string,
+    @Body() dto: RequestCouponDto,
+    @CurrentUser() user: JwtPayload,
+  ) {
+    return this.service.applyCoupon(id, user.sub, dto.code);
+  }
+
+  @Delete(':id/coupon')
+  removeCoupon(@Param('id') id: string, @CurrentUser() user: JwtPayload) {
+    return this.service.removeCoupon(id, user.sub);
   }
 
   @Post(':id/approve')

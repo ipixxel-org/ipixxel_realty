@@ -182,7 +182,7 @@ describe("org subscription page: Package requests section", () => {
   it("approve asks first, then uses the same approval call", async () => {
     const { onChanged } = await renderSection();
     fireEvent.click(screen.getByRole("button", { name: "Approve" }));
-    expect(screen.getByText("Approve upgrade to Pro for Prestige Test Org?")).toBeInTheDocument();
+    expect(screen.getByText('Approve "Change to Pro" for Prestige Test Org?')).toBeInTheDocument();
     fireEvent.click(within(screen.getByRole("dialog")).getByRole("button", { name: "Approve" }));
     await settle();
     expect(api.approve).toHaveBeenCalledWith("pcr_1");

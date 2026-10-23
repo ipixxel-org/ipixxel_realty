@@ -58,6 +58,9 @@ export function PlansScreen({
   // A request waiting for approval blocks every other plan change until it's decided or withdrawn.
   const waiting = blockingRequest(overview);
   const onPaidMonthly = overview.interval === "monthly" && overview.status !== "free" && overview.status !== "moved_to_basic";
+  // Manual mode with the renewal overdue: every paid plan is a request at its
+  // full price (the missed term continues); Basic moves the org straight away.
+  const overdueManual = !live && overview.paymentMode === "manual" && (overview.status === "past_due" || overview.status === "grace_ending");
   /** A plan action link — disabled, with the reason, while a request is waiting. */
   const go = (to: "checkout" | "downgrade", params: Record<string, string | undefined>, className: string, children: ReactNode) =>
     waiting ? (
@@ -78,6 +81,13 @@ export function PlansScreen({
           <Icon name="clock" size={15} /> Request pending
         </button>
       );
+    }
+    if (overdueManual) {
+      if (p.isFree) return go("downgrade", { plan: p.id }, "btn btn-ghost", <><Icon name="arrow-down" size={15} /> Change plan</>);
+      if (p.id === current.id && interval === overview!.interval) {
+        return go("checkout", { plan: p.id, interval, renew: "1" }, "btn btn-primary", <><Icon name="arrow-up" size={15} /> Request renewal</>);
+      }
+      return go("checkout", { plan: p.id, interval }, p.rank > current.rank ? "btn btn-primary" : "btn btn-ghost", <><Icon name={p.rank > current.rank ? "arrow-up" : "arrow-down"} size={15} /> Change plan</>);
     }
     // Same paid plan, monthly → yearly: an upgrade with credit for the unused month.
     if (p.id === current.id && !p.isFree && onPaidMonthly && interval === "yearly") {

@@ -445,7 +445,7 @@ type ChangeDb = Pick<
   'plan' | 'subscription' | 'notification' | 'user'
 > &
   RetentionDb &
-  Partial<Pick<PrismaClient, 'auditLog'>>;
+  Partial<Pick<PrismaClient, 'auditLog' | 'packageChangeRequest'>>;
 
 async function notifyOrgAdmins(
   prisma: ChangeDb,
@@ -520,6 +520,15 @@ export async function moveToFreePlan(
     },
   });
   const retention = await applyRetention(prisma, sub.orgId, free);
+  // Option A (manual mode): a request still waiting stays pending; it notes
+  // that the org fell back to Basic meanwhile. Approving it later starts the
+  // new term on the payment date.
+  await prisma.packageChangeRequest
+    ?.updateMany({
+      where: { orgId: sub.orgId, status: 'pending', movedToBasicAt: null },
+      data: { movedToBasicAt: now },
+    })
+    .catch(() => undefined);
   await prisma.auditLog
     ?.create({
       data: {

@@ -14,6 +14,11 @@ export interface SettledCheckout {
   kind: 'new' | 'upgrade_same_interval' | 'interval_change' | 'renewal';
   couponId: string | null;
   couponDiscountPaise: number;
+  /**
+   * Set when the Super Admin added the coupon to a manual-mode request: it's
+   * a new coupon even on a renewal, so it attaches like a purchase's.
+   */
+  quoteBeforeCoupon?: unknown;
 }
 
 /**
@@ -23,7 +28,8 @@ export interface SettledCheckout {
  *  - keep the subscription's renewal coupon in step: a purchase attaches a
  *    first_n / forever coupon (or clears an old one); a renewal that used the
  *    attached coupon counts one renewal off it; a renewal that didn't (the
- *    smaller plan isn't covered) drops it.
+ *    smaller plan isn't covered) drops it. A coupon our team added to a
+ *    renewal request counts as new: it attaches like a purchase's.
  */
 export async function settleCoupon(tx: Tx, c: SettledCheckout) {
   const sub = await tx.subscription.findFirst({
@@ -47,7 +53,7 @@ export async function settleCoupon(tx: Tx, c: SettledCheckout) {
 
   let couponId: string | null = null;
   let left: number | null = null;
-  if (c.kind === 'renewal') {
+  if (c.kind === 'renewal' && c.quoteBeforeCoupon == null) {
     if (c.couponId && sub.couponId === c.couponId) {
       left = sub.couponRenewalsLeft == null ? null : sub.couponRenewalsLeft - 1;
       couponId = left === null || left > 0 ? c.couponId : null;

@@ -355,7 +355,7 @@ describe('renewal (pay each time)', () => {
     });
   });
 
-  it('manual mode: the team renews it — no checkout is created', async () => {
+  it('manual mode: a renewal is a request (Request renewal) at the renewal price', async () => {
     const { service, db } = setup({
       mode: 'manual',
       sub: {
@@ -364,11 +364,20 @@ describe('renewal (pay each time)', () => {
         renewsAt: new Date(Date.now() - DAY),
       },
     });
-    await expect(service.start('org-1', 'u1', renew)).rejects.toMatchObject({
-      response: { code: 'renewal_manual' },
+    await expect(service.start('org-1', 'u1', renew)).resolves.toMatchObject({
+      status: 'pending_approval',
     });
-    expect(db.billingCheckout.rows).toHaveLength(0);
-    expect(db.packageChangeRequest.rows).toHaveLength(0);
+    expect(db.packageChangeRequest.rows).toHaveLength(1);
+    expect(db.packageChangeRequest.rows[0]).toMatchObject({
+      targetPlanId: 'growth',
+      status: 'pending',
+    });
+    expect(db.billingCheckout.rows[0]).toMatchObject({
+      kind: 'renewal',
+      mode: 'manual',
+      overdue: true,
+      totalPaise: 236_000,
+    });
   });
 
   it('a pending upgrade request does not block paying the renewal', async () => {
@@ -659,6 +668,12 @@ describe('manual mode', () => {
     });
     const requestId = (res as { requestId: string }).requestId;
     const pcr = new PackageChangeRequestsService(db as never);
+    await pcr.markPaid(requestId, 'admin-1', {
+      amount: db.billingCheckout.rows[0].totalPaise / 100,
+      method: 'Bank transfer',
+      reference: 'UTR1',
+      receivedOn: new Date().toISOString().slice(0, 10),
+    });
     await pcr.adminApproveRequest(requestId, 'admin-1');
     expect(db.subscription.rows[0]).toMatchObject({
       planId: 'growth',

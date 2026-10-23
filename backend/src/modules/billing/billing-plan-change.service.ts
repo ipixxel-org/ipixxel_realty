@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Optional } from '@nestjs/common';
 import { PrismaService } from '../../database/prisma.service';
 import { NO_SCHEDULED_CHANGE } from '../../common/utils/plan-change.util';
 import {
@@ -6,7 +6,11 @@ import {
   moveToFreePlan,
 } from '../../common/utils/subscription-lifecycle.util';
 import { pendingRequestMessage } from '../package-change-requests/package-change-requests.service';
-import { billingError } from './billing-checkout.service';
+import {
+  billingError,
+  BillingCheckoutService,
+} from './billing-checkout.service';
+import { BillingModeService } from './billing-mode.service';
 import { OrgBillingV2Service } from './org-billing-v2.service';
 import { isFreePlan, sortPlans } from './plan-modules';
 import type { BillingOverviewV2 } from './billing.types';
@@ -27,7 +31,20 @@ export class BillingPlanChangeService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly overview: OrgBillingV2Service,
+    // Manual mode in grace (below). Optional so unit tests can leave them out:
+    // without them everything behaves as online mode.
+    @Optional() private readonly mode?: BillingModeService,
+    @Optional() private readonly checkout?: BillingCheckoutService,
   ) {}
+
+  /**
+   * Manual mode with the renewal overdue (grace): moving to Basic happens at
+   * once (no request), and any paid plan is a request at its full price.
+   */
+  private async manualOverdue(sub: { status: string }): Promise<boolean> {
+    if (sub.status !== 'past_due' || !this.mode) return false;
+    return (await this.mode.getMode()).mode === 'manual';
+  }
 
   private async current(orgId: string) {
     await applyOrgSubscriptionLifecycle(this.prisma, orgId);
@@ -68,8 +85,13 @@ export class BillingPlanChangeService {
       throw billingError('nothing_to_cancel', "You're already on Basic.");
     }
     const reason = dto.reason?.trim() || null;
-    if (sub.status === 'expired' || sub.status === 'paused') {
-      // The term is already over: move to the free plan now.
+    if (
+      sub.status === 'expired' ||
+      sub.status === 'paused' ||
+      (await this.manualOverdue(sub))
+    ) {
+      // The term is already over (or, in manual mode, overdue): move to the
+      // free plan now — extras paused, nothing deleted.
       await this.prisma.subscription.update({
         where: { id: sub.id },
         data: { cancelReason: reason },
@@ -138,7 +160,8 @@ export class BillingPlanChangeService {
         "You're on the free plan — there's nothing to downgrade.",
       );
     }
-    if (sub.status !== 'active' && sub.status !== 'trial') {
+    const overdueManual = await this.manualOverdue(sub);
+    if (sub.status !== 'active' && sub.status !== 'trial' && !overdueManual) {
       throw billingError(
         'downgrade_not_now',
         'Your renewal is overdue. Renew your plan first, or move to Basic.',
@@ -157,6 +180,16 @@ export class BillingPlanChangeService {
     // Moving to the free plan is cancelling.
     if (isFreePlan(target)) {
       return this.cancel(orgId, userId, {});
+    }
+    // Manual mode, renewal overdue: any paid plan is a change request at its
+    // full price (the missed term continues) — the same as Change plan sends.
+    if (overdueManual && this.checkout) {
+      await this.checkout.start(orgId, userId, {
+        planId: target.id,
+        interval: dto.interval ?? sub.billingCycle,
+        purpose: 'purchase',
+      });
+      return this.overview.getOverview(orgId);
     }
 
     const interval = dto.interval ?? sub.billingCycle;

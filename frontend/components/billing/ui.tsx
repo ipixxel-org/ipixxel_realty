@@ -54,12 +54,14 @@ export function BLink({
   params,
   className,
   style,
+  title,
   children,
 }: {
   to: BillingRoute;
   params?: RouteParams;
   className?: string;
   style?: CSSProperties;
+  title?: string;
   children: ReactNode;
 }) {
   const { nav } = useBillingEnv();
@@ -68,6 +70,7 @@ export function BLink({
       href={nav.href(to, params)}
       className={className}
       style={style}
+      title={title}
       onClick={(e) => {
         if (nav.intercept?.(to, params)) e.preventDefault();
       }}

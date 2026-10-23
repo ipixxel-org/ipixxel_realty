@@ -31,6 +31,7 @@ export class SaveAdminPlanDto {
   // Read-only in the contract shape; accepted so a BillingPlan round-trips, then ignored.
   @IsOptional() @IsString() id?: string;
   @IsOptional() @IsInt() rank?: number;
+  @IsOptional() @IsBoolean() isActive?: boolean;
   @IsString() @MaxLength(80) name!: string;
   @IsOptional() @IsString() @MaxLength(300) tagline?: string;
   @IsNumber() priceMonthly!: number;

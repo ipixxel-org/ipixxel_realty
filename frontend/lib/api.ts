@@ -565,6 +565,38 @@ export async function approvePackageChangeRequest(
 export const REJECTION_REASON_MIN = 10;
 export const REJECTION_REASON_MAX = 500;
 
+/** Manual mode: "Mark as paid" on a pending request (send again to edit). */
+export async function markPackageChangeRequestPaid(
+  id: string,
+  // The amount is always the request's total (the server ignores any other).
+  body: { method: string; reference?: string; receivedOn: string; note?: string },
+): Promise<{ success: boolean; payment: import("./billing/types").RequestPayment }> {
+  return apiFetch(`/admin/package-change-requests/${id}/payment`, {
+    method: "PUT",
+    body: JSON.stringify(body),
+  });
+}
+
+/** Undo "Mark as paid" while the request is still pending. */
+export async function clearPackageChangeRequestPayment(id: string): Promise<{ success: boolean }> {
+  return apiFetch(`/admin/package-change-requests/${id}/payment`, { method: "DELETE" });
+}
+
+type RequestCouponResult = { success: boolean; quote: import("./billing/types").RequestQuote; paymentCleared: boolean };
+
+/** Manual mode: a coupon on a pending request (re-quotes it; a marked payment is cleared). */
+export async function applyPackageChangeRequestCoupon(id: string, code: string): Promise<RequestCouponResult> {
+  return apiFetch(`/admin/package-change-requests/${id}/coupon`, {
+    method: "PUT",
+    body: JSON.stringify({ code }),
+  });
+}
+
+/** Remove the coupon added on the request: its original quote comes back. */
+export async function removePackageChangeRequestCoupon(id: string): Promise<RequestCouponResult> {
+  return apiFetch(`/admin/package-change-requests/${id}/coupon`, { method: "DELETE" });
+}
+
 export async function rejectPackageChangeRequest(
   id: string,
   rejectionReason: string,
