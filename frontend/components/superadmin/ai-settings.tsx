@@ -23,6 +23,16 @@ const PROVIDERS: { value: AiProviderName | ""; label: string }[] = [
   { value: "external", label: "Custom agent (HTTP endpoint)" },
 ];
 
+/** Claude models offered in the picker. Any other model ID can still be typed via "Custom model ID". */
+const CLAUDE_MODELS: { value: string; label: string }[] = [
+  { value: "claude-sonnet-5-5", label: "Claude Sonnet 5.5 — recommended (balanced quality & speed)" },
+  { value: "claude-opus-5-5", label: "Claude Opus 5.5 — highest quality, slower, higher cost" },
+  { value: "claude-haiku-5-5", label: "Claude Haiku 5.5 — fastest, lowest cost" },
+  { value: "claude-fable-5-1", label: "Claude Fable 5.1" },
+];
+const CUSTOM_MODEL = "__custom__";
+const isListedClaudeModel = (model: string) => CLAUDE_MODELS.some((m) => m.value === model);
+
 const PROVIDER_NAMES: Record<string, string> = {
   gemini: "Google Gemini",
   anthropic: "Anthropic Claude",
@@ -97,6 +107,8 @@ export function AiSettings() {
   const [geminiThinkingBudget, setGeminiThinkingBudget] = useState("");
   const [anthropicApiKey, setAnthropicApiKey] = useState("");
   const [anthropicModel, setAnthropicModel] = useState("");
+  // True when the saved model isn't in CLAUDE_MODELS, or the admin chose "Custom model ID".
+  const [customClaudeModel, setCustomClaudeModel] = useState(false);
   const [aiGenerateApiUrl, setAiGenerateApiUrl] = useState("");
   const [aiGenerateApiKey, setAiGenerateApiKey] = useState("");
   const [loading, setLoading] = useState(true);
@@ -111,6 +123,7 @@ export function AiSettings() {
     setGeminiThinkingBudget(v.geminiThinkingBudget);
     setAnthropicApiKey(v.anthropicApiKey);
     setAnthropicModel(v.anthropicModel);
+    setCustomClaudeModel(!!v.anthropicModel && !isListedClaudeModel(v.anthropicModel));
     setAiGenerateApiUrl(v.aiGenerateApiUrl);
     setAiGenerateApiKey(v.aiGenerateApiKey);
   }
@@ -334,16 +347,45 @@ export function AiSettings() {
             />
           </div>
           <div className="field" style={{ marginBottom: 0 }}>
-            <label htmlFor="ai-anthropic-model" style={{ fontWeight: 600 }}>Model</label>
-            <input
+            <label htmlFor="ai-anthropic-model" style={{ fontWeight: 600, display: "flex", justifyContent: "space-between" }}>
+              <span>Model</span>
+              <span className="hint">Applies to the next generation — no restart</span>
+            </label>
+            <select
               id="ai-anthropic-model"
-              className="inp inp-mono"
-              placeholder="claude-sonnet-5-5"
-              value={anthropicModel}
-              onChange={(e) => setAnthropicModel(e.target.value)}
+              className="inp"
+              value={customClaudeModel ? CUSTOM_MODEL : anthropicModel || CLAUDE_MODELS[0].value}
+              onChange={(e) => {
+                if (e.target.value === CUSTOM_MODEL) {
+                  // Keep the current ID in the box so it can be edited, not retyped.
+                  setCustomClaudeModel(true);
+                } else {
+                  setCustomClaudeModel(false);
+                  setAnthropicModel(e.target.value);
+                }
+              }}
               disabled={busy || !canEdit}
-              autoComplete="off"
-            />
+            >
+              {CLAUDE_MODELS.map((m) => (
+                <option key={m.value} value={m.value}>
+                  {m.label}
+                </option>
+              ))}
+              <option value={CUSTOM_MODEL}>Custom model ID…</option>
+            </select>
+            {customClaudeModel ? (
+              <input
+                id="ai-anthropic-model-custom"
+                aria-label="Custom Claude model ID"
+                className="inp inp-mono"
+                style={{ marginTop: 8 }}
+                placeholder="e.g. claude-opus-5"
+                value={anthropicModel}
+                onChange={(e) => setAnthropicModel(e.target.value)}
+                disabled={busy || !canEdit}
+                autoComplete="off"
+              />
+            ) : null}
           </div>
         </div>
 
