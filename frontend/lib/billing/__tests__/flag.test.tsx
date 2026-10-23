@@ -244,7 +244,7 @@ describe("billing v2 flag", () => {
     expect(errors).toEqual([]);
   });
 
-  it("on, manual mode: plans say Request upgrade and checkout explains approval", async () => {
+  it("on, manual mode: plans say Change plan and checkout explains approval", async () => {
     const { BillingV2Root, PlansScreen, CheckoutScreen, ToastProvider } = await load("true");
     const plans = render(
       <ToastProvider>
@@ -254,7 +254,7 @@ describe("billing v2 flag", () => {
       </ToastProvider>,
     );
     await settle();
-    expect(screen.getByRole("link", { name: /Request upgrade/ })).toHaveAttribute("href", expect.stringContaining("plan=uuid-growth"));
+    expect(screen.getByRole("link", { name: /Change plan/ })).toHaveAttribute("href", expect.stringContaining("plan=uuid-growth"));
     plans.unmount();
 
     render(
@@ -265,12 +265,12 @@ describe("billing v2 flag", () => {
       </ToastProvider>,
     );
     await settle();
-    expect(screen.getByText("Request an upgrade to Growth")).toBeInTheDocument();
+    expect(screen.getByText("Request a change to Growth")).toBeInTheDocument();
     expect(screen.getByText(/approved by our team/)).toBeInTheDocument();
     expect(screen.getByText("₹2,360")).toBeInTheDocument();
     // Coupons arrive later: the field is hidden while the API says so.
     expect(screen.queryByLabelText("Coupon code")).toBeNull();
-    expect(screen.getByRole("button", { name: /Send upgrade request/ })).toBeEnabled();
+    expect(screen.getByRole("button", { name: /Send change request/ })).toBeEnabled();
     expect(errors).toEqual([]);
   });
 
@@ -290,7 +290,7 @@ describe("billing v2 flag", () => {
     expect(summary.querySelector("input, select, textarea")).toBeNull();
     expect(screen.queryByRole("button", { name: /Use saved details/ })).toBeNull();
     expect(screen.getByRole("link", { name: "Edit in General settings" })).toHaveAttribute("href", "/org/settings?section=general");
-    fireEvent.click(screen.getByRole("button", { name: /Send upgrade request/ }));
+    fireEvent.click(screen.getByRole("button", { name: /Send change request/ }));
     await settle();
 
     expect(apiFetch.mock.calls.some(([p]) => p === "/org/billing/profile")).toBe(false);
@@ -327,7 +327,7 @@ describe("billing v2 flag", () => {
       </ToastProvider>,
     );
     await settle();
-    expect(screen.getByText("Upgrade to Growth requested")).toBeInTheDocument();
+    expect(screen.getByText("Change to Growth requested")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /Request pending/ })).toBeDisabled();
     expect(screen.getByTestId("billing-details-summary")).toHaveTextContent(/1 Road.*Mysuru.*Karnataka.*570001/);
     expect(errors).toEqual([]);
@@ -461,7 +461,7 @@ describe("billing v2 flag", () => {
     expect(apiFetch).toHaveBeenCalledWith("/org/billing/retention?targetPlanId=uuid-basic");
     expect(screen.getByText(/Asha Rao/)).toBeInTheDocument(); // the default pick that stays
     expect(screen.getByRole("link", { name: /Choose what stays/ })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /Confirm downgrade/ })).toBeEnabled();
+    expect(screen.getByRole("button", { name: /Confirm plan change/ })).toBeEnabled();
     expect(errors).toEqual([]);
   });
 
@@ -509,6 +509,9 @@ describe("billing v2 flag", () => {
         "refundPayment",
         // fixes after testing
         "listOrgCoupons",
+        // manual mode: requests list and withdraw
+        "listOrgRequests",
+        "withdrawRequest",
         "getCompanyDetails",
         "saveCompanyDetails",
         "runLifecycleCheck",
@@ -558,7 +561,7 @@ describe("billing details come from General settings", () => {
     expect(screen.getByText(/Complete your organisation details to continue\. Missing: organisation name, state, PIN code\./)).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Complete organisation details" })).toHaveAttribute("href", "/org/settings?section=general");
     expect(screen.queryByText(/Ask your organisation admin/)).toBeNull();
-    const send = screen.getByRole("button", { name: /Send upgrade request/ });
+    const send = screen.getByRole("button", { name: /Send change request/ });
     expect(send).toBeDisabled();
     fireEvent.click(send);
     await settle();
@@ -579,6 +582,6 @@ describe("billing details come from General settings", () => {
     expect(screen.getByText(/Complete your organisation details to continue/)).toBeInTheDocument();
     expect(screen.getByText("Ask your organisation admin to complete these details.")).toBeInTheDocument();
     expect(screen.queryByRole("link", { name: /Complete organisation details|Edit in General settings/ })).toBeNull();
-    expect(screen.getByRole("button", { name: /Send upgrade request/ })).toBeDisabled();
+    expect(screen.getByRole("button", { name: /Send change request/ })).toBeDisabled();
   });
 });

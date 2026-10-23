@@ -51,6 +51,9 @@ export const REAL_FUNCTIONS: Record<BillingFunction, boolean> = {
   refundPayment: true,
   // Fixes after testing — org coupons page, company & tax details, "Run lifecycle check now"
   listOrgCoupons: true,
+  // Manual mode: the org's requests list and withdrawing a pending request.
+  listOrgRequests: true,
+  withdrawRequest: true,
   getCompanyDetails: true,
   saveCompanyDetails: true,
   runLifecycleCheck: true,

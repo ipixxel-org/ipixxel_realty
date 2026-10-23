@@ -27,7 +27,9 @@ export type BillingRoute =
   | "adminPlanEdit"
   | "coupons"
   /** Settings → General: the org profile that billing details come from. */
-  | "generalSettings";
+  | "generalSettings"
+  /** Settings → Billing → Requests (plan change requests, manual mode). */
+  | "requests";
 
 export type RouteParams = Record<string, string | number | null | undefined>;
 
@@ -83,6 +85,8 @@ export function billingHref(to: BillingRoute, params: RouteParams = {}): string 
       return `/admin-console/subscriptions/plans/${encodeURIComponent(String(params.id))}/edit`;
     case "coupons":
       return `${ORG}/coupons`;
+    case "requests":
+      return `${ORG}/requests`;
   }
 }
 

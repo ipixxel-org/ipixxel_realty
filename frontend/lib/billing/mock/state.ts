@@ -314,6 +314,7 @@ export function deriveOverview(s: MockState, today: string): BillingOverview {
           status: "pending_approval",
           requestId: s.pendingRequest.requestId,
           checkoutId: s.pendingRequest.checkoutId,
+          fromPlan: { id: plan.id, name: plan.name },
           toPlan: { id: s.pendingRequest.planId, name: planById(s, s.pendingRequest.planId).name },
           interval: s.pendingRequest.interval,
           createdAt: s.pendingRequest.createdAt,

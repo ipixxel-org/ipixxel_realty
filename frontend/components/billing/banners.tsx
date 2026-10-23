@@ -322,13 +322,13 @@ export function BillingBanner({ overview }: { overview: BillingOverview }) {
         <Banner
           tone="info"
           icon="arrow-down"
-          title={`Downgrade to ${o.downgradeTo!.name} scheduled for ${formatDate(o.downgradeAt!)}`}
+          title={`Change to ${o.downgradeTo!.name} scheduled for ${formatDate(o.downgradeAt!)}`}
           actions={
             <>
               <BLink to="chooseWhatStays" className="btn btn-ghost btn-sm">
                 Choose what stays
               </BLink>
-              <UndoButton label="Undo downgrade" run={() => client.undoDowngrade()} done={`Downgrade cancelled — you'll stay on ${plan.name}.`} />
+              <UndoButton label="Undo plan change" run={() => client.undoDowngrade()} done={`Plan change cancelled — you'll stay on ${plan.name}.`} />
             </>
           }
         >

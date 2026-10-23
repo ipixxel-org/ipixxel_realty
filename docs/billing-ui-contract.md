@@ -26,6 +26,7 @@ client is the reference behaviour (see `frontend/lib/billing/__tests__/mock-clie
 | 7 | `listInvoices`, `listPayments`, `listSubscriptions`, `getSubscription`, `extendGrace`, `markPaidOffline`, `applyCoupon`, `cancelSubscription`, `listAdminPayments`, `refundPayment` | `invoice.util.ts`, `billing-ledger.service.ts`, `admin-subscriptions.service.ts`, `invoice-document.controller.ts`; `PaymentsService.refundInFull` |
 | Fixes after testing | `listOrgCoupons`, `getCompanyDetails`, `saveCompanyDetails`, `runLifecycleCheck`; `BillingOverview.renewalBreakdown`, `Invoice.checkoutId`, `Coupon.showToCustomers`; reminders stored | `subscription-lifecycle.util.ts` (grace rule, reminders), `common/utils/billing-clock.util.ts`, `admin-billing.service.ts`, `admin-coupons.service.ts` (`orgCoupons`); migration `20261015114705_billing_v2_fixes` |
 | Billing details from the org profile | `BillingOverview.billingProfile` (always set) + `billingDetailsMissing`; GSTIN and the state dropdown in Settings → General (invoice name = organisation name); `saveBillingProfile` / `getBillingProfile` and `PreviewCheckoutRequest.billingState` removed | `billing/org-billing-details.ts`, `common/utils/org-profile-audit.util.ts` (save check); frontend `components/ui/state-select.tsx`, `lib/billing/details.ts`; migration `20261022090000_org_profile_billing_details` |
+| Manual-mode requests | `listOrgRequests`, `withdrawRequest`; `CheckoutPreview.usageConflict`; `PendingUpgrade.fromPlan`; `BillingOverview.rejectedUpgrade`; approval applies "choose what stays" | `billing-ledger.service.ts` (`listRequests`), `checkout-state.ts`, `common/utils/plan-quota.util.ts` (`usageOverLimits`, `assertPlanFitsAfterRetention`), `package-change-requests.service.ts` (`pendingRequestMessage`, required rejection reason); frontend `components/billing/requests.tsx`, `lib/billing/requests.ts` |
 | Fixes after testing (2) | one `plan_locked` error; list filters `viewOnly` / `offline` / `paused` / `needsReassign`; invoice email; `packagePriceText` | `common/utils/plan-lock.util.ts`, `billing-invoice-mailer.service.ts`, `lead-assignee.util.ts`; frontend `lib/plan-lock.ts`, `PlanLockBadge` (`components/billing/locked.tsx`); migration `20261016093000_billing_invoice_email` |
 
 Every function is real except `updatePaymentMethod`, which stays unimplemented on purpose: renewals are
@@ -151,6 +152,67 @@ period rule (`applyPlanChange`).
   the email logs under the org (template `billing`). A ₹0 checkout and an approval without
   payment have no invoice, so no email.
 
+### The free plan and internal ₹0 plans
+
+- **Free plan = the system plan (Basic)** — `isFreePlan` is `isSystem`, no longer "₹0 on both cycles".
+  An internal ₹0 plan such as the staging "Demo" plan (`prisma/seed-demo.ts`) is a normal plan:
+  editable, deletable (Delete is only disabled for Basic), shown with its own name and status.
+- **Never offered:** `isInternalPlan` (₹0, not system) plans are left out of `listPlans()` for
+  organisations and refused at checkout (`plan_not_found`), even if `is_active` is true. The
+  Super Admin assigns them.
+- **Super Admin plan list** (`listAdminPlans`) returns inactive plans too, with
+  `BillingPlan.isActive: false` and a "Not offered" badge, so a plan doesn't have to be made active
+  to be edited or deleted. An inactive plan may be saved at ₹0; an offered one needs a price.
+- **Delete** is refused while an organisation is on the plan, naming it: "\"Demo\" can't be deleted
+  while organisations are on it (Skyline Demo Realty). Move them to another plan first, or make it
+  inactive to stop offering it."
+
+### Manual mode: requests, choose what stays, withdraw
+
+- **Action row:** in manual mode Settings → Billing hides the standalone "Choose what stays"
+  button; the grace and "You're on Basic now" banners keep their links. A "Requests" link sits
+  next to Coupons.
+- **Over the target's limits:** in manual mode the preview no longer returns `usageError` for
+  users / projects / published landing pages; it returns `usageConflict` `{ items: [{ key, limit,
+  used }], choicesFit }`. The request screen shows "Pro allows 5 users; you have 8. Choose which 5
+  stay active when this change is approved." with "Choose what stays"
+  (`/org/settings/billing/choose-what-stays?target=<plan>&back=checkout&interval=…`, whose Back
+  returns to the request). Choices are saved for the target plan (`retention_choices`, one per
+  org). Send — and `startCheckout` (`choose_what_stays`) — waits until `choicesFit`.
+  Templates / created pages over the limit are still a `usageError` (they can't be paused).
+  Online mode is unchanged.
+- **Approval** of a v2 request (one with a checkout) checks only what can't be paused
+  (`assertPlanFitsAfterRetention`); `applyPlanChange` → `applyRetention` then pauses the rest
+  using the saved choice for that plan, or the default picks — like a scheduled downgrade.
+  Older requests (no checkout) keep the strict check.
+- **One pending request:** while `pendingUpgrade.status === "pending_approval"`, Change plan,
+  every plan card action and Send are disabled with "You already have a pending request
+  (Starter → Pro, sent 22 Oct). Wait for approval or withdraw it." (`PendingUpgrade.fromPlan` +
+  `createdAt`). The API refuses a different second request with the same words
+  (`request_pending`, from both checkout start and the legacy request endpoint); the same plan and
+  interval again returns the existing request.
+- **Withdraw:** `PackageChangeRequestStatus` already had `cancelled` (the org cancelling a request),
+  so no migration: withdraw sets it, cancels the linked checkout, and the request leaves Super
+  Admin's Pending filter (shown under All as "withdrawn").
+- **What they chose stays with the request:** `package_change_requests.what_stays` (JSON, migration
+  `20261023090000_package_request_what_stays`, guarded) holds a copy of "choose what stays" for the
+  target plan — only the limits the org is over: `{ planId, planName, choice: "saved" | "default",
+  applied, users?, projects?, landingPages? }`, each `{ limit, total, kept: [{id,name}], paused }`
+  (`whatStaysFor` in `retention.util.ts`). Saved when the request is sent, refreshed when they change
+  their choice for that plan while it's pending, and on approval replaced with what was actually kept
+  (`applied: true`). `OrgPlanRequest.whatStays` (null = everything fits): the Requests tab shows
+  "Keeps 2 of 3 users", the names, and "Change what stays" while pending
+  (`choose-what-stays?target=…&back=requests`). Super Admin's Package requests section shows the summary.
+- **One request at a time:** checkout start (both modes), the legacy request endpoint and scheduling a
+  downgrade all refuse with `request_pending` and the same message until the request is approved,
+  rejected or withdrawn.
+- **Wording:** plan actions say "Change plan" (no Upgrade / Downgrade buttons); the request screen
+  says "Request a change to Pro" / "Send change request"; banners say "Change to Pro requested",
+  "Change to Pro was not approved", "Change to Growth scheduled".
+- **Rejected:** `BillingOverview.rejectedUpgrade` `{ requestId, toPlan, interval, rejectedAt, reason }`
+  while the latest request is a rejected one; the Billing page shows it with the reason. The
+  Super Admin must give a reason (10–500 characters).
+
 ### Billing details from the org profile
 
 - **Single source of truth:** Settings → General (`PATCH /org/settings`, Super Admin `PATCH
@@ -200,7 +262,7 @@ period rule (`applyPlanChange`).
 - **Refusals** (400 `{ code, message }` → `BillingError.code`): `plan_not_found`, `free_plan`,
   `same_plan` (same plan + interval, even when lapsed), `lower_plan` (only while a paid plan is
   active — that's a downgrade), `yearly_to_monthly`, `billing_details_incomplete` (was `billing_profile_required`),
-  `request_pending` (online start while a manual request waits), `amount_too_small` (online
+  `request_pending` (a second request, or online start while a manual request waits — "You already have a pending request (…). Wait for approval or withdraw it."), `choose_what_stays` (manual mode, over the target's limits before choosing what stays), `amount_too_small` (online
   total under ₹1), renewal codes (step 3 notes), and on the old endpoints
   `paid_plan_requires_checkout` / `paid_renewal_requires_checkout`.
 - **One open order per org:** starting a new online checkout cancels the org's older pending
@@ -436,6 +498,8 @@ period rule (`applyPlanChange`).
 | `listInvoices(req)` | `GET /org/billing/v2/invoices?page=&pageSize=` (`/org/billing/invoices` is the legacy list) | `PageRequest` | `Paged<Invoice>` (invoices and credit notes; `pdfUrl` = signed link to the printable document) |
 | `listPayments(req)` | `GET /org/billing/v2/payments?page=&pageSize=` | `PageRequest` | `Paged<PaymentRecord>` (plan payments: Razorpay + offline) |
 | `listOrgCoupons()` | `GET /org/billing/coupons` | — | `OrgCoupon[]` (reserved for the org + open ones listed for customers, with the org's status) |
+| `listOrgRequests(req)` | `GET /org/billing/requests?page=&pageSize=` (`billing:view`) | `PageRequest` (10 a page) | `Paged<OrgPlanRequest>` — newest first; `status` pending / approved / rejected / withdrawn (stored as `cancelled`); `amount` before GST + `amountNote`; `decidedAt`; `rejectionReason` when rejected |
+| `withdrawRequest(id)` | `POST /org/billing/requests/:id/withdraw` (`billing:edit`) | — | `BillingOverview` — the request becomes `cancelled` (shown as Withdrawn), its checkout `cancelled`; plan buttons work again |
 
 **Login refusal for a paused user** (not part of `BillingClient`): `POST /auth/login` returns
 403 with `{ code: "account_paused", orgName, ownerName, planName, planUserLimit }`. The login

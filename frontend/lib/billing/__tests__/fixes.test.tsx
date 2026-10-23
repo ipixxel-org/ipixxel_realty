@@ -89,7 +89,7 @@ describe("admin plans: cards, and Edit opens the full form", () => {
     expect(within(growth).getByRole("link", { name: "Edit Plan" })).toHaveAttribute("href", "/admin-console/subscriptions/plans/growth/edit");
   });
 
-  it("the edit route (flag on) opens the form: prices, free-plan flag, limits, features", async () => {
+  it("the edit route (flag on) opens the form: prices, limits, features — no free-plan checkbox", async () => {
     shared.client = createMockBillingClient();
     const { default: EditPlanPage } = await import("@/app/admin-console/subscriptions/plans/[id]/edit/page");
     render(
@@ -100,7 +100,8 @@ describe("admin plans: cards, and Edit opens the full form", () => {
     expect(await screen.findByRole("heading", { name: "Edit Growth" })).toBeInTheDocument();
     expect(screen.getByLabelText("Monthly price (₹, before GST)")).toBeInTheDocument();
     expect(screen.getByLabelText("Yearly price (₹, before GST)")).toBeInTheDocument();
-    expect(screen.getByText("Free plan")).toBeInTheDocument();
+    expect(screen.queryByRole("checkbox", { name: /Free plan/ })).toBeNull();
+    expect(screen.queryByTestId("free-plan-note")).toBeNull(); // Growth isn't the free plan
     expect(screen.getByLabelText("Users")).toBeInTheDocument();
     expect(screen.getByText("Team chat")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Save plan" })).toBeInTheDocument();

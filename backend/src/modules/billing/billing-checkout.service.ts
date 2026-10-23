@@ -10,7 +10,14 @@ import {
 import type { BillingCheckoutStatus, Prisma } from '@prisma/client';
 import { PrismaService } from '../../database/prisma.service';
 import { applyPlanChange } from '../../common/utils/plan-change.util';
-import { assertPlanFitsCurrentUsage } from '../../common/utils/plan-quota.util';
+import {
+  assertPlanFitsCurrentUsage,
+  usageOverLimits,
+} from '../../common/utils/plan-quota.util';
+import {
+  savedChoiceFor,
+  whatStaysFor,
+} from '../../common/utils/retention.util';
 import {
   applyOrgSubscriptionLifecycle,
   getBillingExpiryConfig,
@@ -21,7 +28,10 @@ import {
   PaymentEventsService,
   type PaymentEvent,
 } from '../payments/payment-events';
-import { PackageChangeRequestsService } from '../package-change-requests/package-change-requests.service';
+import {
+  PackageChangeRequestsService,
+  pendingRequestMessage,
+} from '../package-change-requests/package-change-requests.service';
 import { BillingModeService, type BillingMode } from './billing-mode.service';
 import {
   MIN_ONLINE_PAISE,
@@ -49,11 +59,12 @@ import {
   type BillingDetailsField,
 } from './org-billing-details';
 import { BillingInvoiceMailer } from './billing-invoice-mailer.service';
-import { isFreePlan, sortPlans } from './plan-modules';
+import { isFreePlan, isInternalPlan, sortPlans } from './plan-modules';
 import type {
   CheckoutPreviewV2,
   ConfirmCheckoutResultV2,
   StartCheckoutResultV2,
+  UsageConflictV2,
 } from './billing.types';
 import type {
   ConfirmCheckoutDto,
@@ -99,6 +110,25 @@ export function billingError(code: string, message: string) {
   });
 }
 
+const CONFLICT_NOUN = {
+  users: ['user', 'users'],
+  projects: ['project', 'projects'],
+  landingPages: ['published landing page', 'published landing pages'],
+} as const;
+
+/** "Pro allows 5 users; you have 8. Choose which 5 stay active when this change is approved." */
+export function usageConflictMessage(
+  planName: string,
+  conflict: UsageConflictV2,
+): string {
+  return conflict.items
+    .map((i) => {
+      const [one, many] = CONFLICT_NOUN[i.key];
+      return `${planName} allows ${i.limit} ${i.limit === 1 ? one : many}; you have ${i.used}. Choose which ${i.limit} stay active when this change is approved.`;
+    })
+    .join(' ');
+}
+
 export interface QuoteContext {
   quote: Quote;
   mode: BillingMode;
@@ -119,6 +149,8 @@ export interface QuoteContext {
    * payment is taken — fulfil checks it again.
    */
   usageError: string | null;
+  /** Manual mode: over the target in ways "choose what stays" fixes. */
+  usageConflict: UsageConflictV2 | null;
 }
 
 /** What a payment.captured did to its checkout (returned for tests / logs). */
@@ -187,6 +219,13 @@ export class BillingCheckoutService implements OnModuleInit {
     if (ctx.couponError) throw billingError('coupon_invalid', ctx.couponError);
     // Never take money for a plan the org doesn't fit (fulfil would hold it).
     if (ctx.usageError) throw billingError('plan_too_small', ctx.usageError);
+    // Manual mode over the target's limits: send only once they've chosen what stays.
+    if (ctx.usageConflict && !ctx.usageConflict.choicesFit) {
+      throw billingError(
+        'choose_what_stays',
+        usageConflictMessage(ctx.quote.toPlan.name, ctx.usageConflict),
+      );
+    }
     // Nothing to pay (a 100% coupon): apply it now, in either mode.
     if (ctx.quote.totalPaise === 0)
       return this.activateFree(orgId, userId, ctx);
@@ -234,21 +273,32 @@ export class BillingCheckoutService implements OnModuleInit {
     userId: string,
     ctx: QuoteContext,
   ): Promise<StartCheckoutResultV2> {
-    const existing = await this.pendingRequest(orgId);
-    if (existing) return existing;
     const q = ctx.quote;
+    const existing = await this.pendingRequest(orgId);
+    if (existing) {
+      // The same request again (a double click, another tab): return it.
+      // Anything else is a second pending request — refused.
+      if (
+        existing.toPlanId === q.toPlan.id &&
+        existing.interval === q.toInterval
+      )
+        return existing.result;
+      throw billingError('request_pending', existing.message);
+    }
     let requestId: string;
     try {
       // The existing request path: checks usage and "one pending request".
-      const res = await this.requests.submitOrgRequest(orgId, userId, {
-        targetPlanId: q.toPlan.id,
-        billingCycle: q.toInterval,
-      });
+      const res = await this.requests.submitOrgRequest(
+        orgId,
+        userId,
+        { targetPlanId: q.toPlan.id, billingCycle: q.toInterval },
+        { usage: ctx.usageConflict ? 'after_retention' : 'strict' },
+      );
       requestId = res.request.id;
     } catch (e) {
       // Lost a race with another tab: return the request that won.
       const raced = await this.pendingRequest(orgId);
-      if (raced) return raced;
+      if (raced) return raced.result;
       throw e;
     }
     const checkout = await this.prisma.billingCheckout.create({
@@ -257,6 +307,10 @@ export class BillingCheckoutService implements OnModuleInit {
         packageChangeRequestId: requestId,
       },
     });
+    if (ctx.usageConflict) {
+      // Keep a copy of what they chose to keep with the request (Requests tab).
+      await this.saveWhatStays(orgId, requestId, q.toPlan.id);
+    }
     return {
       status: 'pending_approval',
       mode: 'manual',
@@ -265,19 +319,52 @@ export class BillingCheckoutService implements OnModuleInit {
     };
   }
 
-  private async pendingRequest(
+  private async saveWhatStays(
     orgId: string,
-  ): Promise<StartCheckoutResultV2 | null> {
+    requestId: string,
+    planId: string,
+  ) {
+    const plan = await this.prisma.plan.findUnique({ where: { id: planId } });
+    if (!plan) return;
+    const whatStays = await whatStaysFor(this.prisma, orgId, plan);
+    await this.prisma.packageChangeRequest.update({
+      where: { id: requestId },
+      data: {
+        whatStays: (whatStays ?? undefined) as
+          Prisma.InputJsonValue | undefined,
+      },
+    });
+  }
+
+  private async pendingRequest(orgId: string): Promise<{
+    result: StartCheckoutResultV2;
+    toPlanId: string;
+    interval: string;
+    message: string;
+  } | null> {
     const pending = await this.prisma.packageChangeRequest.findFirst({
       where: { orgId, status: 'pending' },
-      include: { billingCheckout: { select: { id: true } } },
+      include: {
+        billingCheckout: { select: { id: true } },
+        currentPlan: { select: { name: true } },
+        targetPlan: { select: { name: true } },
+      },
     });
     return pending
       ? {
-          status: 'pending_approval',
-          mode: 'manual',
-          checkoutId: pending.billingCheckout?.id ?? null,
-          requestId: pending.id,
+          result: {
+            status: 'pending_approval',
+            mode: 'manual',
+            checkoutId: pending.billingCheckout?.id ?? null,
+            requestId: pending.id,
+          },
+          toPlanId: pending.targetPlanId,
+          interval: pending.billingCycle,
+          message: pendingRequestMessage(
+            pending.currentPlan?.name,
+            pending.targetPlan?.name ?? 'a new plan',
+            pending.createdAt,
+          ),
         }
       : null;
   }
@@ -295,12 +382,9 @@ export class BillingCheckoutService implements OnModuleInit {
       );
     }
     // A waiting upgrade request doesn't stop a renewal: it keeps the org running.
-    if (q.kind !== 'renewal' && (await this.pendingRequest(orgId))) {
-      throw billingError(
-        'request_pending',
-        'You already have an upgrade request waiting for approval. Cancel it first to pay online instead.',
-      );
-    }
+    const waiting =
+      q.kind !== 'renewal' ? await this.pendingRequest(orgId) : null;
+    if (waiting) throw billingError('request_pending', waiting.message);
 
     // One open checkout per org: under a per-org lock, cancel older pending
     // online checkouts, then record this quote.
@@ -739,9 +823,16 @@ export class BillingCheckoutService implements OnModuleInit {
           next && next.id !== sub?.planId
             ? await this.usageErrorFor(orgId, next)
             : null;
-        return { ...base, quote, couponError: null, usageError };
+        return {
+          ...base,
+          quote,
+          couponError: null,
+          usageError,
+          usageConflict: null,
+        };
       }
-      const target = active.find((p) => p.id === planId);
+      // Internal ₹0 plans (e.g. "Demo") are assigned by the Super Admin, never bought.
+      const target = active.find((p) => p.id === planId && !isInternalPlan(p));
       if (!target) {
         throw billingError(
           'plan_not_found',
@@ -768,8 +859,30 @@ export class BillingCheckoutService implements OnModuleInit {
             renewalsCoveredAfterFirst(found.coupon),
           );
       }
+      // Manual mode: being over on users / projects / published pages is fine
+      // once they've chosen what stays — it's paused when the request is approved.
+      if (mode.mode === 'manual') {
+        const over = await usageOverLimits(this.prisma, orgId, target);
+        if (over.length && over.every((o) => o.fixable)) {
+          const saved = await savedChoiceFor(this.prisma, orgId, target.id);
+          const items = over.map((o) => ({
+            key: o.key as 'users' | 'projects' | 'landingPages',
+            limit: o.limit,
+            used: o.used,
+          }));
+          const choicesFit =
+            !!saved && items.every((i) => saved[i.key].length <= i.limit);
+          return {
+            ...base,
+            quote,
+            couponError,
+            usageError: null,
+            usageConflict: { items, choicesFit },
+          };
+        }
+      }
       const usageError = await this.usageErrorFor(orgId, target);
-      return { ...base, quote, couponError, usageError };
+      return { ...base, quote, couponError, usageError, usageConflict: null };
     } catch (e) {
       if (e instanceof QuoteError) throw billingError(e.code, e.message);
       throw e;
@@ -868,6 +981,7 @@ export function toPreview(
       : null,
     couponError: ctx.couponError,
     usageError: ctx.usageError,
+    usageConflict: ctx.usageConflict,
     // A renewal's coupon comes from the subscription, not a code.
     couponsEnabled: !renewal,
     couponDiscount: toRupees(q.couponDiscountPaise),

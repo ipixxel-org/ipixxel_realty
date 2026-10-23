@@ -92,7 +92,12 @@ const LIMIT_LABEL = {
  */
 export function validateAdminPlan(
   input: SaveAdminPlanDto,
-  stored: { isSystem: boolean; priceMonthly: number; priceYearly: number },
+  stored: {
+    isSystem: boolean;
+    priceMonthly: number;
+    priceYearly: number;
+    isActive?: boolean;
+  },
 ): string | null {
   const storedFree = isFreePlan(stored);
   if (!input.name?.trim()) return 'Enter a plan name.';
@@ -109,9 +114,12 @@ export function validateAdminPlan(
   }
   if (storedFree && (input.priceMonthly !== 0 || input.priceYearly !== 0))
     return "The free plan can't have a price.";
-  if (!storedFree && input.priceMonthly <= 0)
+  // An inactive plan isn't offered, so it may stay ₹0 (an internal plan like
+  // "Demo"); one organisations can pick needs a price.
+  const offered = stored.isActive !== false;
+  if (!storedFree && offered && input.priceMonthly <= 0)
     return 'A paid plan needs a monthly price.';
-  if (!storedFree && input.priceYearly <= 0)
+  if (!storedFree && offered && input.priceYearly <= 0)
     return 'A paid plan needs a yearly price.';
   for (const key of Object.keys(LIMIT_LABEL) as (keyof typeof LIMIT_LABEL)[]) {
     const v = input.limits?.[key];
@@ -142,10 +150,9 @@ export class AdminBillingService {
 
   /* ------------------------------------------------------------------ plans */
 
+  /** Every plan, inactive ones too (marked `isActive: false`), so they can be edited or deleted. */
   async listPlans(): Promise<BillingPlanV2[]> {
-    const plans = await this.prisma.plan.findMany({
-      where: { isActive: true },
-    });
+    const plans = await this.prisma.plan.findMany();
     return toBillingPlans(plans);
   }
 

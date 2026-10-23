@@ -104,6 +104,14 @@ export function AdminPlansEditor({ canDelete = false }: { canDelete?: boolean })
                     Free plan
                   </span>
                 ) : null}
+                {p.isActive === false ? (
+                  <span
+                    title="Inactive: not offered to organisations. Organisations already on it keep it. It can be edited or deleted."
+                    style={{ fontSize: 10, fontWeight: 800, letterSpacing: "0.05em", textTransform: "uppercase", padding: "2px 7px", borderRadius: 6, background: "#f1f5f9", color: "#475569", border: "1px solid #e2e8f0" }}
+                  >
+                    Not offered
+                  </span>
+                ) : null}
               </div>
 
               <div style={{ display: "flex", alignItems: "baseline", gap: 4 }}>
@@ -271,13 +279,12 @@ export function PlanEditForm({ initial, onSaved, onCancel }: { initial: BillingP
             {hint ? <div className="hint">{hint}</div> : null}
           </div>
         </div>
-        <label className="bl-row" style={{ gap: 8, fontSize: 13 }}>
-          <input type="checkbox" checked={plan.isFree} disabled onChange={() => undefined} />
-          <span>
-            <b>Free plan</b> — no payment, never expires; new sign-ups start here and organisations fall back to it.{" "}
-            <span className="bl-muted">{plan.isFree ? "This is the free plan." : "Only the default Basic plan can be the free plan."}</span>
-          </span>
-        </label>
+        {/* Only Basic (the system plan) is free: say why its prices are locked. No control — it can't be changed. */}
+        {plan.isFree ? (
+          <div className="bl-muted" style={{ fontSize: 13 }} data-testid="free-plan-note">
+            This is the free plan — no payment, never expires; new sign-ups start here and organisations fall back to it.
+          </div>
+        ) : null}
 
         <div>
           <div className="bl-strong" style={{ fontSize: 13, marginBottom: 8 }}>

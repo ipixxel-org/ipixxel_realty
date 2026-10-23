@@ -4,6 +4,8 @@ import { PrismaService } from '../../database/prisma.service';
 import { toRupees } from './checkout-quote';
 import { GST_STATES } from './gst';
 import { invoiceDocumentUrl, type InvoiceParty } from './invoice.util';
+import type { WhatStays } from '../../common/utils/retention.util';
+import type { OrgPlanRequestV2 } from './billing.types';
 
 /** The contract's Invoice. */
 export interface InvoiceV2 {
@@ -121,6 +123,71 @@ export class BillingLedgerService {
       orderBy: [{ issuedAt: 'desc' }, { number: 'desc' }],
     });
     return page(rows.map(toInvoiceV2), p, size);
+  }
+
+  /** Plan change requests (manual mode) for one org, newest first. */
+  async listRequests(
+    orgId: string,
+    p?: number,
+    size?: number,
+  ): Promise<Paged<OrgPlanRequestV2>> {
+    const rows = await this.prisma.packageChangeRequest.findMany({
+      where: { orgId },
+      orderBy: { createdAt: 'desc' },
+      take: 1000,
+      include: {
+        requestedBy: {
+          select: { firstName: true, lastName: true, email: true },
+        },
+        currentPlan: { select: { id: true, name: true } },
+        targetPlan: {
+          select: {
+            id: true,
+            name: true,
+            priceMonthly: true,
+            priceYearly: true,
+          },
+        },
+        billingCheckout: { select: { kind: true, taxablePaise: true } },
+      },
+    });
+    return page(
+      rows.map((r): OrgPlanRequestV2 => {
+        const c = r.billingCheckout;
+        const by = r.requestedBy;
+        return {
+          id: r.id,
+          requestedAt: r.createdAt.toISOString(),
+          requestedBy: by
+            ? [by.firstName, by.lastName].filter(Boolean).join(' ') || by.email
+            : null,
+          fromPlan: r.currentPlan ?? null,
+          toPlan: { id: r.targetPlan.id, name: r.targetPlan.name },
+          interval: r.billingCycle,
+          amount: c
+            ? toRupees(c.taxablePaise)
+            : r.billingCycle === 'yearly'
+              ? r.targetPlan.priceYearly
+              : r.targetPlan.priceMonthly,
+          amountNote:
+            c?.kind === 'upgrade_same_interval'
+              ? 'prorated'
+              : c?.kind === 'interval_change'
+                ? 'less_monthly_credit'
+                : null,
+          status: r.status === 'cancelled' ? 'withdrawn' : r.status,
+          // Withdrawn requests have no reviewer: their decision date is the update.
+          decidedAt:
+            r.status === 'pending'
+              ? null
+              : (r.reviewedAt ?? r.updatedAt).toISOString(),
+          rejectionReason: r.status === 'rejected' ? r.rejectionReason : null,
+          whatStays: (r.whatStays as WhatStays | null) ?? null,
+        };
+      }),
+      p,
+      size,
+    );
   }
 
   /** Plan payments for one org (or all orgs), newest first. */

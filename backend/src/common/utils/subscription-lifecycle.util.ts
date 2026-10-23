@@ -732,6 +732,8 @@ export async function getOrgActivePlan(
         ],
         isActive: true,
       },
+      // The system Basic plan first — never an internal ₹0 plan such as "Demo".
+      orderBy: [{ isSystem: 'desc' }, { createdAt: 'asc' }],
     });
 
     if (freePlan) {

@@ -17,7 +17,7 @@ export const STATUS_META: Record<SubscriptionStatus, { label: string; badge: str
   expired: { label: "Expired", badge: "b-rose" },
   moved_to_basic: { label: "Moved to Basic", badge: "b-gray" },
   cancellation_scheduled: { label: "Cancellation scheduled", badge: "b-amber" },
-  downgrade_scheduled: { label: "Downgrade scheduled", badge: "b-violet" },
+  downgrade_scheduled: { label: "Plan change scheduled", badge: "b-violet" },
 };
 
 /**

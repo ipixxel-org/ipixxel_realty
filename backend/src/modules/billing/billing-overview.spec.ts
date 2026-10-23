@@ -17,6 +17,7 @@ const plan = (over: Partial<BillingPlanV2> = {}): BillingPlanV2 => ({
   priceMonthly: 2000,
   priceYearly: 20000,
   isFree: false,
+  isActive: true,
   rank: 1,
   limits: { users: 5, projects: 5, landingPages: 5, templates: null },
   modules: {

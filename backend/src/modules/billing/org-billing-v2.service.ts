@@ -27,6 +27,7 @@ import { toRupees } from './checkout-quote';
 import { renewalCharge } from './coupon-rules';
 import {
   isFreePlan,
+  isInternalPlan,
   sortPlans,
   toBillingPlan,
   toBillingPlans,
@@ -54,9 +55,9 @@ export class OrgBillingV2Service {
 
   /** Active plans in rank order (free plan first). */
   async listPlans(): Promise<BillingPlanV2[]> {
-    const plans = await this.prisma.plan.findMany({
-      where: { isActive: true },
-    });
+    const plans = (
+      await this.prisma.plan.findMany({ where: { isActive: true } })
+    ).filter((p) => !isInternalPlan(p)); // internal ₹0 plans are never offered
     return toBillingPlans(plans);
   }
 

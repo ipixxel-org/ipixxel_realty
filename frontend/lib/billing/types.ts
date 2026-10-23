@@ -39,8 +39,10 @@ export interface BillingPlan {
   /** Whole rupees, before GST. */
   priceMonthly: number;
   priceYearly: number;
-  /** The single free plan orgs fall back to (Basic). */
+  /** The single free plan orgs fall back to (Basic) — the system plan, not any ₹0 plan. */
   isFree: boolean;
+  /** false = not offered to organisations (Super Admin still sees it). Missing = offered. */
+  isActive?: boolean;
   /** Ordering: higher = bigger plan. Upgrade vs downgrade is decided by rank. */
   rank: number;
   limits: PlanLimits;
@@ -119,6 +121,50 @@ export interface BillingWarning {
   message: string;
 }
 
+export interface UsageConflict {
+  items: { key: "users" | "projects" | "landingPages"; limit: number; used: number }[];
+  choicesFit: boolean;
+}
+
+/** One limit the org was over on the requested plan: what stays, what is paused. */
+export interface WhatStaysGroup {
+  limit: number;
+  total: number;
+  kept: { id: string; name: string }[];
+  paused: { id: string; name: string }[];
+}
+
+/** A copy of "choose what stays", kept on the request. Only the limits the org was over appear. */
+export interface WhatStays {
+  planId: PlanId;
+  planName: string;
+  /** Their saved choice, or our default picks. */
+  choice: "saved" | "default";
+  /** true once approved: what was actually kept. */
+  applied: boolean;
+  users?: WhatStaysGroup;
+  projects?: WhatStaysGroup;
+  landingPages?: WhatStaysGroup;
+}
+
+/** One plan change request on Settings → Billing → Requests (newest first). */
+export interface OrgPlanRequest {
+  id: string;
+  requestedAt: string;
+  requestedBy: string | null;
+  fromPlan: { id: PlanId; name: string } | null;
+  toPlan: { id: PlanId; name: string };
+  interval: BillingInterval;
+  /** Before GST, in rupees. */
+  amount: number | null;
+  amountNote: "prorated" | "less_monthly_credit" | null;
+  status: "pending" | "approved" | "rejected" | "withdrawn";
+  decidedAt: string | null;
+  rejectionReason: string | null;
+  /** What they chose to keep on the new plan; null when nothing had to be chosen. */
+  whatStays: WhatStays | null;
+}
+
 /** The org's latest package request, when a Super Admin rejected it — shown with the reason. */
 export interface RejectedUpgrade {
   requestId: string;
@@ -133,6 +179,8 @@ export interface PendingUpgrade {
   status: "pending_approval" | "needs_review";
   requestId: string | null;
   checkoutId: string | null;
+  /** The plan the request was made from (null when not known). */
+  fromPlan?: { id: PlanId; name: string } | null;
   toPlan: { id: PlanId; name: string };
   interval: BillingInterval;
   createdAt: string;
@@ -271,6 +319,12 @@ export interface CheckoutPreview {
    * Pay is disabled and the server refuses to start the payment.
    */
   usageError?: string | null;
+  /**
+   * Manual mode: the target allows fewer users / projects / published pages
+   * than the org has. The request can be sent once the org has chosen what
+   * stays (`choicesFit`); the rest is paused when it's approved.
+   */
+  usageConflict?: UsageConflict | null;
   couponDiscount: number;
   taxable: number;
   /** Buyer's GST state code (or name, from the mock); null when unknown. */

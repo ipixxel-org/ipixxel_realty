@@ -20,6 +20,7 @@ import { RequirePermission } from '../../common/decorators/require-permission.de
 import type { JwtPayload } from '../../common/types/jwt-payload.interface';
 import { AdminBillingService } from './admin-billing.service';
 import { OrgBillingV2Service } from './org-billing-v2.service';
+import { PackageChangeRequestsService } from '../package-change-requests/package-change-requests.service';
 import { SaveAdminPlanDto } from './dto/save-admin-plan.dto';
 import {
   SaveCompanyDetailsDto,
@@ -70,6 +71,7 @@ export class OrgBillingV2Controller {
     private readonly retention: BillingRetentionService,
     private readonly ledger: BillingLedgerService,
     private readonly orgCouponList: AdminCouponsService,
+    private readonly packageRequests: PackageChangeRequestsService,
   ) {}
 
   // Step 7: invoices and payment history. Under v2/ because GET
@@ -84,6 +86,30 @@ export class OrgBillingV2Controller {
   @Get('v2/payments')
   payments(@CurrentUser() user: JwtPayload, @Query() q: PageQueryDto) {
     return this.ledger.listPayments(user.orgId as string, q.page, q.pageSize);
+  }
+
+  // Plan change requests (manual mode): Settings → Billing → Requests.
+  @RequirePermission('billing', 'view')
+  @Get('requests')
+  requests(@CurrentUser() user: JwtPayload, @Query() q: PageQueryDto) {
+    return this.ledger.listRequests(user.orgId as string, q.page, q.pageSize);
+  }
+
+  // Withdraw a pending request (billing:edit — the requester has it too); its
+  // checkout is cancelled. Stored as cancelled, shown as Withdrawn.
+  @RequirePermission('billing', 'edit')
+  @Post('requests/:id/withdraw')
+  @HttpCode(200)
+  async withdrawRequest(
+    @CurrentUser() user: JwtPayload,
+    @Param('id') id: string,
+  ) {
+    await this.packageRequests.cancelOrgRequest(
+      user.orgId as string,
+      id,
+      user.sub,
+    );
+    return this.service.getOverview(user.orgId as string);
   }
 
   // Coupons this organisation can see (reserved for it, or listed publicly).

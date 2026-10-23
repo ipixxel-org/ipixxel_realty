@@ -139,10 +139,10 @@ describe("customer walkthrough", () => {
     show(<CustomerWalkthrough />);
     await settle();
     expect(screen.getByRole("button", { name: "Undo cancellation" })).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: /Confirm downgrade/ }));
-    fireEvent.click(screen.getByRole("button", { name: "Schedule downgrade" }));
+    fireEvent.click(screen.getByRole("button", { name: /Confirm plan change/ }));
+    fireEvent.click(screen.getByRole("button", { name: "Schedule plan change" }));
     await settle();
-    expect(screen.getByRole("button", { name: "Undo downgrade" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Undo plan change" })).toBeInTheDocument();
     expect(screen.getByText("Step 15 of 15")).toBeInTheDocument();
   });
 });
@@ -193,7 +193,7 @@ describe("banners preview", () => {
       "grace-ends": /Grace ends tomorrow/,
       moved: /You're on Basic now/,
       cancel: /Cancellation scheduled/,
-      downgrade: /Downgrade to Growth scheduled/,
+      downgrade: /Change to Growth scheduled/,
     };
     for (const [value, text] of Object.entries(expectByOption)) {
       fireEvent.change(select, { target: { value } });

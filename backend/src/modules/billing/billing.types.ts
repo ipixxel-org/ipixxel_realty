@@ -1,3 +1,5 @@
+import type { WhatStays } from '../../common/utils/retention.util';
+
 /**
  * Billing v2 response shapes. These mirror frontend/lib/billing/types.ts
  * (the contract in docs/billing-ui-contract.md) — keep the two in step.
@@ -30,6 +32,8 @@ export interface BillingPlanV2 {
   priceMonthly: number;
   priceYearly: number;
   isFree: boolean;
+  /** false = not offered to organisations (Super Admin still sees it). */
+  isActive: boolean;
   rank: number;
   limits: PlanLimitsV2;
   modules: PlanModulesV2;
@@ -295,6 +299,8 @@ export interface CheckoutPreviewV2 {
   couponError: string | null;
   /** Why the org can't move to this plan yet (over its limits); null when it fits. Pay is refused. */
   usageError: string | null;
+  /** Manual mode: over the target's limits in ways "choose what stays" fixes (null = none). */
+  usageConflict: UsageConflictV2 | null;
   /** false for a renewal: its coupon (if any) comes from the subscription. */
   couponsEnabled: boolean;
   couponDiscount: number;
@@ -366,6 +372,44 @@ export interface ConfirmCheckoutResultV2 {
   toInterval: BillingInterval;
 }
 
+/**
+ * Manual mode: the target plan allows fewer users / projects / published
+ * landing pages than the org has. The request can still be sent once the org
+ * has chosen what stays for that plan (`choicesFit`); the rest is paused when
+ * it is approved.
+ */
+export interface UsageConflictV2 {
+  items: {
+    key: 'users' | 'projects' | 'landingPages';
+    limit: number;
+    used: number;
+  }[];
+  choicesFit: boolean;
+}
+
+/** One plan change request on Settings → Billing → Requests (newest first). */
+export interface OrgPlanRequestV2 {
+  id: string;
+  requestedAt: string;
+  requestedBy: string | null;
+  fromPlan: { id: string; name: string } | null;
+  toPlan: { id: string; name: string };
+  interval: BillingInterval;
+  /** Before GST, in rupees: the request's quote, else the plan price for the cycle. */
+  amount: number | null;
+  /** How the amount was worked out (shown after it). */
+  amountNote: 'prorated' | 'less_monthly_credit' | null;
+  /** 'withdrawn' = cancelled by the organisation (stored as cancelled). */
+  status: 'pending' | 'approved' | 'rejected' | 'withdrawn';
+  decidedAt: string | null;
+  rejectionReason: string | null;
+  /**
+   * What they chose to keep on the new plan (only the limits they were over);
+   * null when nothing had to be chosen. `applied` once approved.
+   */
+  whatStays: WhatStays | null;
+}
+
 /** The org's most recent package request, when a Super Admin rejected it (with the reason). */
 export interface RejectedUpgradeV2 {
   requestId: string;
@@ -380,6 +424,8 @@ export interface PendingUpgradeV2 {
   status: 'pending_approval' | 'needs_review';
   requestId: string | null;
   checkoutId: string | null;
+  /** The plan the request was made from (null when not known). */
+  fromPlan: { id: string; name: string } | null;
   toPlan: { id: string; name: string };
   interval: BillingInterval;
   createdAt: string;

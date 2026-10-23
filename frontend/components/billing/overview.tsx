@@ -2,6 +2,7 @@
 
 import { Icon } from "@/components/icons";
 import { formatDate, packagePriceText, planPrice } from "@/lib/billing/pricing";
+import { blockingRequest, pendingRequestText } from "@/lib/billing/requests";
 import type { BillingOverview } from "@/lib/billing/types";
 import { BillingBanner, PayNowButton, RenewalReminderPopup, UpdatePaymentMethodButton } from "./banners";
 
@@ -120,26 +121,42 @@ export function BillingOverviewPanel({ showInvoices = true }: { showInvoices?: b
   if (!overview) return <Loading />;
   const o = overview;
   const paid = !o.plan.isFree;
+  const waiting = blockingRequest(o);
   return (
     <div className="bl-stack">
       <BillingBanner overview={o} />
       {o.pendingUpgrade ? <PendingUpgradeBanner pending={o.pendingUpgrade} /> : null}
       {o.rejectedUpgrade && !o.pendingUpgrade ? <RejectedUpgradeBanner rejected={o.rejectedUpgrade} /> : null}
       <CurrentPlanCard overview={o} />
-      <div className="bl-row">
-        <BLink to="plans" className="btn btn-primary">
-          <Icon name="crown" size={15} /> {o.plan.isFree ? "Upgrade" : "Change plan"}
-        </BLink>
+      <div className="bl-row" data-testid="billing-actions">
+        {waiting ? (
+          // A request is waiting: no plan change until it's approved or withdrawn.
+          <span title={pendingRequestText(waiting)} style={{ display: "inline-flex" }}>
+            <button type="button" className="btn btn-primary" disabled style={{ opacity: 0.65, cursor: "not-allowed" }}>
+              <Icon name="crown" size={15} /> Change plan
+            </button>
+          </span>
+        ) : (
+          <BLink to="plans" className="btn btn-primary">
+            <Icon name="crown" size={15} /> Change plan
+          </BLink>
+        )}
         {paid && o.status !== "cancellation_scheduled" ? (
           <BLink to="cancel" className="btn btn-ghost">
             Cancel plan
           </BLink>
         ) : null}
-        <BLink to="chooseWhatStays" className="btn btn-ghost">
-          Choose what stays
-        </BLink>
+        {/* Manual mode: chosen per request (the request screen) or from the grace / Basic banners. */}
+        {o.paymentMode !== "manual" ? (
+          <BLink to="chooseWhatStays" className="btn btn-ghost">
+            Choose what stays
+          </BLink>
+        ) : null}
         <BLink to="coupons" className="btn btn-ghost">
           Coupons
+        </BLink>
+        <BLink to="requests" className="btn btn-ghost">
+          Requests
         </BLink>
       </div>
       <UsageCard overview={o} />

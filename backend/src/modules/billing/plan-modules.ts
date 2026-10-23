@@ -40,10 +40,23 @@ const asObject = (v: unknown): Record<string, unknown> =>
 
 const finiteOrNull = (n: number): number | null => (n === Infinity ? null : n);
 
+/**
+ * The free plan (Basic) is the platform's system plan — not any plan that
+ * happens to cost ₹0. An internal ₹0 plan (e.g. "Demo" on staging) is a normal
+ * plan: it can be edited and deleted, and it is never offered to organisations
+ * (isInternalPlan).
+ */
 export function isFreePlan(
   plan: Pick<PlanRow, 'isSystem' | 'priceMonthly' | 'priceYearly'>,
 ): boolean {
-  return plan.isSystem || (plan.priceMonthly === 0 && plan.priceYearly === 0);
+  return plan.isSystem;
+}
+
+/** A ₹0 plan that isn't Basic: assigned by the Super Admin only, never offered or bought. */
+export function isInternalPlan(
+  plan: Pick<PlanRow, 'isSystem' | 'priceMonthly' | 'priceYearly'>,
+): boolean {
+  return !plan.isSystem && plan.priceMonthly === 0 && plan.priceYearly === 0;
 }
 
 export function planLimitsV2(plan: Pick<PlanRow, 'limits'>): PlanLimitsV2 {
@@ -94,6 +107,7 @@ export function toBillingPlan(plan: PlanRow, rank: number): BillingPlanV2 {
     priceMonthly: plan.priceMonthly,
     priceYearly: plan.priceYearly,
     isFree: isFreePlan(plan),
+    isActive: plan.isActive,
     rank,
     limits: planLimitsV2(plan),
     modules: planModulesV2(plan),

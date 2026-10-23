@@ -166,19 +166,46 @@ interface CountPrisma
  * and never deletes anything to make it fit. No-op for unlimited limits or
  * when usage is within bounds. Counting rules are defined by the helpers above.
  */
-export async function assertPlanFitsCurrentUsage(
+/** One limit the org is over on a plan. */
+export interface UsageOverLimit {
+  key: PlanLimitKey;
+  limit: number;
+  used: number;
+  /**
+   * "Choose what stays" can make it fit (users, projects and published
+   * landing pages are paused / taken offline); templates and created pages
+   * can't be.
+   */
+  fixable: boolean;
+}
+
+const LIMIT_KEYS: PlanLimitKey[] = [
+  'projects',
+  'users',
+  'templates',
+  'landingPages',
+  'landingPagesCreate',
+];
+const FIXABLE: ReadonlySet<PlanLimitKey> = new Set([
+  'users',
+  'projects',
+  'landingPages',
+]);
+
+/** Every limit of `targetPlan` the org's current usage is over (empty = fits). */
+export async function usageOverLimits(
   prisma: CountPrisma,
   orgId: string,
-  targetPlan: { name?: string; limits: unknown } | null | undefined,
-): Promise<void> {
-  const [projects, users, templates, landingPages, landingPagesCreate] = await Promise.all([
-    countOrgProjects(prisma, orgId),
-    countBillableOrgUsers(prisma, orgId),
-    prisma.organisationTemplate.count({ where: { orgId } }),
-    countOrgLandingPages(prisma, orgId),
-    countOrgTotalLandingPages(prisma, orgId),
-  ]);
-
+  targetPlan: { limits: unknown } | null | undefined,
+): Promise<UsageOverLimit[]> {
+  const [projects, users, templates, landingPages, landingPagesCreate] =
+    await Promise.all([
+      countOrgProjects(prisma, orgId),
+      countBillableOrgUsers(prisma, orgId),
+      prisma.organisationTemplate.count({ where: { orgId } }),
+      countOrgLandingPages(prisma, orgId),
+      countOrgTotalLandingPages(prisma, orgId),
+    ]);
   const usage: Record<PlanLimitKey, number> = {
     projects,
     users,
@@ -186,23 +213,55 @@ export async function assertPlanFitsCurrentUsage(
     landingPages,
     landingPagesCreate,
   };
-  for (const key of [
-    'projects',
-    'users',
-    'templates',
-    'landingPages',
-    'landingPagesCreate',
-  ] as PlanLimitKey[]) {
-    const max = resolveLimit(targetPlan, key);
-    if (usage[key] > max) {
-      const noun = LIMIT_NOUN[key];
-      const planName = targetPlan?.name
-        ? `The "${targetPlan.name}" plan`
-        : 'This plan';
-      throw new BadRequestException(
-        `${planName} allows ${max} ${noun}(s), but your organisation has ${usage[key]}. ` +
-          `Reduce usage or choose a higher plan before switching.`,
-      );
-    }
-  }
+  return LIMIT_KEYS.flatMap((key) => {
+    const limit = resolveLimit(targetPlan, key);
+    return usage[key] > limit
+      ? [{ key, limit, used: usage[key], fixable: FIXABLE.has(key) }]
+      : [];
+  });
+}
+
+function overLimitError(
+  targetPlan: { name?: string } | null | undefined,
+  over: UsageOverLimit,
+): BadRequestException {
+  const planName = targetPlan?.name
+    ? `The "${targetPlan.name}" plan`
+    : 'This plan';
+  return new BadRequestException(
+    `${planName} allows ${over.limit} ${LIMIT_NOUN[over.key]}(s), but your organisation has ${over.used}. ` +
+      `Reduce usage or choose a higher plan before switching.`,
+  );
+}
+
+/**
+ * Reject switching an org onto `targetPlan` when the org is already using more
+ * than that plan would allow for any limit. Names the limit and the numbers,
+ * and never deletes anything to make it fit. No-op for unlimited limits or
+ * when usage is within bounds. Counting rules are defined by the helpers above.
+ */
+export async function assertPlanFitsCurrentUsage(
+  prisma: CountPrisma,
+  orgId: string,
+  targetPlan: { name?: string; limits: unknown } | null | undefined,
+): Promise<void> {
+  const [first] = await usageOverLimits(prisma, orgId, targetPlan);
+  if (first) throw overLimitError(targetPlan, first);
+}
+
+/**
+ * Like assertPlanFitsCurrentUsage, but only for what "choose what stays"
+ * can't fix (templates, created landing pages): users, projects and
+ * published pages over the limit are paused by applyRetention when the plan
+ * changes, using the org's saved choice or the default picks.
+ */
+export async function assertPlanFitsAfterRetention(
+  prisma: CountPrisma,
+  orgId: string,
+  targetPlan: { name?: string; limits: unknown } | null | undefined,
+): Promise<void> {
+  const blocking = (await usageOverLimits(prisma, orgId, targetPlan)).find(
+    (o) => !o.fixable,
+  );
+  if (blocking) throw overLimitError(targetPlan, blocking);
 }

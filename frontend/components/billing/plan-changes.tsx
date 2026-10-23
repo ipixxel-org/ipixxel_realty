@@ -75,7 +75,7 @@ export function DowngradeScreen({ planId, interval: wanted }: { planId: string; 
       <Banner
         tone="amber"
         icon="info"
-        title={onFree ? "You're already on Basic — there's nothing to downgrade" : `${target.name} isn't smaller than your ${o.plan.name} plan`}
+        title={onFree ? "You're already on Basic — our smallest plan" : `${target.name} isn't smaller than your ${o.plan.name} plan`}
         actions={
           <BLink to="plans" className="btn btn-primary btn-sm">
             See plans
@@ -98,10 +98,10 @@ export function DowngradeScreen({ planId, interval: wanted }: { planId: string; 
       await client.scheduleDowngrade({ planId: target!.id, interval });
       await refresh();
       setConfirm(false);
-      toast({ variant: "success", title: "Downgrade scheduled", description: `${target!.name} starts on ${effective ? formatDate(effective) : "your renewal date"}.` });
+      toast({ variant: "success", title: "Plan change scheduled", description: `${target!.name} starts on ${effective ? formatDate(effective) : "your renewal date"}.` });
       nav.go("overview");
     } catch (e) {
-      toast({ variant: "error", title: "Couldn't schedule the downgrade", description: e instanceof Error ? e.message : undefined });
+      toast({ variant: "error", title: "Couldn't schedule the plan change", description: e instanceof Error ? e.message : undefined });
     } finally {
       setBusy(false);
     }
@@ -110,7 +110,7 @@ export function DowngradeScreen({ planId, interval: wanted }: { planId: string; 
   return (
     <div className="bl-stack">
       <Section
-        title={toMonthly ? `Switch ${o.plan.name} to monthly billing` : `Downgrade ${o.plan.name} → ${target.name}`}
+        title={toMonthly ? `Switch ${o.plan.name} to monthly billing` : `Change plan ${o.plan.name} → ${target.name}`}
         sub="Nothing changes until the end of the period you've paid for."
       >
         <div className="bl-grid3">
@@ -129,7 +129,7 @@ export function DowngradeScreen({ planId, interval: wanted }: { planId: string; 
               </li>
             ))}
           </ul>
-          <div style={{ marginTop: 6 }}>Remove or deactivate the extra ones first, then come back to schedule the downgrade. Nothing changes until then.</div>
+          <div style={{ marginTop: 6 }}>Remove or deactivate the extra ones first, then come back to schedule the plan change. Nothing changes until then.</div>
         </Banner>
       ) : over.length ? (
         <Banner
@@ -185,7 +185,7 @@ export function DowngradeScreen({ planId, interval: wanted }: { planId: string; 
           title={blocked ? `Get within ${target.name}'s limits first` : undefined}
           onClick={() => setConfirm(true)}
         >
-          <Icon name="arrow-down" size={15} /> {toMonthly ? "Confirm switch to monthly" : "Confirm downgrade"}
+          <Icon name="arrow-down" size={15} /> {toMonthly ? "Confirm switch to monthly" : "Confirm plan change"}
         </button>
         <BLink to="plans" className="btn btn-ghost">
           Keep {o.plan.name}
@@ -193,9 +193,9 @@ export function DowngradeScreen({ planId, interval: wanted }: { planId: string; 
       </div>
       <ConfirmDialog
         open={confirm}
-        title={toMonthly ? "Switch to monthly billing?" : `Downgrade to ${target.name}?`}
+        title={toMonthly ? "Switch to monthly billing?" : `Change to ${target.name}?`}
         message={`You keep ${o.plan.name} until ${effective ? formatDate(effective) : "the end of the period"}. You can undo this any time before then.`}
-        confirmLabel="Schedule downgrade"
+        confirmLabel="Schedule plan change"
         busy={busy}
         onClose={() => setConfirm(false)}
         onConfirm={() => void schedule()}

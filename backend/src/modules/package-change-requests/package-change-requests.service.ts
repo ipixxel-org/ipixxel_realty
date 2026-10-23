@@ -1,8 +1,12 @@
 import { BadRequestException, ConflictException, Injectable, NotFoundException } from '@nestjs/common';
 import type { Prisma } from '@prisma/client';
 import { PrismaService } from '../../database/prisma.service';
-import { assertPlanFitsCurrentUsage } from '../../common/utils/plan-quota.util';
+import {
+  assertPlanFitsAfterRetention,
+  assertPlanFitsCurrentUsage,
+} from '../../common/utils/plan-quota.util';
 import { applyPlanChange } from '../../common/utils/plan-change.util';
+import { whatStaysFor } from '../../common/utils/retention.util';
 import { settleCoupon } from '../billing/coupon-settlement';
 import { applyOrgSubscriptionLifecycle } from '../../common/utils/subscription-lifecycle.util';
 import { orgBillingRecipientsWhere } from '../../common/utils/notification-recipients.util';
@@ -13,6 +17,27 @@ import {
   RejectPackageChangeRequestDto,
 } from './dto/reject-package-change-request.dto';
 import { ListPackageChangeRequestsDto } from './dto/list-package-change-requests.dto';
+
+/**
+ * The one "already waiting" message (API and UI say the same):
+ * "You already have a pending request (Starter → Pro, sent 22 Oct). Wait for
+ * approval or withdraw it."
+ */
+export function pendingRequestMessage(
+  fromPlan: string | null | undefined,
+  toPlan: string,
+  sentAt: Date | null | undefined,
+): string {
+  const sent = sentAt
+    ? `, sent ${sentAt.toLocaleDateString('en-IN', {
+        day: 'numeric',
+        month: 'short',
+        timeZone: 'UTC',
+      })}`
+    : '';
+  const change = fromPlan ? `${fromPlan} → ${toPlan}` : toPlan;
+  return `You already have a pending request (${change}${sent}). Wait for approval or withdraw it.`;
+}
 
 /** Trimmed reason, or 400 when it is missing, too short or too long. */
 export function rejectionReasonOrThrow(raw: string | null | undefined): string {
@@ -71,7 +96,17 @@ export class PackageChangeRequestsService {
     };
   }
 
-  async submitOrgRequest(orgId: string, userId: string, dto: CreatePackageChangeRequestDto) {
+  /**
+   * `usage: 'after_retention'` (billing v2 manual mode, once the org has
+   * chosen what stays): users / projects / published pages over the target's
+   * limits are paused on approval instead of refusing the request.
+   */
+  async submitOrgRequest(
+    orgId: string,
+    userId: string,
+    dto: CreatePackageChangeRequestDto,
+    opts: { usage?: 'strict' | 'after_retention' } = {},
+  ) {
     await applyOrgSubscriptionLifecycle(this.prisma, orgId);
 
     const sub = await this.prisma.subscription.findFirst({
@@ -86,12 +121,22 @@ export class PackageChangeRequestsService {
 
     const existingPending = await this.prisma.packageChangeRequest.findFirst({
       where: { orgId, status: 'pending' },
-      include: { targetPlan: { select: { name: true } } },
+      include: {
+        currentPlan: { select: { name: true } },
+        targetPlan: { select: { name: true } },
+      },
     });
     if (existingPending) {
-      throw new BadRequestException(
-        `Your organisation already has a pending package change request for the "${existingPending.targetPlan.name}" plan. Please wait for Super Admin approval or cancel the existing request before submitting a new one.`,
-      );
+      throw new BadRequestException({
+        statusCode: 400,
+        error: 'Bad Request',
+        code: 'request_pending',
+        message: pendingRequestMessage(
+          existingPending.currentPlan?.name,
+          existingPending.targetPlan.name,
+          existingPending.createdAt,
+        ),
+      });
     }
 
     const targetPlan = await this.prisma.plan.findUnique({
@@ -108,7 +153,11 @@ export class PackageChangeRequestsService {
       );
     }
 
-    await assertPlanFitsCurrentUsage(this.prisma, orgId, targetPlan);
+    if (opts.usage === 'after_retention') {
+      await assertPlanFitsAfterRetention(this.prisma, orgId, targetPlan);
+    } else {
+      await assertPlanFitsCurrentUsage(this.prisma, orgId, targetPlan);
+    }
 
     const created = await this.prisma.$transaction(async (tx) => {
       const req = await tx.packageChangeRequest.create({
@@ -307,7 +356,6 @@ export class PackageChangeRequestsService {
     }
 
     const targetPlan = request.targetPlan;
-    await assertPlanFitsCurrentUsage(this.prisma, request.orgId, targetPlan);
 
     // Billing v2: a request raised by a manual-mode checkout keeps that
     // checkout's period rule (an upgrade keeps renewsAt); older requests start
@@ -323,8 +371,33 @@ export class PackageChangeRequestsService {
         couponDiscountPaise: true,
       },
     });
+    if (checkout) {
+      // Billing v2: users / projects / published pages over the target's
+      // limits are paused by applyPlanChange → applyRetention, using the org's
+      // saved "choose what stays" (or the default picks) — like a scheduled
+      // downgrade. Only what can't be paused blocks the approval.
+      await assertPlanFitsAfterRetention(
+        this.prisma,
+        request.orgId,
+        targetPlan,
+      );
+    } else {
+      await assertPlanFitsCurrentUsage(this.prisma, request.orgId, targetPlan);
+    }
+
+    // Billing v2: record what was actually kept (worked out before pausing,
+    // with the same picks applyRetention uses) on the request.
+    const whatStays = checkout
+      ? await whatStaysFor(this.prisma, request.orgId, targetPlan, true)
+      : null;
 
     const result = await this.prisma.$transaction(async (tx) => {
+      if (whatStays) {
+        await tx.packageChangeRequest.update({
+          where: { id: requestId },
+          data: { whatStays: whatStays as unknown as Prisma.InputJsonValue },
+        });
+      }
       const { subscription } = await applyPlanChange(tx, {
         organisationId: request.orgId,
         toPlanId: targetPlan.id,

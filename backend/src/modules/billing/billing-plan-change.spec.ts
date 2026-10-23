@@ -346,6 +346,7 @@ describe('overview with a scheduled change', () => {
     priceMonthly: price,
     priceYearly: price * 10,
     isFree: price === 0,
+    isActive: true,
     rank: price === 0 ? 0 : price === 2000 ? 1 : 2,
     limits: {
       users: null,

@@ -5,9 +5,11 @@ import { Icon } from "@/components/icons";
 import { useToast } from "@/components/ui/toast";
 import { BILLING_FIELD_LABEL } from "@/lib/billing/details";
 import { formatDate, formatINR, packagePriceText, stateName } from "@/lib/billing/pricing";
+import { pendingRequestText } from "@/lib/billing/requests";
 import type { BillingDetailsField, BillingInterval, BillingOverview, BillingProfile, CheckoutPreview, PendingUpgrade } from "@/lib/billing/types";
 import { useBillingEnv, useBillingQuery, useOrgBilling } from "./context";
 import { usePayment } from "./payment";
+import { WithdrawRequestButton } from "./requests";
 import { Banner, BLink, ErrorNote, Loading, Section, useCheckoutLive } from "./ui";
 
 /* ---------------------------------------------------------- Billing details */
@@ -225,10 +227,55 @@ export function PriceSummary({ preview: p, renewalMode }: { preview: CheckoutPre
 
 type Part = "details" | "coupon" | "summary";
 
+const CONFLICT_NOUN = { users: ["user", "users"], projects: ["project", "projects"], landingPages: ["published landing page", "published landing pages"] } as const;
+
+/** "Pro allows 5 users; you have 8. Choose which 5 stay active when this change is approved." (same words as the API) */
+export function usageConflictLines(planName: string, conflict: NonNullable<CheckoutPreview["usageConflict"]>): string[] {
+  return conflict.items.map((i) => {
+    const [one, many] = CONFLICT_NOUN[i.key];
+    return `${planName} allows ${i.limit} ${i.limit === 1 ? one : many}; you have ${i.used}. Choose which ${i.limit} stay active when this change is approved.`;
+  });
+}
+
+/**
+ * Manual mode, the target plan is smaller than what the org uses: pick what
+ * stays (saved for that plan, applied when the request is approved) before sending.
+ */
+export function UsageConflictNote({
+  planId,
+  planName,
+  interval,
+  conflict,
+}: {
+  planId: string;
+  planName: string;
+  interval: BillingInterval;
+  conflict: NonNullable<CheckoutPreview["usageConflict"]>;
+}) {
+  const fits = conflict.choicesFit;
+  return (
+    <div className="bl-stack" style={{ gap: 8, marginTop: 10 }} data-testid="usage-conflict">
+      <Banner
+        tone={fits ? "green" : "amber"}
+        icon={fits ? "check" : "info"}
+        title={fits ? `You've chosen what stays on ${planName}` : `Choose what stays on ${planName}`}
+        actions={
+          <BLink to="chooseWhatStays" params={{ target: planId, back: "checkout", interval }} className={`btn btn-sm ${fits ? "btn-ghost" : "btn-primary"}`}>
+            {fits ? "Change what stays" : "Choose what stays"}
+          </BLink>
+        }
+      >
+        {usageConflictLines(planName, conflict).join(" ")}
+        {fits ? " Everything else is paused (never deleted) when the change is approved." : ""}
+      </Banner>
+    </div>
+  );
+}
+
 /** The org's latest upgrade request was rejected: say so, with the Super Admin's reason. */
 export function RejectedUpgradeBanner({ rejected: r }: { rejected: NonNullable<BillingOverview["rejectedUpgrade"]> }) {
   return (
-    <Banner tone="rose" icon="info" title={`Upgrade to ${r.toPlan.name} was not approved`}>
+    <Banner tone="rose" icon="info" title={`Change to ${r.toPlan.name} was not approved`}>
       Your request for {r.toPlan.name} ({r.interval}) was rejected{r.rejectedAt ? ` on ${formatDate(r.rejectedAt)}` : ""}.
       {r.reason ? (
         <>
@@ -244,7 +291,21 @@ export function RejectedUpgradeBanner({ rejected: r }: { rejected: NonNullable<B
 /** An upgrade request (manual mode) or a paid order waiting on our team. */
 export function PendingUpgradeBanner({ pending: u }: { pending: PendingUpgrade }) {
   return (
-    <Banner tone="info" icon="clock" title={u.status === "needs_review" ? "Your payment is being checked" : `Upgrade to ${u.toPlan.name} requested`}>
+    <Banner
+      tone="info"
+      icon="clock"
+      title={u.status === "needs_review" ? "Your payment is being checked" : `Change to ${u.toPlan.name} requested`}
+      actions={
+        u.status === "pending_approval" && u.requestId ? (
+          <>
+            <BLink to="requests" className="btn btn-ghost btn-sm">
+              View requests
+            </BLink>
+            <WithdrawRequestButton requestId={u.requestId} toPlan={u.toPlan.name} />
+          </>
+        ) : undefined
+      }
+    >
       {u.status === "needs_review"
         ? `We received your payment for ${u.toPlan.name} (${u.interval}). Our team is finishing the setup — nothing more to do on your side.`
         : `Sent on ${formatDate(u.createdAt)} for ${u.toPlan.name} (${u.interval}). Our team will approve it shortly; you keep everything on your current plan until then.`}
@@ -309,7 +370,7 @@ export function CheckoutScreen({
     subtitle: renewal
       ? `Renew ${target?.name}`
       : preview?.kind === "upgrade_same_interval" || preview?.kind === "interval_change"
-        ? `Upgrade ${overview?.plan.name} → ${target?.name}`
+        ? `Change plan ${overview?.plan.name} → ${target?.name}`
         : `Buy ${target?.name}`,
     // A renewal keeps the plan: it's applied when the period end moves on.
     isApplied: renewal ? (ov) => ov.periodEnd !== overview?.periodEnd : undefined,
@@ -426,7 +487,10 @@ export function CheckoutScreen({
   const tooSmall = preview?.usageError ?? null;
   // Every invoice field must be filled in (Settings → General) before paying.
   const missingDetails = overview.billingDetailsMissing;
-  const disabled = !canEdit || payment.busy || !!pendingUpgrade || manualRenewal || !!tooSmall || missingDetails.length > 0;
+  // Manual mode over the target's limits: send once they've chosen what stays.
+  const conflict = preview?.usageConflict ?? null;
+  const mustChoose = !!conflict && !conflict.choicesFit;
+  const disabled = !canEdit || payment.busy || !!pendingUpgrade || manualRenewal || !!tooSmall || missingDetails.length > 0 || mustChoose;
 
   return (
     <div className="bl-stack">
@@ -454,12 +518,13 @@ export function CheckoutScreen({
         ) : null}
         {right ? (
           <Section
-            title={renewal ? `Renew ${target.name}` : online ? "Order summary" : `Request an upgrade to ${target.name}`}
+            title={renewal ? `Renew ${target.name}` : online ? "Order summary" : `Request a change to ${target.name}`}
             sub={online || renewal ? `${target.name} · ${interval === "yearly" ? "billed yearly" : "billed monthly"}` : "Approved by our team"}
           >
             {preview ? (
               <>
                 <PriceSummary preview={preview} renewalMode={overview.renewalMode} />
+                {conflict && !pendingUpgrade ? <UsageConflictNote planId={target.id} planName={target.name} interval={interval} conflict={conflict} /> : null}
                 {missingDetails.length && !parts.includes("details") ? (
                   <MissingDetailsNote missing={missingDetails} />
                 ) : tooSmall ? (
@@ -475,8 +540,8 @@ export function CheckoutScreen({
                   </div>
                 ) : !online ? (
                   <div className="bl-muted" style={{ marginTop: 10, padding: "10px 12px", background: "var(--bg)", borderRadius: 10, lineHeight: 1.55 }}>
-                    Online payment isn&apos;t available for your account, so upgrades are approved by our team. Send a request and we&apos;ll confirm the plan and how to
-                    pay. You stay on {overview.plan.name} with everything working until the upgrade is approved.
+                    Online payment isn&apos;t available for your account, so plan changes are approved by our team. Send a request and we&apos;ll confirm the plan and how
+                    to pay. You stay on {overview.plan.name} with everything working until the change is approved.
                   </div>
                 ) : null}
                 <button
@@ -486,12 +551,16 @@ export function CheckoutScreen({
                   disabled={disabled}
                   title={
                     pendingUpgrade
-                      ? "An upgrade request is already waiting for approval"
+                      ? pendingUpgrade.status === "pending_approval"
+                        ? pendingRequestText(pendingUpgrade)
+                        : "Your last payment is still being checked by our team"
                       : !canEdit
                         ? "Ask an admin with billing access to buy a plan"
                         : missingDetails.length
                           ? "Complete your organisation details to continue"
-                          : undefined
+                          : mustChoose
+                            ? "Choose what stays on the new plan first"
+                            : undefined
                   }
                   onClick={() => void pay()}
                 >
@@ -505,7 +574,7 @@ export function CheckoutScreen({
                     </>
                   ) : !online ? (
                     <>
-                      <Icon name="arrow-up" size={15} /> Send upgrade request
+                      <Icon name="arrow-up" size={15} /> Send change request
                     </>
                   ) : preview.total === 0 ? (
                     <>

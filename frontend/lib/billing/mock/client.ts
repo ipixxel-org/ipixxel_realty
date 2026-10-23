@@ -29,6 +29,7 @@ import type {
   Coupon,
   CouponRow,
   OrgCoupon,
+  OrgPlanRequest,
   Paged,
   PaymentRecord,
   SubscriptionDetail,
@@ -36,6 +37,7 @@ import type {
   SubscriptionStatus,
 } from "../types";
 import { missingBillingDetails } from "../details";
+import { pendingRequestText } from "../requests";
 import { DEFAULT_BILLING_DETAILS, DEMO_ORG, MOCK_SELLER, TODAY, type MockOrg, type MockPayment } from "./data";
 import { deriveAccess, deriveDates, deriveOverview, deriveRetention, freePlan, initialMockState, planById, planNames, type MockState } from "./state";
 
@@ -340,9 +342,17 @@ export function createMockBillingClient(opts: { initial?: Partial<MockState>; pe
       if (pv.total === 0) return ok({ status: "activated" as const, receipt: activate(p, "free_coupon") });
       const id = `chk_${Math.random().toString(36).slice(2, 10)}`;
       if (pv.paymentMode === "manual") {
-        // Same as the API: one pending request, returned again instead of duplicated.
+        // Same as the API: the same request again is returned; a different one is refused.
         const existing = s.pendingRequest;
-        if (existing) return ok({ status: "pending_approval" as const, mode: "manual" as const, checkoutId: existing.checkoutId, requestId: existing.requestId });
+        if (existing) {
+          if (existing.planId !== p.planId || existing.interval !== p.interval) {
+            const ov = overview();
+            return fail(
+              pendingRequestText({ fromPlan: { id: ov.plan.id, name: ov.plan.name }, toPlan: { id: existing.planId, name: planById(s, existing.planId).name }, createdAt: existing.createdAt }),
+            );
+          }
+          return ok({ status: "pending_approval" as const, mode: "manual" as const, checkoutId: existing.checkoutId, requestId: existing.requestId });
+        }
         const pendingRequest = { requestId: `pcr_${id.slice(4)}`, checkoutId: id, planId: p.planId, interval: p.interval, createdAt: `${today}T12:00:00.000Z` };
         set({ pendingRequest });
         return ok({ status: "pending_approval" as const, mode: "manual" as const, checkoutId: id, requestId: pendingRequest.requestId });
@@ -436,6 +446,36 @@ export function createMockBillingClient(opts: { initial?: Partial<MockState>; pe
         ),
       ),
 
+    listOrgRequests(req) {
+      const s = get();
+      const ov = overview();
+      const p = s.pendingRequest;
+      const rows: OrgPlanRequest[] = p
+        ? [
+            {
+              id: p.requestId,
+              requestedAt: p.createdAt,
+              requestedBy: ov.ownerName || null,
+              fromPlan: { id: ov.plan.id, name: ov.plan.name },
+              toPlan: { id: p.planId, name: planById(s, p.planId).name },
+              interval: p.interval,
+              amount: planPrice(planById(s, p.planId), p.interval),
+              amountNote: null,
+              status: "pending",
+              decidedAt: null,
+              rejectionReason: null,
+              whatStays: null,
+            },
+          ]
+        : [];
+      return ok(paged(rows, req.page, req.pageSize));
+    },
+    withdrawRequest(requestId) {
+      const s = get();
+      if (!s.pendingRequest || s.pendingRequest.requestId !== requestId) return fail("Only pending requests can be withdrawn.");
+      set({ pendingRequest: null });
+      return ok(overview());
+    },
     listOrgCoupons() {
       const s = get();
       const names = planNames(s);

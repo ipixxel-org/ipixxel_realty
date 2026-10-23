@@ -242,8 +242,20 @@ export class PlansService {
         `"${plan.name}" is the platform's default onboarding plan and cannot be deleted — edit it instead.`,
       );
     }
-    const subs = await this.prisma.subscription.count({ where: { planId: id, status: { not: 'cancelled' } } });
-    if (subs > 0) throw new ConflictException('Cannot delete plan with active subscriptions — archive it instead');
+    const subs = await this.prisma.subscription.findMany({
+      where: { planId: id, status: { not: 'cancelled' } },
+      select: { organisation: { select: { name: true } } },
+      take: 3,
+    });
+    if (subs.length > 0) {
+      const names = subs
+        .map((s) => s.organisation?.name)
+        .filter(Boolean)
+        .join(', ');
+      throw new ConflictException(
+        `"${plan.name}" can't be deleted while organisations are on it${names ? ` (${names})` : ''}. Move them to another plan first, or make it inactive to stop offering it.`,
+      );
+    }
     await this.prisma.plan.delete({ where: { id } });
     return { success: true };
   }

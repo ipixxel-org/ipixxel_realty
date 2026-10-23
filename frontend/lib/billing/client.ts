@@ -29,6 +29,7 @@ import type {
   ListSubscriptionsRequest,
   MarkPaidOfflineRequest,
   OrgCoupon,
+  OrgPlanRequest,
   OrgOption,
   PageRequest,
   Paged,
@@ -99,6 +100,10 @@ export interface BillingClient {
   listPayments(req: PageRequest): Promise<Paged<PaymentRecord>>;
   /** GET /org/billing/coupons — coupons reserved for the org, and open ones listed for customers. */
   listOrgCoupons(): Promise<OrgCoupon[]>;
+  /** GET /org/billing/requests — the org's plan change requests (manual mode), newest first. */
+  listOrgRequests(req: PageRequest): Promise<Paged<OrgPlanRequest>>;
+  /** POST /org/billing/requests/:id/withdraw — withdraw a pending request; returns the overview. */
+  withdrawRequest(requestId: string): Promise<BillingOverview>;
 
   /* ---------------- Super Admin (admin_subscriptions) ---------------- */
   /** GET /admin/billing/plans */

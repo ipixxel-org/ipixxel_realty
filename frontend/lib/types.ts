@@ -886,6 +886,8 @@ export interface PackageChangeRequestRow {
   } | null;
   currentPlan?: Plan | OrgBillingPlan;
   targetPlan?: Plan | OrgBillingPlan;
+  /** Billing v2 manual mode: what the org chose to keep on the target plan (null = everything fits). */
+  whatStays?: import("./billing/types").WhatStays | null;
   /** Billing v2: the manual-mode checkout behind the request (amounts in paise). */
   billingCheckout?: {
     id: string;
