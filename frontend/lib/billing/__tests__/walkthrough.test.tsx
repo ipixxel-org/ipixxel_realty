@@ -138,11 +138,14 @@ describe("customer walkthrough", () => {
     search = new URLSearchParams("step=15");
     show(<CustomerWalkthrough />);
     await settle();
-    expect(screen.getByRole("button", { name: "Undo cancellation" })).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: /Confirm downgrade/ }));
-    fireEvent.click(screen.getByRole("button", { name: "Schedule downgrade" }));
+    // Right: Basic already scheduled, with the undo.
+    expect(screen.getByText(/Change to Basic scheduled for/)).toBeInTheDocument();
+    expect(screen.getAllByRole("button", { name: "Keep Pro" })).toHaveLength(1);
+    fireEvent.click(screen.getByRole("button", { name: /Confirm plan change/ }));
+    fireEvent.click(screen.getByRole("button", { name: "Schedule plan change" }));
     await settle();
-    expect(screen.getByRole("button", { name: "Undo downgrade" })).toBeInTheDocument();
+    expect(screen.getAllByText(/Change to Growth scheduled for/).length).toBeGreaterThan(0);
+    expect(screen.getAllByRole("button", { name: "Keep Pro" })).toHaveLength(2);
     expect(screen.getByText("Step 15 of 15")).toBeInTheDocument();
   });
 });
@@ -192,8 +195,8 @@ describe("banners preview", () => {
       "payment-due": /We couldn't charge/,
       "grace-ends": /Grace ends tomorrow/,
       moved: /You're on Basic now/,
-      cancel: /Cancellation scheduled/,
-      downgrade: /Downgrade to Growth scheduled/,
+      basic: /Change to Basic scheduled for/,
+      downgrade: /Change to Growth scheduled/,
     };
     for (const [value, text] of Object.entries(expectByOption)) {
       fireEvent.change(select, { target: { value } });

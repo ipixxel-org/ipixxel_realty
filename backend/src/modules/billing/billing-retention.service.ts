@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import type { Plan, Subscription } from '@prisma/client';
+import type { Plan, Prisma, Subscription } from '@prisma/client';
 import { PrismaService } from '../../database/prisma.service';
 import {
   applyRetention,
@@ -8,6 +8,7 @@ import {
   rankRetention,
   retentionLimits,
   savedChoiceFor,
+  whatStaysFor,
 } from '../../common/utils/retention.util';
 import {
   findFreePlan,
@@ -226,6 +227,21 @@ export class BillingRetentionService {
       },
     });
     // Already on that plan (e.g. moved to Basic): swap what's paused now.
+    // A pending request to this plan keeps a copy of the choice (Requests tab).
+    const pending = await this.prisma.packageChangeRequest.findFirst({
+      where: { orgId, status: 'pending', targetPlanId: target.id },
+      select: { id: true },
+    });
+    if (pending) {
+      const whatStays = await whatStaysFor(this.prisma, orgId, target);
+      await this.prisma.packageChangeRequest.update({
+        where: { id: pending.id },
+        data: {
+          whatStays: (whatStays ?? undefined) as
+            Prisma.InputJsonValue | undefined,
+        },
+      });
+    }
     if (sub?.planId === target.id) {
       await applyRetention(this.prisma, orgId, target);
     }

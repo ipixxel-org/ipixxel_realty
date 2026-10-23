@@ -43,6 +43,7 @@ export async function findPendingUpgrade(
     where: { orgId, status: 'pending' },
     orderBy: { createdAt: 'desc' },
     include: {
+      currentPlan: { select: { id: true, name: true } },
       targetPlan: { select: { id: true, name: true } },
       billingCheckout: { select: { id: true } },
     },
@@ -52,6 +53,7 @@ export async function findPendingUpgrade(
       status: 'pending_approval',
       requestId: request.id,
       checkoutId: request.billingCheckout?.id ?? null,
+      fromPlan: request.currentPlan ?? null,
       toPlan: request.targetPlan,
       interval: request.billingCycle,
       createdAt: request.createdAt.toISOString(),
@@ -60,13 +62,17 @@ export async function findPendingUpgrade(
   const review = await db.billingCheckout.findFirst({
     where: { organisationId: orgId, status: 'needs_review' },
     orderBy: { updatedAt: 'desc' },
-    include: { toPlan: { select: { id: true, name: true } } },
+    include: {
+      fromPlan: { select: { id: true, name: true } },
+      toPlan: { select: { id: true, name: true } },
+    },
   });
   if (!review) return null;
   return {
     status: 'needs_review',
     requestId: review.packageChangeRequestId,
     checkoutId: review.id,
+    fromPlan: review.fromPlan ?? null,
     toPlan: review.toPlan,
     interval: review.toInterval,
     createdAt: review.createdAt.toISOString(),

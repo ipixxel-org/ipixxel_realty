@@ -542,10 +542,10 @@ export async function moveToFreePlan(
     prisma,
     sub,
     'subscription_expired',
-    reason === 'grace_ended' ? 'Moved to Basic' : 'Plan ended',
+    reason === 'grace_ended' ? 'Moved to Basic' : `You're on ${free.name} now`,
     reason === 'grace_ended'
       ? `Your ${old?.name ?? 'paid'} plan wasn't renewed, so you're on ${free.name} now. Anything over its limits is paused, not deleted, and leads keep coming in. Buy ${old?.name ?? 'your plan'} again to bring everything back.`
-      : `Your ${old?.name ?? 'paid'} plan has ended as requested. You're on ${free.name} now — anything over its limits is paused, not deleted, and leads keep coming in.`,
+      : `Your change from ${old?.name ?? 'your paid plan'} to ${free.name} has taken effect. Anything over its limits is paused, not deleted, and leads keep coming in.`,
   );
   return true;
 }
@@ -602,7 +602,7 @@ async function applyScheduledPlan(
     prisma,
     sub,
     'package_change_approved',
-    'Plan changed',
+    `You're on ${plan.name} now`,
     `Your scheduled change to the "${plan.name}" plan (${interval}) has taken effect.`,
   );
   return updated;
@@ -732,6 +732,8 @@ export async function getOrgActivePlan(
         ],
         isActive: true,
       },
+      // The system Basic plan first — never an internal ₹0 plan such as "Demo".
+      orderBy: [{ isSystem: 'desc' }, { createdAt: 'asc' }],
     });
 
     if (freePlan) {

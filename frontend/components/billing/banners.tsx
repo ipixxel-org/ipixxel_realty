@@ -39,7 +39,7 @@ export function usePayNow(overview: BillingOverview) {
       toast({ variant: "success", title: `Payment received — ${r.planName || plan.name} is active`, description: r.activeUntil ? `Paid ${formatINR(r.amount)}. Next renewal ${formatDate(r.activeUntil)}.` : `Paid ${formatINR(r.amount)}.` });
     },
     onFailed: (reason) => toast({ variant: "error", title: "Payment failed", description: reason }),
-    onClosed: () => toast({ variant: "info", title: "Payment cancelled", description: "The payment window was closed. Nothing was charged." }),
+    onClosed: () => toast({ variant: "info", title: "Payment not completed", description: "The payment window was closed. Nothing was charged." }),
   });
   // Incomplete organisation details: the renewal checkout shows what to fill in.
   const renew = () =>
@@ -106,7 +106,7 @@ export function UpdatePaymentMethodButton({ overview, className = "btn btn-ghost
         footer={
           <DialogActions>
             <button type="button" className="btn btn-ghost btn-sm" onClick={() => setOpen(false)}>
-              Cancel
+              Go back
             </button>
             <button type="button" className="btn btn-primary btn-sm" disabled={busy} onClick={() => void save()}>
               {busy ? "Saving…" : "Authorise new method"}
@@ -310,10 +310,10 @@ export function BillingBanner({ overview }: { overview: BillingOverview }) {
         <Banner
           tone="amber"
           icon="calendar"
-          title="Cancellation scheduled"
-          actions={<UndoButton label="Undo cancellation" run={() => client.undoCancel()} done={`Cancellation undone — ${plan.name} will renew as usual.`} />}
+          title={`Change to Basic scheduled for ${formatDate(o.cancelAt!)}`}
+          actions={<UndoButton label={`Keep ${plan.name}`} run={() => client.undoCancel()} done={`You'll stay on ${plan.name} — it renews as usual.`} />}
         >
-          {plan.name} stays fully active until {formatDate(o.cancelAt!)}. After that {o.orgName} moves to Basic{auto ? " and automatic payments stop" : ""}.
+          You keep {plan.name} until then. After that {o.orgName} moves to Basic{auto ? " and automatic payments stop" : ""}.
         </Banner>
       );
 
@@ -322,13 +322,13 @@ export function BillingBanner({ overview }: { overview: BillingOverview }) {
         <Banner
           tone="info"
           icon="arrow-down"
-          title={`Downgrade to ${o.downgradeTo!.name} scheduled for ${formatDate(o.downgradeAt!)}`}
+          title={`Change to ${o.downgradeTo!.name} scheduled for ${formatDate(o.downgradeAt!)}`}
           actions={
             <>
               <BLink to="chooseWhatStays" className="btn btn-ghost btn-sm">
                 Choose what stays
               </BLink>
-              <UndoButton label="Undo downgrade" run={() => client.undoDowngrade()} done={`Downgrade cancelled — you'll stay on ${plan.name}.`} />
+              <UndoButton label={`Keep ${plan.name}`} run={() => client.undoDowngrade()} done={`You'll stay on ${plan.name}.`} />
             </>
           }
         >

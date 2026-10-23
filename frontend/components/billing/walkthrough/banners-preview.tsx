@@ -13,8 +13,8 @@ const SITUATIONS: { id: string; label: string; state: Partial<MockState>; popup?
   { id: "payment-due", label: "Payment due (7 days left)", state: { situation: "payment_due" } },
   { id: "grace-ends", label: "Grace ends tomorrow", state: { situation: "grace_ends_tomorrow" } },
   { id: "moved", label: "Moved to Basic", state: { situation: "moved_to_basic" } },
-  { id: "cancel", label: "Cancellation scheduled", state: { situation: "cancellation_scheduled" } },
-  { id: "downgrade", label: "Downgrade scheduled", state: { situation: "downgrade_scheduled", downgradeTargetId: "growth" } },
+  { id: "basic", label: "Change to Basic scheduled", state: { situation: "cancellation_scheduled" } },
+  { id: "downgrade", label: "Change to a smaller plan scheduled", state: { situation: "downgrade_scheduled", downgradeTargetId: "growth" } },
 ];
 
 function Shown({ popup }: { popup?: boolean }) {

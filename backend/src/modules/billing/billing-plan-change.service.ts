@@ -5,6 +5,7 @@ import {
   applyOrgSubscriptionLifecycle,
   moveToFreePlan,
 } from '../../common/utils/subscription-lifecycle.util';
+import { pendingRequestMessage } from '../package-change-requests/package-change-requests.service';
 import { billingError } from './billing-checkout.service';
 import { OrgBillingV2Service } from './org-billing-v2.service';
 import { isFreePlan, sortPlans } from './plan-modules';
@@ -64,10 +65,7 @@ export class BillingPlanChangeService {
   ): Promise<BillingOverviewV2> {
     const sub = await this.current(orgId);
     if (!sub || isFreePlan(sub.plan)) {
-      throw billingError(
-        'nothing_to_cancel',
-        "You're on the free plan — there's no paid plan to cancel.",
-      );
+      throw billingError('nothing_to_cancel', "You're already on Basic.");
     }
     const reason = dto.reason?.trim() || null;
     if (sub.status === 'expired' || sub.status === 'paused') {
@@ -109,7 +107,10 @@ export class BillingPlanChangeService {
   async undoCancel(orgId: string, userId: string): Promise<BillingOverviewV2> {
     const sub = await this.current(orgId);
     if (!sub?.cancelAtPeriodEnd) {
-      throw billingError('nothing_scheduled', 'No cancellation is scheduled.');
+      throw billingError(
+        'nothing_scheduled',
+        'No change to Basic is scheduled.',
+      );
     }
     await this.prisma.subscription.update({
       where: { id: sub.id },
@@ -140,7 +141,7 @@ export class BillingPlanChangeService {
     if (sub.status !== 'active' && sub.status !== 'trial') {
       throw billingError(
         'downgrade_not_now',
-        'Your renewal is overdue. Renew your plan first, or cancel to move to Basic.',
+        'Your renewal is overdue. Renew your plan first, or move to Basic.',
       );
     }
     const active = await this.prisma.plan.findMany({
@@ -180,13 +181,23 @@ export class BillingPlanChangeService {
         `${target.name} (${interval}) isn't smaller than your current plan — that's an upgrade, from Change plan.`,
       );
     }
+    // One request at a time: nothing else changes the plan until it's
+    // approved, rejected or withdrawn.
     const pending = await this.prisma.packageChangeRequest.findFirst({
       where: { orgId, status: 'pending' },
+      include: {
+        currentPlan: { select: { name: true } },
+        targetPlan: { select: { name: true } },
+      },
     });
     if (pending) {
       throw billingError(
         'request_pending',
-        'You have an upgrade request waiting for approval. Cancel it first.',
+        pendingRequestMessage(
+          pending.currentPlan?.name,
+          pending.targetPlan?.name ?? 'a new plan',
+          pending.createdAt,
+        ),
       );
     }
     // Over the smaller plan's limits is fine: what doesn't fit is paused

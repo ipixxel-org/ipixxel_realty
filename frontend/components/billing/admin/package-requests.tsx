@@ -9,6 +9,7 @@ import { formatDate, packagePriceText } from "@/lib/billing/pricing";
 import type { PackageChangeRequestRow } from "@/lib/types";
 import { Empty, ErrorNote, Loading, Section } from "../ui";
 import { RejectRequestDialog } from "./reject-request-dialog";
+import { whatStaysSummary } from "../requests";
 
 /** Anchor of the section; Package Requests → Open scrolls here. */
 export const PACKAGE_REQUESTS_ANCHOR = "package-requests";
@@ -144,15 +145,21 @@ export function OrgPackageRequests({ orgId, onChanged }: { orgId: string; onChan
                         <div className="bl-muted bl-small" style={{ textTransform: "capitalize" }}>
                           {r.billingCycle}
                         </div>
+                        {r.whatStays ? (
+                          // What the org chose to keep (the rest is paused on approval).
+                          <div className="bl-small" style={{ marginTop: 4 }} data-testid="admin-what-stays">
+                            Keeps {whatStaysSummary(r.whatStays)}
+                          </div>
+                        ) : null}
                       </td>
                       <td style={{ whiteSpace: "nowrap" }}>{amount ?? <span className="bl-muted">—</span>}</td>
                       <td>
                         <span className={`badge ${STATUS_BADGE[r.status] ?? "b-gray"}`} style={{ textTransform: "capitalize" }}>
-                          {r.status}
+                          {r.status === "cancelled" ? "withdrawn" : r.status}
                         </span>
                         {r.status !== "pending" && (r.reviewedAt || r.reviewedBy) ? (
                           <div className="bl-muted bl-small" style={{ marginTop: 4 }}>
-                            {r.status === "cancelled" ? "Cancelled" : r.status === "approved" ? "Approved" : "Rejected"}
+                            {r.status === "cancelled" ? "Withdrawn" : r.status === "approved" ? "Approved" : "Rejected"}
                             {person(r.reviewedBy) ? ` by ${person(r.reviewedBy)}` : ""}
                             {r.reviewedAt ? ` on ${formatDate(r.reviewedAt)}` : ""}
                           </div>

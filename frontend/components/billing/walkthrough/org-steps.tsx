@@ -11,7 +11,7 @@ import { ChooseWhatStaysScreen } from "../choose-what-stays";
 import { useOrgBilling, type BillingRoute } from "../context";
 import { LeadsKeepComingNote, LimitReachedDialog, OfflineBadge, OfflinePagePreview, PausedAccountNotice, ViewOnlyBadge } from "../locked";
 import { BillingOverviewPanel, CurrentPlanCard } from "../overview";
-import { CancelScreen, DowngradeScreen } from "../plan-changes";
+import { DowngradeScreen, MoveToBasicScreen } from "../plan-changes";
 import { PlansScreen } from "../plans";
 import { AppFrame, Sandbox, type WalkStep } from "./stepper";
 
@@ -340,18 +340,18 @@ export const ORG_STEPS: WalkStep[] = [
     ),
   },
   {
-    title: "Downgrading or cancelling",
-    caption: "Smaller plans and cancellations start at the end of the paid period, never straight away. We warn about anything that won't fit, and it can be undone until then.",
+    title: "Moving to a smaller plan",
+    caption: "Smaller plans, Basic included, start at the end of the paid period, never straight away. We warn about anything that won't fit, and it can be undone until then.",
     render: () => (
       <div className="bw-grid2">
-        <AppFrame url="/org/settings/billing/downgrade?plan=growth" label="Downgrade Pro → Growth" minHeight={420}>
+        <AppFrame url="/org/settings/billing/downgrade?plan=growth" label="Change Pro → Growth" minHeight={420}>
           <Sandbox initial={PRO({ situation: "active" })} stay>
             <DowngradeScreen planId="growth" />
           </Sandbox>
         </AppFrame>
-        <AppFrame url="/org/settings/billing/cancel" label="After cancelling — with an undo" minHeight={420}>
+        <AppFrame url="/org/settings/billing/move-to-basic" label="After choosing Basic — with an undo" minHeight={420}>
           <Sandbox initial={PRO({ situation: "cancellation_scheduled" })} stay>
-            <CancelScreen />
+            <MoveToBasicScreen />
           </Sandbox>
         </AppFrame>
       </div>

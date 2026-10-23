@@ -222,7 +222,7 @@ describe('the lifecycle sweep applies scheduled changes when the term ends', () 
       cancelAtPeriodEnd: false,
     });
     expect(
-      db.notification.rows.some((n: any) => n.title === 'Plan ended'),
+      db.notification.rows.some((n: any) => n.title === "You're on Basic now"),
     ).toBe(true);
   });
 
@@ -346,6 +346,7 @@ describe('overview with a scheduled change', () => {
     priceMonthly: price,
     priceYearly: price * 10,
     isFree: price === 0,
+    isActive: true,
     rank: price === 0 ? 0 : price === 2000 ? 1 : 2,
     limits: {
       users: null,

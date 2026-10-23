@@ -267,7 +267,7 @@ describe("the org's Billing page shows the rejection reason", () => {
         rejected={{ requestId: "pcr_1", toPlan: { id: "pro", name: "Pro" }, interval: "monthly", rejectedAt: "2026-10-18T09:00:00.000Z", reason: "Please pay the pending invoice first." }}
       />,
     );
-    expect(screen.getByText("Upgrade to Pro was not approved")).toBeInTheDocument();
+    expect(screen.getByText("Change to Pro was not approved")).toBeInTheDocument();
     expect(screen.getByText(/rejected on 18 Oct 2026/)).toBeInTheDocument();
     expect(screen.getByText("Please pay the pending invoice first.", { exact: false })).toBeInTheDocument();
   });

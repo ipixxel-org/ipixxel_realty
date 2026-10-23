@@ -6,10 +6,11 @@ import type { BillingInterval } from "@/lib/billing/types";
 import { CheckoutScreen } from "./checkout";
 import { CheckoutFailure, CheckoutSuccess } from "./checkout-result";
 import { OrgCouponsScreen } from "./coupons-org";
+import { RequestsTable } from "./requests";
 import { ChooseWhatStaysScreen } from "./choose-what-stays";
 import { useBillingQuery, useOrgBilling } from "./context";
 import { InvoicesTable, PaymentHistoryTable } from "./invoices";
-import { CancelScreen, DowngradeScreen } from "./plan-changes";
+import { DowngradeScreen, MoveToBasicScreen } from "./plan-changes";
 import { PlansScreen } from "./plans";
 import { BillingBanner } from "./banners";
 import { Loading, PageHead } from "./ui";
@@ -108,24 +109,25 @@ export function CheckoutFailurePage(p: { plan?: string; interval?: string; reaso
 export function DowngradePage({ plan, interval }: { plan?: string; interval?: string }) {
   return (
     <Guard>
-      <PageHead eyebrow={EYEBROW} icon="arrow-down" title="Downgrade plan" sub="See when it starts and what doesn't fit, before you confirm." back={{ to: "plans", label: "Plans" }} sampleFns={["getRetentionChoices", "scheduleDowngrade"]} />
+      <PageHead eyebrow={EYEBROW} icon="arrow-down" title="Change plan" sub="See when it starts and what doesn't fit, before you confirm." back={{ to: "plans", label: "Plans" }} sampleFns={["getRetentionChoices", "scheduleDowngrade"]} />
       <DowngradeScreen planId={plan ?? "growth"} interval={interval === "monthly" || interval === "yearly" ? interval : undefined} />
     </Guard>
   );
 }
 
-export function CancelPage() {
+/** /org/settings/billing/move-to-basic: the plan change screen for Basic (old /cancel links redirect here). */
+export function MoveToBasicPage() {
   return (
     <Guard>
       <PageHead
         eyebrow={EYEBROW}
-        icon="close"
-        title="Cancel plan"
-        sub="Cancelling stops the next renewal. You keep everything you've paid for until the end date."
-        back={{ to: "overview", label: "Billing" }}
+        icon="arrow-down"
+        title="Move to Basic"
+        sub="Nothing changes until the end of the period you've paid for."
+        back={{ to: "plans", label: "Plans" }}
         sampleFns={["cancelPlan"]}
       />
-      <CancelScreen />
+      <MoveToBasicScreen />
     </Guard>
   );
 }
@@ -158,7 +160,24 @@ export function CouponsPage() {
   );
 }
 
-export function ChooseWhatStaysPage({ target }: { target?: string }) {
+export function RequestsPage() {
+  return (
+    <Guard>
+      <PageHead
+        eyebrow={EYEBROW}
+        icon="clock"
+        title="Requests"
+        sub="Plan changes you asked our team to make, and what happened to each."
+        back={{ to: "overview", label: "Billing" }}
+        sampleFns={["listOrgRequests"]}
+      />
+      <RequestsTable />
+    </Guard>
+  );
+}
+
+/** `back="checkout"` (from the request screen): Back returns to that request. */
+export function ChooseWhatStaysPage({ target, back, interval }: { target?: string; back?: string; interval?: string }) {
   const { overview } = useOrgBilling();
   return (
     <Guard>
@@ -167,7 +186,13 @@ export function ChooseWhatStaysPage({ target }: { target?: string }) {
         icon="check"
         title="Choose what stays"
         sub="When you move to a smaller plan, pick what stays active. Everything else is paused, never deleted."
-        back={{ to: "overview", label: "Billing" }}
+        back={
+          back === "checkout" && target
+            ? { to: "checkout", params: { plan: target, interval: interval === "yearly" ? "yearly" : "monthly" }, label: "Back to your request" }
+            : back === "requests"
+              ? { to: "requests", label: "Back to requests" }
+              : { to: "overview", label: "Billing" }
+        }
         sampleFns={["getRetentionChoices"]}
       />
       <div className="bl-stack">

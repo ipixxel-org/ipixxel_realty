@@ -93,6 +93,8 @@ export const httpBilling: Impl = {
 
   // Fixes after testing: org coupons, company & tax details, run the lifecycle check now
   listOrgCoupons: () => call("/org/billing/coupons"),
+  listOrgRequests: (req) => call(`/org/billing/requests${qs({ page: req.page, pageSize: req.pageSize })}`),
+  withdrawRequest: (requestId) => call(`/org/billing/requests/${encodeURIComponent(requestId)}/withdraw`, post({})),
   getCompanyDetails: () => call("/admin/billing/company"),
   saveCompanyDetails: (details) => call("/admin/billing/company", put(details)),
   runLifecycleCheck: () => call("/admin/billing/lifecycle/run", post({})),

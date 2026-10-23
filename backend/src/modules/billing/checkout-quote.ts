@@ -346,7 +346,7 @@ export function quoteRenewal(
   if (cur.cancelAtPeriodEnd) {
     throw new QuoteError(
       'cancellation_scheduled',
-      'Your plan is set to end. Undo the cancellation to renew it.',
+      'A change to Basic is scheduled. Keep your plan first to renew it.',
     );
   }
   const next = cur.scheduled ?? { plan: cur.plan, interval: cur.interval };

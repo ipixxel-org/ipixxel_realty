@@ -3,7 +3,7 @@
 import { Icon } from "@/components/icons";
 import { formatDate, packagePriceText, planPrice } from "@/lib/billing/pricing";
 import type { BillingOverview } from "@/lib/billing/types";
-import { BillingBanner, PayNowButton, RenewalReminderPopup, UpdatePaymentMethodButton } from "./banners";
+import { BillingBanner, RenewalReminderPopup } from "./banners";
 
 export { RenewalReminderPopup };
 import { BillingDetailsSection, PendingUpgradeBanner, RejectedUpgradeBanner } from "./checkout";
@@ -19,7 +19,7 @@ function planLine(o: BillingOverview): string {
   }
   if (o.status === "past_due" || o.status === "grace_ending") return `Renewal was due ${formatDate(o.dueDate!)} · grace until ${formatDate(o.graceEndsAt!)}`;
   if (o.status === "expired") return `Expired${o.dueDate ? ` on ${formatDate(o.dueDate)}` : ""} — publishing is paused until you renew`;
-  if (o.status === "cancellation_scheduled") return `Ends ${formatDate(o.cancelAt!)} — full access until then`;
+  if (o.status === "cancellation_scheduled") return `Moves to Basic on ${formatDate(o.cancelAt!)} — full access until then`;
   return `Renews on ${formatDate(o.periodEnd!)}${o.renewalMode === "auto" && o.autoRenewAvailable ? " automatically" : ""}`;
 }
 
@@ -73,41 +73,6 @@ export function UsageCard({ overview: o }: { overview: BillingOverview }) {
   );
 }
 
-export function PaymentMethodCard({ overview: o }: { overview: BillingOverview }) {
-  const payNear = o.status === "renewal_due" || o.status === "past_due" || o.status === "grace_ending";
-  return (
-    <Section title="How you pay" sub={o.renewalMode === "auto" && o.autoRenewAvailable ? "Automatic renewal" : "Pay each renewal yourself"}>
-      {o.plan.isFree ? (
-        <div className="bl-muted">No payment method needed on Basic. You&apos;ll add one when you buy a plan.</div>
-      ) : o.renewalMode === "auto" && o.autoRenewAvailable && o.paymentMethod ? (
-        <div className="bl-between">
-          <div className="bl-row">
-            <span className="bl-card-chip">{o.paymentMethod.kind === "card" ? "CARD" : "UPI"}</span>
-            <div>
-              <div className="bl-strong">{o.paymentMethod.label}</div>
-              <div className="bl-muted">{o.paymentMethod.detail}</div>
-            </div>
-          </div>
-          <UpdatePaymentMethodButton overview={o} />
-        </div>
-      ) : (
-        <div className="bl-stack" style={{ gap: 10 }}>
-          <div className="bl-muted">Nothing is saved. We remind you 3 days before each renewal and you pay with UPI, card or netbanking.</div>
-          {payNear ? (
-            <div>
-              <PayNowButton overview={o} />
-            </div>
-          ) : o.periodEnd ? (
-            <div className="bl-muted">
-              Next payment due <b>{formatDate(o.periodEnd)}</b> — a Pay now button appears here 3 days before.
-            </div>
-          ) : null}
-        </div>
-      )}
-    </Section>
-  );
-}
-
 /** Read-only: the org profile from Settings → General, edited there. */
 export function BillingDetailsCard({ overview: o }: { overview: BillingOverview }) {
   return <BillingDetailsSection overview={o} sub="From your General settings — printed on your GST invoices" />;
@@ -119,34 +84,32 @@ export function BillingOverviewPanel({ showInvoices = true }: { showInvoices?: b
   if (error) return <ErrorNote message={error} />;
   if (!overview) return <Loading />;
   const o = overview;
-  const paid = !o.plan.isFree;
   return (
     <div className="bl-stack">
       <BillingBanner overview={o} />
       {o.pendingUpgrade ? <PendingUpgradeBanner pending={o.pendingUpgrade} /> : null}
       {o.rejectedUpgrade && !o.pendingUpgrade ? <RejectedUpgradeBanner rejected={o.rejectedUpgrade} /> : null}
       <CurrentPlanCard overview={o} />
-      <div className="bl-row">
+      <div className="bl-row" data-testid="billing-actions">
+        {/* Always open: while a request waits, the plan cards and checkout are disabled instead. */}
         <BLink to="plans" className="btn btn-primary">
-          <Icon name="crown" size={15} /> {o.plan.isFree ? "Upgrade" : "Change plan"}
+          <Icon name="crown" size={15} /> Change plan
         </BLink>
-        {paid && o.status !== "cancellation_scheduled" ? (
-          <BLink to="cancel" className="btn btn-ghost">
-            Cancel plan
+        {/* Manual mode: chosen per request (the request screen) or from the grace / Basic banners. */}
+        {o.paymentMode !== "manual" ? (
+          <BLink to="chooseWhatStays" className="btn btn-ghost">
+            Choose what stays
           </BLink>
         ) : null}
-        <BLink to="chooseWhatStays" className="btn btn-ghost">
-          Choose what stays
-        </BLink>
         <BLink to="coupons" className="btn btn-ghost">
           Coupons
         </BLink>
+        <BLink to="requests" className="btn btn-ghost">
+          Requests
+        </BLink>
       </div>
       <UsageCard overview={o} />
-      <div className="bl-grid2">
-        <PaymentMethodCard overview={o} />
-        <BillingDetailsCard overview={o} />
-      </div>
+      <BillingDetailsCard overview={o} />
       {showInvoices ? (
         <>
           <InvoicesTable

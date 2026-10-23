@@ -9,7 +9,8 @@ export type OrgSubscriptionRow = {
   startedAt?: string | null;
   renewsAt?: string | null;
   graceEndsAt?: string | null;
-  plan?: { name: string; priceMonthly: number; priceYearly: number } | null;
+  /** isSystem: the platform's Basic plan (an internal ₹0 plan like "Demo" isn't Basic). */
+  plan?: { name: string; priceMonthly: number; priceYearly: number; isSystem?: boolean } | null;
 };
 
 type Summary = {
@@ -27,8 +28,8 @@ export function orgSubscriptionSummary(sub: OrgSubscriptionRow): Summary {
   const plan = sub.plan;
   const yearly = sub.billingCycle === "yearly";
   const price = plan ? (yearly ? plan.priceYearly : plan.priceMonthly) : 0;
-  // The free plan (Basic) is the only one with no price on either cycle.
-  const onBasic = !plan || (plan.priceMonthly === 0 && plan.priceYearly === 0);
+  // Basic is the system plan; older payloads without the flag fall back to "no price on either cycle".
+  const onBasic = !plan || (plan.isSystem ?? (plan.priceMonthly === 0 && plan.priceYearly === 0));
   const due = !onBasic && (sub.status === "past_due" || sub.status === "expired");
   const started = sub.startedAt ? formatDate(sub.startedAt) : null;
   if (onBasic) {

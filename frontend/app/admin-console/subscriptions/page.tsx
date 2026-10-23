@@ -1350,11 +1350,14 @@ export default function SuperAdminSubscriptionsPage() {
                                     ? "rgba(245, 158, 11, 0.1)"
                                     : r.status === "approved"
                                       ? "rgba(16, 185, 129, 0.1)"
-                                      : "rgba(239, 68, 68, 0.1)",
-                                color: r.status === "pending" ? "#d97706" : r.status === "approved" ? "#10b981" : "#ef4444",
+                                      : r.status === "cancelled"
+                                        ? "#f1f5f9"
+                                        : "rgba(239, 68, 68, 0.1)",
+                                color: r.status === "pending" ? "#d97706" : r.status === "approved" ? "#10b981" : r.status === "cancelled" ? "#64748b" : "#ef4444",
                               }}
                             >
-                              {r.status}
+                              {/* Cancelled by the organisation = withdrawn. */}
+                              {r.status === "cancelled" ? "withdrawn" : r.status}
                             </span>
                           </td>
                           <td style={{ padding: "12px 16px", textAlign: "right" }}>

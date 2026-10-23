@@ -1140,6 +1140,10 @@ model PackageChangeRequest {
   billingCycle    BillingCycle               @default(monthly) @map("billing_cycle")
   status          PackageChangeRequestStatus @default(pending)
   rejectionReason String?                    @map("rejection_reason")
+  // Manual mode: what stays on the target plan (over its limits) — a copy of the
+  // org's "choose what stays" when the request was sent / last changed, and
+  // what was actually kept once approved. Shown on Settings → Billing → Requests.
+  whatStays       Json?                      @map("what_stays")
   reviewedAt      DateTime?                  @map("reviewed_at")
   reviewedById    String?                    @map("reviewed_by_id")
   createdAt       DateTime                   @default(now()) @map("created_at")

@@ -4,6 +4,7 @@ import { useState, type ReactNode } from "react";
 import { Icon } from "@/components/icons";
 import { Seg } from "@/components/superadmin/seg";
 import { formatINR, packagePriceText, yearlySaving } from "@/lib/billing/pricing";
+import { blockingRequest, pendingRequestText } from "@/lib/billing/requests";
 import type { BillingInterval, BillingPlan } from "@/lib/billing/types";
 import { useBillingQuery, useOrgBilling } from "./context";
 import { BLink, countLabel, ErrorNote, Loading, PlanPrice, Section, planFeatureRows, useCheckoutLive } from "./ui";
@@ -54,7 +55,22 @@ export function PlansScreen({
   const current = overview.plan;
 
   const pending = overview.pendingUpgrade;
+  // A request waiting for approval blocks every other plan change until it's decided or withdrawn.
+  const waiting = blockingRequest(overview);
   const onPaidMonthly = overview.interval === "monthly" && overview.status !== "free" && overview.status !== "moved_to_basic";
+  /** A plan action link — disabled, with the reason, while a request is waiting. */
+  const go = (to: "checkout" | "downgrade", params: Record<string, string | undefined>, className: string, children: ReactNode) =>
+    waiting ? (
+      <span title={pendingRequestText(waiting)} style={{ display: "flex", width: "100%" }}>
+        <button type="button" className={className} disabled style={{ width: "100%", justifyContent: "center", opacity: 0.65, cursor: "not-allowed" }}>
+          {children}
+        </button>
+      </span>
+    ) : (
+      <BLink to={to} params={params} className={className} style={{ width: "100%", justifyContent: "center" }}>
+        {children}
+      </BLink>
+    );
   function action(p: BillingPlan) {
     if (pending && pending.toPlan.id === p.id && pending.interval === interval) {
       return (
@@ -66,17 +82,13 @@ export function PlansScreen({
     // Same paid plan, monthly → yearly: an upgrade with credit for the unused month.
     if (p.id === current.id && !p.isFree && onPaidMonthly && interval === "yearly") {
       return (
-        <BLink to="checkout" params={{ plan: p.id, interval, coupon }} className="btn btn-primary" style={{ width: "100%", justifyContent: "center" }}>
-          <Icon name="arrow-up" size={15} /> {live ? "Switch to yearly" : "Request yearly billing"}
-        </BLink>
+        go("checkout", { plan: p.id, interval, coupon }, "btn btn-primary", <><Icon name="arrow-up" size={15} /> {live ? "Switch to yearly" : "Request yearly billing"}</>)
       );
     }
     // Same paid plan, yearly → monthly: scheduled for the renewal date.
     if (p.id === current.id && !p.isFree && overview!.interval === "yearly" && interval === "monthly") {
       return (
-        <BLink to="downgrade" params={{ plan: p.id, interval }} className="btn btn-ghost" style={{ width: "100%", justifyContent: "center" }}>
-          <Icon name="arrow-down" size={15} /> Switch to monthly
-        </BLink>
+        go("downgrade", { plan: p.id, interval }, "btn btn-ghost", <><Icon name="arrow-down" size={15} /> Switch to monthly</>)
       );
     }
     if (p.id === current.id) {
@@ -88,15 +100,11 @@ export function PlansScreen({
     }
     if (p.rank > current.rank) {
       return (
-        <BLink to="checkout" params={{ plan: p.id, interval, coupon }} className="btn btn-primary" style={{ width: "100%", justifyContent: "center" }}>
-          <Icon name="arrow-up" size={15} /> {live ? "Upgrade" : "Request upgrade"}
-        </BLink>
+        go("checkout", { plan: p.id, interval, coupon }, "btn btn-primary", <><Icon name="arrow-up" size={15} /> Change plan</>)
       );
     }
     return (
-      <BLink to="downgrade" params={{ plan: p.id, interval }} className="btn btn-ghost" style={{ width: "100%", justifyContent: "center" }}>
-        <Icon name="arrow-down" size={15} /> Downgrade
-      </BLink>
+      go("downgrade", { plan: p.id, interval }, "btn btn-ghost", <><Icon name="arrow-down" size={15} /> Change plan</>)
     );
   }
 

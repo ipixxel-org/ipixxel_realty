@@ -282,10 +282,17 @@ describe('startCheckout (online)', () => {
       status: 'pending',
       targetPlanId: 'pro',
       billingCycle: 'monthly',
+      createdAt: new Date('2026-10-22T10:00:00Z'),
     });
     await expect(
       service.start('org-1', 'u1', { planId: 'growth', interval: 'monthly' }),
-    ).rejects.toMatchObject({ response: { code: 'request_pending' } });
+    ).rejects.toMatchObject({
+      response: {
+        code: 'request_pending',
+        message:
+          'You already have a pending request (Pro, sent 22 Oct). Wait for approval or withdraw it.',
+      },
+    });
   });
 });
 
@@ -613,18 +620,28 @@ describe('payment.captured → plan applied', () => {
 });
 
 describe('manual mode', () => {
-  it('creates exactly one request, and returns it again instead of duplicating', async () => {
+  it('creates exactly one request: the same one again is returned, a second (different) one is refused', async () => {
     const { service, db, requests } = setup({ mode: 'manual' });
     const first = await service.start('org-1', 'u1', {
       planId: 'growth',
       interval: 'monthly',
     });
     const again = await service.start('org-1', 'u1', {
-      planId: 'pro',
+      planId: 'growth',
       interval: 'monthly',
     });
     expect(first).toMatchObject({ status: 'pending_approval', mode: 'manual' });
     expect(again).toEqual(first);
+    await expect(
+      service.start('org-1', 'u1', { planId: 'pro', interval: 'monthly' }),
+    ).rejects.toMatchObject({
+      response: {
+        code: 'request_pending',
+        message: expect.stringContaining(
+          'Wait for approval or withdraw it.',
+        ),
+      },
+    });
     expect(requests.submitOrgRequest).toHaveBeenCalledTimes(1);
     expect(db.packageChangeRequest.rows).toHaveLength(1);
     expect(db.billingCheckout.rows[0]).toMatchObject({

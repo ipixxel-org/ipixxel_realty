@@ -257,6 +257,64 @@ export async function savedChoiceFor(
     : null;
 }
 
+/** One limit the org is over on a plan: what stays and what is paused. */
+export interface WhatStaysGroup {
+  limit: number;
+  total: number;
+  kept: { id: string; name: string }[];
+  paused: { id: string; name: string }[];
+}
+
+/**
+ * A copy of "choose what stays" for a plan, kept on a package change request
+ * (Settings → Billing → Requests). Only the limits the org is over appear.
+ * `choice`: the org's saved choice, or the default picks. `applied`: what
+ * was actually kept when the request was approved.
+ */
+export interface WhatStays {
+  planId: string;
+  planName: string;
+  choice: 'saved' | 'default';
+  applied: boolean;
+  users?: WhatStaysGroup;
+  projects?: WhatStaysGroup;
+  landingPages?: WhatStaysGroup;
+}
+
+/** What stays on `plan` with the saved choice (or the defaults); null when nothing is over. */
+export async function whatStaysFor(
+  db: RetentionDb,
+  orgId: string,
+  plan: { id: string; name: string; limits: unknown },
+  applied = false,
+  now = new Date(),
+): Promise<WhatStays | null> {
+  const ranked = rankRetention(await loadRetentionCandidates(db, orgId, now));
+  const limits = retentionLimits(plan);
+  const saved = await savedChoiceFor(db, orgId, plan.id);
+  const keep = pickRetention(ranked, limits, saved);
+  const out: WhatStays = {
+    planId: plan.id,
+    planName: plan.name,
+    choice: saved ? 'saved' : 'default',
+    applied,
+  };
+  let over = false;
+  for (const key of ['users', 'projects', 'landingPages'] as const) {
+    const items: { id: string; name: string }[] = ranked[key];
+    if (!Number.isFinite(limits[key]) || items.length <= limits[key]) continue;
+    over = true;
+    const pick = ({ id, name }: { id: string; name: string }) => ({ id, name });
+    out[key] = {
+      limit: limits[key],
+      total: items.length,
+      kept: items.filter((i) => keep[key].includes(i.id)).map(pick),
+      paused: items.filter((i) => !keep[key].includes(i.id)).map(pick),
+    };
+  }
+  return over ? out : null;
+}
+
 export interface RetentionResult {
   paused: { users: number; projects: number; landingPages: number };
   restored: { users: number; projects: number; landingPages: number };

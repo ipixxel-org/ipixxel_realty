@@ -4,7 +4,7 @@ import { useState } from "react";
 import { Icon } from "@/components/icons";
 import { useToast } from "@/components/ui/toast";
 import { formatDate, packagePriceText, planPrice } from "@/lib/billing/pricing";
-import type { BillingInterval, BillingPlan } from "@/lib/billing/types";
+import type { BillingInterval } from "@/lib/billing/types";
 import { BillingBanner, PicksSummary } from "./banners";
 import { useBillingEnv, useBillingQuery, useOrgBilling } from "./context";
 import { BillingDialog, DialogActions } from "./dialog";
@@ -51,6 +51,11 @@ function ConfirmDialog({
 
 /* --------------------------------------------------------------- Downgrade */
 
+const REASONS = ["Too expensive", "Missing a feature we need", "Project finished / paused", "Switching to another tool", "Other"];
+
+/** "23 Dec 2026", or a fallback when there's no date. */
+const onDate = (iso: string | null | undefined, fallback: string) => (iso ? formatDate(iso) : fallback);
+
 export function DowngradeScreen({ planId, interval: wanted }: { planId: string; interval?: BillingInterval }) {
   const { client, nav, canEdit } = useBillingEnv();
   const { overview, refresh } = useOrgBilling();
@@ -59,6 +64,7 @@ export function DowngradeScreen({ planId, interval: wanted }: { planId: string; 
   const { data: retention } = useBillingQuery((c) => c.getRetentionChoices({ targetPlanId: planId }), [planId]);
   const [confirm, setConfirm] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [reason, setReason] = useState("");
   if (!overview || !plans) return <Loading />;
   const target = plans.find((p) => p.id === planId);
   if (!target) return <ErrorNote message="That plan doesn't exist." />;
@@ -70,12 +76,13 @@ export function DowngradeScreen({ planId, interval: wanted }: { planId: string; 
   const per = interval === "yearly" ? "year" : "month";
 
   if (o.downgradeTo) return <BillingBanner overview={{ ...o, status: "downgrade_scheduled" }} />;
+  if (o.status === "cancellation_scheduled") return <BillingBanner overview={o} />;
   if (onFree || (target.rank >= o.plan.rank && !toMonthly)) {
     return (
       <Banner
         tone="amber"
         icon="info"
-        title={onFree ? "You're already on Basic — there's nothing to downgrade" : `${target.name} isn't smaller than your ${o.plan.name} plan`}
+        title={onFree ? "You're already on Basic — our smallest plan" : `${target.name} isn't smaller than your ${o.plan.name} plan`}
         actions={
           <BLink to="plans" className="btn btn-primary btn-sm">
             See plans
@@ -85,7 +92,12 @@ export function DowngradeScreen({ planId, interval: wanted }: { planId: string; 
     );
   }
 
-  const effective = o.graceEndsAt ?? o.periodEnd;
+  // Basic uses the end-of-term move to the free plan underneath; the reason is saved with it.
+  const toBasic = target.isFree;
+  // The paid term is already over: moving to Basic happens straight away.
+  const now = toBasic && o.status === "expired";
+  const effective = now ? null : (o.graceEndsAt ?? o.periodEnd);
+  const when = onDate(effective, "the end of your paid period");
   const over = o.usage.filter((u) => target.limits[u.key] !== null && u.used > target.limits[u.key]!);
   // Until "choose what stays" is live, nothing can be paused: the org has to fit first.
   const canPause = client.isMock || client.isReal("saveRetentionChoices");
@@ -95,13 +107,14 @@ export function DowngradeScreen({ planId, interval: wanted }: { planId: string; 
   async function schedule() {
     setBusy(true);
     try {
-      await client.scheduleDowngrade({ planId: target!.id, interval });
+      const next = toBasic ? await client.cancelPlan({ reason: reason || undefined }) : await client.scheduleDowngrade({ planId: target!.id, interval });
       await refresh();
       setConfirm(false);
-      toast({ variant: "success", title: "Downgrade scheduled", description: `${target!.name} starts on ${effective ? formatDate(effective) : "your renewal date"}.` });
+      if (next.plan.isFree) toast({ variant: "success", title: `You're on ${target!.name} now` });
+      else toast({ variant: "success", title: `Change to ${target!.name} scheduled for ${when}`, description: `You keep ${o.plan.name} until then.` });
       nav.go("overview");
     } catch (e) {
-      toast({ variant: "error", title: "Couldn't schedule the downgrade", description: e instanceof Error ? e.message : undefined });
+      toast({ variant: "error", title: "Couldn't schedule the plan change", description: e instanceof Error ? e.message : undefined });
     } finally {
       setBusy(false);
     }
@@ -110,13 +123,13 @@ export function DowngradeScreen({ planId, interval: wanted }: { planId: string; 
   return (
     <div className="bl-stack">
       <Section
-        title={toMonthly ? `Switch ${o.plan.name} to monthly billing` : `Downgrade ${o.plan.name} → ${target.name}`}
+        title={toMonthly ? `Switch ${o.plan.name} to monthly billing` : `Change plan ${o.plan.name} → ${target.name}`}
         sub="Nothing changes until the end of the period you've paid for."
       >
         <div className="bl-grid3">
-          <Kv label="Takes effect">{effective ? formatDate(effective) : "—"}</Kv>
+          <Kv label="Takes effect">{now ? "Straight away" : effective ? formatDate(effective) : "—"}</Kv>
           <Kv label="Until then">{o.plan.name} — everything as today</Kv>
-          <Kv label="Then you pay">{target.isFree ? "Nothing — Basic is free" : `${packagePriceText(planPrice(target, interval))} / ${per}`}</Kv>
+          <Kv label="Then you pay">{target.isFree ? `Nothing — ${target.name} is free` : `${packagePriceText(planPrice(target, interval))} / ${per}`}</Kv>
         </div>
       </Section>
 
@@ -129,7 +142,7 @@ export function DowngradeScreen({ planId, interval: wanted }: { planId: string; 
               </li>
             ))}
           </ul>
-          <div style={{ marginTop: 6 }}>Remove or deactivate the extra ones first, then come back to schedule the downgrade. Nothing changes until then.</div>
+          <div style={{ marginTop: 6 }}>Remove or deactivate the extra ones first, then come back to schedule the plan change. Nothing changes until then.</div>
         </Banner>
       ) : over.length ? (
         <Banner
@@ -177,6 +190,18 @@ export function DowngradeScreen({ planId, interval: wanted }: { planId: string; 
         </Banner>
       ) : null}
 
+      {toBasic ? (
+        <div className="field" style={{ marginBottom: 0, maxWidth: 360 }}>
+          <label htmlFor="bl-basic-reason">Why are you moving to {target.name}? (optional)</label>
+          <select id="bl-basic-reason" className="inp" value={reason} onChange={(e) => setReason(e.target.value)}>
+            <option value="">Choose a reason…</option>
+            {REASONS.map((r) => (
+              <option key={r}>{r}</option>
+            ))}
+          </select>
+        </div>
+      ) : null}
+
       <div className="bl-row">
         <button
           type="button"
@@ -185,7 +210,7 @@ export function DowngradeScreen({ planId, interval: wanted }: { planId: string; 
           title={blocked ? `Get within ${target.name}'s limits first` : undefined}
           onClick={() => setConfirm(true)}
         >
-          <Icon name="arrow-down" size={15} /> {toMonthly ? "Confirm switch to monthly" : "Confirm downgrade"}
+          <Icon name="arrow-down" size={15} /> {toMonthly ? "Confirm switch to monthly" : toBasic ? `Move to ${target.name}` : "Confirm plan change"}
         </button>
         <BLink to="plans" className="btn btn-ghost">
           Keep {o.plan.name}
@@ -193,9 +218,15 @@ export function DowngradeScreen({ planId, interval: wanted }: { planId: string; 
       </div>
       <ConfirmDialog
         open={confirm}
-        title={toMonthly ? "Switch to monthly billing?" : `Downgrade to ${target.name}?`}
-        message={`You keep ${o.plan.name} until ${effective ? formatDate(effective) : "the end of the period"}. You can undo this any time before then.`}
-        confirmLabel="Schedule downgrade"
+        title={
+          toMonthly
+            ? "Switch to monthly billing?"
+            : now
+              ? `Move to ${target.name} now?`
+              : `${toBasic ? "Move" : "Change"} to ${target.name} on ${when}?`
+        }
+        message={now ? `Your ${o.plan.name} term has ended, so the move happens straight away.` : `You keep ${o.plan.name} until then.`}
+        confirmLabel={toBasic ? `Move to ${target.name}` : "Schedule plan change"}
         busy={busy}
         onClose={() => setConfirm(false)}
         onConfirm={() => void schedule()}
@@ -204,89 +235,14 @@ export function DowngradeScreen({ planId, interval: wanted }: { planId: string; 
   );
 }
 
-/* ------------------------------------------------------------------ Cancel */
+/* ------------------------------------------------------------ Move to Basic */
 
-const REASONS = ["Too expensive", "Missing a feature we need", "Project finished / paused", "Switching to another tool", "Other"];
-
-export function CancelScreen() {
-  const { client, nav, canEdit } = useBillingEnv();
-  const { overview, refresh } = useOrgBilling();
-  const { toast } = useToast();
-  const { data: plans } = useBillingQuery((c) => c.listPlans(), []);
-  const [reason, setReason] = useState("");
-  const [confirm, setConfirm] = useState(false);
-  const [busy, setBusy] = useState(false);
-  if (!overview || !plans) return <Loading />;
-  const o = overview;
-  if (o.plan.isFree) return <Banner tone="gray" icon="info" title="You're on Basic — there's no paid plan to cancel." />;
-  if (o.status === "cancellation_scheduled") return <BillingBanner overview={o} />;
-  const endsOn = o.graceEndsAt ?? o.periodEnd;
-  const free = plans.find((p) => p.isFree) as BillingPlan;
-  const canPause = client.isMock || client.isReal("saveRetentionChoices");
-
-  async function cancel() {
-    setBusy(true);
-    try {
-      await client.cancelPlan({ reason: reason || undefined });
-      await refresh();
-      setConfirm(false);
-      toast({ variant: "success", title: "Cancellation scheduled", description: `${o.plan.name} stays active until ${endsOn ? formatDate(endsOn) : "the end date"}.` });
-      nav.go("overview");
-    } catch (e) {
-      toast({ variant: "error", title: "Couldn't cancel", description: e instanceof Error ? e.message : undefined });
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  return (
-    <div className="bl-stack">
-      <Section title={`Cancel ${o.plan.name}`}>
-        <div className="bl-grid3">
-          <Kv label="Plan ends">{endsOn ? formatDate(endsOn) : "—"}</Kv>
-          <Kv label="Until then">Full {o.plan.name} access</Kv>
-          <Kv label="After that">{free.name} (free)</Kv>
-        </div>
-        <div className="bl-muted" style={{ marginTop: 14 }}>
-          No further charges{o.renewalMode === "auto" ? " — automatic payments stop too" : ""}.{" "}
-          {canPause
-            ? `Nothing is deleted: whatever doesn't fit on ${free.name} is paused, and leads keep coming in.`
-            : `Nothing is deleted and leads keep coming in. If you have more than ${free.name} allows, you can't add more until you're within its limits.`}
-        </div>
-        {o.retention ? <PicksSummary retention={o.retention} /> : null}
-        <div className="field" style={{ marginTop: 16, marginBottom: 0, maxWidth: 360 }}>
-          <label>Why are you cancelling? (optional)</label>
-          <select className="inp" value={reason} onChange={(e) => setReason(e.target.value)}>
-            <option value="">Choose a reason…</option>
-            {REASONS.map((r) => (
-              <option key={r}>{r}</option>
-            ))}
-          </select>
-        </div>
-      </Section>
-      <div className="bl-row">
-        <button type="button" className="btn btn-danger" disabled={!canEdit} onClick={() => setConfirm(true)}>
-          Cancel plan
-        </button>
-        {canPause ? (
-          <BLink to="chooseWhatStays" className="btn btn-ghost">
-            Choose what stays first
-          </BLink>
-        ) : null}
-        <BLink to="overview" className="btn btn-ghost">
-          Keep {o.plan.name}
-        </BLink>
-      </div>
-      <ConfirmDialog
-        open={confirm}
-        danger
-        title={`Cancel ${o.plan.name}?`}
-        message={`Access continues until ${endsOn ? formatDate(endsOn) : "the end of the period"}. After that you move to ${free.name}. You can undo this before then.`}
-        confirmLabel="Yes, cancel"
-        busy={busy}
-        onClose={() => setConfirm(false)}
-        onConfirm={() => void cancel()}
-      />
-    </div>
-  );
+/** Settings → Billing → Move to Basic: the plan change screen for the free plan (old /cancel links land here). */
+export function MoveToBasicScreen() {
+  const { data: plans, error } = useBillingQuery((c) => c.listPlans(), []);
+  if (error) return <ErrorNote message={error} />;
+  if (!plans) return <Loading />;
+  const free = plans.find((p) => p.isFree);
+  if (!free) return <ErrorNote message="The free plan isn't available right now." />;
+  return <DowngradeScreen planId={free.id} />;
 }

@@ -72,3 +72,12 @@ describe("OrgSubscriptionSummary", () => {
     expect(screen.getByRole("link", { name: "Manage in Subscriptions →" })).toBeInTheDocument();
   });
 });
+
+describe("an internal ₹0 plan (Demo) is not Basic", () => {
+  it("only the system plan reads as On Basic", () => {
+    const sub = (plan: OrgSubscriptionRow["plan"]): OrgSubscriptionRow => ({ status: "active", billingCycle: "monthly", startedAt: "2026-10-16T04:36:38.000Z", plan });
+    expect(orgSubscriptionSummary(sub({ name: "Demo", priceMonthly: 0, priceYearly: 0, isSystem: false })).status.label).toBe("Active");
+    expect(orgSubscriptionSummary(sub({ name: "Demo", priceMonthly: 0, priceYearly: 0, isSystem: false })).planName).toBe("Demo");
+    expect(orgSubscriptionSummary(sub({ name: "Basic", priceMonthly: 0, priceYearly: 0, isSystem: true })).status.label).toBe("On Basic");
+  });
+});

@@ -177,7 +177,8 @@ export interface Seed {
 export function createFakeBillingDb(seed: Seed) {
   const plans: Row[] = seed.plans.map((p) => ({
     isActive: true,
-    isSystem: false,
+    // Like the real Basic: the ₹0 plan in a fixture is the system (free) plan.
+    isSystem: p.isSystem ?? (p.priceMonthly === 0 && p.priceYearly === 0),
     limits: {},
     capabilities: {},
     createdAt: new Date(0),
