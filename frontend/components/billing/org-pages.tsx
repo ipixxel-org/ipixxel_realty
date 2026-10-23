@@ -10,7 +10,7 @@ import { RequestsTable } from "./requests";
 import { ChooseWhatStaysScreen } from "./choose-what-stays";
 import { useBillingQuery, useOrgBilling } from "./context";
 import { InvoicesTable, PaymentHistoryTable } from "./invoices";
-import { CancelScreen, DowngradeScreen } from "./plan-changes";
+import { DowngradeScreen, MoveToBasicScreen } from "./plan-changes";
 import { PlansScreen } from "./plans";
 import { BillingBanner } from "./banners";
 import { Loading, PageHead } from "./ui";
@@ -115,18 +115,19 @@ export function DowngradePage({ plan, interval }: { plan?: string; interval?: st
   );
 }
 
-export function CancelPage() {
+/** /org/settings/billing/move-to-basic: the plan change screen for Basic (old /cancel links redirect here). */
+export function MoveToBasicPage() {
   return (
     <Guard>
       <PageHead
         eyebrow={EYEBROW}
-        icon="close"
-        title="Cancel plan"
-        sub="Cancelling stops the next renewal. You keep everything you've paid for until the end date."
-        back={{ to: "overview", label: "Billing" }}
+        icon="arrow-down"
+        title="Move to Basic"
+        sub="Nothing changes until the end of the period you've paid for."
+        back={{ to: "plans", label: "Plans" }}
         sampleFns={["cancelPlan"]}
       />
-      <CancelScreen />
+      <MoveToBasicScreen />
     </Guard>
   );
 }

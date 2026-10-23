@@ -387,7 +387,7 @@ export function CheckoutScreen({
       });
     },
     onFailed: (reason) => nav.go("checkoutFailure", { plan: planId, interval, reason }),
-    onClosed: () => toast({ variant: "info", title: "Payment cancelled", description: "You closed the payment window. Nothing was charged — try again when you're ready." }),
+    onClosed: () => toast({ variant: "info", title: "Payment not completed", description: "You closed the payment window. Nothing was charged — try again when you're ready." }),
     onRequested: () => {
       void refresh();
       toast({ variant: "success", title: "Request sent", description: "Our team will approve it shortly. You keep everything on your current plan until then." });
@@ -490,6 +490,20 @@ export function CheckoutScreen({
   // Manual mode over the target's limits: send once they've chosen what stays.
   const conflict = preview?.usageConflict ?? null;
   const mustChoose = !!conflict && !conflict.choicesFit;
+  // A request waiting for approval: the button keeps its label (Send change request / Pay) but is disabled.
+  const waiting = pendingUpgrade?.status === "pending_approval";
+  const buttonReason =
+    pendingUpgrade
+      ? waiting
+        ? pendingRequestText(pendingUpgrade)
+        : "Your last payment is still being checked by our team"
+      : !canEdit
+        ? "Ask an admin with billing access to buy a plan"
+        : missingDetails.length
+          ? "Complete your organisation details to continue"
+          : mustChoose
+            ? "Choose what stays on the new plan first"
+            : undefined;
   const disabled = !canEdit || payment.busy || !!pendingUpgrade || manualRenewal || !!tooSmall || missingDetails.length > 0 || mustChoose;
 
   return (
@@ -544,48 +558,38 @@ export function CheckoutScreen({
                     to pay. You stay on {overview.plan.name} with everything working until the change is approved.
                   </div>
                 ) : null}
-                <button
-                  type="button"
-                  className="btn btn-primary"
-                  style={{ width: "100%", justifyContent: "center", marginTop: 14, padding: 12 }}
-                  disabled={disabled}
-                  title={
-                    pendingUpgrade
-                      ? pendingUpgrade.status === "pending_approval"
-                        ? pendingRequestText(pendingUpgrade)
-                        : "Your last payment is still being checked by our team"
-                      : !canEdit
-                        ? "Ask an admin with billing access to buy a plan"
-                        : missingDetails.length
-                          ? "Complete your organisation details to continue"
-                          : mustChoose
-                            ? "Choose what stays on the new plan first"
-                            : undefined
-                  }
-                  onClick={() => void pay()}
-                >
-                  {pendingUpgrade ? (
-                    <>
-                      <Icon name="clock" size={15} /> Request pending
-                    </>
-                  ) : manualRenewal ? (
-                    <>
-                      <Icon name="clock" size={15} /> Renewed by our team
-                    </>
-                  ) : !online ? (
-                    <>
-                      <Icon name="arrow-up" size={15} /> Send change request
-                    </>
-                  ) : preview.total === 0 ? (
-                    <>
-                      <Icon name="check" size={15} /> Activate {target.name} — nothing to pay
-                    </>
-                  ) : (
-                    <>
-                      <Icon name="lock" size={15} /> Pay {formatINR(preview.total)}
-                    </>
-                  )}
-                </button>
+                {/* The tooltip sits on a wrapper: a disabled button shows none of its own in some browsers. */}
+                <div title={buttonReason} style={{ display: "flex", marginTop: 14 }}>
+                  <button
+                    type="button"
+                    className="btn btn-primary"
+                    style={{ width: "100%", justifyContent: "center", padding: 12, ...(waiting ? { opacity: 0.65, cursor: "not-allowed" } : null) }}
+                    disabled={disabled}
+                    onClick={() => void pay()}
+                  >
+                    {pendingUpgrade && !waiting ? (
+                      <>
+                        <Icon name="clock" size={15} /> Request pending
+                      </>
+                    ) : manualRenewal ? (
+                      <>
+                        <Icon name="clock" size={15} /> Renewed by our team
+                      </>
+                    ) : !online ? (
+                      <>
+                        <Icon name="arrow-up" size={15} /> Send change request
+                      </>
+                    ) : preview.total === 0 ? (
+                      <>
+                        <Icon name="check" size={15} /> Activate {target.name} — nothing to pay
+                      </>
+                    ) : (
+                      <>
+                        <Icon name="lock" size={15} /> Pay {formatINR(preview.total)}
+                      </>
+                    )}
+                  </button>
+                </div>
                 <div className="bl-muted bl-small" style={{ textAlign: "center", marginTop: 8 }}>
                   {online ? "Secure payment by Razorpay. GST invoice by email." : manualRenewal ? "Nothing to pay here." : "No payment is taken now."}
                 </div>

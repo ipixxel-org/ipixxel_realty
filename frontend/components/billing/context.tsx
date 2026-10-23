@@ -15,7 +15,7 @@ export type BillingRoute =
   | "checkoutSuccess"
   | "checkoutFailure"
   | "downgrade"
-  | "cancel"
+  | "moveToBasic"
   | "invoices"
   | "chooseWhatStays"
   | "adminCoupons"
@@ -61,8 +61,8 @@ export function billingHref(to: BillingRoute, params: RouteParams = {}): string 
       return `${ORG}/checkout/failure${query(params)}`;
     case "downgrade":
       return `${ORG}/downgrade${query(params)}`;
-    case "cancel":
-      return `${ORG}/cancel`;
+    case "moveToBasic":
+      return `${ORG}/move-to-basic`;
     case "invoices":
       return `${ORG}/invoices`;
     case "chooseWhatStays":

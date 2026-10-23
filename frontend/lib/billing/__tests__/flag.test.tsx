@@ -328,7 +328,10 @@ describe("billing v2 flag", () => {
     );
     await settle();
     expect(screen.getByText("Change to Growth requested")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /Request pending/ })).toBeDisabled();
+    // Keeps its label, but disabled, with the reason on hover.
+    const send = screen.getByRole("button", { name: /Send change request/ });
+    expect(send).toBeDisabled();
+    expect(send.parentElement!.getAttribute("title")).toMatch(/^You already have a pending request/);
     expect(screen.getByTestId("billing-details-summary")).toHaveTextContent(/1 Road.*Mysuru.*Karnataka.*570001/);
     expect(errors).toEqual([]);
   });
@@ -408,28 +411,30 @@ describe("billing v2 flag", () => {
     expect(errors).toEqual([]);
   });
 
-  it("cancel: sends the reason, explains pausing, and shows the scheduled state", async () => {
+  it("choosing Basic: sends the reason and shows the scheduled change", async () => {
     backend.overview = overview({ plan: GROWTH, paidPlan: GROWTH, status: "active", periodEnd: "2026-11-10", renewalAmount: 2360 });
-    const { BillingV2Root, CancelScreen, ToastProvider } = await load("true");
+    const { BillingV2Root, DowngradeScreen, ToastProvider } = await load("true");
     render(
       <ToastProvider>
         <BillingV2Root canEdit>
-          <CancelScreen />
+          <DowngradeScreen planId={BASIC.id} />
         </BillingV2Root>
       </ToastProvider>,
     );
     await settle();
-    expect(screen.getByText(/whatever doesn't fit on Basic is paused/)).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: /Choose what stays first/ })).toBeInTheDocument();
-    fireEvent.change(screen.getByRole("combobox"), { target: { value: "Too expensive" } });
-    fireEvent.click(screen.getByRole("button", { name: "Cancel plan" }));
+    fireEvent.change(screen.getByLabelText("Why are you moving to Basic? (optional)"), { target: { value: "Too expensive" } });
+    fireEvent.click(screen.getByRole("button", { name: /Move to Basic/ }));
     await settle();
-    fireEvent.click(screen.getByRole("button", { name: "Yes, cancel" }));
+    expect(screen.getByText("Move to Basic on 10 Nov 2026?")).toBeInTheDocument();
+    expect(screen.getByText("You keep Growth until then.")).toBeInTheDocument();
+    const buttons = screen.getAllByRole("button", { name: /Move to Basic/ });
+    fireEvent.click(buttons[buttons.length - 1]);
     await settle();
     const call = apiFetch.mock.calls.find(([p, i]) => p === "/org/billing/cancel" && i?.method === "POST");
     expect(JSON.parse(String(call![1]!.body))).toEqual({ reason: "Too expensive" });
     // The toast, and the banner on the refreshed overview.
-    expect(screen.getAllByText("Cancellation scheduled").length).toBeGreaterThanOrEqual(2);
+    expect(screen.getAllByText("Change to Basic scheduled for 10 Nov 2026").length).toBeGreaterThanOrEqual(2);
+    expect(screen.getAllByRole("button", { name: "Keep Growth" }).length).toBeGreaterThan(0);
     expect(push).toHaveBeenCalledWith("/org/settings?section=billing");
     expect(errors).toEqual([]);
   });
@@ -461,7 +466,7 @@ describe("billing v2 flag", () => {
     expect(apiFetch).toHaveBeenCalledWith("/org/billing/retention?targetPlanId=uuid-basic");
     expect(screen.getByText(/Asha Rao/)).toBeInTheDocument(); // the default pick that stays
     expect(screen.getByRole("link", { name: /Choose what stays/ })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /Confirm plan change/ })).toBeEnabled();
+    expect(screen.getByRole("button", { name: /Move to Basic/ })).toBeEnabled();
     expect(errors).toEqual([]);
   });
 

@@ -65,10 +65,7 @@ export class BillingPlanChangeService {
   ): Promise<BillingOverviewV2> {
     const sub = await this.current(orgId);
     if (!sub || isFreePlan(sub.plan)) {
-      throw billingError(
-        'nothing_to_cancel',
-        "You're on the free plan — there's no paid plan to cancel.",
-      );
+      throw billingError('nothing_to_cancel', "You're already on Basic.");
     }
     const reason = dto.reason?.trim() || null;
     if (sub.status === 'expired' || sub.status === 'paused') {
@@ -110,7 +107,10 @@ export class BillingPlanChangeService {
   async undoCancel(orgId: string, userId: string): Promise<BillingOverviewV2> {
     const sub = await this.current(orgId);
     if (!sub?.cancelAtPeriodEnd) {
-      throw billingError('nothing_scheduled', 'No cancellation is scheduled.');
+      throw billingError(
+        'nothing_scheduled',
+        'No change to Basic is scheduled.',
+      );
     }
     await this.prisma.subscription.update({
       where: { id: sub.id },
@@ -141,7 +141,7 @@ export class BillingPlanChangeService {
     if (sub.status !== 'active' && sub.status !== 'trial') {
       throw billingError(
         'downgrade_not_now',
-        'Your renewal is overdue. Renew your plan first, or cancel to move to Basic.',
+        'Your renewal is overdue. Renew your plan first, or move to Basic.',
       );
     }
     const active = await this.prisma.plan.findMany({

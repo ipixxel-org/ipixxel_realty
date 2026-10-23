@@ -222,7 +222,7 @@ describe('the lifecycle sweep applies scheduled changes when the term ends', () 
       cancelAtPeriodEnd: false,
     });
     expect(
-      db.notification.rows.some((n: any) => n.title === 'Plan ended'),
+      db.notification.rows.some((n: any) => n.title === "You're on Basic now"),
     ).toBe(true);
   });
 

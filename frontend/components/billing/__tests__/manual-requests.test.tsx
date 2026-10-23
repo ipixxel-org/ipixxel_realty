@@ -161,12 +161,11 @@ describe("Settings → Billing → Requests", () => {
 /* -------------------------------------------------- While a request is pending */
 
 describe("while a request is pending", () => {
-  it("Change plan, every plan card and Send are disabled with the same message", async () => {
+  it("Change plan stays open; every plan card and Send are disabled with the same message", async () => {
     const client = createMockBillingClient({ initial: manual({ situation: "active", paidPlanId: "growth", pendingRequest: waitingRequest }) });
     let view = await show(client, <BillingOverviewPanel showInvoices={false} />);
-    const change = within(actionRow()).getByRole("button", { name: /Change plan/ });
-    expect(change).toBeDisabled();
-    expect(change.parentElement!.getAttribute("title")).toMatch(PENDING_TEXT);
+    // Always clickable, so the plans can be seen.
+    expect(within(actionRow()).getByRole("link", { name: /Change plan/ })).toHaveAttribute("href", "/org/settings/billing/plans");
     view.unmount();
 
     view = await show(client, <PlansScreen />);
@@ -178,9 +177,10 @@ describe("while a request is pending", () => {
     view.unmount();
 
     await show(client, <CheckoutScreen planId="pro" interval="monthly" />);
-    const send = screen.getByRole("button", { name: /Request pending/ });
+    // Keeps its own label; disabled, with the message on its wrapper.
+    const send = screen.getByRole("button", { name: /Send change request/ });
     expect(send).toBeDisabled();
-    expect(send.getAttribute("title")).toMatch(PENDING_TEXT);
+    expect(send.parentElement!.getAttribute("title")).toMatch(PENDING_TEXT);
   });
 
   it("withdraw (with a confirm) clears it and re-enables the buttons", async () => {

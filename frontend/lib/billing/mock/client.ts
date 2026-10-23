@@ -380,12 +380,12 @@ export function createMockBillingClient(opts: { initial?: Partial<MockState>; pe
 
     cancelPlan() {
       const st = overview().status;
-      if (st === "free" || st === "moved_to_basic") return fail("There's no paid plan to cancel.");
+      if (st === "free" || st === "moved_to_basic") return fail("You're already on Basic.");
       set({ situation: "cancellation_scheduled" });
       return ok(overview());
     },
     undoCancel() {
-      if (get().situation !== "cancellation_scheduled") return fail("No cancellation is scheduled.");
+      if (get().situation !== "cancellation_scheduled") return fail("No change to Basic is scheduled.");
       set({ situation: "active" });
       return ok(overview());
     },

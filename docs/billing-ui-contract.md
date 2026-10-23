@@ -185,8 +185,8 @@ period rule (`applyPlanChange`).
   (`assertPlanFitsAfterRetention`); `applyPlanChange` → `applyRetention` then pauses the rest
   using the saved choice for that plan, or the default picks — like a scheduled downgrade.
   Older requests (no checkout) keep the strict check.
-- **One pending request:** while `pendingUpgrade.status === "pending_approval"`, Change plan,
-  every plan card action and Send are disabled with "You already have a pending request
+- **One pending request:** while `pendingUpgrade.status === "pending_approval"`, every plan card
+  action and the checkout button (keeps its "Send change request" / "Pay" label) are disabled with "You already have a pending request
   (Starter → Pro, sent 22 Oct). Wait for approval or withdraw it." (`PendingUpgrade.fromPlan` +
   `createdAt`). The API refuses a different second request with the same words
   (`request_pending`, from both checkout start and the legacy request endpoint); the same plan and
@@ -209,6 +209,17 @@ period rule (`applyPlanChange`).
 - **Wording:** plan actions say "Change plan" (no Upgrade / Downgrade buttons); the request screen
   says "Request a change to Pro" / "Send change request"; banners say "Change to Pro requested",
   "Change to Pro was not approved", "Change to Growth scheduled".
+- **Change plan is always open** (Settings → Billing action row), even while a request waits, so the
+  plans can always be seen; the plan cards and checkout button carry the block instead.
+- **No "Cancel plan" for orgs, no "How you pay" block.** Basic is a normal choice under Change plan
+  (`/downgrade?plan=<basic id>`; `/move-to-basic`, and old `/cancel` links redirect there). Choosing it
+  calls `cancelPlan({ reason })` underneath (end of the paid period; straight away if expired) and
+  asks "Why are you moving to Basic? (optional)". Org wording never says cancel: "Move to Basic on
+  23 Dec 2026? You keep Starter until then.", banner/status "Change to Basic scheduled for 23 Dec 2026"
+  with "Keep Starter" (undo), notification "You're on Basic now". Smaller paid plans the same way:
+  "Change to Growth on …?", "Change to Growth scheduled for …", "Keep Pro"; their notification is
+  "You're on Growth now". Org-facing API messages follow ("You're already on Basic.", "No change to
+  Basic is scheduled."). Super Admin's own Cancel action is unchanged.
 - **Rejected:** `BillingOverview.rejectedUpgrade` `{ requestId, toPlan, interval, rejectedAt, reason }`
   while the latest request is a rejected one; the Billing page shows it with the reason. The
   Super Admin must give a reason (10–500 characters).
