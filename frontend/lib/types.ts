@@ -888,10 +888,18 @@ export interface PackageChangeRequestRow {
   targetPlan?: Plan | OrgBillingPlan;
   /** Billing v2 manual mode: what the org chose to keep on the target plan (null = everything fits). */
   whatStays?: import("./billing/types").WhatStays | null;
+  /** "Renewal of Pro" (same plan) or "Change to Starter". */
+  label?: string;
+  /** Sent while the renewal was overdue (grace). */
+  overdue?: boolean;
+  /** Manual mode: the payment recorded with Mark as paid (rupees, GST included). */
+  payment?: import("./billing/types").RequestPayment | null;
+  /** The org fell back to Basic while this request was waiting. */
+  movedToBasicAt?: string | null;
   /** Billing v2: the manual-mode checkout behind the request (amounts in paise). */
   billingCheckout?: {
     id: string;
-    kind: "new" | "upgrade_same_interval" | "interval_change";
+    kind: "new" | "upgrade_same_interval" | "interval_change" | "renewal";
     taxablePaise: number;
     cgstPaise: number;
     sgstPaise: number;
@@ -901,6 +909,8 @@ export interface PackageChangeRequestRow {
     buyerGstin: string | null;
     buyerState: string;
   } | null;
+  /** How the total is made up, with any coupon (requests with a checkout). */
+  quote?: import("./billing/types").RequestQuote | null;
 }
 
 export interface PackageChangeRequestsListResponse {

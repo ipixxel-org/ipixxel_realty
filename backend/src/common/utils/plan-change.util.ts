@@ -63,6 +63,11 @@ export interface ApplyPlanChangeInput {
   requestId?: string | null;
   /** Also notified: the member who asked for the change. */
   requestedById?: string | null;
+  /**
+   * Overrides the period rule: the new term starts on this date (manual mode,
+   * a request approved after the org fell back to Basic — from the payment date).
+   */
+  periodStart?: Date | null;
   now?: Date;
 }
 
@@ -111,8 +116,11 @@ export async function applyPlanChange(
   const activeSub = await tx.subscription.findFirst({
     where: { orgId: input.organisationId, status: { not: 'cancelled' } },
   });
-  const renewsAt =
-    input.kind === 'upgrade_same_interval' && activeSub?.renewsAt
+  const renewsAt = input.periodStart
+    ? new Date(
+        input.periodStart.getTime() + CYCLE_DAYS[input.toInterval] * DAY_MS,
+      )
+    : input.kind === 'upgrade_same_interval' && activeSub?.renewsAt
       ? activeSub.renewsAt
       : input.kind === 'renewal' && activeSub
         ? renewalPeriodEnd(activeSub, input.toInterval, now)

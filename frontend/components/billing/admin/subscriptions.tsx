@@ -366,6 +366,9 @@ export function SubscriptionDetailView({ orgId, initialAction = null }: { orgId:
   if (!d) return <Loading what="subscription" />;
   const inGrace = d.status === "past_due" || d.status === "grace_ending";
   const paid = !d.plan.isFree;
+  // Manual mode: payments and coupons go through the org's request (Package
+  // requests → Mark as paid), so those two actions aren't offered here.
+  const viaRequest = (a: SubscriptionAction) => d.paymentMode === "manual" && (a === "offline" || a === "coupon");
   // Why each action is unavailable (null = available). Shown as the hover text.
   const noEdit = canEdit ? null : "You don't have permission to change billing";
   const onBasic = `Not available on ${d.plan.name} — the organisation isn't on a paid plan`;
@@ -375,14 +378,15 @@ export function SubscriptionDetailView({ orgId, initialAction = null }: { orgId:
     coupon: noEdit ?? (paid ? null : onBasic),
     cancel: noEdit ?? (!paid ? onBasic : d.status === "cancellation_scheduled" ? "Cancellation is already scheduled" : null),
   };
-  const actionButton = (a: SubscriptionAction, className: string, label: React.ReactNode) => (
-    // The wrapper carries the hover text: browsers don't reliably show a disabled button's title.
-    <span title={blocked[a] ?? undefined} style={{ display: "inline-flex" }}>
-      <button type="button" className={className} disabled={blocked[a] !== null} onClick={() => setAction(a)}>
-        {label}
-      </button>
-    </span>
-  );
+  const actionButton = (a: SubscriptionAction, className: string, label: React.ReactNode) =>
+    viaRequest(a) ? null : (
+      // The wrapper carries the hover text: browsers don't reliably show a disabled button's title.
+      <span title={blocked[a] ?? undefined} style={{ display: "inline-flex" }}>
+        <button type="button" className={className} disabled={blocked[a] !== null} onClick={() => setAction(a)}>
+          {label}
+        </button>
+      </span>
+    );
 
   return (
     <div className="bl-stack">
@@ -474,7 +478,7 @@ export function SubscriptionDetailView({ orgId, initialAction = null }: { orgId:
       </Section>
       <ActionDialog
         key={action ?? "none"}
-        action={action}
+        action={action && !viaRequest(action) ? action : null}
         detail={d}
         onClose={() => setAction(null)}
         onDone={(next, message) => {

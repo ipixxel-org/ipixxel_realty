@@ -16,6 +16,7 @@ import { AdminCouponsService } from './admin-coupons.service';
 import { billingError } from './billing-checkout.service';
 import { deriveStatus } from './billing-overview';
 import { BillingLedgerService, type Paged } from './billing-ledger.service';
+import { BillingModeService } from './billing-mode.service';
 import { BillingPlanChangeService } from './billing-plan-change.service';
 import {
   checkCoupon,
@@ -104,7 +105,23 @@ export class AdminSubscriptionsService {
     private readonly platformConfig: PlatformConfigService,
     // Optional so unit tests can leave it out (then no invoice email).
     @Optional() private readonly invoiceMailer?: BillingInvoiceMailer,
+    // Optional so unit tests can leave it out (then treated as online).
+    @Optional() private readonly mode?: BillingModeService,
   ) {}
+
+  /**
+   * Manual mode: payments and discounts go through the org's request (Mark as
+   * paid → Approve, and its coupon), so these org-level actions are refused.
+   */
+  private async refuseInManualMode(what: 'payment' | 'coupon') {
+    if (!this.mode || (await this.mode.getMode()).mode !== 'manual') return;
+    throw billingError(
+      'use_request',
+      what === 'payment'
+        ? "Online payments are off, so payments are recorded on the organisation's request. Use the pending request instead (Package requests → Mark as paid)."
+        : "Online payments are off, so coupons are added on the organisation's request. Use the pending request instead (Package requests → Mark as paid → Coupon).",
+    );
+  }
 
   /* --------------------------------------------------------------- list */
 
@@ -304,6 +321,8 @@ export class AdminSubscriptionsService {
       couponCode: coupon?.code ?? null,
       renewalAmount: ov.renewalAmount ?? 0,
       graceDays: ov.graceDays,
+      // Manual mode hides "Mark paid offline" and "Apply coupon" (requests do both).
+      paymentMode: ov.paymentMode,
       timeline,
       payments,
       coupon: coupon
@@ -399,7 +418,20 @@ export class AdminSubscriptionsService {
       receivedOn: string;
     },
   ) {
+    await this.refuseInManualMode('payment');
     const sub = await this.sub(orgId);
+    // Only for renewals the org didn't request: a waiting request is paid
+    // through its own Mark as paid, so it can't be applied twice.
+    const waiting = await this.prisma.packageChangeRequest.findFirst({
+      where: { orgId, status: 'pending' },
+      select: { id: true },
+    });
+    if (waiting) {
+      throw billingError(
+        'request_pending',
+        'This organisation has a pending plan change request. Use Mark as paid on the pending request (Package requests) instead.',
+      );
+    }
     const amountPaise = Math.round(dto.amount * 100);
     if (!(amountPaise > 0))
       throw billingError('amount_required', 'Enter the amount received.');
@@ -467,6 +499,7 @@ export class AdminSubscriptionsService {
 
   /** Attach a coupon to the organisation's next renewals. */
   async applyCoupon(orgId: string, actorId: string, rawCode: string) {
+    await this.refuseInManualMode('coupon');
     const sub = await this.sub(orgId);
     if (isFreePlan(sub.plan)) {
       throw billingError(

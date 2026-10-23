@@ -34,9 +34,11 @@ import {
 } from '../package-change-requests/package-change-requests.service';
 import { BillingModeService, type BillingMode } from './billing-mode.service';
 import {
+  isOverdue,
   MIN_ONLINE_PAISE,
   quoteCheckout,
   QuoteError,
+  quoteOverdueChange,
   quoteRenewal,
   toRupees,
   type Interval,
@@ -44,8 +46,8 @@ import {
   type QuotePlan,
 } from './checkout-quote';
 import { expireStaleCheckouts } from './checkout-state';
+import { findCouponFor } from './coupon-lookup';
 import {
-  checkCoupon,
   normaliseCouponCode,
   renewalsCoveredAfterFirst,
   withCoupon,
@@ -208,13 +210,8 @@ export class BillingCheckoutService implements OnModuleInit {
         BILLING_DETAILS_INCOMPLETE,
       );
     }
-    if (renewal && ctx.mode.mode === 'manual') {
-      // No online payment: a Super Admin renews it (Subscriptions → Renew).
-      throw billingError(
-        'renewal_manual',
-        "Online payment isn't available for your account, so our team renews your plan. We'll contact you before it's due.",
-      );
-    }
+    // Manual mode: a renewal is a request too (Request renewal), handled by the
+    // Super Admin like any other: Mark as paid → Approve.
     // Never charge differently from what was shown: a bad code is refused.
     if (ctx.couponError) throw billingError('coupon_invalid', ctx.couponError);
     // Never take money for a plan the org doesn't fit (fulfil would hold it).
@@ -292,7 +289,11 @@ export class BillingCheckoutService implements OnModuleInit {
         orgId,
         userId,
         { targetPlanId: q.toPlan.id, billingCycle: q.toInterval },
-        { usage: ctx.usageConflict ? 'after_retention' : 'strict' },
+        {
+          usage: ctx.usageConflict ? 'after_retention' : 'strict',
+          // A renewal (or an overdue change) may be for the plan the org is on.
+          renewal: q.kind === 'renewal',
+        },
       );
       requestId = res.request.id;
     } catch (e) {
@@ -465,6 +466,7 @@ export class BillingCheckoutService implements OnModuleInit {
       toInterval: q.toInterval,
       kind: q.kind,
       fromRenewsAt: q.fromRenewsAt,
+      overdue: q.overdue ?? false,
       couponId: q.coupon?.id ?? null,
       couponDiscountPaise: q.couponDiscountPaise,
       subtotalPaise: q.subtotalPaise,
@@ -789,45 +791,34 @@ export class BillingCheckoutService implements OnModuleInit {
     const base = { mode, buyer, seller, missingDetails: org.missing };
     try {
       if (purpose === 'renewal') {
-        let quote = quoteRenewal({
-          now,
-          current,
-          ...parties,
-          notifyDays: expiry.notifyDays,
-          requested: { planId, interval },
-        });
-        // A first_n / forever coupon still on the subscription discounts it,
-        // while it covers the plan the next term is on.
-        const left = sub?.couponRenewalsLeft ?? null;
-        if (sub?.couponId && (left === null || left > 0)) {
-          const coupon = await this.prisma.coupon.findUnique({
-            where: { id: sub.couponId },
-          });
-          if (
-            coupon &&
-            coupon.planIds.includes(quote.toPlan.id) &&
-            (coupon.interval === 'any' || coupon.interval === quote.toInterval)
-          ) {
-            quote = withCoupon(
-              quote,
-              coupon,
-              parties,
-              left === null ? null : left - 1,
-            );
-          }
-        }
+        const quote = await this.withRenewalCoupon(
+          quoteRenewal({
+            now,
+            current,
+            ...parties,
+            notifyDays: expiry.notifyDays,
+            requested: { planId, interval },
+          }),
+          sub,
+          parties,
+        );
         // Same rule as fulfil: a renewal on the same plan isn't re-checked;
-        // one that switches to a scheduled smaller plan is.
+        // one that switches to a scheduled smaller plan is (in manual mode,
+        // "choose what stays" covers what can be paused).
         const next = active.find((p) => p.id === quote.toPlan.id);
-        const usageError =
-          next && next.id !== sub?.planId
-            ? await this.usageErrorFor(orgId, next)
-            : null;
+        if (next && next.id !== sub?.planId) {
+          return {
+            ...base,
+            quote,
+            couponError: null,
+            ...(await this.usageFor(orgId, next, mode)),
+          };
+        }
         return {
           ...base,
           quote,
           couponError: null,
-          usageError,
+          usageError: null,
           usageConflict: null,
         };
       }
@@ -838,6 +829,37 @@ export class BillingCheckoutService implements OnModuleInit {
           'plan_not_found',
           'That plan is not available. Pick another one.',
         );
+      }
+      // Manual mode with the renewal overdue (grace): any paid plan is a
+      // request at its full price, continuing the missed term; a renewal
+      // coupon on the subscription applies as it would to the renewal.
+      if (mode.mode === 'manual' && current && isOverdue(current.status)) {
+        const quote = await this.withRenewalCoupon(
+          quoteOverdueChange({
+            now,
+            target: asQuotePlan(target),
+            interval,
+            current,
+            ...parties,
+          }),
+          sub,
+          parties,
+        );
+        if (target.id === sub?.planId) {
+          return {
+            ...base,
+            quote,
+            couponError: null,
+            usageError: null,
+            usageConflict: null,
+          };
+        }
+        return {
+          ...base,
+          quote,
+          couponError: null,
+          ...(await this.usageFor(orgId, target, mode)),
+        };
       }
       let quote = quoteCheckout({
         now,
@@ -859,34 +881,75 @@ export class BillingCheckoutService implements OnModuleInit {
             renewalsCoveredAfterFirst(found.coupon),
           );
       }
-      // Manual mode: being over on users / projects / published pages is fine
-      // once they've chosen what stays — it's paused when the request is approved.
-      if (mode.mode === 'manual') {
-        const over = await usageOverLimits(this.prisma, orgId, target);
-        if (over.length && over.every((o) => o.fixable)) {
-          const saved = await savedChoiceFor(this.prisma, orgId, target.id);
-          const items = over.map((o) => ({
-            key: o.key as 'users' | 'projects' | 'landingPages',
-            limit: o.limit,
-            used: o.used,
-          }));
-          const choicesFit =
-            !!saved && items.every((i) => saved[i.key].length <= i.limit);
-          return {
-            ...base,
-            quote,
-            couponError,
-            usageError: null,
-            usageConflict: { items, choicesFit },
-          };
-        }
-      }
-      const usageError = await this.usageErrorFor(orgId, target);
-      return { ...base, quote, couponError, usageError, usageConflict: null };
+      return {
+        ...base,
+        quote,
+        couponError,
+        ...(await this.usageFor(orgId, target, mode)),
+      };
     } catch (e) {
       if (e instanceof QuoteError) throw billingError(e.code, e.message);
       throw e;
     }
+  }
+
+  /**
+   * Whether the org fits the plan. Manual mode: being over on users /
+   * projects / published pages is fine once they've chosen what stays — it's
+   * paused when the request is approved (usageConflict). Otherwise a usageError.
+   */
+  private async usageFor(
+    orgId: string,
+    target: { id: string; name?: string; limits: unknown },
+    mode: BillingMode,
+  ): Promise<Pick<QuoteContext, 'usageError' | 'usageConflict'>> {
+    if (mode.mode === 'manual') {
+      const over = await usageOverLimits(this.prisma, orgId, target);
+      if (over.length && over.every((o) => o.fixable)) {
+        const saved = await savedChoiceFor(this.prisma, orgId, target.id);
+        const items = over.map((o) => ({
+          key: o.key as 'users' | 'projects' | 'landingPages',
+          limit: o.limit,
+          used: o.used,
+        }));
+        const choicesFit =
+          !!saved && items.every((i) => saved[i.key].length <= i.limit);
+        return { usageError: null, usageConflict: { items, choicesFit } };
+      }
+    }
+    return {
+      usageError: await this.usageErrorFor(orgId, target),
+      usageConflict: null,
+    };
+  }
+
+  /**
+   * A first_n / forever coupon still on the subscription discounts a renewal
+   * (or an overdue change), while it covers the plan the next term is on.
+   */
+  private async withRenewalCoupon(
+    quote: Quote,
+    sub: { couponId: string | null; couponRenewalsLeft: number | null } | null,
+    parties: Pick<Parameters<typeof withCoupon>[2], 'buyer' | 'seller'>,
+  ): Promise<Quote> {
+    const left = sub?.couponRenewalsLeft ?? null;
+    if (!sub?.couponId || (left !== null && left <= 0)) return quote;
+    const coupon = await this.prisma.coupon.findUnique({
+      where: { id: sub.couponId },
+    });
+    if (
+      coupon &&
+      coupon.planIds.includes(quote.toPlan.id) &&
+      (coupon.interval === 'any' || coupon.interval === quote.toInterval)
+    ) {
+      return withCoupon(
+        quote,
+        coupon,
+        parties,
+        left === null ? null : left - 1,
+      );
+    }
+    return quote;
   }
 
   /** Look up and check an entered coupon for this org and quote. */
@@ -899,25 +962,13 @@ export class BillingCheckoutService implements OnModuleInit {
   ): Promise<
     { coupon: CouponRule & { description: string } } | { error: string }
   > {
-    const coupon = await this.prisma.coupon.findUnique({ where: { code } });
-    if (!coupon) {
-      return { error: `There's no coupon called ${code}. Check the spelling.` };
-    }
-    const redeemers = await this.prisma.couponRedemption.findMany({
-      where: { couponId: coupon.id },
-      select: { organisationId: true },
-      distinct: ['organisationId'],
-    });
-    const check = checkCoupon(coupon, {
-      now,
+    return findCouponFor(this.prisma, code, {
       orgId,
       planId: quote.toPlan.id,
       interval: quote.toInterval,
-      planNames: Object.fromEntries(plans.map((p) => [p.id, p.name])),
-      usesSoFar: redeemers.length,
-      orgHasUsed: redeemers.some((r) => r.organisationId === orgId),
+      now,
+      plans,
     });
-    return check.ok ? { coupon } : { error: check.reason };
   }
 
   /** The "plan allows N projects, you have M" message, or null when the org fits. */
@@ -946,7 +997,9 @@ export class BillingCheckoutService implements OnModuleInit {
       renewal ? 'renewal' : 'purchase',
       renewal ? null : dto.couponCode,
     );
-    return toPreview(ctx, renewal);
+    // An overdue change (manual mode, grace) is priced like a renewal: its
+    // coupon comes from the subscription, not a code.
+    return toPreview(ctx, renewal || ctx.quote.kind === 'renewal');
   }
 }
 

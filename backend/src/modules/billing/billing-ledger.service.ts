@@ -6,6 +6,11 @@ import { GST_STATES } from './gst';
 import { invoiceDocumentUrl, type InvoiceParty } from './invoice.util';
 import type { WhatStays } from '../../common/utils/retention.util';
 import type { OrgPlanRequestV2 } from './billing.types';
+import {
+  requestLabel,
+  requestPaymentView,
+} from '../package-change-requests/package-change-requests.service';
+import { requestQuoteView } from './request-coupon';
 
 /** The contract's Invoice. */
 export interface InvoiceV2 {
@@ -148,7 +153,24 @@ export class BillingLedgerService {
             priceYearly: true,
           },
         },
-        billingCheckout: { select: { kind: true, taxablePaise: true } },
+        billingCheckout: {
+          select: {
+            kind: true,
+            taxablePaise: true,
+            totalPaise: true,
+            fromPlanId: true,
+            toPlanId: true,
+            overdue: true,
+            couponId: true,
+            couponDiscountPaise: true,
+            cgstPaise: true,
+            sgstPaise: true,
+            igstPaise: true,
+            quoteBeforeCoupon: true,
+            coupon: { select: { code: true } },
+          },
+        },
+        offlinePayment: true,
       },
     });
     return page(
@@ -183,6 +205,13 @@ export class BillingLedgerService {
               : (r.reviewedAt ?? r.updatedAt).toISOString(),
           rejectionReason: r.status === 'rejected' ? r.rejectionReason : null,
           whatStays: (r.whatStays as WhatStays | null) ?? null,
+          ...requestLabel(c, r.targetPlan.name),
+          total: c ? toRupees(c.totalPaise) : null,
+          payment: r.offlinePayment
+            ? requestPaymentView(r.offlinePayment)
+            : null,
+          movedToBasicAt: r.movedToBasicAt?.toISOString() ?? null,
+          quote: c ? requestQuoteView(c) : null,
         };
       }),
       p,
@@ -213,8 +242,13 @@ export class BillingLedgerService {
           },
         },
       }),
+      // Payments marked against a request count once it is approved
+      // (awaiting approval / refund due are shown on the request instead).
       this.prisma.offlinePayment.findMany({
-        where: orgId ? { organisationId: orgId } : {},
+        where: {
+          ...(orgId ? { organisationId: orgId } : {}),
+          status: { in: ['received', 'refunded'] },
+        },
         orderBy: { receivedOn: 'desc' },
         take: 1000,
       }),

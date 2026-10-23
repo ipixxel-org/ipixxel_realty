@@ -1144,6 +1144,9 @@ model PackageChangeRequest {
   // org's "choose what stays" when the request was sent / last changed, and
   // what was actually kept once approved. Shown on Settings → Billing → Requests.
   whatStays       Json?                      @map("what_stays")
+  // Manual mode, Option A: set when grace ended (or the plan ended) while this
+  // request was still pending — the org fell back to Basic while waiting.
+  movedToBasicAt  DateTime?                  @map("moved_to_basic_at")
   reviewedAt      DateTime?                  @map("reviewed_at")
   reviewedById    String?                    @map("reviewed_by_id")
   createdAt       DateTime                   @default(now()) @map("created_at")
@@ -1156,6 +1159,8 @@ model PackageChangeRequest {
   targetPlan   Plan         @relation("TargetPlanRequests", fields: [targetPlanId], references: [id], onDelete: Restrict)
   // Billing v2: set when the request was raised by a manual-mode checkout.
   billingCheckout BillingCheckout?
+  // Manual mode: the payment the Super Admin marked against it (before approving).
+  offlinePayment  OfflinePayment?
 
   @@index([orgId])
   @@index([status])
@@ -1327,6 +1332,11 @@ model BillingCheckout {
   // Coupon taken off before GST (step 5); the discount is part of taxable.
   couponId               String?               @map("coupon_id")
   couponDiscountPaise    Int                   @default(0) @map("coupon_discount_paise")
+  // Quoted while the renewal was overdue (grace): full price, the missed term continues.
+  overdue                Boolean               @default(false)
+  // Manual mode: the amounts before the Super Admin added a coupon to the
+  // request (restored by Remove); null = no coupon added on the request.
+  quoteBeforeCoupon      Json?                 @map("quote_before_coupon")
   createdAt              DateTime              @default(now()) @map("created_at")
   updatedAt              DateTime              @updatedAt @map("updated_at")
 
@@ -1443,10 +1453,14 @@ model OfflinePayment {
   reference      String   @default("")
   receivedOn     DateTime @map("received_on")
   note           String?
-  // received | refunded
+  // received | refunded | awaiting_approval (marked paid on a pending request)
+  // | refund_due (that request was rejected — refunded outside the app)
   status         String   @default("received")
   recordedById   String?  @map("recorded_by_id")
   createdAt      DateTime @default(now()) @map("created_at")
+  // Manual mode: the plan change request this payment was marked against.
+  packageChangeRequestId String?               @unique @map("package_change_request_id")
+  packageChangeRequest   PackageChangeRequest? @relation(fields: [packageChangeRequestId], references: [id], onDelete: SetNull)
 
   @@index([organisationId])
   @@map("offline_payments")

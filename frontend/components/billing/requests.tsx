@@ -3,8 +3,8 @@
 import { useState } from "react";
 import { useToast } from "@/components/ui/toast";
 import { ListPager } from "@/components/ui/list-pager";
-import { formatDate, packagePriceText } from "@/lib/billing/pricing";
-import { REQUEST_STATUS_LABEL } from "@/lib/billing/requests";
+import { formatDate, formatINR, packagePriceText } from "@/lib/billing/pricing";
+import { MOVED_TO_BASIC_WHILE_WAITING, requestPaymentText, requestPriceText, requestStage, requestTitle } from "@/lib/billing/requests";
 import type { OrgPlanRequest, WhatStays } from "@/lib/billing/types";
 import { useBillingEnv, useBillingQuery, useOrgBilling } from "./context";
 import { BillingDialog, DialogActions } from "./dialog";
@@ -132,6 +132,9 @@ export function WithdrawRequestButton({
   );
 }
 
+/** Once our team has recorded the payment the request can't be withdrawn here. */
+export const CONTACT_TO_WITHDRAW = "Contact us to withdraw";
+
 /** Settings → Billing → Requests: every plan change request, newest first, 10 a page. */
 export function RequestsTable({ pageSize = 10 }: { pageSize?: number }) {
   const [page, setPage] = useState(1);
@@ -139,7 +142,7 @@ export function RequestsTable({ pageSize = 10 }: { pageSize?: number }) {
   const { data, error } = useBillingQuery((c) => c.listOrgRequests({ page, pageSize }), [page, pageSize, version]);
   return (
     <>
-      <Section title="Plan change requests" sub="Requests sent to our team while online payment is off, newest first" flush>
+      <Section title="Plan change requests" sub="Renewals and plan changes sent to our team while online payment is off, newest first" flush>
         {error ? (
           <div style={{ padding: 16 }}>
             <ErrorNote message={error} />
@@ -170,18 +173,40 @@ export function RequestsTable({ pageSize = 10 }: { pageSize?: number }) {
                       <div className="bl-muted bl-small">{r.requestedBy ?? "—"}</div>
                     </td>
                     <td>
-                      {r.fromPlan ? `${r.fromPlan.name} → ` : ""}
-                      <b>{r.toPlan.name}</b>
-                      <div className="bl-muted bl-small" style={{ textTransform: "capitalize" }}>
-                        {r.interval}
+                      <b>{requestTitle(r)}</b>
+                      {r.overdue ? (
+                        <span className="badge b-amber" style={{ marginLeft: 6 }}>
+                          overdue renewal
+                        </span>
+                      ) : null}
+                      <div className="bl-muted bl-small">
+                        {r.fromPlan ? `${r.fromPlan.name} → ${r.toPlan.name}` : r.toPlan.name} · <span style={{ textTransform: "capitalize" }}>{r.interval}</span>
                       </div>
+                      {r.movedToBasicAt ? (
+                        <div className="bl-small" style={{ marginTop: 4, color: "var(--amber-700, #b45309)" }}>
+                          {MOVED_TO_BASIC_WHILE_WAITING} ({formatDate(r.movedToBasicAt)})
+                        </div>
+                      ) : null}
                     </td>
-                    <td style={{ whiteSpace: "nowrap" }}>{requestAmount(r) ?? <span className="bl-muted">—</span>}</td>
+                    <td style={{ whiteSpace: "nowrap" }}>
+                      {/* With a coupon: "₹1,499 − ₹300 coupon + GST". */}
+                      {r.quote?.couponCode ? <span data-testid="request-coupon-amount">{requestPriceText(r.quote)}</span> : (requestAmount(r) ?? <span className="bl-muted">—</span>)}
+                      {r.total != null ? (
+                        <div className="bl-muted bl-small">
+                          {formatINR(r.total)} incl. GST{r.quote?.couponCode ? ` · coupon ${r.quote.couponCode}` : ""}
+                        </div>
+                      ) : null}
+                    </td>
                     <td>
                       <WhatStaysCell whatStays={r.whatStays} pending={r.status === "pending"} />
                     </td>
                     <td>
-                      <span className={`badge ${STATUS_BADGE[r.status]}`}>{REQUEST_STATUS_LABEL[r.status]}</span>
+                      <span className={`badge ${STATUS_BADGE[r.status]}`}>{requestStage(r)}</span>
+                      {r.payment && r.payment.status !== "refund_due" ? (
+                        <div className="bl-small bl-muted" style={{ marginTop: 4 }}>
+                          {requestPaymentText(r.payment)}
+                        </div>
+                      ) : null}
                       {r.status === "rejected" && r.rejectionReason ? (
                         <div className="bl-small" style={{ marginTop: 4, maxWidth: 320 }}>
                           <b>Reason:</b> {r.rejectionReason}
@@ -190,9 +215,14 @@ export function RequestsTable({ pageSize = 10 }: { pageSize?: number }) {
                     </td>
                     <td style={{ whiteSpace: "nowrap" }}>{r.decidedAt ? formatDate(r.decidedAt) : <span className="bl-muted">—</span>}</td>
                     <td>
-                      {r.status === "pending" ? (
+                      {r.status !== "pending" ? null : r.payment ? (
+                        // Paid: our team has the money, so withdrawing goes through them.
+                        <span className="bl-muted bl-small" title="We've received the payment for this request">
+                          {CONTACT_TO_WITHDRAW}
+                        </span>
+                      ) : (
                         <WithdrawRequestButton requestId={r.id} toPlan={r.toPlan.name} onWithdrawn={() => setVersion((v) => v + 1)} />
-                      ) : null}
+                      )}
                     </td>
                   </tr>
                 ))}

@@ -163,6 +163,43 @@ export interface OrgPlanRequest {
   rejectionReason: string | null;
   /** What they chose to keep on the new plan; null when nothing had to be chosen. */
   whatStays: WhatStays | null;
+  /** "Renewal of Pro" (same plan) or "Change to Starter". */
+  label?: string;
+  /** Sent while the renewal was overdue (grace): full price, the missed term continues. */
+  overdue?: boolean;
+  /** Total incl. GST in rupees; null for older requests. */
+  total?: number | null;
+  /** The payment our team recorded for it (Mark as paid); null until then. */
+  payment?: RequestPayment | null;
+  /** The org fell back to Basic while this request was waiting (Option A). */
+  movedToBasicAt?: string | null;
+  /** How the total is made up; shows a coupon on it. Null for older requests. */
+  quote?: RequestQuote | null;
+}
+
+/** A request's price: "₹1,499 − ₹300 coupon (CODE) + GST ₹215.82 = ₹1,414.82" (rupees). */
+export interface RequestQuote {
+  /** Before the coupon and GST (after any proration credit). */
+  price: number;
+  couponCode: string | null;
+  couponDiscount: number;
+  gst: number;
+  total: number;
+  /** Our team added the coupon on the request (Remove restores the original quote). */
+  couponAdded: boolean;
+}
+
+/** A payment the Super Admin marked against a request (manual mode). */
+export interface RequestPayment {
+  id: string;
+  /** Rupees received, GST included. */
+  amount: number;
+  method: string;
+  reference: string;
+  receivedOn: string;
+  note: string | null;
+  /** awaiting_approval → received on approval; refund_due when the request was rejected. */
+  status: "awaiting_approval" | "received" | "refund_due" | "refunded";
 }
 
 /** The org's latest package request, when a Super Admin rejected it — shown with the reason. */
@@ -184,6 +221,14 @@ export interface PendingUpgrade {
   toPlan: { id: PlanId; name: string };
   interval: BillingInterval;
   createdAt: string;
+  /** "Renewal of Pro" or "Change to Starter". */
+  label?: string;
+  /** Sent while the renewal was overdue. */
+  overdue?: boolean;
+  /** Manual mode: our team has recorded the payment; waiting for approval. */
+  paid?: boolean;
+  /** The org fell back to Basic while waiting. */
+  movedToBasicAt?: string | null;
 }
 
 export interface UsageItem {
@@ -647,6 +692,8 @@ export interface AdminPaymentRow extends PaymentRecord {
 export interface SubscriptionDetail extends SubscriptionRow {
   renewalAmount: number;
   graceDays: number;
+  /** Manual mode hides "Mark paid offline" and "Apply coupon" (the org's request does both). */
+  paymentMode?: PaymentMode;
   timeline: TimelineEvent[];
   payments: AdminPaymentRow[];
   coupon: CouponRow | null;

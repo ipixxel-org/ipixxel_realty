@@ -27,6 +27,8 @@ client is the reference behaviour (see `frontend/lib/billing/__tests__/mock-clie
 | Fixes after testing | `listOrgCoupons`, `getCompanyDetails`, `saveCompanyDetails`, `runLifecycleCheck`; `BillingOverview.renewalBreakdown`, `Invoice.checkoutId`, `Coupon.showToCustomers`; reminders stored | `subscription-lifecycle.util.ts` (grace rule, reminders), `common/utils/billing-clock.util.ts`, `admin-billing.service.ts`, `admin-coupons.service.ts` (`orgCoupons`); migration `20261015114705_billing_v2_fixes` |
 | Billing details from the org profile | `BillingOverview.billingProfile` (always set) + `billingDetailsMissing`; GSTIN and the state dropdown in Settings → General (invoice name = organisation name); `saveBillingProfile` / `getBillingProfile` and `PreviewCheckoutRequest.billingState` removed | `billing/org-billing-details.ts`, `common/utils/org-profile-audit.util.ts` (save check); frontend `components/ui/state-select.tsx`, `lib/billing/details.ts`; migration `20261022090000_org_profile_billing_details` |
 | Manual-mode requests | `listOrgRequests`, `withdrawRequest`; `CheckoutPreview.usageConflict`; `PendingUpgrade.fromPlan`; `BillingOverview.rejectedUpgrade`; approval applies "choose what stays" | `billing-ledger.service.ts` (`listRequests`), `checkout-state.ts`, `common/utils/plan-quota.util.ts` (`usageOverLimits`, `assertPlanFitsAfterRetention`), `package-change-requests.service.ts` (`pendingRequestMessage`, required rejection reason); frontend `components/billing/requests.tsx`, `lib/billing/requests.ts` |
+| Manual mode: Mark as paid → Approve | Request renewal (`startCheckout` `purpose: "renewal"` in manual mode), overdue changes at full price, `OrgPlanRequest.label` / `overdue` / `total` / `payment` / `movedToBasicAt`, `PendingUpgrade.label` / `paid`; Super Admin `PUT` / `DELETE /admin/package-change-requests/:id/payment` | `checkout-quote.ts` (`quoteOverdueChange`), `package-change-requests.service.ts` (`markPaid`, approve / reject), `plan-change.util.ts` (`periodStart`), `moveToFreePlan` (Option A marker); frontend `components/billing/admin/mark-paid-dialog.tsx`; migration `20261024090000_manual_request_payments` |
+| Manual mode: coupon on the request | Super Admin `PUT` / `DELETE /admin/package-change-requests/:id/coupon`; Mark as paid amount = the request total; `OrgPlanRequest.quote` / admin row `quote`; `SubscriptionDetail.paymentMode`; org-level offline payment / apply coupon refused in manual mode (`use_request`) | `package-change-requests.service.ts` (`applyCoupon` / `removeCoupon`), `request-coupon.ts`, `coupon-lookup.ts` (`findCouponFor`, shared with checkout), `coupon-settlement.ts`; migration `20261025090000_request_coupon` |
 | Fixes after testing (2) | one `plan_locked` error; list filters `viewOnly` / `offline` / `paused` / `needsReassign`; invoice email; `packagePriceText` | `common/utils/plan-lock.util.ts`, `billing-invoice-mailer.service.ts`, `lead-assignee.util.ts`; frontend `lib/plan-lock.ts`, `PlanLockBadge` (`components/billing/locked.tsx`); migration `20261016093000_billing_invoice_email` |
 
 Every function is real except `updatePaymentMethod`, which stays unimplemented on purpose: renewals are
@@ -224,6 +226,83 @@ period rule (`applyPlanChange`).
   while the latest request is a rejected one; the Billing page shows it with the reason. The
   Super Admin must give a reason (10–500 characters).
 
+### Manual mode: every paid action is a request (Mark as paid → Approve)
+
+Online payments off: renewals and plan changes are requests the Super Admin handles in one place —
+Package Requests → Open → the org's "Package requests" section: **Mark as paid**, then **Approve**
+(or **Reject**). Online mode is unchanged.
+
+- **Request kinds** (`OrgPlanRequest.label`, also on the admin rows and `PendingUpgrade.label`):
+  "Renewal of Pro" (a renewal-kind checkout for the plan the org is on) or "Change to Starter";
+  `overdue: true` (shown as an "overdue renewal" tag) when it was sent while the renewal was
+  overdue — stored as `billing_checkouts.overdue`.
+- **Request renewal:** `startCheckout({ purpose: "renewal" })` in manual mode creates a request at
+  the renewal quote (today's price, renewal coupon, GST; a scheduled smaller plan is renewed at its
+  price) instead of refusing — **`renewal_manual` is removed**. Open from the renewal window
+  (`notifyDays` before `renewsAt`) through grace. The renewal banner, the 3-day popup, the grace
+  banner and the overview action row show "Request renewal · ₹X + GST" (→ the renewal request
+  screen, `checkout?…&renew=1`, button "Send renewal request"); "Renewal requested" (disabled) while
+  it waits. Approval continues the period from `renewsAt` (`renewalPeriodEnd`).
+- **Renewal overdue (grace, `past_due`):** any paid plan — same, bigger or smaller, either interval —
+  is a request at that plan's **full price + GST** (`quoteOverdueChange`, kind `renewal`, no
+  proration: nothing was paid for the overdue days; a renewal coupon on the subscription applies as it
+  does for renewals; `couponsEnabled: false`). Approval continues the period from the missed
+  `renewsAt`. What doesn't fit is paused with the org's "choose what stays" for that plan (the
+  `usageConflict` flow) or the default picks. The plans page links every paid plan to the request
+  screen. **Basic** moves the org at once (fall back to Basic: extras paused, `movedToBasicAt`) after
+  "Move to Basic now?" — no request. `POST /org/billing/cancel` does this in grace in manual mode;
+  `POST /org/billing/downgrade` to a paid plan sends the change request — **`downgrade_not_now` is no
+  longer returned in manual mode** (online keeps it).
+- **Option A — no hold:** when grace ends with a request still pending the org still falls back to
+  Basic; the request stays pending and gets `package_change_requests.moved_to_basic_at`
+  (`OrgPlanRequest.movedToBasicAt`, shown as "Org moved to Basic while waiting"). Approved later, the
+  org moves to the requested plan, everything that fits comes back, and the new term starts on the
+  payment date entered in Mark as paid (`applyPlanChange({ periodStart })`).
+- **Mark as paid** (Super Admin, `PUT /admin/package-change-requests/:id/payment`
+  `{ method, reference?, receivedOn, note? }` — the amount is always the request's current total incl.
+  GST, read-only in the dialog (an `amount` sent is ignored; a ₹0 request → `nothing_to_pay`); method Bank transfer / UPI / Cheque / Cash / Other; reference required except for
+  Cash; `receivedOn` YYYY-MM-DD, not in the future). Stored in `billing.offline_payments` with
+  `package_change_request_id` (unique) and `status: "awaiting_approval"`. Sending it again edits it;
+  `DELETE …/payment` clears it — both only while the request is pending. Codes: `amount_required`,
+  `reference_required`, `date_invalid`, `date_in_future`, `request_not_pending`,
+  `request_without_checkout` (older requests are approved as before). The rows show "Paid · ₹1,178.82
+  · UPI · UTR 12345 · 23 Oct" (`payment` on the admin rows and `OrgPlanRequest.payment`).
+- **Coupon on the request** (top of the Mark as paid dialog: code + Apply / Remove;
+  `PUT /admin/package-change-requests/:id/coupon { code }`, `DELETE …/coupon`; pending requests only,
+  `request_not_pending`). Checked like checkout (`findCouponFor` → `checkCoupon`: plan, interval,
+  dates, uses, once per org) with the same messages (`coupon_invalid`, e.g. "There's no coupon called
+  NOPE. Check the spelling."). The request is re-quoted — coupon off the price before GST (after any
+  proration credit), GST again on the rest — and saved on its checkout (`couponId`,
+  `couponDiscountPaise`, taxable, GST, total), so the request total, the org's Requests tab and the
+  invoice use it. It replaces any coupon the quote had (e.g. a renewal coupon). The original amounts are
+  kept in `billing_checkouts.quote_before_coupon`; Remove restores them. Changing it after Mark as paid
+  clears the recorded payment (`paymentCleared: true`; the dialog asks first). Both return
+  `{ quote, paymentCleared }`. `quote` (also on the admin rows and `OrgPlanRequest.quote`):
+  `{ price, couponCode, couponDiscount, gst, total, couponAdded }` — shown as "₹1,499 − ₹300 coupon
+  (SAVE300) + GST ₹215.82 = ₹1,414.82" in the dialog and "₹1,499 − ₹300 coupon + GST" on the rows.
+  A 100% coupon makes it ₹0: no Mark as paid ("Edit coupon" opens the dialog), Approve directly, no
+  invoice (as a ₹0 checkout). On approval the redemption is recorded and a first_n / forever coupon
+  attaches to the subscription for later renewals, as for online purchases — on a renewal request too.
+- **Approve** needs the payment first (`payment_required`) unless the total is ₹0. No amount
+  confirm (the amount is always the total). Then, once, in one transaction:
+  the plan is applied (`applyPlanChange`, the period rules above), the coupon settled, the GST invoice
+  issued from that payment — the request's quoted breakdown when the amount equals its total, else the
+  offline rule (amount GST-inclusive) — with `checkoutId` and `offlinePaymentId`, the payment becomes
+  `received`; after commit the invoice is emailed (existing mailer) and the org is notified. A second
+  approval is refused (the request and the checkout's `fulfilledAt` are claimed conditionally), so
+  nothing is extended or invoiced twice.
+- **Reject** (reason still required): a paid request's dialog warns "This request was marked paid
+  (₹X). Refund the customer outside the app."; the payment is kept as `refund_due` ("rejected – refund
+  due"); no invoice. Payments `awaiting_approval` / `refund_due` are not in Payments & Invoicing.
+- **Org-level "Mark paid offline" and "Apply coupon"** (Subscriptions → org): hidden in manual mode
+  (`SubscriptionDetail.paymentMode`), and the endpoints refuse them (`use_request`, "… Use the pending
+  request instead …"). "Extend grace" stays. Online mode is unchanged; there "Mark paid offline" is
+  still refused while the org has a pending request (`request_pending`).
+- **Org side:** the Requests tab shows "Waiting for payment" → "Payment received – waiting for
+  approval" → Approved / Rejected (with the reason) / Withdrawn. Withdraw works until the request is
+  marked paid; after that "Contact us to withdraw" (`POST …/withdraw` → `request_paid`). The pending
+  banner says the same.
+
 ### Billing details from the org profile
 
 - **Single source of truth:** Settings → General (`PATCH /org/settings`, Super Admin `PATCH
@@ -299,12 +378,13 @@ period rule (`applyPlanChange`).
   so "Pay now · ₹X" equals the charge.
 - **When:** from `notifyDays` before `renewsAt` (when the reminder fires), through grace, and
   after expiry; earlier → `renewal_not_due`. Free plan / no subscription → `nothing_to_renew`.
+  (Manual mode: a renewal is a request — see "Manual mode: every paid action is a request".)
 - **New term** (`renewalPeriodEnd`, shared by quote and fulfilment): while the term or its grace
   is running (active / trial / past_due) it continues from `renewsAt` — paying early loses no
   days, paying in grace covers the days used; once expired it starts on the payment day. Status
   goes back to `active`, grace cleared.
-- **Online only:** manual mode answers `renewal_manual` — our team renews it with the existing
-  Subscriptions → Renew action. A pending upgrade request doesn't block a renewal.
+- **Online:** a pending upgrade request doesn't block a renewal. **Manual mode** (since the "Mark as
+  paid → Approve" rework): no longer `renewal_manual` — the renewal is a request ("Request renewal").
 - **Applied once:** the checkout stores `fromRenewsAt` (the subscription's `renewsAt` when
   quoted); fulfilment applies only while it still matches, so a second paid renewal (an old tab,
   or a Super Admin renewal meanwhile) goes to `needs_review` instead of extending twice. Usage
@@ -333,7 +413,8 @@ period rule (`applyPlanChange`).
   `nothing_scheduled`.
 - **Downgrade** (`POST /org/billing/downgrade` `{ planId, interval? }`, undo `DELETE`): a
   smaller plan, or the same plan yearly → monthly; a free target is a cancellation. Only while
-  active (not in grace: `downgrade_not_now`) and not with a pending upgrade request
+  active (not in grace: `downgrade_not_now` — online mode only; in manual mode a paid target in grace
+  is sent as a change request and Basic moves at once) and not with a pending upgrade request
   (`request_pending`). Being over the smaller plan's limits is fine since step 6 — the extras
   are paused when it starts. Other codes: `same_plan`, `not_a_downgrade`, `plan_not_found`.
 - **When the term ends:** the renewal paid before then is charged at the smaller plan's price
@@ -510,7 +591,7 @@ period rule (`applyPlanChange`).
 | `listPayments(req)` | `GET /org/billing/v2/payments?page=&pageSize=` | `PageRequest` | `Paged<PaymentRecord>` (plan payments: Razorpay + offline) |
 | `listOrgCoupons()` | `GET /org/billing/coupons` | — | `OrgCoupon[]` (reserved for the org + open ones listed for customers, with the org's status) |
 | `listOrgRequests(req)` | `GET /org/billing/requests?page=&pageSize=` (`billing:view`) | `PageRequest` (10 a page) | `Paged<OrgPlanRequest>` — newest first; `status` pending / approved / rejected / withdrawn (stored as `cancelled`); `amount` before GST + `amountNote`; `decidedAt`; `rejectionReason` when rejected |
-| `withdrawRequest(id)` | `POST /org/billing/requests/:id/withdraw` (`billing:edit`) | — | `BillingOverview` — the request becomes `cancelled` (shown as Withdrawn), its checkout `cancelled`; plan buttons work again |
+| `withdrawRequest(id)` | `POST /org/billing/requests/:id/withdraw` (`billing:edit`) | — | `BillingOverview` — the request becomes `cancelled` (shown as Withdrawn), its checkout `cancelled`; plan buttons work again. Refused once marked paid (`request_paid`) |
 
 **Login refusal for a paused user** (not part of `BillingClient`): `POST /auth/login` returns
 403 with `{ code: "account_paused", orgName, ownerName, planName, planUserLimit }`. The login
@@ -542,7 +623,10 @@ page shows the paused message (`frontend/lib/billing/paused.ts`).
 | `listAdminCheckouts(status?)` | `GET /admin/billing/checkouts?status=` | `CheckoutStatus` (default `needs_review`) | `AdminCheckoutRow[]` (latest 100) |
 
 The legacy `GET /admin/package-change-requests` rows now include `billingCheckout` (amounts in
-paise, buyer GSTIN/state) when the request came from a manual-mode checkout.
+paise, buyer GSTIN/state) when the request came from a manual-mode checkout, plus `label`,
+`overdue`, `payment` and `movedToBasicAt`. Manual mode adds `PUT` / `DELETE
+/admin/package-change-requests/:id/payment` (Mark as paid; Super Admin) — approve
+(`POST …/:id/approve`) needs it first for a request with a price.
 
 ## Payment wiring
 

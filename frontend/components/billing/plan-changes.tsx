@@ -8,7 +8,7 @@ import type { BillingInterval } from "@/lib/billing/types";
 import { BillingBanner, PicksSummary } from "./banners";
 import { useBillingEnv, useBillingQuery, useOrgBilling } from "./context";
 import { BillingDialog, DialogActions } from "./dialog";
-import { Banner, BLink, countLabel, ErrorNote, Kv, Loading, Section } from "./ui";
+import { Banner, BLink, countLabel, ErrorNote, Kv, Loading, Section, useCheckoutLive } from "./ui";
 
 function ConfirmDialog({
   open,
@@ -65,6 +65,7 @@ export function DowngradeScreen({ planId, interval: wanted }: { planId: string; 
   const [confirm, setConfirm] = useState(false);
   const [busy, setBusy] = useState(false);
   const [reason, setReason] = useState("");
+  const live = useCheckoutLive(overview);
   if (!overview || !plans) return <Loading />;
   const target = plans.find((p) => p.id === planId);
   if (!target) return <ErrorNote message="That plan doesn't exist." />;
@@ -77,6 +78,22 @@ export function DowngradeScreen({ planId, interval: wanted }: { planId: string; 
 
   if (o.downgradeTo) return <BillingBanner overview={{ ...o, status: "downgrade_scheduled" }} />;
   if (o.status === "cancellation_scheduled") return <BillingBanner overview={o} />;
+  // Manual mode with the renewal overdue: Basic happens now; a paid plan is a request.
+  const overdueManual = !live && o.paymentMode === "manual" && (o.status === "past_due" || o.status === "grace_ending");
+  if (overdueManual && !target.isFree) {
+    return (
+      <Banner
+        tone="amber"
+        icon="info"
+        title={`Your renewal is overdue — ${target.name} is a request at its full price`}
+        actions={
+          <BLink to="checkout" params={{ plan: target.id, interval: wanted ?? o.interval }} className="btn btn-primary btn-sm">
+            Request a change to {target.name}
+          </BLink>
+        }
+      />
+    );
+  }
   if (onFree || (target.rank >= o.plan.rank && !toMonthly)) {
     return (
       <Banner
@@ -95,7 +112,7 @@ export function DowngradeScreen({ planId, interval: wanted }: { planId: string; 
   // Basic uses the end-of-term move to the free plan underneath; the reason is saved with it.
   const toBasic = target.isFree;
   // The paid term is already over: moving to Basic happens straight away.
-  const now = toBasic && o.status === "expired";
+  const now = toBasic && (o.status === "expired" || overdueManual);
   const effective = now ? null : (o.graceEndsAt ?? o.periodEnd);
   const when = onDate(effective, "the end of your paid period");
   const over = o.usage.filter((u) => target.limits[u.key] !== null && u.used > target.limits[u.key]!);
@@ -225,7 +242,13 @@ export function DowngradeScreen({ planId, interval: wanted }: { planId: string; 
               ? `Move to ${target.name} now?`
               : `${toBasic ? "Move" : "Change"} to ${target.name} on ${when}?`
         }
-        message={now ? `Your ${o.plan.name} term has ended, so the move happens straight away.` : `You keep ${o.plan.name} until then.`}
+        message={
+          now
+            ? overdueManual
+              ? `Your ${o.plan.name} renewal is overdue, so the move happens straight away. Anything over ${target.name}'s limits is paused, not deleted.`
+              : `Your ${o.plan.name} term has ended, so the move happens straight away.`
+            : `You keep ${o.plan.name} until then.`
+        }
         confirmLabel={toBasic ? `Move to ${target.name}` : "Schedule plan change"}
         busy={busy}
         onClose={() => setConfirm(false)}

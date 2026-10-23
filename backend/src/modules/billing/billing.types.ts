@@ -408,6 +408,44 @@ export interface OrgPlanRequestV2 {
    * null when nothing had to be chosen. `applied` once approved.
    */
   whatStays: WhatStays | null;
+  /** "Renewal of Pro" (same plan, a renewal) or "Change to Starter". */
+  label: string;
+  /** Sent while the renewal was overdue (grace): full price, the missed term continues. */
+  overdue: boolean;
+  /** Total incl. GST in rupees (what to pay); null for older requests. */
+  total: number | null;
+  /** Manual mode: the payment our team recorded for it (Mark as paid). */
+  payment: RequestPaymentV2 | null;
+  /** Option A: the org fell back to Basic while this request was waiting. */
+  movedToBasicAt: string | null;
+  /** How the total is made up (requests with a price); shows a coupon on it. */
+  quote: RequestQuoteV2 | null;
+}
+
+/** A request's price: "₹1,499 − ₹300 coupon (CODE) + GST ₹215.82 = ₹1,414.82" (rupees). */
+export interface RequestQuoteV2 {
+  /** Before the coupon and GST (after any proration credit). */
+  price: number;
+  /** The coupon taken off; null without one. */
+  couponCode: string | null;
+  couponDiscount: number;
+  gst: number;
+  total: number;
+  /** Our team added the coupon on the request (Remove restores the original quote). */
+  couponAdded: boolean;
+}
+
+/** A payment the Super Admin marked against a request. */
+export interface RequestPaymentV2 {
+  id: string;
+  /** Rupees received, GST included. */
+  amount: number;
+  method: string;
+  reference: string;
+  receivedOn: string;
+  note: string | null;
+  /** awaiting_approval → received on approval; refund_due when rejected. */
+  status: 'awaiting_approval' | 'received' | 'refund_due' | 'refunded';
 }
 
 /** The org's most recent package request, when a Super Admin rejected it (with the reason). */
@@ -429,4 +467,12 @@ export interface PendingUpgradeV2 {
   toPlan: { id: string; name: string };
   interval: BillingInterval;
   createdAt: string;
+  /** "Renewal of Pro" or "Change to Starter". */
+  label?: string;
+  /** Sent while the renewal was overdue. */
+  overdue?: boolean;
+  /** Manual mode: our team has recorded the payment (waiting for approval). */
+  paid?: boolean;
+  /** Option A: the org fell back to Basic while waiting. */
+  movedToBasicAt?: string | null;
 }

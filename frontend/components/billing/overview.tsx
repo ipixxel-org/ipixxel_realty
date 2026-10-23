@@ -3,7 +3,7 @@
 import { Icon } from "@/components/icons";
 import { formatDate, packagePriceText, planPrice } from "@/lib/billing/pricing";
 import type { BillingOverview } from "@/lib/billing/types";
-import { BillingBanner, RenewalReminderPopup } from "./banners";
+import { BillingBanner, RENEWAL_OPEN, RenewalReminderPopup, RequestRenewalButton } from "./banners";
 
 export { RenewalReminderPopup };
 import { BillingDetailsSection, PendingUpgradeBanner, RejectedUpgradeBanner } from "./checkout";
@@ -95,6 +95,10 @@ export function BillingOverviewPanel({ showInvoices = true }: { showInvoices?: b
         <BLink to="plans" className="btn btn-primary">
           <Icon name="crown" size={15} /> Change plan
         </BLink>
+        {/* Manual mode: from the renewal window through grace, the renewal is a request. */}
+        {o.paymentMode === "manual" && !o.plan.isFree && (RENEWAL_OPEN as readonly string[]).includes(o.status) ? (
+          <RequestRenewalButton overview={o} className="btn btn-ghost" />
+        ) : null}
         {/* Manual mode: chosen per request (the request screen) or from the grace / Basic banners. */}
         {o.paymentMode !== "manual" ? (
           <BLink to="chooseWhatStays" className="btn btn-ghost">

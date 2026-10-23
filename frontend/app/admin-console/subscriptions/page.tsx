@@ -1359,6 +1359,13 @@ export default function SuperAdminSubscriptionsPage() {
                               {/* Cancelled by the organisation = withdrawn. */}
                               {r.status === "cancelled" ? "withdrawn" : r.status}
                             </span>
+                            {BILLING_V2 && r.status === "pending" && r.billingCheckout && r.billingCheckout.totalPaise > 0 ? (
+                              // Manual mode: Mark as paid (on the org's page) comes before Approve.
+                              <div style={{ fontSize: 11, color: r.payment ? "#10b981" : "#64748b", marginTop: 4 }}>
+                                {r.payment ? "Paid – ready to approve" : "Waiting for payment"}
+                              </div>
+                            ) : null}
+                            {BILLING_V2 && r.overdue ? <div style={{ fontSize: 11, color: "#d97706", marginTop: 2 }}>overdue renewal</div> : null}
                           </td>
                           <td style={{ padding: "12px 16px", textAlign: "right" }}>
                             {BILLING_V2 ? (

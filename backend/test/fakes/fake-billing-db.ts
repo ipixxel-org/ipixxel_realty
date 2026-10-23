@@ -5,8 +5,16 @@
  * what the row locks guarantee in Postgres — enough to test idempotency.
  * Test-only.
  */
+import { Prisma } from '@prisma/client';
+
 type Row = Record<string, any>;
 type Where = Record<string, any>;
+
+/** Prisma.DbNull writes SQL NULL: stored as null here. */
+const dbNulls = (data: Row): Row =>
+  Object.fromEntries(
+    Object.entries(data).map(([k, v]) => [k, v === Prisma.DbNull ? null : v]),
+  );
 
 function matches(row: Row, where: Where = {}): boolean {
   return Object.entries(where).every(([key, cond]) => {
@@ -65,8 +73,11 @@ function table(
     findMany: async ({
       where,
       distinct,
-    }: { where?: Where; distinct?: string[] } = {}) => {
-      const hit = rows.filter((r) => matches(r, where)).map((r) => ({ ...r }));
+      include,
+    }: { where?: Where; distinct?: string[]; include?: Row } = {}) => {
+      const hit = rows
+        .filter((r) => matches(r, where))
+        .map((r) => (include ? includes({ ...r }, include) : { ...r }));
       if (!distinct) return hit;
       const seen = new Set<string>();
       return hit.filter((r) => {
@@ -95,7 +106,7 @@ function table(
     update: async ({ where, data }: { where: Where; data: Row }) => {
       const r = find(where);
       if (!r) throw new Error(`${prefix} not found`);
-      Object.assign(r, data, { updatedAt: new Date() });
+      Object.assign(r, dbNulls(data), { updatedAt: new Date() });
       return { ...r };
     },
     upsert: async ({
@@ -124,8 +135,16 @@ function table(
     },
     updateMany: async ({ where, data }: { where: Where; data: Row }) => {
       const hit = rows.filter((r) => matches(r, where));
-      hit.forEach((r) => Object.assign(r, data, { updatedAt: new Date() }));
+      hit.forEach((r) =>
+        Object.assign(r, dbNulls(data), { updatedAt: new Date() }),
+      );
       return { count: hit.length };
+    },
+    deleteMany: async ({ where }: { where?: Where } = {}) => {
+      const keep = rows.filter((r) => !matches(r, where));
+      const count = rows.length - keep.length;
+      rows.splice(0, rows.length, ...keep);
+      return { count };
     },
   };
 }
@@ -205,17 +224,35 @@ export function createFakeBillingDb(seed: Seed) {
     ...r,
     ...(inc?.billingCheckout
       ? {
-          billingCheckout:
+          billingCheckout: withCoupon(
             db.billingCheckout.rows.find(
               (c: Row) => c.packageChangeRequestId === r.id,
-            ) ?? null,
+            ),
+          ),
         }
       : {}),
     ...(inc?.targetPlan ? { targetPlan: planById(r.targetPlanId) } : {}),
+    ...(inc?.currentPlan ? { currentPlan: planById(r.currentPlanId) } : {}),
+    ...(inc?.offlinePayment
+      ? {
+          offlinePayment:
+            db.offlinePayment.rows.find(
+              (p: Row) => p.packageChangeRequestId === r.id,
+            ) ?? null,
+        }
+      : {}),
     ...(inc?.organisation
       ? { organisation: { id: r.orgId, name: 'Acme' } }
       : {}),
   }));
+  // A checkout read with its coupon (include / select of `coupon`).
+  const withCoupon = (c: Row | undefined): Row | null =>
+    c
+      ? {
+          ...c,
+          coupon: db.coupon.rows.find((x: Row) => x.id === c.couponId) ?? null,
+        }
+      : null;
   db.billingCheckout = table([], 'chk', (r, inc) =>
     inc?.toPlan ? { ...r, toPlan: planById(r.toPlanId) } : r,
   );
