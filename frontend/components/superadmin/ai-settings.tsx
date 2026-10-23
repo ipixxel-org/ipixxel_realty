@@ -17,11 +17,18 @@ const SECRET_MASK = "••••••••";
 type Status = { tone: "ok" | "err"; text: string } | null;
 
 const PROVIDERS: { value: AiProviderName | ""; label: string }[] = [
-  { value: "", label: "Auto-detect (first configured)" },
+  { value: "", label: "Auto-detect (first configured: Gemini → Claude → Custom)" },
   { value: "gemini", label: "Google Gemini" },
   { value: "anthropic", label: "Anthropic Claude" },
   { value: "external", label: "Custom agent (HTTP endpoint)" },
 ];
+
+const PROVIDER_NAMES: Record<string, string> = {
+  gemini: "Google Gemini",
+  anthropic: "Anthropic Claude",
+  external: "Custom agent",
+  custom: "Custom agent",
+};
 
 function SecretInput({
   id,
@@ -162,16 +169,19 @@ export function AiSettings() {
 
   const busy = loading || saving;
 
+  const activeName = view?.activeProvider ? PROVIDER_NAMES[view.activeProvider] ?? view.activeProvider : "";
+  const configuredCount = [view?.hasGeminiApiKey, view?.hasAnthropicApiKey, Boolean(view?.aiGenerateApiUrl)].filter(Boolean).length;
+  const unsaved = !!view && provider !== view.provider;
+
   let chip: { text: string; style: React.CSSProperties };
   if (loading) chip = { text: "Loading…", style: { background: "#f1f5f9", color: "#475569", border: "1px solid #e2e8f0" } };
-  else if (view?.provider === "gemini" && view.hasGeminiApiKey)
-    chip = { text: "Active • Gemini", style: { background: "#ecfdf5", color: "#065f46", border: "1px solid #a7f3d0" } };
-  else if (view?.provider === "anthropic" && view.hasAnthropicApiKey)
-    chip = { text: "Active • Claude", style: { background: "#ecfdf5", color: "#065f46", border: "1px solid #a7f3d0" } };
-  else if (view?.provider === "external" && view.aiGenerateApiUrl)
-    chip = { text: "Active • Custom agent", style: { background: "#ecfdf5", color: "#065f46", border: "1px solid #a7f3d0" } };
-  else if (view?.hasGeminiApiKey || view?.hasAnthropicApiKey || view?.aiGenerateApiUrl)
-    chip = { text: "Configured", style: { background: "#fffbeb", color: "#92400e", border: "1px solid #fde68a" } };
+  else if (activeName)
+    chip = {
+      text: `Active • ${activeName}${view?.provider ? "" : " (auto)"}`,
+      style: { background: "#ecfdf5", color: "#065f46", border: "1px solid #a7f3d0" },
+    };
+  else if (view?.provider)
+    chip = { text: "Selected provider has no key", style: { background: "#fef2f2", color: "#991b1b", border: "1px solid #fecaca" } };
   else chip = { text: "Setup Required", style: { background: "#fffbeb", color: "#92400e", border: "1px solid #fde68a" } };
 
   return (
@@ -226,6 +236,34 @@ export function AiSettings() {
               </option>
             ))}
           </select>
+          {!loading && view ? (
+            <div role="note" className="hint" style={{ marginTop: 6, fontSize: 12.5, lineHeight: 1.5 }}>
+              {activeName ? (
+                <>
+                  The AI builder currently uses <strong>{activeName}</strong>
+                  {view.activeModel ? <> (<code>{view.activeModel}</code>)</> : null}.
+                </>
+              ) : view.provider ? (
+                <span style={{ color: "#991b1b" }}>
+                  {PROVIDER_NAMES[view.provider] ?? view.provider} is selected but has no API key — the AI builder is off.
+                </span>
+              ) : (
+                <>No provider has a key yet — the AI builder is off.</>
+              )}
+              {!view.provider && configuredCount > 1 ? (
+                <>
+                  {" "}
+                  More than one provider has a key; Auto-detect always picks the first. Choose a provider above to
+                  use a specific one.
+                </>
+              ) : null}
+              {unsaved ? (
+                <strong style={{ display: "block", color: "#92400e" }}>
+                  Provider changed — click “Save AI credentials” to apply it.
+                </strong>
+              ) : null}
+            </div>
+          ) : null}
         </div>
 
         {/* Google Gemini */}
@@ -300,7 +338,7 @@ export function AiSettings() {
             <input
               id="ai-anthropic-model"
               className="inp inp-mono"
-              placeholder="claude-sonnet-4-20250514"
+              placeholder="claude-sonnet-5-5"
               value={anthropicModel}
               onChange={(e) => setAnthropicModel(e.target.value)}
               disabled={busy || !canEdit}

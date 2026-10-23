@@ -3190,6 +3190,10 @@ export interface AiSettingsView {
   /** Where the active credentials come from: saved in the console, or .env. */
   source: "database" | "env";
   provider: AiProviderName | "";
+  /** Provider the AI builder actually calls right now ("" = none usable). */
+  activeProvider: AiProviderName | "custom" | "";
+  /** Model the AI builder actually calls right now. */
+  activeModel: string;
   geminiModel: string;
   geminiThinkingBudget: string;
   geminiApiKey: string;

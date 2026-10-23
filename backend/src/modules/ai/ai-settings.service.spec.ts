@@ -144,6 +144,31 @@ describe('AiSettingsService', () => {
     expect(JSON.stringify(view)).not.toContain(DB_KEY);
   });
 
+  it('reports which provider Auto-detect will actually use', async () => {
+    const prisma = fakePrisma({
+      id: 'default',
+      provider: null,
+      gemini_api_key: DB_KEY,
+      anthropic_api_key: 'sk-ant-db-saved-0123456789abcdef',
+      anthropic_model: 'claude-sonnet-5-5',
+    });
+    // .env is captured at construction, so clear the stale provider first.
+    delete process.env.AI_PROVIDER;
+    const settings = new AiSettingsService(prisma as never);
+
+    const auto = await settings.getForAdmin();
+    expect(auto).toMatchObject({ provider: '', activeProvider: 'gemini' });
+
+    await settings.update({ provider: 'anthropic' });
+    const chosen = await settings.getForAdmin();
+    expect(chosen).toMatchObject({
+      provider: 'anthropic',
+      activeProvider: 'anthropic',
+      activeModel: 'claude-sonnet-5-5',
+    });
+    expect(JSON.stringify(chosen)).not.toContain('sk-ant-db-saved');
+  });
+
   it('applies a saved model to the next request without a restart', async () => {
     const prisma = fakePrisma({
       id: 'default',

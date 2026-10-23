@@ -1,6 +1,8 @@
 import { Logger } from '@nestjs/common';
 import {
   AiProviderError,
+  ANTHROPIC_DEFAULT_MAX_TOKENS,
+  AnthropicProvider,
   GeminiProvider,
   resolveAiProvider,
   sanitizeErrorText,
@@ -210,6 +212,137 @@ describe('GeminiProvider', () => {
 
     expect(err).toMatchObject({ kind: 'upstream', status: null });
     expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+});
+
+const CLAUDE_KEY = 'sk-ant-test-0123456789abcdefghijklmnop';
+
+function claudeConfig(model: string): AiProviderConfig {
+  return config({
+    provider: 'anthropic',
+    anthropicApiKey: CLAUDE_KEY,
+    anthropicModel: model,
+  });
+}
+
+function claudeOk(json: unknown, stopReason = 'end_turn') {
+  return new Response(
+    JSON.stringify({
+      content: [{ type: 'text', text: JSON.stringify(json) }],
+      stop_reason: stopReason,
+    }),
+    { status: 200, headers: { 'content-type': 'application/json' } },
+  );
+}
+
+function claudeError(status: number, message: string) {
+  return new Response(
+    JSON.stringify({
+      type: 'error',
+      error: { type: 'invalid_request_error', message },
+    }),
+    { status, headers: { 'content-type': 'application/json' } },
+  );
+}
+
+function sentBodies(): Array<Record<string, unknown>> {
+  return (fetchMock.mock.calls as Array<[string, RequestInit]>).map(
+    ([, init]) => JSON.parse(init.body as string) as Record<string, unknown>,
+  );
+}
+
+describe('AnthropicProvider', () => {
+  it('sends the configured model with the key in a header', async () => {
+    fetchMock.mockResolvedValueOnce(claudeOk({ ok: true }));
+    const provider = new AnthropicProvider(
+      claudeConfig('claude-test-plain'),
+      retry,
+    );
+
+    await expect(
+      provider.generateJson({ prompt: 'hi', temperature: 0.5 }),
+    ).resolves.toEqual({ ok: true });
+
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(String(url)).toBe('https://api.anthropic.com/v1/messages');
+    expect(String(url)).not.toContain(CLAUDE_KEY);
+    expect(init.headers).toMatchObject({ 'x-api-key': CLAUDE_KEY });
+    expect(sentBodies()[0]).toMatchObject({
+      model: 'claude-test-plain',
+      temperature: 0.5,
+      max_tokens: ANTHROPIC_DEFAULT_MAX_TOKENS,
+    });
+  });
+
+  it('retries without temperature when the model rejects it, and remembers that', async () => {
+    fetchMock
+      .mockResolvedValueOnce(
+        claudeError(400, '`temperature` is deprecated for this model.'),
+      )
+      .mockResolvedValueOnce(claudeOk({ first: true }))
+      .mockResolvedValueOnce(claudeOk({ second: true }));
+    const provider = new AnthropicProvider(
+      claudeConfig('claude-test-no-temp'),
+      retry,
+    );
+
+    await expect(
+      provider.generateJson({ prompt: 'hi', temperature: 0.7 }),
+    ).resolves.toEqual({ first: true });
+    await expect(
+      provider.generateJson({ prompt: 'again', temperature: 0.7 }),
+    ).resolves.toEqual({ second: true });
+
+    const bodies = sentBodies();
+    expect(bodies).toHaveLength(3);
+    expect(bodies[0]).toHaveProperty('temperature', 0.7);
+    expect(bodies[1]).not.toHaveProperty('temperature');
+    expect(bodies[2]).not.toHaveProperty('temperature');
+    expect(sleeps).toEqual([]);
+  });
+
+  it('does not retry other bad requests', async () => {
+    fetchMock.mockImplementation(() =>
+      Promise.resolve(claudeError(400, 'messages: field required')),
+    );
+
+    const err: unknown = await new AnthropicProvider(
+      claudeConfig('claude-test-bad'),
+      retry,
+    )
+      .generateJson({ prompt: 'hi', temperature: 0.7 })
+      .catch((e: unknown) => e as AiProviderError);
+
+    expect(err).toMatchObject({ kind: 'bad_request', status: 400 });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('retries an overloaded (529) response on the same model', async () => {
+    fetchMock
+      .mockResolvedValueOnce(claudeError(529, 'Overloaded'))
+      .mockResolvedValueOnce(claudeOk({ ok: 1 }));
+
+    await expect(
+      new AnthropicProvider(
+        claudeConfig('claude-test-busy'),
+        retry,
+      ).generateJson({ prompt: 'hi' }),
+    ).resolves.toEqual({ ok: 1 });
+    expect(sleeps).toEqual([1000]);
+  });
+
+  it('reports a truncated response instead of parsing partial JSON', async () => {
+    fetchMock.mockResolvedValueOnce(claudeOk({ partial: true }, 'max_tokens'));
+
+    const err: unknown = await new AnthropicProvider(
+      claudeConfig('claude-test-long'),
+      retry,
+    )
+      .generateJson({ prompt: 'hi' })
+      .catch((e: unknown) => e as AiProviderError);
+
+    expect(err).toMatchObject({ kind: 'invalid_response' });
+    expect((err as Error).message).toContain('ran out of output space');
   });
 });
 

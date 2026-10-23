@@ -1,7 +1,7 @@
 import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import { PrismaService } from '../../database/prisma.service';
 import { UpdateAiSettingsDto } from './dto/update-ai-settings.dto';
-import type { AiProviderConfig } from './ai-provider';
+import { resolveAiProvider, type AiProviderConfig } from './ai-provider';
 
 const SETTINGS_ID = 'default';
 
@@ -20,7 +20,7 @@ const ENV_KEYS = [
 ] as const;
 
 export const DEFAULT_GEMINI_MODEL = 'gemini-3.8-flash';
-export const DEFAULT_ANTHROPIC_MODEL = 'claude-sonnet-4-20250514';
+export const DEFAULT_ANTHROPIC_MODEL = 'claude-sonnet-5-5';
 
 /**
  * Platform-wide AI provider credentials, editable from the Super Admin console
@@ -133,10 +133,15 @@ export class AiSettingsService implements OnModuleInit {
     const row = await this.readRow();
     const r = row ?? {};
     const resolved = this.resolveRow(r);
+    // Exactly what the generator will call (same resolver), so the console can
+    // show which agent "Auto-detect" actually picks.
+    const active = resolveAiProvider(resolved);
 
     return {
       source: row ? 'database' : 'env',
       provider: resolved.provider,
+      activeProvider: active?.name ?? '',
+      activeModel: active?.model ?? '',
       geminiModel: resolved.geminiModel,
       geminiThinkingBudget: resolved.geminiThinkingBudget,
       geminiApiKey: resolved.geminiApiKey ? AI_SECRET_MASK : '',
