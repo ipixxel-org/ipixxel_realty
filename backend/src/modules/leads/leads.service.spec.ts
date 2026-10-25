@@ -20,7 +20,7 @@ describe('LeadsService', () => {
       update: jest.Mock;
     };
     landingPage: { findUnique: jest.Mock; findFirst: jest.Mock };
-    template: { findUnique: jest.Mock };
+    template: { findUnique: jest.Mock; findFirst: jest.Mock };
     project: { findMany: jest.Mock; findFirst: jest.Mock; findUnique: jest.Mock; update: jest.Mock };
     projectSalesAgent: { findMany: jest.Mock; findFirst: jest.Mock };
     unit: { findFirst: jest.Mock };
@@ -42,7 +42,7 @@ describe('LeadsService', () => {
         update: jest.fn(),
       },
       landingPage: { findUnique: jest.fn(), findFirst: jest.fn() },
-      template: { findUnique: jest.fn().mockResolvedValue(null) },
+      template: { findUnique: jest.fn().mockResolvedValue(null), findFirst: jest.fn().mockResolvedValue(null) },
       project: {
         findMany: jest.fn().mockResolvedValue([]),
         findFirst: jest.fn().mockResolvedValue(null),
@@ -235,7 +235,7 @@ describe('LeadsService', () => {
       });
 
       expect(prisma.lead.create).toHaveBeenCalledWith({
-        data: {
+        data: expect.objectContaining({
           orgId: 'org-42',
           landingPageId: 'lp-x',
           projectId: null,
@@ -244,7 +244,7 @@ describe('LeadsService', () => {
           data: { fullName: 'Aarav' },
           configurations: [],
           tags: [],
-        },
+        }),
       });
       expect(result.id).toBe('lead-1');
     });

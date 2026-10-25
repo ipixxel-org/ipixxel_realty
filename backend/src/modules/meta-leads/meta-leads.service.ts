@@ -347,13 +347,16 @@ export class MetaLeadsService implements OnModuleInit {
       );
     }
     const redirectUri = `${this.apiPublicUrl()}/org/meta/oauth/callback`;
+    const statePayload = {
+      orgId,
+      userId,
+      platformKey: platformKey || 'meta',
+      ts: Date.now(),
+    };
+    const jsonStr = JSON.stringify(statePayload);
+    const sig = createHmac('sha256', creds.appSecret).update(jsonStr).digest('hex');
     const state = Buffer.from(
-      JSON.stringify({
-        orgId,
-        userId,
-        platformKey: platformKey || 'meta',
-        ts: Date.now(),
-      }),
+      JSON.stringify({ ...statePayload, sig }),
       'utf8',
     ).toString('base64url');
     const params = new URLSearchParams({
@@ -398,21 +401,35 @@ export class MetaLeadsService implements OnModuleInit {
   }
 
   async handleOAuthCallback(code: string, state: string) {
-    let parsed: { orgId?: string; userId?: string; platformKey?: string };
+    let parsed: { orgId?: string; userId?: string; platformKey?: string; ts?: number; sig?: string };
     try {
       parsed = JSON.parse(
         Buffer.from(state, 'base64url').toString('utf8'),
-      ) as { orgId?: string; userId?: string; platformKey?: string };
+      ) as { orgId?: string; userId?: string; platformKey?: string; ts?: number; sig?: string };
     } catch {
       throw new BadRequestException('Invalid OAuth state');
     }
     if (!parsed.orgId) throw new BadRequestException('Invalid OAuth state');
+    if (parsed.ts && Date.now() - parsed.ts > 30 * 60 * 1000) {
+      throw new BadRequestException('OAuth state has expired');
+    }
+
     const returnKey =
       parsed.platformKey === 'instagram' || parsed.platformKey === 'whatsapp'
         ? parsed.platformKey
         : 'meta';
 
     const creds = await this.getOrgCredentials(parsed.orgId);
+    if (parsed.sig) {
+      const { sig, ...rest } = parsed;
+      const expectedSig = createHmac('sha256', creds.appSecret).update(JSON.stringify(rest)).digest('hex');
+      const a = Buffer.from(expectedSig, 'utf8');
+      const b = Buffer.from(sig, 'utf8');
+      if (a.length !== b.length || !timingSafeEqual(a, b)) {
+        throw new BadRequestException('Invalid OAuth state signature');
+      }
+    }
+
     const redirectUri = `${this.apiPublicUrl()}/org/meta/oauth/callback`;
     const tokenUrl = new URL(`${GRAPH_BASE}/oauth/access_token`);
     tokenUrl.searchParams.set('client_id', creds.appId);
@@ -663,7 +680,7 @@ export class MetaLeadsService implements OnModuleInit {
     signatureHeader: string | undefined,
   ): Promise<void> {
     if (!signatureHeader || !rawBody) {
-      return;
+      throw new BadRequestException('Missing webhook signature or raw body');
     }
 
     const secrets: string[] = [];
@@ -685,7 +702,9 @@ export class MetaLeadsService implements OnModuleInit {
       // ignore
     }
 
-    if (secrets.length === 0) return;
+    if (secrets.length === 0) {
+      throw new BadRequestException('Meta webhook app secret is not configured on the server');
+    }
 
     for (const secret of secrets) {
       const expected =

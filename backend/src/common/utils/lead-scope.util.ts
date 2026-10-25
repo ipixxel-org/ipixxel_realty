@@ -13,8 +13,7 @@ export function canSeeAllLeads(roles: string[] | undefined): boolean {
     keys.includes('admin') ||
     keys.includes('organisation_admin') ||
     keys.includes('org_admin') ||
-    keys.includes('owner') ||
-    keys.includes('manager')
+    keys.includes('owner')
   );
 }
 
@@ -80,7 +79,6 @@ export async function actorLeadOrClauses(
 
   const orClauses: Prisma.LeadWhereInput[] = [
     { assignedToId: actorId },
-    { assignedToId: null },
   ];
 
   // Managed projects — everything.

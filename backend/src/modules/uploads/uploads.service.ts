@@ -75,6 +75,13 @@ export class UploadsService {
     const category =
       dto.category || this.determineCategory(dto.mimeType);
 
+    if (dto.storedKey.includes('..') || dto.storedKey.includes('\\')) {
+      throw new BadRequestException('Path traversal characters are forbidden in storage key');
+    }
+    if (orgId && !dto.storedKey.startsWith(`orgs/${orgId}/`)) {
+      throw new BadRequestException('Storage key does not belong to your organisation');
+    }
+
     const file = await this.prisma.mediaFile.create({
       data: {
         orgId: orgId || null,

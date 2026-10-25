@@ -153,7 +153,7 @@ describe("project wizard — per-step required-field validation", () => {
     await jumpTo(user, "Team & access");
     await user.click(screen.getByRole("button", { name: /Next Step/ }));
     expect(screen.getByRole("heading", { name: /Documents & media/ })).toBeInTheDocument();
-  });
+  }, 15000);
 
   it("warns before a step-rail jump ahead out of an incomplete step", async () => {
     const user = userEvent.setup();

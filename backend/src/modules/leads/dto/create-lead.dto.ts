@@ -39,4 +39,14 @@ export class CreateLeadDto {
   /** Free-form field values captured by the form (label/key -> value). */
   @IsObject()
   data!: Record<string, unknown>;
+
+  /** Honeypot anti-bot field: hidden from humans, filled by automated spam bots. */
+  @IsOptional()
+  @IsString()
+  hp?: string;
+
+  /** Optional Turnstile or captcha response token for anti-bot verification. */
+  @IsOptional()
+  @IsString()
+  captchaToken?: string;
 }

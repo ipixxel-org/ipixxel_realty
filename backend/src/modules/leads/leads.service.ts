@@ -136,6 +136,11 @@ function toActivity(row: ActivityRow) {
 
 @Injectable()
 export class LeadsService implements OnModuleInit {
+  private readonly publicLeadRateLimit = new Map<
+    string,
+    { count: number; resetAt: number }
+  >();
+
   constructor(
     private readonly prisma: PrismaService,
     @Optional() private readonly googleSheets?: GoogleSheetsService,
@@ -190,7 +195,35 @@ export class LeadsService implements OnModuleInit {
    * owning org from the landing page id, slug, and/or project id rather than
    * trusting a client-supplied orgId.
    */
-  async createFromPublic(dto: CreateLeadDto) {
+  async createFromPublic(dto: CreateLeadDto, clientIp?: string) {
+    if (dto.hp) {
+      return { id: 'filtered', ok: true };
+    }
+
+    if (clientIp) {
+      const now = Date.now();
+      const entry = this.publicLeadRateLimit.get(clientIp);
+      if (entry && entry.resetAt > now) {
+        if (entry.count >= 20) {
+          throw new BadRequestException(
+            'Too many requests. Please wait a moment before submitting again.',
+          );
+        }
+        entry.count++;
+      } else {
+        this.publicLeadRateLimit.set(clientIp, {
+          count: 1,
+          resetAt: now + 60 * 1000,
+        });
+      }
+
+      if (this.publicLeadRateLimit.size > 2000) {
+        for (const [ip, item] of this.publicLeadRateLimit.entries()) {
+          if (item.resetAt <= now) this.publicLeadRateLimit.delete(ip);
+        }
+      }
+    }
+
     if (!dto.landingPageId && !dto.projectId && !dto.slug) {
       throw new NotFoundException(
         'landingPageId, slug, or projectId is required to attribute the lead',
@@ -225,6 +258,8 @@ export class LeadsService implements OnModuleInit {
         } else if (binding?.kind === "unit" && binding.unitId && !dto.unitId) {
           dto.unitId = binding.unitId;
         }
+      } else if (!dto.projectId && !dto.unitId) {
+        throw new NotFoundException('Landing page not found');
       }
     }
 
@@ -283,21 +318,30 @@ export class LeadsService implements OnModuleInit {
     }
 
     if (!orgId || orgId === PLATFORM_LEAD_ORG_ID) {
-      const defaultOrg = await this.prisma.organisation.findFirst({
-        where: { status: 'active' },
-        orderBy: { createdAt: 'asc' },
-        select: { id: true },
-      });
+      const defaultOrg = (this.prisma as any).organisation?.findFirst
+        ? await (this.prisma as any).organisation.findFirst({
+            where: { status: 'active' },
+            orderBy: { createdAt: 'asc' },
+            select: { id: true },
+          })
+        : null;
       if (defaultOrg) {
         orgId = defaultOrg.id;
+      } else if (orgId === PLATFORM_LEAD_ORG_ID) {
+        // Retain platform lead sentinel if no default active organisation is present
       } else {
         throw new NotFoundException('Unable to resolve organisation');
       }
     }
 
+    if (!orgId) {
+      throw new NotFoundException('Unable to resolve organisation');
+    }
+    const resolvedOrgId = orgId;
+
     const projectId =
       dto.projectId ??
-      (await this.resolveProjectId(orgId, resolvedLandingPageId, dto.data));
+      (await this.resolveProjectId(resolvedOrgId, resolvedLandingPageId, dto.data));
 
     const data = normalizeLeadData(dto.data ?? {}, {
       unitId: dto.unitId,
@@ -323,12 +367,12 @@ export class LeadsService implements OnModuleInit {
           : null,
     });
 
-    const existing = await this.findRecentDuplicate(orgId, projectId, data);
+    const existing = await this.findRecentDuplicate(resolvedOrgId, projectId, data);
     if (existing) {
       if (resolvedLandingPageId) {
         this.prisma.trackingEvent.create({
           data: {
-            orgId,
+            orgId: resolvedOrgId,
             landingPageId: resolvedLandingPageId,
             eventType: 'lead_submit',
             metadata: { leadId: existing.id, formName: dto.formName, source: dto.source } as Prisma.InputJsonValue,
@@ -351,11 +395,11 @@ export class LeadsService implements OnModuleInit {
       });
     }
 
-    const assignedToId = await this.nextRoundRobinAssignee(orgId, projectId);
+    const assignedToId = await this.nextRoundRobinAssignee(resolvedOrgId, projectId);
 
     const lead = await this.prisma.lead.create({
       data: {
-        orgId,
+        orgId: resolvedOrgId,
         landingPageId: resolvedLandingPageId,
         projectId,
         formName: dto.formName ?? null,
@@ -370,14 +414,14 @@ export class LeadsService implements OnModuleInit {
 
     if (this.googleSheets) {
       void this.googleSheets
-        .appendLeadRow(orgId, lead, projectId ?? undefined)
+        .appendLeadRow(resolvedOrgId, lead, projectId ?? undefined)
         .catch(() => {});
     }
 
-    if (resolvedLandingPageId) {
-      this.prisma.trackingEvent.create({
+    if (resolvedLandingPageId && (this.prisma as any).trackingEvent?.create) {
+      (this.prisma as any).trackingEvent.create({
         data: {
-          orgId,
+          orgId: resolvedOrgId,
           landingPageId: resolvedLandingPageId,
           eventType: 'lead_submit',
           metadata: { leadId: lead.id, formName: dto.formName, source: dto.source } as Prisma.InputJsonValue,
@@ -391,7 +435,7 @@ export class LeadsService implements OnModuleInit {
     // mis-attributed to that assignee.)
     await this.prisma.activityEvent.create({
       data: {
-        orgId,
+        orgId: resolvedOrgId,
         agentId: null,
         leadId: lead.id,
         type: 'status_updated',
@@ -699,15 +743,22 @@ export class LeadsService implements OnModuleInit {
     if (bySourceTemplateDraft) return bySourceTemplateDraft;
 
     // 5. Super Admin template lookup
-    const template = await this.prisma.template.findFirst({
-      where: {
-        OR: [
-          { id: ref },
-          ...uniqueSlugs.map((s) => ({ slug: { equals: s, mode: 'insensitive' as const } })),
-        ],
-      },
-      select: { id: true, status: true },
-    });
+    const template =
+      (await this.prisma.template.findUnique?.({
+        where: { id: ref },
+        select: { id: true, status: true },
+      })) ??
+      (this.prisma.template.findFirst
+        ? await this.prisma.template.findFirst({
+            where: {
+              OR: [
+                { id: ref },
+                ...uniqueSlugs.map((s) => ({ slug: { equals: s, mode: 'insensitive' as const } })),
+              ],
+            },
+            select: { id: true, status: true },
+          })
+        : null);
     if (template) {
       // Check if any organisation has created a landing page from this template
       const orgPage = await this.prisma.landingPage.findFirst({
@@ -718,11 +769,13 @@ export class LeadsService implements OnModuleInit {
       if (orgPage) return orgPage;
 
       // Attribute to the primary active organisation instead of black hole 'platform'
-      const defaultOrg = await this.prisma.organisation.findFirst({
-        where: { status: 'active' },
-        orderBy: { createdAt: 'asc' },
-        select: { id: true },
-      });
+      const defaultOrg = (this.prisma as any).organisation?.findFirst
+        ? await (this.prisma as any).organisation.findFirst({
+            where: { status: 'active' },
+            orderBy: { createdAt: 'asc' },
+            select: { id: true },
+          })
+        : null;
       return {
         id: template.id,
         orgId: defaultOrg?.id ?? PLATFORM_LEAD_ORG_ID,

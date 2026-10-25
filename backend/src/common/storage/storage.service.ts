@@ -177,10 +177,18 @@ export class StorageService {
 
   async deleteObject(key: string): Promise<void> {
     if (!key) return;
+    if (key.includes('..') || key.includes('\\')) {
+      this.logger.warn(`Rejected path traversal attempt in deleteObject: ${key}`);
+      return;
+    }
     if (!this.isConfigured()) {
       try {
-        const safeKey = path.normalize(key).replace(/^(\.\.[\/\\])+/, '');
-        const localPath = path.join(process.cwd(), 'uploads', safeKey);
+        const uploadsRoot = path.resolve(process.cwd(), 'uploads');
+        const localPath = path.resolve(uploadsRoot, key);
+        if (!localPath.startsWith(uploadsRoot)) {
+          this.logger.warn(`Rejected traversal in deleteObject: ${key}`);
+          return;
+        }
         if (fs.existsSync(localPath)) {
           fs.unlinkSync(localPath);
         }
@@ -198,7 +206,7 @@ export class StorageService {
         }),
       );
     } catch (err) {
-        this.logger.error(`Failed to delete storage key "${key}": ${err}`);
+      this.logger.error(`Failed to delete storage key "${key}": ${err}`);
     }
   }
 
