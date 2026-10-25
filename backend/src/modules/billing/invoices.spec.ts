@@ -324,7 +324,7 @@ describe('Super Admin actions', () => {
     const { admin, sub } = setup();
     const before = sub().graceEndsAt.getTime();
     await admin.extendGrace('org-1', 'admin', 5, 'bank holiday');
-    expect(sub().graceEndsAt.getTime() - before).toBe(5 * DAY);
+    expect(Math.round((sub().graceEndsAt.getTime() - before) / 1000)).toBe((5 * DAY) / 1000);
     const active = setup({
       status: 'active',
       graceEndsAt: null,

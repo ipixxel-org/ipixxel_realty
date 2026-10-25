@@ -492,6 +492,32 @@ export class CustomProvider implements AiProvider {
   }
 
   async generateJson(request: AiJsonRequest): Promise<any> {
+    const rawUrl = this.config.aiGenerateApiUrl.trim();
+    let parsedUrl: URL;
+    try {
+      parsedUrl = new URL(rawUrl);
+    } catch {
+      throw new AiProviderError('bad_request', this.name, this.model, 400, 'Invalid external AI API URL');
+    }
+    const isProduction = process.env.NODE_ENV === 'production';
+    if (parsedUrl.protocol !== 'https:' && (isProduction || parsedUrl.protocol !== 'http:')) {
+      throw new AiProviderError('bad_request', this.name, this.model, 400, 'External AI API must use HTTPS');
+    }
+    const host = parsedUrl.hostname.toLowerCase();
+    if (
+      host === '169.254.169.254' ||
+      host === 'metadata.google.internal' ||
+      host === '0.0.0.0' ||
+      (isProduction &&
+        (host === 'localhost' ||
+          host === '127.0.0.1' ||
+          host.startsWith('192.168.') ||
+          host.startsWith('10.') ||
+          /^172\.(1[6-9]|2[0-9]|3[0-1])\./.test(host)))
+    ) {
+      throw new AiProviderError('bad_request', this.name, this.model, 400, 'Private or link-local address rejected for AI API endpoint');
+    }
+
     const headers: Record<string, string> = {
       'content-type': 'application/json',
     };
@@ -502,7 +528,7 @@ export class CustomProvider implements AiProvider {
 
     let response: Response;
     try {
-      response = await fetch(this.config.aiGenerateApiUrl.trim(), {
+      response = await fetch(parsedUrl.toString(), {
         method: 'POST',
         headers,
         body: JSON.stringify({

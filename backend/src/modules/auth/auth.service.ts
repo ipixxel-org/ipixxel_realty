@@ -105,6 +105,7 @@ export class AuthService {
     process.env.JWT_ACCESS_EXPIRES_IN?.trim() || '15m';
   private readonly refreshExpiresIn =
     process.env.JWT_REFRESH_EXPIRES_IN?.trim() || '30d';
+  private readonly emailVerifyAttempts = new Map<string, { count: number; lockedUntil: number }>();
 
   constructor(
     private readonly prisma: PrismaService,
@@ -122,6 +123,8 @@ export class AuthService {
     passwordHash: string;
     status: User['status'];
     mustChangePassword: boolean;
+    failedLoginAttempts?: number;
+    lockedUntil?: Date | null;
     approvedAt: Date | null;
     createdAt: Date;
     onboardingStep: OnboardingStep;
@@ -140,6 +143,8 @@ export class AuthService {
           passwordHash: true,
           status: true,
           mustChangePassword: true,
+          failedLoginAttempts: true,
+          lockedUntil: true,
           approvedAt: true,
           createdAt: true,
           onboardingStep: true,
@@ -166,6 +171,8 @@ export class AuthService {
         email: string;
         phoneNumber: string | null;
         passwordHash: string;
+        failedLoginAttempts?: number;
+        lockedUntil?: Date | null;
         status: User['status'];
         createdAt: Date;
       }>
@@ -178,6 +185,8 @@ export class AuthService {
         u.email,
         u.phone_number AS "phoneNumber",
         u.password_hash AS "passwordHash",
+        u.failed_login_attempts AS "failedLoginAttempts",
+        u.locked_until AS "lockedUntil",
         u.status,
         u.created_at AS "createdAt"
       FROM identity.users u
@@ -203,6 +212,8 @@ export class AuthService {
 
     return {
       ...row,
+      failedLoginAttempts: row.failedLoginAttempts ?? 0,
+      lockedUntil: row.lockedUntil ?? null,
       mustChangePassword: false,
       // Fallback path (Prisma unavailable) — treat as long-approved so a DB
       // hiccup never locks a legitimate user out. `status` is still enforced.
@@ -916,6 +927,16 @@ export class AuthService {
       throw loginFieldError('email', INCORRECT_EMAIL_MESSAGE);
     }
 
+    if (user.lockedUntil && new Date(user.lockedUntil) > new Date()) {
+      const waitMin = Math.max(
+        1,
+        Math.ceil((new Date(user.lockedUntil).getTime() - Date.now()) / 60000),
+      );
+      throw new UnauthorizedException(
+        `Account is temporarily locked due to multiple failed login attempts. Please try again in ${waitMin} minute${waitMin > 1 ? 's' : ''}.`,
+      );
+    }
+
     let passwordMatches = false;
     try {
       passwordMatches = await bcrypt.compare(dto.password, user.passwordHash);
@@ -923,7 +944,38 @@ export class AuthService {
       passwordMatches = false;
     }
     if (!passwordMatches) {
+      const attempts = (user.failedLoginAttempts || 0) + 1;
+      const lockedUntil =
+        attempts >= 5 ? new Date(Date.now() + 15 * 60 * 1000) : null;
+      try {
+        await this.prisma.user.update({
+          where: { id: user.id },
+          data: {
+            failedLoginAttempts: attempts >= 5 ? 0 : attempts,
+            lockedUntil,
+          },
+        });
+      } catch {
+        // Non-blocking on DB error
+      }
+      if (attempts >= 5) {
+        throw new UnauthorizedException(
+          'Account is temporarily locked due to multiple failed login attempts. Please try again in 15 minutes.',
+        );
+      }
       throw loginFieldError('password', INCORRECT_PASSWORD_MESSAGE);
+    }
+
+    // Reset failed login counter on successful password match
+    if ((user.failedLoginAttempts ?? 0) > 0 || user.lockedUntil) {
+      try {
+        await this.prisma.user.update({
+          where: { id: user.id },
+          data: { failedLoginAttempts: 0, lockedUntil: null },
+        });
+      } catch {
+        // Non-blocking
+      }
     }
 
     // Account-state messaging only AFTER the password is verified, so a wrong
@@ -1086,7 +1138,11 @@ export class AuthService {
     // `disabled` = disapproved/deactivated — refuse. `pending` is allowed here
     // because an approved member mid-first-login (still mustChangePassword)
     // holds a valid refresh token and may legitimately rotate it.
-    if (!user || user.status === 'disabled' || user.billingPausedAt) {
+    if (
+      !user ||
+      user.status === 'disabled' ||
+      user.billingPausedAt
+    ) {
       throw new UnauthorizedException('Invalid or expired refresh token');
     }
 
@@ -1244,32 +1300,25 @@ export class AuthService {
       ((portal === 'platform' && !!user.orgId) ||
         (portal === 'organisation' && !user.orgId));
 
-    if (isPlatformRequest) {
-      // Platform (Super Admin / Platform Team) accounts are the most
-      // privileged on the system, so this path never reveals whether an
-      // address exists, belongs to an org, or is disabled — the response is
-      // always the same generic success.
-      if (!user || portalMismatch || user.status === 'disabled') {
-        this.logger.warn(
-          '[Forgot Password] Platform reset requested for a non-eligible address',
-        );
-        return { success: true };
-      }
-      // Throttle: one email per minute per account, so the endpoint can't be
-      // used to flood an admin inbox. An outstanding link stays valid.
-      const recent = await this.prisma.passwordResetToken.findFirst({
-        where: {
-          userId: user.id,
-          usedAt: null,
-          createdAt: { gt: new Date(Date.now() - 60 * 1000) },
-        },
-        select: { id: true },
-      });
-      if (recent) {
-        return { success: true };
-      }
-    } else if (!user || portalMismatch) {
-      throw new NotFoundException('No account exists for this email address');
+    if (!user || portalMismatch || user.status === 'disabled') {
+      this.logger.warn(
+        `[Forgot Password] Reset requested for a non-eligible or missing address: ${email}`,
+      );
+      return { success: true };
+    }
+
+    // Throttle: one email per minute per account, so the endpoint can't be
+    // used to flood an inbox or burn SMTP quotas. An outstanding link stays valid.
+    const recent = await this.prisma.passwordResetToken.findFirst({
+      where: {
+        userId: user.id,
+        usedAt: null,
+        createdAt: { gt: new Date(Date.now() - 60 * 1000) },
+      },
+      select: { id: true },
+    });
+    if (recent) {
+      return { success: true };
     }
 
     await this.prisma.passwordResetToken.updateMany({
@@ -1369,6 +1418,15 @@ export class AuthService {
   }
 
   async verifyEmail(email: string, code: string) {
+    const key = email.toLowerCase().trim();
+    const attempt = this.emailVerifyAttempts.get(key);
+    if (attempt && attempt.lockedUntil > Date.now()) {
+      const waitSec = Math.ceil((attempt.lockedUntil - Date.now()) / 1000);
+      throw new BadRequestException(
+        `Too many failed attempts. Please wait ${waitSec} seconds before retrying.`,
+      );
+    }
+
     const user = await this.prisma.user.findUnique({ where: { email } });
     if (!user) {
       throw new UnauthorizedException('Invalid or expired verification code');
@@ -1387,8 +1445,20 @@ export class AuthService {
       orderBy: { createdAt: 'desc' },
     });
     if (!entry) {
+      const cur = this.emailVerifyAttempts.get(key) || { count: 0, lockedUntil: 0 };
+      cur.count += 1;
+      if (cur.count >= 5) {
+        cur.lockedUntil = Date.now() + 15 * 60 * 1000;
+        this.emailVerifyAttempts.set(key, cur);
+        throw new BadRequestException(
+          'Too many failed verification attempts. Please wait 15 minutes before retrying.',
+        );
+      }
+      this.emailVerifyAttempts.set(key, cur);
       throw new UnauthorizedException('Invalid or expired verification code');
     }
+
+    this.emailVerifyAttempts.delete(key);
 
     const updated = await this.prisma.$transaction(async (tx) => {
       await tx.emailVerificationToken.update({
@@ -1446,7 +1516,7 @@ export class AuthService {
       data: {
         userId: user.id,
         tokenHash: hashToken(code),
-        expiresAt: new Date(Date.now() + 60 * 60 * 1000),
+        expiresAt: new Date(Date.now() + 15 * 60 * 1000), // 15 minutes expiration
       },
     });
 

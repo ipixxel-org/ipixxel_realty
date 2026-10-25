@@ -1646,6 +1646,13 @@ export class GoogleSheetsService {
       throw new UnauthorizedException('Missing webhook authorization token');
     }
 
+    const safeCompare = (secret?: string, received?: string): boolean => {
+      if (!secret || !received) return false;
+      const a = Buffer.from(secret, 'utf8');
+      const b = Buffer.from(received, 'utf8');
+      return a.length === b.length && crypto.timingSafeEqual(a, b);
+    };
+
     let connection: any = null;
     if (payload.connectionId) {
       connection = await this.prisma.marketingConnection.findUnique({
@@ -1653,7 +1660,7 @@ export class GoogleSheetsService {
       });
       if (connection) {
         const meta = this.parseMetadata(connection.metadata);
-        if (meta.webhookSecret !== token) {
+        if (!safeCompare(meta.webhookSecret, token)) {
           connection = null;
         }
       }
@@ -1665,7 +1672,7 @@ export class GoogleSheetsService {
       });
       connection = candidates.find((c) => {
         const meta = this.parseMetadata(c.metadata);
-        return meta.webhookSecret === token;
+        return safeCompare(meta.webhookSecret, token);
       });
     }
 

@@ -6,8 +6,10 @@ import {
   Patch,
   Post,
   Query,
+  Req,
   UseGuards,
 } from '@nestjs/common';
+import type { Request } from 'express';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { OrgApprovedGuard } from '../../common/guards/org-approved.guard';
 import {
@@ -41,8 +43,10 @@ export class LeadsController {
    * by anonymous visitors. orgId is derived from landingPageId server-side.
    */
   @Post()
-  createPublic(@Body() dto: CreateLeadDto) {
-    return this.service.createFromPublic(dto);
+  createPublic(@Body() dto: CreateLeadDto, @Req() req: Request) {
+    const rawIp = req.headers['x-forwarded-for'];
+    const clientIp = typeof rawIp === 'string' ? rawIp.split(',')[0].trim() : req.ip;
+    return this.service.createFromPublic(dto, clientIp);
   }
 
   // Leads / CRM > Add allows any lead. Projects > Add lead (the project
