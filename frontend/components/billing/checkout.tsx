@@ -4,13 +4,14 @@ import { useEffect, useRef, useState } from "react";
 import { Icon } from "@/components/icons";
 import { useToast } from "@/components/ui/toast";
 import { BILLING_FIELD_LABEL } from "@/lib/billing/details";
+import { planChangeRoute } from "@/lib/billing/direction";
 import { formatDate, formatINR, packagePriceText, stateName } from "@/lib/billing/pricing";
 import { pendingRequestText } from "@/lib/billing/requests";
 import type { BillingDetailsField, BillingInterval, BillingOverview, BillingProfile, CheckoutPreview, PendingUpgrade } from "@/lib/billing/types";
 import { useBillingEnv, useBillingQuery, useOrgBilling } from "./context";
 import { usePayment } from "./payment";
 import { WithdrawRequestButton } from "./requests";
-import { Banner, BLink, ErrorNote, Loading, Section, useCheckoutLive } from "./ui";
+import { Banner, BillingRedirect, BLink, ErrorNote, Loading, Section, useCheckoutLive } from "./ui";
 
 /* ---------------------------------------------------------- Billing details */
 
@@ -461,28 +462,27 @@ export function CheckoutScreen({
   if (!overview || !plans) return <Loading what="checkout" />;
   if (!target) return <ErrorNote message="That plan doesn't exist." />;
 
-  const onFree = overview.status === "free" || overview.status === "moved_to_basic";
   const inGrace = overview.status === "past_due" || overview.status === "grace_ending";
-  const samePlan = target.id === overview.plan.id;
-  // Same plan monthly → yearly is an interval change (allowed); yearly → monthly happens at renewal.
-  const notAnUpgrade =
-    !onFree &&
-    !inGrace &&
-    (target.rank < overview.plan.rank || (target.rank === overview.plan.rank && !samePlan) || (samePlan && (interval === overview.interval || interval === "monthly")));
-  if (!renewal && (target.isFree || notAnUpgrade)) {
+  // Renewal overdue: there's no paid term to schedule a downgrade against, so
+  // any paid plan is bought here (manual mode: a request at its full price).
+  const overduePurchase = inGrace && !target.isFree;
+  // Same rule as the plan cards: a smaller plan (or yearly → monthly) belongs on the downgrade page.
+  const route = planChangeRoute(overview, target, interval, online);
+  if (!renewal && !overduePurchase && route === "downgrade") {
+    return <BillingRedirect to="downgrade" params={target.isFree ? { plan: target.id } : { plan: target.id, interval }} />;
+  }
+  if (!renewal && !overduePurchase && route === null) {
     return (
       <Banner
         tone="amber"
         icon="info"
-        title={target.isFree ? "Basic is free — there's nothing to buy" : samePlan && interval === overview.interval ? `You're already on ${overview.plan.name}` : "This isn't an upgrade"}
+        title={target.isFree ? "Basic is free — there's nothing to buy" : `You're already on ${overview.plan.name} (${overview.interval})`}
         actions={
           <BLink to="plans" className="btn btn-primary btn-sm">
             See plans
           </BLink>
         }
-      >
-        Moving to a smaller plan (or from yearly to monthly billing) is a downgrade, which takes effect at the end of your billing period.
-      </Banner>
+      />
     );
   }
 

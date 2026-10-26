@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import type { CSSProperties, ReactNode } from "react";
+import { useEffect, type CSSProperties, type ReactNode } from "react";
 import { Icon, type IconName } from "@/components/icons";
 import { formatINR, packagePriceText, renewalPriceNote, renewalPriceText } from "@/lib/billing/pricing";
 import type { BillingFunction } from "@/lib/billing/client";
@@ -278,6 +278,18 @@ export function Empty({ children }: { children: ReactNode }) {
 
 export function Loading({ what = "billing" }: { what?: string }) {
   return <div className="bl-muted" style={{ padding: 16 }}>Loading {what}…</div>;
+}
+
+/** Sends a wrong URL (e.g. /downgrade for a bigger plan) to the right page, without a history entry. */
+export function BillingRedirect({ to, params }: { to: BillingRoute; params?: RouteParams }) {
+  const { nav } = useBillingEnv();
+  const href = nav.href(to, params);
+  useEffect(() => {
+    (nav.replace ?? nav.go)(to, params);
+    // href captures to + params.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [nav, href]);
+  return <Loading what="the right page" />;
 }
 
 export function ErrorNote({ message }: { message: string }) {

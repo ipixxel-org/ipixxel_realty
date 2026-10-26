@@ -3,12 +3,13 @@
 import { useState } from "react";
 import { Icon } from "@/components/icons";
 import { useToast } from "@/components/ui/toast";
+import { isOverdueManual, planChangeRoute } from "@/lib/billing/direction";
 import { formatDate, packagePriceText, planPrice } from "@/lib/billing/pricing";
 import type { BillingInterval } from "@/lib/billing/types";
 import { BillingBanner, PicksSummary } from "./banners";
 import { useBillingEnv, useBillingQuery, useOrgBilling } from "./context";
 import { BillingDialog, DialogActions } from "./dialog";
-import { Banner, BLink, countLabel, ErrorNote, Kv, Loading, Section, useCheckoutLive } from "./ui";
+import { Banner, BillingRedirect, BLink, countLabel, ErrorNote, Kv, Loading, Section, useCheckoutLive } from "./ui";
 
 function ConfirmDialog({
   open,
@@ -79,27 +80,17 @@ export function DowngradeScreen({ planId, interval: wanted }: { planId: string; 
   if (o.downgradeTo) return <BillingBanner overview={{ ...o, status: "downgrade_scheduled" }} />;
   if (o.status === "cancellation_scheduled") return <BillingBanner overview={o} />;
   // Manual mode with the renewal overdue: Basic happens now; a paid plan is a request.
-  const overdueManual = !live && o.paymentMode === "manual" && (o.status === "past_due" || o.status === "grace_ending");
-  if (overdueManual && !target.isFree) {
+  const overdueManual = isOverdueManual(o, live);
+  // Same rule as the plan cards: a bigger plan (or a paid plan while overdue in
+  // manual mode, which is a request) belongs on the checkout, not here.
+  const route = planChangeRoute(o, target, interval, live);
+  if (route === "checkout") return <BillingRedirect to="checkout" params={{ plan: target.id, interval }} />;
+  if (route !== "downgrade") {
     return (
       <Banner
         tone="amber"
         icon="info"
-        title={`Your renewal is overdue — ${target.name} is a request at its full price`}
-        actions={
-          <BLink to="checkout" params={{ plan: target.id, interval: wanted ?? o.interval }} className="btn btn-primary btn-sm">
-            Request a change to {target.name}
-          </BLink>
-        }
-      />
-    );
-  }
-  if (onFree || (target.rank >= o.plan.rank && !toMonthly)) {
-    return (
-      <Banner
-        tone="amber"
-        icon="info"
-        title={onFree ? "You're already on Basic — our smallest plan" : `${target.name} isn't smaller than your ${o.plan.name} plan`}
+        title={onFree ? "You're already on Basic — our smallest plan" : `You're already on ${o.plan.name} (${o.interval})`}
         actions={
           <BLink to="plans" className="btn btn-primary btn-sm">
             See plans

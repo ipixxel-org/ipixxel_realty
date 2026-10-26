@@ -61,7 +61,7 @@ import {
   type BillingDetailsField,
 } from './org-billing-details';
 import { BillingInvoiceMailer } from './billing-invoice-mailer.service';
-import { isFreePlan, isInternalPlan, sortPlans } from './plan-modules';
+import { isFreePlan, isInternalPlan, planRanker } from './plan-modules';
 import type {
   CheckoutPreviewV2,
   ConfirmCheckoutResultV2,
@@ -747,15 +747,14 @@ export class BillingCheckoutService implements OnModuleInit {
       getBillingExpiryConfig(this.prisma),
     ]);
 
-    const ranked = sortPlans(active);
+    const rankOf = planRanker(active);
     const asQuotePlan = (p: (typeof active)[number]): QuotePlan => {
-      const rank = ranked.findIndex((r) => r.id === p.id);
       return {
         id: p.id,
         name: p.name,
         priceMonthly: p.priceMonthly,
         priceYearly: p.priceYearly,
-        rank: rank === -1 ? ranked.length : rank,
+        rank: rankOf(p),
         isFree: isFreePlan(p),
       };
     };

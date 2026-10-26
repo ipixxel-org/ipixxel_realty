@@ -7,6 +7,7 @@ import { Switch } from "@/components/superadmin/switch";
 import { useToast } from "@/components/ui/toast";
 import { apiFetch } from "@/lib/api";
 import { setFlash } from "@/lib/flash";
+import { planLimitWarnings, planLimitWarningsFor, type PlanLimitWarning } from "@/lib/billing/plan-limit-warnings";
 import { formatINR, packagePriceText, yearlySaving } from "@/lib/billing/pricing";
 import type { BillingPlan, PlanLimits, PlanModules } from "@/lib/billing/types";
 import { useBillingEnv, useBillingQuery } from "../context";
@@ -35,6 +36,22 @@ export function yearlyHint(priceMonthly: number, priceYearly: number): string | 
 
 /* ------------------------------------------------------------------ Cards */
 
+/** Amber note: a plan allows less than a cheaper one. A warning only — saving is never blocked. */
+function LimitWarnings({ warnings }: { warnings: PlanLimitWarning[] }) {
+  if (warnings.length === 0) return null;
+  return (
+    <div
+      role="note"
+      data-testid="plan-limit-warning"
+      style={{ fontSize: 12, lineHeight: 1.5, color: "#92400e", background: "#fffbeb", border: "1px solid #fde68a", borderRadius: 8, padding: "8px 10px", marginBottom: 12 }}
+    >
+      {warnings.map((w) => (
+        <div key={`${w.planId}:${w.cheaperId}:${w.key}`}>⚠ {w.text}</div>
+      ))}
+    </div>
+  );
+}
+
 const chip: React.CSSProperties = {
   fontSize: 11,
   fontWeight: 600,
@@ -58,6 +75,7 @@ export function AdminPlansEditor({ canDelete = false }: { canDelete?: boolean })
   const [busy, setBusy] = useState(false);
   if (error) return <ErrorNote message={error} />;
   if (!data) return <Loading what="plans" />;
+  const warnings = planLimitWarnings(data);
 
   async function confirmDelete() {
     if (!deleting) return;
@@ -131,6 +149,7 @@ export function AdminPlansEditor({ canDelete = false }: { canDelete?: boolean })
                   </span>
                 ))}
               </div>
+              <LimitWarnings warnings={warnings.filter((w) => w.planId === p.id)} />
             </div>
 
             <div style={{ display: "flex", gap: 8, paddingTop: 12, borderTop: "1px solid #f1f5f9" }}>
@@ -224,7 +243,18 @@ function ModuleRow({
 }
 
 /** The full plan form: name, prices, free-plan flag, limits and features. */
-export function PlanEditForm({ initial, onSaved, onCancel }: { initial: BillingPlan; onSaved?: (p: BillingPlan) => void; onCancel?: () => void }) {
+export function PlanEditForm({
+  initial,
+  plans,
+  onSaved,
+  onCancel,
+}: {
+  initial: BillingPlan;
+  /** All plans, to warn when this one allows less than a cheaper plan. */
+  plans?: BillingPlan[];
+  onSaved?: (p: BillingPlan) => void;
+  onCancel?: () => void;
+}) {
   const { client, canEdit } = useBillingEnv();
   const { toast } = useToast();
   const [saved, setSaved] = useState(initial);
@@ -236,6 +266,7 @@ export function PlanEditForm({ initial, onSaved, onCancel }: { initial: BillingP
   const setLimit = (key: keyof PlanLimits, v: string) => set({ limits: { ...plan.limits, [key]: v.trim() === "" ? null : Math.max(0, Math.floor(Number(v) || 0)) } });
   const setModule = (patch: Partial<PlanModules>) => set({ modules: { ...plan.modules, ...patch } });
   const hint = plan.isFree ? null : yearlyHint(plan.priceMonthly, plan.priceYearly);
+  const warnings = plans ? planLimitWarningsFor(plan, plans) : [];
 
   async function save() {
     setBusy(true);
@@ -244,6 +275,8 @@ export function PlanEditForm({ initial, onSaved, onCancel }: { initial: BillingP
       setSaved(p);
       setPlan(p);
       toast({ variant: "success", title: `${p.name} saved`, description: "New purchases use it now; existing subscriptions from their next renewal." });
+      const after = plans ? planLimitWarningsFor(p, plans) : [];
+      if (after.length > 0) toast({ variant: "warning", title: "Check the plan limits", description: after.map((w) => w.text).join(". ") });
       onSaved?.(p);
     } catch (e) {
       toast({ variant: "error", title: "Couldn't save the plan", description: e instanceof Error ? e.message : undefined });
@@ -330,6 +363,8 @@ export function PlanEditForm({ initial, onSaved, onCancel }: { initial: BillingP
           <ModuleRow label="AI calling" hint="AI voice agent for lead follow-ups" on={false} comingLater />
         </div>
 
+        <LimitWarnings warnings={warnings} />
+
         <div className={formPageStyles.actions}>
           <button className={formPageStyles.btn} type="button" onClick={() => (onCancel ? onCancel() : setPlan(saved))}>
             Cancel
@@ -360,7 +395,7 @@ export function AdminEditPlan({ planId }: { planId: string }) {
       backHref={SUBS_PATH}
       backLabel="Back to Plans & Subscriptions"
     >
-      {error ? <ErrorNote message={error} /> : !data ? <Loading what="plan" /> : !plan ? <ErrorNote message="That plan doesn't exist any more." /> : <PlanEditForm initial={plan} onSaved={(p) => back(`Plan “${p.name}” updated`)} onCancel={() => back()} />}
+      {error ? <ErrorNote message={error} /> : !data ? <Loading what="plan" /> : !plan ? <ErrorNote message="That plan doesn't exist any more." /> : <PlanEditForm initial={plan} plans={data} onSaved={(p) => back(`Plan “${p.name}” updated`)} onCancel={() => back()} />}
     </FormPage>
   );
 }

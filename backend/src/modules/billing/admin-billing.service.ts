@@ -20,7 +20,7 @@ import { expireStaleCheckouts } from './checkout-state';
 import { readOnlinePayments } from './online-payments';
 import {
   isFreePlan,
-  sortPlans,
+  planRanker,
   toBillingPlan,
   toBillingPlans,
 } from './plan-modules';
@@ -197,14 +197,13 @@ export class AdminBillingService {
       },
     });
 
-    const active = sortPlans(
-      await this.prisma.plan.findMany({ where: { isActive: true } }),
-    );
+    const active = await this.prisma.plan.findMany({
+      where: { isActive: true },
+    });
     const saved =
       active.find((p) => p.id === id) ??
       (await this.prisma.plan.findUniqueOrThrow({ where: { id } }));
-    const rank = active.findIndex((p) => p.id === id);
-    return toBillingPlan(saved, rank === -1 ? active.length : rank);
+    return toBillingPlan(saved, planRanker(active)(saved));
   }
 
   /* -------------------------------------------------------------- lifecycle */

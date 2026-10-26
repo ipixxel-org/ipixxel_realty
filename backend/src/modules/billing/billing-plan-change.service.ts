@@ -12,7 +12,7 @@ import {
 } from './billing-checkout.service';
 import { BillingModeService } from './billing-mode.service';
 import { OrgBillingV2Service } from './org-billing-v2.service';
-import { isFreePlan, sortPlans } from './plan-modules';
+import { isFreePlan, planChangeDirection, planRanker } from './plan-modules';
 import type { BillingOverviewV2 } from './billing.types';
 import type {
   CancelPlanDto,
@@ -193,11 +193,7 @@ export class BillingPlanChangeService {
     }
 
     const interval = dto.interval ?? sub.billingCycle;
-    const ranked = sortPlans(active);
-    const rank = (id: string) => {
-      const i = ranked.findIndex((p) => p.id === id);
-      return i === -1 ? ranked.length : i;
-    };
+    const rank = planRanker(active);
     const samePlan = target.id === sub.planId;
     if (samePlan && interval === sub.billingCycle) {
       throw billingError(
@@ -205,9 +201,11 @@ export class BillingPlanChangeService {
         `You're already on ${target.name} (${interval}).`,
       );
     }
-    const isDowngrade = samePlan
-      ? sub.billingCycle === 'yearly' && interval === 'monthly'
-      : rank(target.id) < rank(sub.planId);
+    const isDowngrade =
+      planChangeDirection(
+        { rank: rank(sub.plan), interval: sub.billingCycle },
+        { rank: rank(target), interval },
+      ) === 'downgrade';
     if (!isDowngrade) {
       throw billingError(
         'not_a_downgrade',
