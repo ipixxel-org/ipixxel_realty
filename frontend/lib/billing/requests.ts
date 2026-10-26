@@ -31,7 +31,8 @@ export function requestPaymentText(p: Pick<RequestPayment, "amount" | "method" |
 }
 
 /** Where a request is: "Waiting for payment", "Payment received – waiting for approval", or the decision. */
-export function requestStage(r: Pick<OrgPlanRequest, "status" | "payment">): string {
+export function requestStage(r: Pick<OrgPlanRequest, "status" | "payment" | "startsAt">): string {
+  if (r.status === "scheduled") return r.startsAt ? `Scheduled (applies on ${shortDay(r.startsAt)})` : "Scheduled";
   if (r.status !== "pending") return REQUEST_STATUS_LABEL[r.status];
   return r.payment ? "Payment received – waiting for approval" : "Waiting for payment";
 }
@@ -61,4 +62,20 @@ export const REQUEST_STATUS_LABEL: Record<OrgPlanRequest["status"], string> = {
   approved: "Approved",
   rejected: "Rejected",
   withdrawn: "Withdrawn",
+  scheduled: "Scheduled",
+  done: "Done",
+  undone: "Undone",
+  replaced: "Replaced",
 };
+
+/** A scheduled change (to Basic / a smaller plan) recorded on the list — no approval. */
+export const isScheduledChange = (r: { kind?: string }) => r.kind === "scheduled_change";
+
+/** Tag on scheduled-change rows. */
+export const NO_APPROVAL_NEEDED = "No approval needed";
+
+/** "Nothing to pay now" (Basic), or "₹999 + GST from 22 Dec" for a smaller paid plan. */
+export function scheduledAmountText(amount: number | null | undefined, startsAt: string | null | undefined): string {
+  if (!amount) return "Nothing to pay now";
+  return `${formatINR(amount)} + GST${startsAt ? ` from ${shortDay(startsAt)}` : ""}`;
+}

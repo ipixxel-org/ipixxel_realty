@@ -136,7 +136,12 @@ export class PackageChangeRequestsService {
         },
       }),
       this.prisma.packageChangeRequest.findMany({
-        where: { orgId, status: { not: 'pending' } },
+        // Legacy history: approval requests only (not scheduled changes).
+        where: {
+          orgId,
+          status: { not: 'pending' },
+          kind: { not: 'scheduled_change' },
+        },
         orderBy: { updatedAt: 'desc' },
         take: 10,
         include: {

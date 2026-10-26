@@ -3,8 +3,13 @@ import { PrismaService } from '../../database/prisma.service';
 import { NO_SCHEDULED_CHANGE } from '../../common/utils/plan-change.util';
 import {
   applyOrgSubscriptionLifecycle,
+  findFreePlan,
   moveToFreePlan,
 } from '../../common/utils/subscription-lifecycle.util';
+import {
+  closeScheduledChange,
+  recordScheduledChange,
+} from '../../common/utils/scheduled-change.util';
 import { pendingRequestMessage } from '../package-change-requests/package-change-requests.service';
 import {
   billingError,
@@ -108,6 +113,19 @@ export class BillingPlanChangeService {
           changeScheduledAt: new Date(),
         },
       });
+      const free = await findFreePlan(this.prisma);
+      if (free) {
+        await recordScheduledChange(this.prisma, {
+          orgId,
+          requestedById: userId,
+          fromPlanId: sub.planId,
+          toPlanId: free.id,
+          interval: 'monthly',
+          startsAt: sub.status === 'past_due' ? sub.graceEndsAt : sub.renewsAt,
+          reason,
+          amount: null,
+        });
+      }
       await this.audit(
         orgId,
         userId,
@@ -138,6 +156,7 @@ export class BillingPlanChangeService {
       where: { id: sub.id },
       data: { ...NO_SCHEDULED_CHANGE },
     });
+    await closeScheduledChange(this.prisma, orgId, 'undone');
     await this.audit(
       orgId,
       userId,
@@ -243,6 +262,15 @@ export class BillingPlanChangeService {
         changeScheduledAt: new Date(),
       },
     });
+    await recordScheduledChange(this.prisma, {
+      orgId,
+      requestedById: userId,
+      fromPlanId: sub.planId,
+      toPlanId: target.id,
+      interval,
+      startsAt: sub.renewsAt,
+      amount: interval === 'yearly' ? target.priceYearly : target.priceMonthly,
+    });
     await this.audit(
       orgId,
       userId,
@@ -270,6 +298,7 @@ export class BillingPlanChangeService {
       where: { id: sub.id },
       data: { ...NO_SCHEDULED_CHANGE },
     });
+    await closeScheduledChange(this.prisma, orgId, 'undone');
     await this.audit(
       orgId,
       userId,

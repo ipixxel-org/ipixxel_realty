@@ -130,7 +130,10 @@ export class BillingLedgerService {
     return page(rows.map(toInvoiceV2), p, size);
   }
 
-  /** Plan change requests (manual mode) for one org, newest first. */
+  /**
+   * Plan change requests (manual mode) and scheduled changes (both modes,
+   * no approval) for one org, newest first.
+   */
   async listRequests(
     orgId: string,
     p?: number,
@@ -177,8 +180,10 @@ export class BillingLedgerService {
       rows.map((r): OrgPlanRequestV2 => {
         const c = r.billingCheckout;
         const by = r.requestedBy;
+        const scheduled = r.kind === 'scheduled_change';
         return {
           id: r.id,
+          kind: scheduled ? 'scheduled_change' : 'request',
           requestedAt: r.createdAt.toISOString(),
           requestedBy: by
             ? [by.firstName, by.lastName].filter(Boolean).join(' ') || by.email
@@ -186,11 +191,14 @@ export class BillingLedgerService {
           fromPlan: r.currentPlan ?? null,
           toPlan: { id: r.targetPlan.id, name: r.targetPlan.name },
           interval: r.billingCycle,
-          amount: c
-            ? toRupees(c.taxablePaise)
-            : r.billingCycle === 'yearly'
-              ? r.targetPlan.priceYearly
-              : r.targetPlan.priceMonthly,
+          // Scheduled: the smaller plan's price from startsAt; null = nothing to pay (Basic).
+          amount: scheduled
+            ? (r.scheduledAmount ?? null)
+            : c
+              ? toRupees(c.taxablePaise)
+              : r.billingCycle === 'yearly'
+                ? r.targetPlan.priceYearly
+                : r.targetPlan.priceMonthly,
           amountNote:
             c?.kind === 'upgrade_same_interval'
               ? 'prorated'
@@ -199,8 +207,9 @@ export class BillingLedgerService {
                 : null,
           status: r.status === 'cancelled' ? 'withdrawn' : r.status,
           // Withdrawn requests have no reviewer: their decision date is the update.
+          // Scheduled changes: when it took effect / was undone / replaced.
           decidedAt:
-            r.status === 'pending'
+            r.status === 'pending' || r.status === 'scheduled'
               ? null
               : (r.reviewedAt ?? r.updatedAt).toISOString(),
           rejectionReason: r.status === 'rejected' ? r.rejectionReason : null,
@@ -212,6 +221,8 @@ export class BillingLedgerService {
             : null,
           movedToBasicAt: r.movedToBasicAt?.toISOString() ?? null,
           quote: c ? requestQuoteView(c) : null,
+          startsAt: scheduled ? (r.startsAt?.toISOString() ?? null) : null,
+          reason: scheduled ? (r.reason ?? null) : null,
         };
       }),
       p,

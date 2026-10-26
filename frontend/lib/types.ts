@@ -853,7 +853,12 @@ export type PackageChangeRequestStatus =
   | "pending"
   | "approved"
   | "rejected"
-  | "cancelled";
+  | "cancelled"
+  // Scheduled changes (kind scheduled_change, no approval).
+  | "scheduled"
+  | "done"
+  | "undone"
+  | "replaced";
 
 export interface PackageChangeRequestRow {
   id: string;
@@ -911,6 +916,12 @@ export interface PackageChangeRequestRow {
   } | null;
   /** How the total is made up, with any coupon (requests with a checkout). */
   quote?: import("./billing/types").RequestQuote | null;
+  /** scheduled_change = a recorded downgrade / move to Basic (read-only, no approval). Missing = request. */
+  kind?: "request" | "scheduled_change";
+  /** Scheduled changes: the reason they gave, when it applies, and the smaller plan's price (rupees, before GST; null = Basic). */
+  reason?: string | null;
+  startsAt?: string | null;
+  scheduledAmount?: number | null;
 }
 
 export interface PackageChangeRequestsListResponse {

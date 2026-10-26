@@ -1127,6 +1127,21 @@ enum PackageChangeRequestStatus {
   approved
   rejected
   cancelled
+  // kind scheduled_change only (no approval): applies on starts_at, or is
+  // undone ("Keep <plan>") / replaced (an upgrade, renewal or another change).
+  scheduled
+  done
+  undone
+  replaced
+
+  @@schema("billing")
+}
+
+/// request = sent for approval (manual mode); scheduled_change = a recorded
+/// downgrade / move to Basic at the end of the term (never pending).
+enum PackageChangeRequestKind {
+  request
+  scheduled_change
 
   @@schema("billing")
 }
@@ -1140,6 +1155,13 @@ model PackageChangeRequest {
   billingCycle    BillingCycle               @default(monthly) @map("billing_cycle")
   status          PackageChangeRequestStatus @default(pending)
   rejectionReason String?                    @map("rejection_reason")
+  kind            PackageChangeRequestKind   @default(request)
+  // Scheduled changes: the reason they gave (moving to Basic), when it applies,
+  // and the smaller plan's price from then (rupees, before GST; null for Basic).
+  // A closed one (done / undone / replaced) has its date in reviewed_at.
+  reason          String?
+  startsAt        DateTime?                  @map("starts_at")
+  scheduledAmount Int?                       @map("scheduled_amount")
   // Manual mode: what stays on the target plan (over its limits) — a copy of the
   // org's "choose what stays" when the request was sent / last changed, and
   // what was actually kept once approved. Shown on Settings → Billing → Requests.

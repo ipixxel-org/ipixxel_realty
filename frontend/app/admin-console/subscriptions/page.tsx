@@ -87,6 +87,18 @@ const LIMIT_ROWS: { key: "projects" | "users" | "templates" | "landingPages" | "
 
 
 
+/** Package Requests status pill: background + text colour per status (scheduled changes included). */
+const REQUEST_BADGE_COLORS: Record<string, { background: string; color: string }> = {
+  pending: { background: "rgba(245, 158, 11, 0.1)", color: "#d97706" },
+  approved: { background: "rgba(16, 185, 129, 0.1)", color: "#10b981" },
+  rejected: { background: "rgba(239, 68, 68, 0.1)", color: "#ef4444" },
+  cancelled: { background: "#f1f5f9", color: "#64748b" },
+  scheduled: { background: "rgba(99, 102, 241, 0.1)", color: "#4f46e5" },
+  done: { background: "rgba(16, 185, 129, 0.1)", color: "#10b981" },
+  undone: { background: "#f1f5f9", color: "#64748b" },
+  replaced: { background: "#f1f5f9", color: "#64748b" },
+};
+
 function priceFor(plan: Plan, cycle: "Monthly" | "Yearly") {
   return cycle === "Monthly" ? plan.priceMonthly : plan.priceYearly;
 }
@@ -1345,20 +1357,16 @@ export default function SuperAdminSubscriptionsPage() {
                                 borderRadius: 999,
                                 fontSize: 11,
                                 fontWeight: 700,
-                                background:
-                                  r.status === "pending"
-                                    ? "rgba(245, 158, 11, 0.1)"
-                                    : r.status === "approved"
-                                      ? "rgba(16, 185, 129, 0.1)"
-                                      : r.status === "cancelled"
-                                        ? "#f1f5f9"
-                                        : "rgba(239, 68, 68, 0.1)",
-                                color: r.status === "pending" ? "#d97706" : r.status === "approved" ? "#10b981" : r.status === "cancelled" ? "#64748b" : "#ef4444",
+                                ...(REQUEST_BADGE_COLORS[r.status] ?? REQUEST_BADGE_COLORS.rejected),
                               }}
                             >
                               {/* Cancelled by the organisation = withdrawn. */}
                               {r.status === "cancelled" ? "withdrawn" : r.status}
                             </span>
+                            {r.kind === "scheduled_change" ? (
+                              // A scheduled downgrade / move to Basic: a record, nothing to approve.
+                              <div style={{ fontSize: 11, color: "#64748b", marginTop: 4 }}>No approval needed</div>
+                            ) : null}
                             {BILLING_V2 && r.status === "pending" && r.billingCheckout && r.billingCheckout.totalPaise > 0 ? (
                               // Manual mode: Mark as paid (on the org's page) comes before Approve.
                               <div style={{ fontSize: 11, color: r.payment ? "#10b981" : "#64748b", marginTop: 4 }}>

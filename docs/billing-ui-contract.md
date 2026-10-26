@@ -28,6 +28,7 @@ client is the reference behaviour (see `frontend/lib/billing/__tests__/mock-clie
 | Billing details from the org profile | `BillingOverview.billingProfile` (always set) + `billingDetailsMissing`; GSTIN and the state dropdown in Settings → General (invoice name = organisation name); `saveBillingProfile` / `getBillingProfile` and `PreviewCheckoutRequest.billingState` removed | `billing/org-billing-details.ts`, `common/utils/org-profile-audit.util.ts` (save check); frontend `components/ui/state-select.tsx`, `lib/billing/details.ts`; migration `20261022090000_org_profile_billing_details` |
 | Manual-mode requests | `listOrgRequests`, `withdrawRequest`; `CheckoutPreview.usageConflict`; `PendingUpgrade.fromPlan`; `BillingOverview.rejectedUpgrade`; approval applies "choose what stays" | `billing-ledger.service.ts` (`listRequests`), `checkout-state.ts`, `common/utils/plan-quota.util.ts` (`usageOverLimits`, `assertPlanFitsAfterRetention`), `package-change-requests.service.ts` (`pendingRequestMessage`, required rejection reason); frontend `components/billing/requests.tsx`, `lib/billing/requests.ts` |
 | Manual mode: Mark as paid → Approve | Request renewal (`startCheckout` `purpose: "renewal"` in manual mode), overdue changes at full price, `OrgPlanRequest.label` / `overdue` / `total` / `payment` / `movedToBasicAt`, `PendingUpgrade.label` / `paid`; Super Admin `PUT` / `DELETE /admin/package-change-requests/:id/payment` | `checkout-quote.ts` (`quoteOverdueChange`), `package-change-requests.service.ts` (`markPaid`, approve / reject), `plan-change.util.ts` (`periodStart`), `moveToFreePlan` (Option A marker); frontend `components/billing/admin/mark-paid-dialog.tsx`; migration `20261024090000_manual_request_payments` |
+| Scheduled changes on the Requests list | Every scheduled change (to Basic via cancel-at-period-end, or a smaller plan / yearly → monthly via `scheduleDowngrade`) is a row in `listOrgRequests` and the Super Admin package request lists: `OrgPlanRequest.kind` `scheduled_change`, statuses `scheduled` / `done` / `undone` / `replaced`, `startsAt`, `reason`; no approval, never pending | `common/utils/scheduled-change.util.ts` (`recordScheduledChange`, `closeScheduledChange`), `billing-plan-change.service.ts`, `applyPlanChange`, `moveToFreePlan` / `applyScheduledPlan` (sweep), `billing-ledger.service.ts`; frontend `components/billing/requests.tsx` (Keep <plan>), `components/billing/admin/package-requests.tsx` (read-only); migration `20261026090000_scheduled_plan_changes` |
 | Manual mode: coupon on the request | Super Admin `PUT` / `DELETE /admin/package-change-requests/:id/coupon`; Mark as paid amount = the request total; `OrgPlanRequest.quote` / admin row `quote`; `SubscriptionDetail.paymentMode`; org-level offline payment / apply coupon refused in manual mode (`use_request`) | `package-change-requests.service.ts` (`applyCoupon` / `removeCoupon`), `request-coupon.ts`, `coupon-lookup.ts` (`findCouponFor`, shared with checkout), `coupon-settlement.ts`; migration `20261025090000_request_coupon` |
 | Fixes after testing (2) | one `plan_locked` error; list filters `viewOnly` / `offline` / `paused` / `needsReassign`; invoice email; `packagePriceText` | `common/utils/plan-lock.util.ts`, `billing-invoice-mailer.service.ts`, `lead-assignee.util.ts`; frontend `lib/plan-lock.ts`, `PlanLockBadge` (`components/billing/locked.tsx`); migration `20261016093000_billing_invoice_email` |
 
@@ -298,6 +299,28 @@ Package Requests → Open → the org's "Package requests" section: **Mark as pa
   (`SubscriptionDetail.paymentMode`), and the endpoints refuse them (`use_request`, "… Use the pending
   request instead …"). "Extend grace" stays. Online mode is unchanged; there "Mark paid offline" is
   still refused while the org has a pending request (`request_pending`).
+
+### Scheduled changes on the Requests list (both modes)
+
+- Stored in `package_change_requests` with `kind = 'scheduled_change'` (approval requests are
+  `kind = 'request'`, the default) plus `reason`, `starts_at`, `scheduled_amount` (the smaller plan's
+  price, rupees before GST; null for Basic). Same table, so `listOrgRequests` and the Super Admin lists
+  page and sort them with the requests without merging. A closed row's date is `reviewed_at`.
+- **Statuses** (never `pending`): `scheduled` ("Scheduled (applies on 22 Dec)") → `done` (it took
+  effect: the sweep applied it, or a renewal paid onto the scheduled plan) / `undone` ("Keep <plan>":
+  `undoCancel` / `undoDowngrade`) / `replaced` (an upgrade, a renewal of the same plan, an approval,
+  another scheduled change, fall back to Basic after grace, or the scheduled plan was archived). One
+  open row per org at a time.
+- Never `pending`, so they don't disable plan buttons, don't trigger `request_pending`, can't be
+  approved / rejected / withdrawn, and aren't in the Super Admin Pending filter (only All). Scheduling a
+  change while an approval request is pending is still refused (`request_pending`). The legacy org
+  history and `BillingOverview.rejectedUpgrade` ignore them.
+- `OrgPlanRequest` for a scheduled change: `label` "Change to Basic" / "Change to Growth",
+  `fromPlan` → `toPlan`, `interval`, `startsAt`, `reason`, `amount` (null = "Nothing to pay now",
+  else "₹999 + GST from 22 Dec"), `total` / `quote` / `payment` null, `decidedAt` = when it closed.
+- UI: a "No approval needed" tag; the org Requests tab has "Keep <plan>" on a Scheduled row (the
+  banner's undo); Super Admin rows are read-only. Moving to Basic straight away (term over, or manual
+  mode overdue) is not recorded — nothing was scheduled.
 - **Org side:** the Requests tab shows "Waiting for payment" → "Payment received – waiting for
   approval" → Approved / Rejected (with the reason) / Withdrawn. Withdraw works until the request is
   marked paid; after that "Contact us to withdraw" (`POST …/withdraw` → `request_paid`). The pending
@@ -590,7 +613,7 @@ Package Requests → Open → the org's "Package requests" section: **Mark as pa
 | `listInvoices(req)` | `GET /org/billing/v2/invoices?page=&pageSize=` (`/org/billing/invoices` is the legacy list) | `PageRequest` | `Paged<Invoice>` (invoices and credit notes; `pdfUrl` = signed link to the printable document) |
 | `listPayments(req)` | `GET /org/billing/v2/payments?page=&pageSize=` | `PageRequest` | `Paged<PaymentRecord>` (plan payments: Razorpay + offline) |
 | `listOrgCoupons()` | `GET /org/billing/coupons` | — | `OrgCoupon[]` (reserved for the org + open ones listed for customers, with the org's status) |
-| `listOrgRequests(req)` | `GET /org/billing/requests?page=&pageSize=` (`billing:view`) | `PageRequest` (10 a page) | `Paged<OrgPlanRequest>` — newest first; `status` pending / approved / rejected / withdrawn (stored as `cancelled`); `amount` before GST + `amountNote`; `decidedAt`; `rejectionReason` when rejected |
+| `listOrgRequests(req)` | `GET /org/billing/requests?page=&pageSize=` (`billing:view`) | `PageRequest` (10 a page) | `Paged<OrgPlanRequest>` — newest first, approval requests and scheduled changes (`kind`); `status` pending / approved / rejected / withdrawn (stored as `cancelled`), or for a scheduled change scheduled / done / undone / replaced with `startsAt` and `reason`; `amount` before GST + `amountNote`; `decidedAt`; `rejectionReason` when rejected |
 | `withdrawRequest(id)` | `POST /org/billing/requests/:id/withdraw` (`billing:edit`) | — | `BillingOverview` — the request becomes `cancelled` (shown as Withdrawn), its checkout `cancelled`; plan buttons work again. Refused once marked paid (`request_paid`) |
 
 **Login refusal for a paused user** (not part of `BillingClient`): `POST /auth/login` returns

@@ -14,13 +14,22 @@ import {
 } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
 import { formatDate, formatINR, packagePriceText } from "@/lib/billing/pricing";
-import { MOVED_TO_BASIC_WHILE_WAITING, requestPaymentText, requestPriceText, requestTitle } from "@/lib/billing/requests";
-import type { RequestQuote } from "@/lib/billing/types";
+import {
+  isScheduledChange,
+  MOVED_TO_BASIC_WHILE_WAITING,
+  REQUEST_STATUS_LABEL,
+  requestPaymentText,
+  requestPriceText,
+  requestStage,
+  requestTitle,
+  scheduledAmountText,
+} from "@/lib/billing/requests";
+import type { RequestQuote, ScheduledChangeStatus } from "@/lib/billing/types";
 import type { PackageChangeRequestRow } from "@/lib/types";
 import { Empty, ErrorNote, Loading, Section } from "../ui";
 import { MarkPaidDialog, type MarkPaidValues } from "./mark-paid-dialog";
 import { RejectRequestDialog } from "./reject-request-dialog";
-import { whatStaysSummary } from "../requests";
+import { NoApprovalTag, whatStaysSummary } from "../requests";
 
 /** Anchor of the section; Package Requests → Open scrolls here. */
 export const PACKAGE_REQUESTS_ANCHOR = "package-requests";
@@ -30,6 +39,10 @@ const STATUS_BADGE: Record<string, string> = {
   approved: "b-green",
   rejected: "b-rose",
   cancelled: "b-gray",
+  scheduled: "b-indigo",
+  done: "b-green",
+  undone: "b-gray",
+  replaced: "b-gray",
 };
 
 const person = (u: PackageChangeRequestRow["requestedBy"] | PackageChangeRequestRow["reviewedBy"]) =>
@@ -63,6 +76,7 @@ export function requestQuote(r: PackageChangeRequestRow): RequestQuote | null {
 }
 
 export function requestAmountText(r: PackageChangeRequestRow): string | null {
+  if (isScheduledChange(r)) return scheduledAmountText(r.scheduledAmount, r.startsAt);
   const c = r.billingCheckout;
   // With a coupon: "₹1,499 − ₹300 coupon + GST".
   if (r.quote?.couponCode) return requestPriceText(r.quote);
@@ -79,6 +93,8 @@ export function requestAmountText(r: PackageChangeRequestRow): string | null {
  * Super Admin → org subscription page: this org's package change requests,
  * newest first. Pending ones are approved / rejected here (the same API as
  * before); decided ones show who decided, when, and the rejection reason.
+ * Scheduled changes (to Basic / a smaller plan) are listed read-only: they
+ * need no approval.
  */
 export function OrgPackageRequests({ orgId, onChanged }: { orgId: string; onChanged?: () => void }) {
   const { hasPermission } = useAuth();
@@ -214,7 +230,7 @@ export function OrgPackageRequests({ orgId, onChanged }: { orgId: string; onChan
 
   return (
     <div id={PACKAGE_REQUESTS_ANCHOR} style={{ scrollMarginTop: 16 }}>
-      <Section title="Package requests" sub="Plan change and renewal requests from this organisation, newest first: Mark as paid, then Approve" flush>
+      <Section title="Package requests" sub="Plan change and renewal requests from this organisation, newest first: Mark as paid, then Approve. Scheduled changes need no approval." flush>
         {error ? (
           <div style={{ padding: 16 }}>
             <ErrorNote message={error} />
@@ -238,6 +254,9 @@ export function OrgPackageRequests({ orgId, onChanged }: { orgId: string; onChan
               <tbody>
                 {rows.map((r) => {
                   const amount = requestAmountText(r);
+                  const scheduled = isScheduledChange(r);
+                  // A scheduled-change row only ever has one of these statuses.
+                  const scheduledStatus = r.status as ScheduledChangeStatus;
                   return (
                     <tr key={r.id} data-testid="org-package-request">
                       <td>
@@ -257,6 +276,12 @@ export function OrgPackageRequests({ orgId, onChanged }: { orgId: string; onChan
                         {r.movedToBasicAt ? (
                           <div className="bl-small" style={{ marginTop: 4, color: "var(--amber-700, #b45309)" }} data-testid="moved-to-basic-note">
                             {MOVED_TO_BASIC_WHILE_WAITING} ({formatDate(r.movedToBasicAt)})
+                          </div>
+                        ) : null}
+                        {scheduled && r.startsAt ? <div className="bl-small" style={{ marginTop: 4 }}>Starts {formatDate(r.startsAt)}</div> : null}
+                        {scheduled && r.reason ? (
+                          <div className="bl-small bl-muted" style={{ marginTop: 2, maxWidth: 320 }}>
+                            Reason: {r.reason}
                           </div>
                         ) : null}
                         {r.whatStays ? (
@@ -281,10 +306,24 @@ export function OrgPackageRequests({ orgId, onChanged }: { orgId: string; onChan
                         ) : null}
                       </td>
                       <td>
-                        <span className={`badge ${STATUS_BADGE[r.status] ?? "b-gray"}`} style={{ textTransform: "capitalize" }}>
-                          {r.status === "cancelled" ? "withdrawn" : r.status}
-                        </span>
-                        {r.status !== "pending" && (r.reviewedAt || r.reviewedBy) ? (
+                        {scheduled ? (
+                          <>
+                            <span className={`badge ${STATUS_BADGE[r.status] ?? "b-gray"}`} data-testid="scheduled-change-status">
+                              {requestStage({ status: scheduledStatus, payment: null, startsAt: r.startsAt })}
+                            </span>
+                            <NoApprovalTag />
+                            {r.status !== "scheduled" && r.reviewedAt ? (
+                              <div className="bl-muted bl-small" style={{ marginTop: 4 }}>
+                                {REQUEST_STATUS_LABEL[scheduledStatus]} on {formatDate(r.reviewedAt)}
+                              </div>
+                            ) : null}
+                          </>
+                        ) : (
+                          <span className={`badge ${STATUS_BADGE[r.status] ?? "b-gray"}`} style={{ textTransform: "capitalize" }}>
+                            {r.status === "cancelled" ? "withdrawn" : r.status}
+                          </span>
+                        )}
+                        {!scheduled && r.status !== "pending" && (r.reviewedAt || r.reviewedBy) ? (
                           <div className="bl-muted bl-small" style={{ marginTop: 4 }}>
                             {r.status === "cancelled" ? "Withdrawn" : r.status === "approved" ? "Approved" : "Rejected"}
                             {person(r.reviewedBy) ? ` by ${person(r.reviewedBy)}` : ""}
