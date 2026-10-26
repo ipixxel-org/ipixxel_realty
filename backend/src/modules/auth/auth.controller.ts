@@ -12,10 +12,7 @@ import { LogoutDto } from './dto/logout.dto';
 import { ChangePasswordDto } from './dto/change-password.dto';
 import { OnboardingAccountDto } from './dto/onboarding-account.dto';
 import { OnboardingOrganisationDto } from './dto/onboarding-organisation.dto';
-import { ResumeSignupDto } from './dto/resume-signup.dto';
 import { ResolveDraftDto } from './dto/resolve-draft.dto';
-import { RestartDraftDto } from './dto/restart-draft.dto';
-import { PreviewDraftDto } from './dto/preview-draft.dto';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import type { JwtPayload } from '../../common/types/jwt-payload.interface';
@@ -65,34 +62,40 @@ export class AuthController {
     return this.authService.signupStep1(dto);
   }
 
+  @UseGuards(JwtAuthGuard)
   @Post('resume-signup')
   @HttpCode(200)
-  resumeSignup(@Body() dto: ResumeSignupDto) {
-    return this.authService.resumeSignup(dto);
+  resumeSignup(@CurrentUser() actor: JwtPayload) {
+    return this.authService.resumeSignup(actor);
   }
 
-  // "Continue previous setup" preview — read-only fetch of the draft the
-  // Step 1 collision matched, keyed by id (the match may have been on
-  // phone number with a brand-new email). See AuthService.previewDraft.
+  // "Continue previous setup" preview — read-only fetch of the authenticated
+  // actor's own draft. See AuthService.previewDraft.
+  @UseGuards(JwtAuthGuard)
   @Post('signup/step1/preview')
   @HttpCode(200)
-  previewDraft(@Body() dto: PreviewDraftDto) {
-    return this.authService.previewDraft(dto);
+  previewDraft(@CurrentUser() actor: JwtPayload) {
+    return this.authService.previewDraft(actor);
   }
 
   // "You already started this" popup — one of these two fires once the
   // caller picks an option, see AuthService.resumeExistingDraft /
   // restartExistingDraft.
+  @UseGuards(JwtAuthGuard)
   @Post('signup/step1/resume')
   @HttpCode(200)
-  resumeExistingDraft(@Body() dto: ResolveDraftDto) {
-    return this.authService.resumeExistingDraft(dto);
+  resumeExistingDraft(
+    @CurrentUser() actor: JwtPayload,
+    @Body() dto: ResolveDraftDto,
+  ) {
+    return this.authService.resumeExistingDraft(actor, dto);
   }
 
+  @UseGuards(JwtAuthGuard)
   @Post('signup/step1/restart')
   @HttpCode(200)
-  restartExistingDraft(@Body() dto: RestartDraftDto) {
-    return this.authService.restartExistingDraft(dto);
+  restartExistingDraft(@CurrentUser() actor: JwtPayload) {
+    return this.authService.restartExistingDraft(actor);
   }
 
   @UseGuards(JwtAuthGuard)

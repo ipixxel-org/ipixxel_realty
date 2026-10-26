@@ -5,6 +5,7 @@ import type { NestExpressApplication } from '@nestjs/platform-express';
 import { json, urlencoded, type Request, type Response } from 'express';
 import helmet from 'helmet';
 import { AppModule } from './app.module';
+import { rateLimitMiddleware } from './common/middleware/rate-limit.middleware';
 import { join } from 'path';
 
 async function bootstrap() {
@@ -71,6 +72,8 @@ async function bootstrap() {
   // thumbnail data) regularly exceeds Express's 100kb default body limit.
   app.use(json({ limit: '15mb', ...rawBodySaver }));
   app.use(urlencoded({ extended: true, limit: '15mb', ...rawBodySaver }));
+
+  app.use(rateLimitMiddleware);
 
   app.useGlobalPipes(
     new ValidationPipe({

@@ -1,8 +1,7 @@
-import { IsEmail, IsNotEmpty, IsString, MaxLength } from 'class-validator';
+import { IsEmail, IsNotEmpty, IsOptional, IsString, MaxLength } from 'class-validator';
 
-// Step 1 fields (freshly typed on a retry) plus which existing draft the
-// user chose to resume or restart — used by the "you already started this"
-// popup, see AuthService.resumeExistingDraft / restartExistingDraft.
+// Step 1 fields freshly typed on a retry. The target draft is always the
+// authenticated actor's own account; existingUserId is ignored.
 export class ResolveDraftDto {
   @IsString()
   @IsNotEmpty()
@@ -27,7 +26,9 @@ export class ResolveDraftDto {
   @MaxLength(100)
   country: string;
 
+  // Kept only for backwards compatibility: the backend always operates on
+  // the authenticated actor's own draft and ignores this field.
+  @IsOptional()
   @IsString()
-  @IsNotEmpty()
-  existingUserId: string;
+  existingUserId?: string;
 }

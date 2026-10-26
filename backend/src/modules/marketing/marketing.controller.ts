@@ -35,13 +35,29 @@ export class AdminMarketingController {
   constructor(private readonly service: MarketingService) {}
 
   @Get('credentials')
-  getCredentials() {
+  getCredentials(@CurrentUser() actor: JwtPayload) {
+    this.assertSuperAdmin(actor);
     return this.service.getMarketingCredentials();
   }
 
   @Put('credentials')
-  updateCredentials(@Body() dto: UpdateMarketingCredentialsDto) {
+  updateCredentials(
+    @CurrentUser() actor: JwtPayload,
+    @Body() dto: UpdateMarketingCredentialsDto,
+  ) {
+    this.assertSuperAdmin(actor);
     return this.service.updateMarketingCredentials(dto);
+  }
+
+  // The platform OAuth secrets are not delegated through the Settings
+  // permission matrix; only a true Super Administrator may read or change
+  // them.
+  private assertSuperAdmin(actor: JwtPayload) {
+    if (!actor.roles?.includes('super_admin')) {
+      throw new ForbiddenException(
+        'Platform marketing credentials can only be accessed by a Super Administrator',
+      );
+    }
   }
 
   @Get('platforms')

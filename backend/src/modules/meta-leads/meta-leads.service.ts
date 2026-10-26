@@ -410,7 +410,13 @@ export class MetaLeadsService implements OnModuleInit {
       throw new BadRequestException('Invalid OAuth state');
     }
     if (!parsed.orgId) throw new BadRequestException('Invalid OAuth state');
-    if (parsed.ts && Date.now() - parsed.ts > 30 * 60 * 1000) {
+    // The state is public (it round-trips through Facebook), so it must be
+    // signed and time-limited; otherwise an attacker can forge orgId and
+    // attach their own Meta account to another organisation.
+    if (!parsed.ts || !parsed.sig) {
+      throw new BadRequestException('Invalid OAuth state');
+    }
+    if (Date.now() - parsed.ts > 30 * 60 * 1000) {
       throw new BadRequestException('OAuth state has expired');
     }
 

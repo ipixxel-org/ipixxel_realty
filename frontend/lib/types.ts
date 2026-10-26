@@ -131,20 +131,13 @@ export type SignupStep1Response =
         nextStep: OnboardingStep;
         email_verification_required?: boolean;
       })
-  | {
-      status: "exists_incomplete";
-      existingUserId: string;
-      firstName: string | null;
-      lastName: string | null;
-      onboardingStep: OnboardingStep;
-    }
+  | { status: "exists_incomplete" }
   | { status: "exists_completed" };
 
-// "You already started this" popup — resolves an exists_incomplete match by
-// either continuing the old draft or restarting it, both with whatever was
+// "You already started this" popup - resolves the authenticated actor's own
+// draft by either continuing it or restarting it, both with whatever was
 // just retyped on Step 1. See AuthService.resumeExistingDraft/restartExistingDraft.
 export interface ResolveDraftInput {
-  existingUserId: string;
   first_name: string;
   last_name: string;
   work_email: string;

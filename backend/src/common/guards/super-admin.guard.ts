@@ -106,7 +106,15 @@ export class SuperAdminGuard implements CanActivate {
 
     const moduleKey = platformModuleForPath(path);
     if (!moduleKey) {
-      return true;
+      // /admin/integrations performs its own per-integration permission
+      // checks (each card has a distinct permission). Every other unmapped
+      // admin route is denied rather than silently allowed.
+      if (path === '/admin/integrations' || path.startsWith('/admin/integrations/')) {
+        return true;
+      }
+      throw new ForbiddenException(
+        'This admin area is not available for your role',
+      );
     }
 
     // Organisation template assignment is one endpoint for both adding and
@@ -202,7 +210,9 @@ export class SuperAdminGuard implements CanActivate {
 
     const known = PLATFORM_PERMISSION_MODULES.some((m) => m.key === moduleKey);
     if (!known) {
-      return true;
+      throw new ForbiddenException(
+        `Unknown platform permission module: ${moduleKey}`,
+      );
     }
 
     throw new ForbiddenException(
