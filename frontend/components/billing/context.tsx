@@ -93,6 +93,8 @@ export function billingHref(to: BillingRoute, params: RouteParams = {}): string 
 export interface BillingNav {
   href(to: BillingRoute, params?: RouteParams): string;
   go(to: BillingRoute, params?: RouteParams): void;
+  /** Like go, without a history entry (redirects). Falls back to go. */
+  replace?(to: BillingRoute, params?: RouteParams): void;
   /** Presentation pages intercept navigation (e.g. jump to the next step). */
   intercept?: (to: BillingRoute, params?: RouteParams) => boolean;
 }
@@ -118,6 +120,7 @@ function useRouterNav(): BillingNav {
     () => ({
       href: billingHref,
       go: (to, params) => router.push(billingHref(to, params)),
+      replace: (to, params) => router.replace(billingHref(to, params)),
     }),
     [router],
   );
@@ -148,6 +151,9 @@ export function BillingEnvProvider({
             intercept: onNavigate,
             go: (to, params) => {
               if (!onNavigate(to, params)) routerNav.go(to, params);
+            },
+            replace: (to, params) => {
+              if (!onNavigate(to, params)) routerNav.replace!(to, params);
             },
           }
         : routerNav,

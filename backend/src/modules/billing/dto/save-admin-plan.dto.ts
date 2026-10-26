@@ -30,7 +30,8 @@ class PlanModulesV2Dto {
 export class SaveAdminPlanDto {
   // Read-only in the contract shape; accepted so a BillingPlan round-trips, then ignored.
   @IsOptional() @IsString() id?: string;
-  @IsOptional() @IsInt() rank?: number;
+  // A plan that isn't offered (inactive / internal) has a half rank, e.g. 0.5.
+  @IsOptional() @IsNumber() rank?: number;
   @IsOptional() @IsBoolean() isActive?: boolean;
   @IsString() @MaxLength(80) name!: string;
   @IsOptional() @IsString() @MaxLength(300) tagline?: string;

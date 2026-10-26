@@ -28,6 +28,7 @@ import { renewalCharge } from './coupon-rules';
 import {
   isFreePlan,
   isInternalPlan,
+  planRanker,
   sortPlans,
   toBillingPlan,
   toBillingPlans,
@@ -127,13 +128,10 @@ export class OrgBillingV2Service {
     // Billing details are the org profile (Settings → General).
     const profile = billingDetailsFromOrg(org);
 
-    // Rank comes from the active catalogue; a subscription on a since-archived
-    // plan still gets a sensible rank (after the active ones).
+    // Same ranks as GET /org/billing/plans (planRanker); an archived or
+    // internal plan sits between its neighbours.
     const ranked = sortPlans(activePlans);
-    const rankOf = (id: string) => {
-      const i = ranked.findIndex((p) => p.id === id);
-      return i === -1 ? ranked.length : i;
-    };
+    const rankOf = planRanker(activePlans);
     const planRow = subscription?.plan ?? ranked.find(isFreePlan) ?? null;
     if (!planRow)
       throw new NotFoundException(
@@ -201,7 +199,7 @@ export class OrgBillingV2Service {
       billingProfile: profile,
       pendingUpgrade,
       rejectedUpgrade,
-      plan: toBillingPlan(planRow, rankOf(planRow.id)),
+      plan: toBillingPlan(planRow, rankOf(planRow)),
       subscription: subscription
         ? {
             status: subscription.status as never,
@@ -211,7 +209,7 @@ export class OrgBillingV2Service {
             cancelAtPeriodEnd: subscription.cancelAtPeriodEnd,
             scheduled: scheduledRow
               ? {
-                  plan: toBillingPlan(scheduledRow, rankOf(scheduledRow.id)),
+                  plan: toBillingPlan(scheduledRow, rankOf(scheduledRow)),
                   interval: nextInterval ?? subscription.billingCycle,
                 }
               : null,
@@ -227,7 +225,7 @@ export class OrgBillingV2Service {
         subscription?.movedToBasicAt && previousRow
           ? {
               at: subscription.movedToBasicAt,
-              plan: toBillingPlan(previousRow, rankOf(previousRow.id)),
+              plan: toBillingPlan(previousRow, rankOf(previousRow)),
               interval: subscription.previousInterval ?? 'monthly',
             }
           : null,

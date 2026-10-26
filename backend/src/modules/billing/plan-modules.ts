@@ -89,14 +89,56 @@ export function planModulesV2(
   };
 }
 
-/** Free plan first, then by monthly price, then age — rank is the position. */
-export function sortPlans<T extends PlanRow>(plans: T[]): T[] {
-  return [...plans].sort(
-    (a, b) =>
-      Number(isFreePlan(b)) - Number(isFreePlan(a)) ||
-      a.priceMonthly - b.priceMonthly ||
-      a.createdAt.getTime() - b.createdAt.getTime(),
+type RankRow = Pick<
+  PlanRow,
+  'id' | 'isSystem' | 'isActive' | 'priceMonthly' | 'priceYearly' | 'createdAt'
+>;
+
+function comparePlans(a: RankRow, b: RankRow): number {
+  return (
+    Number(isFreePlan(b)) - Number(isFreePlan(a)) ||
+    a.priceMonthly - b.priceMonthly ||
+    a.createdAt.getTime() - b.createdAt.getTime()
   );
+}
+
+/** Free plan first, then by monthly price, then age. */
+export function sortPlans<T extends RankRow>(plans: T[]): T[] {
+  return [...plans].sort(comparePlans);
+}
+
+/**
+ * The ONE rank rule (upgrade vs downgrade): a plan's position among the plans
+ * organisations can pick — active and not internal — in sortPlans order, so
+ * Basic is 0 and every screen and endpoint agrees with GET /org/billing/plans.
+ * A plan that isn't offered (internal ₹0 or archived) sits halfway between its
+ * neighbours (e.g. 0.5), so it never ties with an offered plan.
+ */
+export function planRanker(plans: RankRow[]): (plan: RankRow) => number {
+  const offered = sortPlans(
+    plans.filter((p) => p.isActive && !isInternalPlan(p)),
+  );
+  return (plan) => {
+    const i = offered.findIndex((p) => p.id === plan.id);
+    if (i !== -1) return i;
+    return offered.filter((p) => comparePlans(p, plan) < 0).length - 0.5;
+  };
+}
+
+export type PlanChangeDirection = 'upgrade' | 'downgrade' | 'same';
+
+/**
+ * Upgrade or downgrade, by rank. Same plan: monthly → yearly is an upgrade,
+ * yearly → monthly a downgrade. Mirrored in frontend lib/billing/direction.ts.
+ */
+export function planChangeDirection(
+  from: { rank: number; interval: 'monthly' | 'yearly' },
+  to: { rank: number; interval: 'monthly' | 'yearly' },
+): PlanChangeDirection {
+  if (to.rank !== from.rank)
+    return to.rank > from.rank ? 'upgrade' : 'downgrade';
+  if (to.interval === from.interval) return 'same';
+  return to.interval === 'yearly' ? 'upgrade' : 'downgrade';
 }
 
 export function toBillingPlan(plan: PlanRow, rank: number): BillingPlanV2 {
@@ -115,7 +157,8 @@ export function toBillingPlan(plan: PlanRow, rank: number): BillingPlanV2 {
 }
 
 export function toBillingPlans(plans: PlanRow[]): BillingPlanV2[] {
-  return sortPlans(plans).map((p, i) => toBillingPlan(p, i));
+  const rank = planRanker(plans);
+  return sortPlans(plans).map((p) => toBillingPlan(p, rank(p)));
 }
 
 /**

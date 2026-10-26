@@ -15,7 +15,7 @@ import {
   getBillingExpiryConfig,
 } from '../../common/utils/subscription-lifecycle.util';
 import { billingError } from './billing-checkout.service';
-import { sortPlans, toBillingPlan } from './plan-modules';
+import { planRanker, toBillingPlan } from './plan-modules';
 import type {
   RetentionChoicesV2,
   RetentionItemV2,
@@ -92,11 +92,7 @@ export class BillingRetentionService {
     const saved = await savedChoiceFor(this.prisma, orgId, target.id);
     const defaults = pickRetention(ranked, limits, null);
     const selected = pickRetention(ranked, limits, saved);
-    const ranks = sortPlans(active);
-    const rank = Math.max(
-      0,
-      ranks.findIndex((p) => p.id === target.id),
-    );
+    const rank = planRanker(active)(target);
 
     const item = (
       id: string,

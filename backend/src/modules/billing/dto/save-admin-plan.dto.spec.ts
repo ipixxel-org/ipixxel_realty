@@ -35,4 +35,16 @@ describe('SaveAdminPlanDto', () => {
     });
     expect(errors).toEqual([]);
   });
+
+  it('accepts the half rank of a plan that is not offered (inactive Demo)', async () => {
+    const errors = await validate(
+      plainToInstance(SaveAdminPlanDto, {
+        ...loaded,
+        isActive: false,
+        rank: 0.5,
+      }),
+      { whitelist: true, forbidNonWhitelisted: true },
+    );
+    expect(errors).toEqual([]);
+  });
 });

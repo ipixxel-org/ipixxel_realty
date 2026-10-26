@@ -26,7 +26,12 @@ import {
 import { GST_STATES } from './gst';
 import { issueCreditNote, issueOfflineInvoice } from './invoice.util';
 import { OrgBillingV2Service } from './org-billing-v2.service';
-import { isFreePlan, sortPlans, toBillingPlan } from './plan-modules';
+import {
+  isFreePlan,
+  planRanker,
+  sortPlans,
+  toBillingPlan,
+} from './plan-modules';
 import type {
   BillingInterval,
   BillingPlanV2,
@@ -168,10 +173,7 @@ export class AdminSubscriptionsService {
       this.prisma.coupon.findMany({ select: { id: true, code: true } }),
     ]);
     const ranked = sortPlans(active);
-    const rankOf = (id: string) => {
-      const i = ranked.findIndex((p) => p.id === id);
-      return i === -1 ? ranked.length : i;
-    };
+    const rankOf = planRanker(active);
     const free = ranked.find(isFreePlan) ?? null;
     const seatsBy = new Map(seats.map((s) => [s.orgId, s._count._all]));
     const codeOf = new Map(coupons.map((c) => [c.id, c.code]));
@@ -182,7 +184,7 @@ export class AdminSubscriptionsService {
       const sub = o.subscriptions[0] ?? null;
       const planRow: Plan | null = sub?.plan ?? free;
       if (!planRow) continue;
-      const plan = toBillingPlan(planRow, rankOf(planRow.id));
+      const plan = toBillingPlan(planRow, rankOf(planRow));
       const scheduled = sub?.scheduledPlanId
         ? planById.get(sub.scheduledPlanId)
         : undefined;
@@ -207,7 +209,7 @@ export class AdminSubscriptionsService {
               cancelAtPeriodEnd: sub.cancelAtPeriodEnd,
               scheduled: scheduled
                 ? {
-                    plan: toBillingPlan(scheduled, rankOf(scheduled.id)),
+                    plan: toBillingPlan(scheduled, rankOf(scheduled)),
                     interval: sub.scheduledInterval ?? sub.billingCycle,
                   }
                 : null,

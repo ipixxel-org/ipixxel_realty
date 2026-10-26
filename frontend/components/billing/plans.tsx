@@ -4,6 +4,7 @@ import { useState, type ReactNode } from "react";
 import { Icon } from "@/components/icons";
 import { Seg } from "@/components/superadmin/seg";
 import { formatINR, packagePriceText, yearlySaving } from "@/lib/billing/pricing";
+import { isOverdueManual, planChangeRoute } from "@/lib/billing/direction";
 import { blockingRequest, pendingRequestText } from "@/lib/billing/requests";
 import type { BillingInterval, BillingPlan } from "@/lib/billing/types";
 import { useBillingQuery, useOrgBilling } from "./context";
@@ -57,10 +58,9 @@ export function PlansScreen({
   const pending = overview.pendingUpgrade;
   // A request waiting for approval blocks every other plan change until it's decided or withdrawn.
   const waiting = blockingRequest(overview);
-  const onPaidMonthly = overview.interval === "monthly" && overview.status !== "free" && overview.status !== "moved_to_basic";
   // Manual mode with the renewal overdue: every paid plan is a request at its
   // full price (the missed term continues); Basic moves the org straight away.
-  const overdueManual = !live && overview.paymentMode === "manual" && (overview.status === "past_due" || overview.status === "grace_ending");
+  const overdueManual = isOverdueManual(overview, live);
   /** A plan action link — disabled, with the reason, while a request is waiting. */
   const go = (to: "checkout" | "downgrade", params: Record<string, string | undefined>, className: string, children: ReactNode) =>
     waiting ? (
@@ -82,40 +82,30 @@ export function PlansScreen({
         </button>
       );
     }
-    if (overdueManual) {
-      if (p.isFree) return go("downgrade", { plan: p.id }, "btn btn-ghost", <><Icon name="arrow-down" size={15} /> Change plan</>);
-      if (p.id === current.id && interval === overview!.interval) {
-        return go("checkout", { plan: p.id, interval, renew: "1" }, "btn btn-primary", <><Icon name="arrow-up" size={15} /> Request renewal</>);
-      }
-      return go("checkout", { plan: p.id, interval }, p.rank > current.rank ? "btn btn-primary" : "btn btn-ghost", <><Icon name={p.rank > current.rank ? "arrow-up" : "arrow-down"} size={15} /> Change plan</>);
-    }
-    // Same paid plan, monthly → yearly: an upgrade with credit for the unused month.
-    if (p.id === current.id && !p.isFree && onPaidMonthly && interval === "yearly") {
-      return (
-        go("checkout", { plan: p.id, interval, coupon }, "btn btn-primary", <><Icon name="arrow-up" size={15} /> {live ? "Switch to yearly" : "Request yearly billing"}</>)
-      );
-    }
-    // Same paid plan, yearly → monthly: scheduled for the renewal date.
-    if (p.id === current.id && !p.isFree && overview!.interval === "yearly" && interval === "monthly") {
-      return (
-        go("downgrade", { plan: p.id, interval }, "btn btn-ghost", <><Icon name="arrow-down" size={15} /> Switch to monthly</>)
-      );
-    }
-    if (p.id === current.id) {
+    // One rule (lib/billing/direction.ts) picks the page; the arrow follows it.
+    const route = planChangeRoute(overview!, p, interval, live);
+    if (!route) {
       return (
         <button type="button" className="btn" disabled style={{ width: "100%", justifyContent: "center", background: "var(--surface-2)", color: "var(--muted)", border: "1px solid var(--line)" }}>
           ✓ Current plan
         </button>
       );
     }
-    if (p.rank > current.rank) {
-      return (
-        go("checkout", { plan: p.id, interval, coupon }, "btn btn-primary", <><Icon name="arrow-up" size={15} /> Change plan</>)
-      );
+    const up = route === "checkout";
+    const arrow = <Icon name={up ? "arrow-up" : "arrow-down"} size={15} data-icon={up ? "arrow-up" : "arrow-down"} />;
+    const samePlan = p.id === current.id;
+    if (overdueManual) {
+      if (samePlan && interval === overview!.interval) {
+        return go("checkout", { plan: p.id, interval, renew: "1" }, "btn btn-primary", <>{arrow} Request renewal</>);
+      }
+      return go(route, p.isFree ? { plan: p.id } : { plan: p.id, interval }, p.rank > current.rank ? "btn btn-primary" : "btn btn-ghost", <>{arrow} Change plan</>);
     }
-    return (
-      go("downgrade", { plan: p.id, interval }, "btn btn-ghost", <><Icon name="arrow-down" size={15} /> Change plan</>)
-    );
+    // Same paid plan: monthly → yearly is an upgrade (credit for the unused month);
+    // yearly → monthly is scheduled for the renewal date.
+    const label = samePlan ? (up ? (live ? "Switch to yearly" : "Request yearly billing") : "Switch to monthly") : "Change plan";
+    return up
+      ? go("checkout", { plan: p.id, interval, coupon }, "btn btn-primary", <>{arrow} {label}</>)
+      : go("downgrade", { plan: p.id, interval }, "btn btn-ghost", <>{arrow} {label}</>);
   }
 
   const rows: { label: string; render: (p: BillingPlan) => ReactNode }[] = [
