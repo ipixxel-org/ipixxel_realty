@@ -3,6 +3,7 @@ import type { Prisma } from '@prisma/client';
 import { orgBillingRecipientsWhere } from './notification-recipients.util';
 import { applyRetention } from './retention.util';
 import { billingNow } from './billing-clock.util';
+import { closeScheduledChange } from './scheduled-change.util';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 const CYCLE_DAYS = { monthly: 30, yearly: 365 } as const;
@@ -160,6 +161,15 @@ export async function applyPlanChange(
           renewsAt,
         },
       });
+
+  // The Requests list: a renewal onto the scheduled plan is that change done;
+  // anything else (an upgrade, a renewal of the same plan) replaces it.
+  await closeScheduledChange(
+    tx,
+    input.organisationId,
+    { planId: plan.id, interval: input.toInterval },
+    now,
+  );
 
   // "Choose what stays": a bigger plan brings paused things back; a smaller
   // one (a renewal onto a scheduled downgrade) pauses what doesn't fit.

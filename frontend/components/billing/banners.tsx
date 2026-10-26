@@ -196,7 +196,8 @@ export function PicksSummary({ retention }: { retention: RetentionSummary }) {
 
 /* ------------------------------------------------------------ Banners */
 
-function UndoButton({ label, run, done }: { label: string; run: () => Promise<unknown>; done: string }) {
+/** "Keep <plan>": undo a scheduled change (banner, and the Requests list). */
+export function UndoButton({ label, run, done, onDone }: { label: string; run: () => Promise<unknown>; done: string; onDone?: () => void }) {
   const { canEdit } = useBillingEnv();
   const { toast } = useToast();
   const refresh = useRefresh();
@@ -212,6 +213,7 @@ function UndoButton({ label, run, done }: { label: string; run: () => Promise<un
           await run();
           await refresh();
           toast({ variant: "success", title: done });
+          onDone?.();
         } catch (e) {
           toast({ variant: "error", title: "Couldn't undo", description: e instanceof Error ? e.message : undefined });
         } finally {

@@ -101,8 +101,9 @@ export async function findRejectedUpgrade(
   db: Pick<PrismaClient, 'packageChangeRequest'>,
   orgId: string,
 ): Promise<RejectedUpgradeV2 | null> {
+  // Scheduled changes are records, not requests: they don't hide a rejection.
   const latest = await db.packageChangeRequest.findFirst({
-    where: { orgId },
+    where: { orgId, kind: { not: 'scheduled_change' } },
     orderBy: { createdAt: 'desc' },
     include: { targetPlan: { select: { id: true, name: true } } },
   });

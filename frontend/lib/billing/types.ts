@@ -148,8 +148,17 @@ export interface WhatStays {
 }
 
 /** One plan change request on Settings → Billing → Requests (newest first). */
+/** A scheduled change (no approval): scheduled → done / undone ("Keep <plan>") / replaced. */
+export type ScheduledChangeStatus = "scheduled" | "done" | "undone" | "replaced";
+
 export interface OrgPlanRequest {
   id: string;
+  /**
+   * request = sent to our team for approval (manual mode); scheduled_change =
+   * a move to Basic / a smaller plan at the end of the term, recorded here
+   * (both modes, no approval, never pending). Missing = request.
+   */
+  kind?: "request" | "scheduled_change";
   requestedAt: string;
   requestedBy: string | null;
   fromPlan: { id: PlanId; name: string } | null;
@@ -158,7 +167,8 @@ export interface OrgPlanRequest {
   /** Before GST, in rupees. */
   amount: number | null;
   amountNote: "prorated" | "less_monthly_credit" | null;
-  status: "pending" | "approved" | "rejected" | "withdrawn";
+  status: "pending" | "approved" | "rejected" | "withdrawn" | ScheduledChangeStatus;
+  /** Requests: when it was decided. Scheduled changes: when it took effect / was undone / replaced. */
   decidedAt: string | null;
   rejectionReason: string | null;
   /** What they chose to keep on the new plan; null when nothing had to be chosen. */
@@ -175,6 +185,10 @@ export interface OrgPlanRequest {
   movedToBasicAt?: string | null;
   /** How the total is made up; shows a coupon on it. Null for older requests. */
   quote?: RequestQuote | null;
+  /** Scheduled changes: when it applies. */
+  startsAt?: string | null;
+  /** Scheduled changes: the reason they gave (moving to Basic). */
+  reason?: string | null;
 }
 
 /** A request's price: "₹1,499 − ₹300 coupon (CODE) + GST ₹215.82 = ₹1,414.82" (rupees). */

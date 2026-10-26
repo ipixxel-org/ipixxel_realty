@@ -7,6 +7,7 @@ import {
 } from './plan-quota.util';
 import { orgBillingRecipientsWhere } from './notification-recipients.util';
 import { NO_SCHEDULED_CHANGE } from './plan-change.util';
+import { closeScheduledChange } from './scheduled-change.util';
 import { applyRetention, type RetentionDb } from './retention.util';
 import { billingNow, isBillingV2Server } from './billing-clock.util';
 
@@ -519,6 +520,13 @@ export async function moveToFreePlan(
       previousInterval: sub.billingCycle,
     },
   });
+  // A scheduled move to Basic is done; any other scheduled change is replaced.
+  await closeScheduledChange(
+    prisma,
+    sub.orgId,
+    { planId: free.id, interval: 'monthly' },
+    now,
+  );
   const retention = await applyRetention(prisma, sub.orgId, free);
   // Option A (manual mode): a request still waiting stays pending; it notes
   // that the org fell back to Basic meanwhile. Approving it later starts the
@@ -573,6 +581,7 @@ async function applyScheduledPlan(
   });
   if (!plan || !plan.isActive) {
     // The plan was archived meanwhile: keep the current plan.
+    await closeScheduledChange(prisma, sub.orgId, 'replaced');
     return prisma.subscription.update({
       where: { id: sub.id },
       data: { ...NO_SCHEDULED_CHANGE },
@@ -590,6 +599,7 @@ async function applyScheduledPlan(
       ...NO_SCHEDULED_CHANGE,
     },
   });
+  await closeScheduledChange(prisma, sub.orgId, { planId: plan.id, interval });
   await applyRetention(prisma, sub.orgId, plan);
   await prisma.auditLog
     ?.create({
