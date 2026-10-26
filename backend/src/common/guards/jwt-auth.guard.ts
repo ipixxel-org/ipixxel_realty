@@ -35,9 +35,13 @@ export function verifyAccessToken(
   token: string,
 ): JwtPayload {
   try {
-    return jwtService.verify<JwtPayload>(token, {
+    const payload = jwtService.verify<JwtPayload>(token, {
       secret: process.env.JWT_SECRET,
     });
+    if (payload.typ !== 'access' || !payload.sub) {
+      throw new Error('Not an access token');
+    }
+    return payload;
   } catch {
     throw new UnauthorizedException('Invalid or expired token');
   }

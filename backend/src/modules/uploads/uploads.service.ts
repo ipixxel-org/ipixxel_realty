@@ -78,7 +78,12 @@ export class UploadsService {
     if (dto.storedKey.includes('..') || dto.storedKey.includes('\\')) {
       throw new BadRequestException('Path traversal characters are forbidden in storage key');
     }
-    if (orgId && !dto.storedKey.startsWith(`orgs/${orgId}/`)) {
+    if (
+      orgId &&
+      !dto.storedKey.startsWith(`org/${orgId}/`) &&
+      // Legacy keys created before the prefix was standardised.
+      !dto.storedKey.startsWith(`orgs/${orgId}/`)
+    ) {
       throw new BadRequestException('Storage key does not belong to your organisation');
     }
 

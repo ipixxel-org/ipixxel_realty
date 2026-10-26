@@ -1,4 +1,4 @@
-import { IsEmail, IsNotEmpty, IsOptional, IsString, MaxLength } from 'class-validator';
+import { IsEmail, IsNotEmpty, IsOptional, IsString, MaxLength, MinLength } from 'class-validator';
 
 // Signup wizard — Step 1 (Account). Creates the User; no Organisation
 // exists yet, so nothing org-related belongs here.
@@ -23,6 +23,7 @@ export class OnboardingAccountDto {
 
   @IsOptional()
   @IsString()
+  @MinLength(8)
   @MaxLength(72)
   password?: string;
 

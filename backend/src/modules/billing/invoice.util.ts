@@ -1,4 +1,4 @@
-import { createHmac, timingSafeEqual } from 'crypto';
+import { createHmac, randomBytes, timingSafeEqual } from 'crypto';
 import type { Invoice, Prisma } from '@prisma/client';
 import { roundHalfUp } from './checkout-quote';
 import {
@@ -257,8 +257,17 @@ export async function issueCreditNote(
 
 const DOC_TTL_MS = 60 * 60 * 1000;
 
+// Never fall back to a hard-coded secret. If no configured secret exists we
+// use a random per-process key: existing links still verify while the process
+// lives (they expire after an hour anyway), and nobody can forge them.
+const EPHEMERAL_DOC_SECRET = randomBytes(32).toString('hex');
+
 function docSecret(): string {
-  return `invoice-doc:${process.env.JWT_SECRET ?? 'dev'}`;
+  const secret =
+    process.env.INVOICE_DOC_SECRET?.trim() ||
+    process.env.JWT_SECRET?.trim() ||
+    EPHEMERAL_DOC_SECRET;
+  return `invoice-doc:${secret}`;
 }
 
 function sign(id: string, exp: number): string {

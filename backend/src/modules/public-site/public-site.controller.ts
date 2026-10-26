@@ -1,5 +1,6 @@
 import { Controller, Get, Post, Body, Param, ParseUUIDPipe, Query, Header, Res } from '@nestjs/common';
 import { PublicSiteService } from './public-site.service';
+import { TrackEventDto } from './dto/track-event.dto';
 import type { Response } from 'express';
 
 @Controller('public/site')
@@ -7,7 +8,7 @@ export class PublicSiteController {
   constructor(private readonly service: PublicSiteService) {}
 
   @Post('track')
-  track(@Body() dto: { landingPageId: string; eventType?: string; metadata?: any }) {
+  track(@Body() dto: TrackEventDto) {
     return this.service.recordPublicTrack(dto);
   }
 

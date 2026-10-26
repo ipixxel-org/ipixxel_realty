@@ -160,10 +160,12 @@ export default function RegisterPage() {
   // signup — the popup asks whether to continue that draft or start fresh
   // with whatever was just typed, see handleContinueDraft/handleStartFreshDraft.
   const [draftCollision, setDraftCollision] = useState<{
-    existingUserId: string;
-    firstName: string | null;
-    lastName: string | null;
-    onboardingStep: OnboardingStep;
+    // True only when we have a real authenticated session that owns the
+    // draft (e.g. redirected here after login). A fresh signup collision
+    // only learns that some draft exists and cannot manage it.
+    canManage: boolean;
+    firstName?: string | null;
+    onboardingStep?: OnboardingStep;
   } | null>(null);
   const [draftBusy, setDraftBusy] = useState<"resume" | "restart" | null>(null);
   const [draftError, setDraftError] = useState<string | null>(null);
@@ -264,7 +266,6 @@ export default function RegisterPage() {
       // signupStep1's real, server-side email/phone collision check.
       if (resumedAccountIdRef.current) {
         const resumed = await resumeExistingDraft({
-          existingUserId: resumedAccountIdRef.current,
           first_name: form.first_name,
           last_name: form.last_name,
           work_email: form.work_email,
@@ -309,15 +310,11 @@ export default function RegisterPage() {
         return false;
       }
       if (res.status === "exists_incomplete") {
-        // Don't silently resume — that used to discard whatever was just
-        // retyped above (see AuthService.resumeExistingDraft). Ask instead.
+        // The backend no longer reveals whose draft this is (or its id) to
+        // an unauthenticated caller, so this browser cannot resume or delete
+        // it. Point the person at sign-in instead.
         setDraftError(null);
-        setDraftCollision({
-          existingUserId: res.existingUserId,
-          firstName: res.firstName,
-          lastName: res.lastName,
-          onboardingStep: res.onboardingStep,
-        });
+        setDraftCollision({ canManage: false });
         return false;
       }
       applyTokens(res.user, res);
@@ -492,12 +489,11 @@ export default function RegisterPage() {
     if (!hasResumeIntent) return;
 
     didResumeRef.current = true;
-    resumeSignup(user.email)
+    resumeSignup()
       .then((resumed) => {
         setDraftCollision({
-          existingUserId: resumed.user.id,
+          canManage: true,
           firstName: resumed.user.first_name,
-          lastName: resumed.user.last_name,
           onboardingStep: resumed.user.onboarding_step,
         });
       })
@@ -635,11 +631,11 @@ export default function RegisterPage() {
   // again, which commitStep's Step 1 branch routes through
   // resumeExistingDraft for exactly this reason.
   async function handleContinueDraft() {
-    if (!draftCollision) return;
+    if (!draftCollision?.canManage) return;
     setDraftError(null);
     setDraftBusy("resume");
     try {
-      const resumed = await previewDraft({ existingUserId: draftCollision.existingUserId });
+      const resumed = await previewDraft();
       applyResumedState(resumed);
       setDraftCollision(null);
     } catch (err) {
@@ -654,13 +650,11 @@ export default function RegisterPage() {
   // account is created until the user submits the blank Step 1 again, which
   // keeps verification and collision detection on the normal signup path.
   async function handleStartFreshDraft() {
-    if (!draftCollision) return;
+    if (!draftCollision?.canManage) return;
     setDraftError(null);
     setDraftBusy("restart");
     try {
-      const res = await restartExistingDraft({
-        existingUserId: draftCollision.existingUserId,
-      });
+      const res = await restartExistingDraft();
       if (res.status !== "restarted") {
         setDraftError("Couldn't start a fresh setup — please try again.");
         return;
@@ -1058,15 +1052,24 @@ export default function RegisterPage() {
         <Modal
           open
           onClose={() => setDraftCollision(null)}
-          title="Welcome back"
+          title={draftCollision.canManage ? "Welcome back" : "Setup already started"}
           size="sm"
           closeDisabled={!!draftBusy}
         >
             <p style={{ margin: "0 0 20px", color: "var(--ink-2)", fontSize: 13.5, lineHeight: 1.6 }}>
-              Looks like {draftCollision.firstName ? <b>{draftCollision.firstName}</b> : "someone"} already
-              started setting up a workspace with this email or mobile number — it got as far as{" "}
-              <b>{completedStepLabel(draftCollision.onboardingStep)}</b>. Want to continue where that setup
-              left off, or start fresh with what you just entered?
+              {draftCollision.canManage ? (
+                <>
+                  Looks like {draftCollision.firstName ? <b>{draftCollision.firstName}</b> : "someone"} already
+                  started setting up a workspace with this email or mobile number - it got as far as{" "}
+                  <b>{completedStepLabel(draftCollision.onboardingStep ?? "account")}</b>. Want to continue where
+                  that setup left off, or start fresh with what you just entered?
+                </>
+              ) : (
+                <>
+                  An account setup already exists for this email or mobile number. Sign in with that account to
+                  continue, or use a different email or number.
+                </>
+              )}
             </p>
             {draftError ? (
               <p role="alert" className="help" style={{ color: "var(--rose)", borderColor: "var(--rose-050)", background: "var(--rose-050)", marginBottom: 16 }}>
@@ -1074,22 +1077,43 @@ export default function RegisterPage() {
               </p>
             ) : null}
             <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-              <button
-                className="btn btn-primary btn-block"
-                type="button"
-                onClick={handleContinueDraft}
-                disabled={!!draftBusy}
-              >
-                {draftBusy === "resume" ? "Continuing…" : "Continue previous setup →"}
-              </button>
-              <button
-                className="btn btn-ghost btn-block"
-                type="button"
-                onClick={handleStartFreshDraft}
-                disabled={!!draftBusy}
-              >
-                {draftBusy === "restart" ? "Starting fresh…" : "Start fresh instead"}
-              </button>
+              {draftCollision.canManage ? (
+                <>
+                  <button
+                    className="btn btn-primary btn-block"
+                    type="button"
+                    onClick={handleContinueDraft}
+                    disabled={!!draftBusy}
+                  >
+                    {draftBusy === "resume" ? "Continuing…" : "Continue previous setup →"}
+                  </button>
+                  <button
+                    className="btn btn-ghost btn-block"
+                    type="button"
+                    onClick={handleStartFreshDraft}
+                    disabled={!!draftBusy}
+                  >
+                    {draftBusy === "restart" ? "Starting fresh…" : "Start fresh instead"}
+                  </button>
+                </>
+              ) : (
+                <>
+                  <button
+                    className="btn btn-primary btn-block"
+                    type="button"
+                    onClick={() => router.push("/login")}
+                  >
+                    Sign in to continue
+                  </button>
+                  <button
+                    className="btn btn-ghost btn-block"
+                    type="button"
+                    onClick={() => setDraftCollision(null)}
+                  >
+                    Use a different email or number
+                  </button>
+                </>
+              )}
             </div>
         </Modal>
       ) : null}

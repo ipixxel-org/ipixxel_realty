@@ -347,12 +347,10 @@ export async function signupStep1(
   });
 }
 
-export async function resumeSignup(
-  email: string,
-): Promise<ResumeSignupResponse> {
+export async function resumeSignup(): Promise<ResumeSignupResponse> {
   return apiFetch<ResumeSignupResponse>("/auth/resume-signup", {
     method: "POST",
-    body: JSON.stringify({ email }),
+    body: JSON.stringify({}),
   });
 }
 
@@ -360,12 +358,10 @@ export async function resumeSignup(
 // fetch of the draft as it was actually saved (not whatever was just
 // retyped on the collision attempt), so Step 1 can be prefilled with it for
 // review before the person re-submits.
-export async function previewDraft(
-  input: { existingUserId: string },
-): Promise<ResumeSignupResponse> {
+export async function previewDraft(): Promise<ResumeSignupResponse> {
   return apiFetch<ResumeSignupResponse>("/auth/signup/step1/preview", {
     method: "POST",
-    body: JSON.stringify(input),
+    body: JSON.stringify({}),
   });
 }
 
@@ -381,12 +377,10 @@ export async function resumeExistingDraft(
   });
 }
 
-export async function restartExistingDraft(
-  input: { existingUserId: string },
-): Promise<{ status: "restarted" }> {
+export async function restartExistingDraft(): Promise<{ status: "restarted" }> {
   return apiFetch<{ status: "restarted" }>("/auth/signup/step1/restart", {
     method: "POST",
-    body: JSON.stringify(input),
+    body: JSON.stringify({}),
   });
 }
 

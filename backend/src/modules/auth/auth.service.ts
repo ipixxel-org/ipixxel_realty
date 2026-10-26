@@ -20,10 +20,7 @@ import { LoginDto } from './dto/login.dto';
 import { ChangePasswordDto } from './dto/change-password.dto';
 import { OnboardingAccountDto } from './dto/onboarding-account.dto';
 import { OnboardingOrganisationDto } from './dto/onboarding-organisation.dto';
-import { ResumeSignupDto } from './dto/resume-signup.dto';
 import { ResolveDraftDto } from './dto/resolve-draft.dto';
-import { RestartDraftDto } from './dto/restart-draft.dto';
-import { PreviewDraftDto } from './dto/preview-draft.dto';
 import { JwtPayload } from '../../common/types/jwt-payload.interface';
 import { nextOnboardingStep } from '../../common/utils/onboarding.util';
 import {
@@ -50,8 +47,12 @@ import {
 import { assertTemplateQuota } from '../../common/utils/plan-quota.util';
 import { assertEligibleTemplateIds } from '../../common/utils/template-eligibility.util';
 import {
-  normalizeDomain,
+  generateSubdomainSuggestions,
   isValidDomain,
+  isValidSubdomain,
+  normalizeDomain,
+  normalizeSubdomain,
+  subdomainHost,
 } from '../../common/utils/domain.util';
 import { buildNotificationData } from '../../common/utils/notifications.util';
 import {
@@ -68,22 +69,9 @@ const BCRYPT_COST_FACTOR = 12;
 
 const GOOGLE_ISSUERS = ['accounts.google.com', 'https://accounts.google.com'];
 
-const INCORRECT_EMAIL_MESSAGE = 'Incorrect email ID';
-const INCORRECT_PASSWORD_MESSAGE = 'Incorrect password';
-
-// Sign-in failure tied to one form field. `field` lets the login pages show
-// the backend's message under the right input without parsing the text.
-function loginFieldError(
-  field: 'email' | 'password',
-  message: string,
-): UnauthorizedException {
-  return new UnauthorizedException({
-    statusCode: 401,
-    error: 'Unauthorized',
-    message,
-    field,
-  });
-}
+// Deliberately identical for unknown emails and wrong passwords so login
+// cannot be used to enumerate registered accounts.
+const INCORRECT_CREDENTIALS_MESSAGE = 'Incorrect email or password';
 
 type GoogleProfile = {
   email: string;
@@ -427,13 +415,7 @@ export class AuthService {
       // used to discard whatever the caller just retyped here, see
       // resumeExistingDraft/restartExistingDraft). Report the match; the
       // frontend asks the user whether to continue or start fresh.
-      return {
-        status: 'exists_incomplete' as const,
-        existingUserId: existing.id,
-        firstName: existing.firstName,
-        lastName: existing.lastName,
-        onboardingStep: existing.onboardingStep,
-      };
+      return { status: 'exists_incomplete' as const };
     }
 
     // Duplicate check for phone, same idea as email above.
@@ -453,13 +435,7 @@ export class AuthService {
       }
       // Same offer as the email-match case above — this email is new, but
       // the phone belongs to someone's still-in-progress signup.
-      return {
-        status: 'exists_incomplete' as const,
-        existingUserId: existingByPhone.id,
-        firstName: existingByPhone.firstName,
-        lastName: existingByPhone.lastName,
-        onboardingStep: existingByPhone.onboardingStep,
-      };
+      return { status: 'exists_incomplete' as const };
     }
 
     let isGoogleVerified = false;
@@ -519,21 +495,15 @@ export class AuthService {
     };
   }
 
-  // Dedicated resume path — deliberately NOT a login variant. No password
-  // is required: forgot-password doesn't exist in this codebase yet, so
-  // requiring a password here would be a dead end for anyone who forgets
-  // it mid-onboarding. Accepted trade-off: no real dashboard/customer data
-  // exists before onboarding is 'completed', so the exposure is limited to
-  // "someone else can resume filling in your half-finished signup form" —
-  // and this path explicitly refuses to work at all once onboarding is
-  // 'completed' (that's what real login is for, gate and all).
-  async resumeSignup(dto: ResumeSignupDto) {
+  // Authenticated resume path: the caller must already own the account via a
+  // valid access token. It never accepts an email/id from the request body.
+  async resumeSignup(actor: JwtPayload) {
     const user = await this.prisma.user.findUnique({
-      where: { email: dto.email },
+      where: { id: actor.sub },
       include: { userRoles: { include: { role: true } } },
     });
     if (!user) {
-      throw new NotFoundException('No signup in progress for this email');
+      throw new NotFoundException('No signup in progress for this account');
     }
     // Legacy draft parked on a step the simplified wizard removed — finish
     // it up and fall through to the "already finished" branch below rather
@@ -555,17 +525,12 @@ export class AuthService {
     return this.buildResumePayload(user);
   }
 
-  // Step 1 collision, "Continue previous setup" branch (preview half) — same
-  // no-password read as resumeSignup above, just keyed by id instead of
-  // email so a phone-matched collision (new email, old phone) still
-  // resolves. Deliberately read-only: identity fields are left exactly as
-  // saved so the frontend can prefill Step 1 with the draft's *actual* data
-  // rather than whatever was just retyped on the collision attempt. Actually
-  // persisting any edits happens later, via resumeExistingDraft below, once
-  // the person re-submits Step 1.
-  async previewDraft(dto: PreviewDraftDto) {
+  // Step 1 collision, "Continue previous setup" branch (preview half). The
+  // caller must already own the account via a valid access token; the body is
+  // ignored. Read-only: identity fields are left exactly as saved.
+  async previewDraft(actor: JwtPayload) {
     const user = await this.prisma.user.findUnique({
-      where: { id: dto.existingUserId },
+      where: { id: actor.sub },
       include: { userRoles: { include: { role: true } } },
     });
     if (!user) {
@@ -577,7 +542,7 @@ export class AuthService {
     }
     if (user.onboardingStep === 'completed') {
       throw new ConflictException(
-        'This account has already finished setup — please sign in instead.',
+        'This account has already finished setup - please sign in instead.',
       );
     }
 
@@ -588,14 +553,11 @@ export class AuthService {
     return this.buildResumePayload(user);
   }
 
-  // Step 1 collision, "Continue previous setup" branch — the caller picked
-  // up their old draft and (optionally) edited name/email/phone/password on
-  // the retry. Updates those fields on the SAME user row (onboardingStep is
-  // left alone, so the wizard still resumes wherever they'd got to) rather
-  // than silently keeping the stale values, which is the bug this fixes.
-  async resumeExistingDraft(dto: ResolveDraftDto) {
+  // Step 1 collision, "Continue previous setup" branch. The caller must own
+  // the account via a valid access token; the target is always actor.sub.
+  async resumeExistingDraft(actor: JwtPayload, dto: ResolveDraftDto) {
     const existingUser = await this.prisma.user.findUnique({
-      where: { id: dto.existingUserId },
+      where: { id: actor.sub },
     });
     if (!existingUser) {
       throw new NotFoundException('No signup in progress for this account');
@@ -654,9 +616,9 @@ export class AuthService {
   // records. A replacement account is intentionally not created here: the
   // next Step 1 submit must be the normal new-signup flow so verification is
   // requested only after the user has filled the blank form again.
-  async restartExistingDraft(dto: RestartDraftDto) {
+  async restartExistingDraft(actor: JwtPayload) {
     const existingUser = await this.prisma.user.findUnique({
-      where: { id: dto.existingUserId },
+      where: { id: actor.sub },
     });
     if (!existingUser) {
       throw new NotFoundException('No signup in progress for this account');
@@ -924,7 +886,7 @@ export class AuthService {
     const user = await this.findLoginUser(dto.email);
 
     if (!user) {
-      throw loginFieldError('email', INCORRECT_EMAIL_MESSAGE);
+      throw new UnauthorizedException(INCORRECT_CREDENTIALS_MESSAGE);
     }
 
     if (user.lockedUntil && new Date(user.lockedUntil) > new Date()) {
@@ -963,7 +925,7 @@ export class AuthService {
           'Account is temporarily locked due to multiple failed login attempts. Please try again in 15 minutes.',
         );
       }
-      throw loginFieldError('password', INCORRECT_PASSWORD_MESSAGE);
+      throw new UnauthorizedException(INCORRECT_CREDENTIALS_MESSAGE);
     }
 
     // Reset failed login counter on successful password match
@@ -1003,7 +965,7 @@ export class AuthService {
       (dto.portal === 'organisation' && belongsToPlatform) ||
       (dto.portal === 'platform' && !belongsToPlatform)
     ) {
-      throw loginFieldError('email', INCORRECT_EMAIL_MESSAGE);
+      throw new UnauthorizedException(INCORRECT_CREDENTIALS_MESSAGE);
     }
 
     // Self-heal a draft parked on a step the simplified 2-step wizard
@@ -1129,7 +1091,24 @@ export class AuthService {
   }
 
   async refresh(rawToken: string) {
-    const existing = await this.findActiveRefreshToken(rawToken);
+    const existing = await this.prisma.refreshToken.findFirst({
+      where: { tokenHash: hashToken(rawToken) },
+    });
+    if (!existing) {
+      throw new UnauthorizedException('Invalid or expired refresh token');
+    }
+    if (existing.revokedAt) {
+      // A rotated refresh token was replayed. Treat it as theft and revoke
+      // every active session for that user.
+      await this.prisma.refreshToken.updateMany({
+        where: { userId: existing.userId, revokedAt: null },
+        data: { revokedAt: new Date() },
+      });
+      throw new UnauthorizedException('Invalid or expired refresh token');
+    }
+    if (existing.expiresAt < new Date()) {
+      throw new UnauthorizedException('Invalid or expired refresh token');
+    }
 
     const user = await this.prisma.user.findUnique({
       where: { id: existing.userId },
@@ -1547,25 +1526,12 @@ export class AuthService {
     }
   }
 
-  private async findActiveRefreshToken(rawToken: string) {
-    const tokenHash = hashToken(rawToken);
-    const existing = await this.prisma.refreshToken.findFirst({
-      where: { tokenHash },
-    });
-
-    if (!existing || existing.revokedAt || existing.expiresAt < new Date()) {
-      throw new UnauthorizedException('Invalid or expired refresh token');
-    }
-
-    return existing;
-  }
-
   private async issueTokens(
     userId: string,
     orgId: string | null,
     roles: string[],
   ) {
-    const payload: JwtPayload = { sub: userId, orgId, roles };
+    const payload: JwtPayload = { sub: userId, orgId, roles, typ: 'access' };
     const secret = process.env.JWT_SECRET?.trim();
     if (!secret) {
       this.logger.error('JWT_SECRET is not set — cannot issue tokens');
@@ -1615,13 +1581,68 @@ export class AuthService {
   // invalid/expired/missing token just means "treat as anonymous", never
   // a 401 here) and exclude that caller's own org from the "taken" check,
   // so their own unchanged subdomain doesn't falsely show as taken.
-  async checkSubdomainAvailability(_subdomain: string, _authHeader?: string) {
+  async checkSubdomainAvailability(raw: string, authHeader?: string) {
+    const subdomain = normalizeSubdomain(raw ?? '');
+    const host = subdomain ? subdomainHost(subdomain) : '';
+    const reasons: string[] = [];
+
+    if (!subdomain) {
+      reasons.push('Enter a subdomain');
+    } else if (!isValidSubdomain(subdomain)) {
+      reasons.push(
+        'Use 2-63 letters, numbers or hyphens; it cannot start or end with a hyphen',
+      );
+    }
+
+    let ownOrgId: string | null = null;
+    if (authHeader?.startsWith('Bearer ')) {
+      try {
+        const payload = this.jwtService.verify<JwtPayload>(
+          authHeader.slice('Bearer '.length),
+          { secret: process.env.JWT_SECRET },
+        );
+        ownOrgId = payload.orgId ?? null;
+      } catch {
+        // Invalid/expired token: treat as anonymous, never 401 this check.
+      }
+    }
+
+    if (reasons.length === 0) {
+      const [org, pendingRequest] = await Promise.all([
+        this.prisma.organisation.findFirst({
+          where: {
+            subdomain: { equals: subdomain, mode: 'insensitive' },
+            ...(ownOrgId ? { id: { not: ownOrgId } } : {}),
+          },
+          select: { id: true },
+        }),
+        this.prisma.orgDomainRequest.findFirst({
+          where: {
+            subdomain: { equals: subdomain, mode: 'insensitive' },
+            status: {
+              in: ['pending', 'changes_requested', 'approved', 'connected'],
+            },
+            ...(ownOrgId ? { orgId: { not: ownOrgId } } : {}),
+          },
+          select: { id: true },
+        }),
+      ]);
+      if (org) {
+        reasons.push('This subdomain is already taken');
+      } else if (pendingRequest) {
+        reasons.push('This subdomain is reserved by another request');
+      }
+    }
+
     return {
-      subdomain: '',
-      host: '',
-      available: true,
-      reasons: [],
-      suggestions: [],
+      subdomain,
+      host,
+      available: reasons.length === 0,
+      reasons,
+      suggestions:
+        reasons.length === 0
+          ? []
+          : generateSubdomainSuggestions(subdomain || 'yourbrand'),
     };
   }
 
@@ -1850,7 +1871,7 @@ export class AuthService {
         (dto.portal === 'organisation' && belongsToPlatform) ||
         (dto.portal === 'platform' && !belongsToPlatform)
       ) {
-        throw loginFieldError('email', INCORRECT_EMAIL_MESSAGE);
+        throw new UnauthorizedException(INCORRECT_CREDENTIALS_MESSAGE);
       }
 
       if (existing.orgId && isLegacyOnboardingStep(existing.onboardingStep)) {

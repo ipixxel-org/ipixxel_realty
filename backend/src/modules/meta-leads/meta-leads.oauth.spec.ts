@@ -1,3 +1,4 @@
+import { createHmac } from 'crypto';
 import { MetaLeadsService } from './meta-leads.service';
 import type { PrismaService } from '../../database/prisma.service';
 
@@ -12,9 +13,18 @@ describe('MetaLeadsService.handleOAuthCallback page discovery', () => {
   let warn: jest.SpyInstance;
   const originalFetch = global.fetch;
   const originalEnv = { ...process.env };
-  const state = Buffer.from(
-    JSON.stringify({ orgId: 'org-1', userId: 'user-1', platformKey: 'meta' }),
-  ).toString('base64url');
+  function signedState(now = Date.now()): string {
+    const body = {
+      orgId: 'org-1',
+      userId: 'user-1',
+      platformKey: 'meta',
+      ts: now,
+    };
+    const sig = createHmac('sha256', 'app-secret')
+      .update(JSON.stringify(body))
+      .digest('hex');
+    return Buffer.from(JSON.stringify({ ...body, sig })).toString('base64url');
+  }
 
   type Reply = { ok?: boolean; body: unknown };
   /** Graph responses for the calls that differ per test. */
@@ -123,7 +133,7 @@ describe('MetaLeadsService.handleOAuthCallback page discovery', () => {
       { body: { data: [{ id: 'p2', name: 'Page Two', access_token: 'PT2' }] } },
     ];
 
-    const result = await service.handleOAuthCallback('code', state);
+    const result = await service.handleOAuthCallback('code', signedState());
 
     expect(result.connected).toBe(2);
     expect(savedPageIds()).toEqual(['p1', 'p2']);
@@ -148,7 +158,7 @@ describe('MetaLeadsService.handleOAuthCallback page discovery', () => {
       p2: { body: { id: 'p2', name: 'Page Two', access_token: 'PT2' } },
     };
 
-    const result = await service.handleOAuthCallback('code', state);
+    const result = await service.handleOAuthCallback('code', signedState());
 
     expect(result.connected).toBe(2);
     expect(savedPageIds()).toEqual(['p1', 'p2']);
@@ -178,7 +188,7 @@ describe('MetaLeadsService.handleOAuthCallback page discovery', () => {
   it('shows the clearer error when both sources return nothing', async () => {
     graph.debugToken = { body: { data: { granular_scopes: [] } } };
 
-    await expect(service.handleOAuthCallback('code', state)).rejects.toThrow(
+    await expect(service.handleOAuthCallback('code', signedState())).rejects.toThrow(
       'No Facebook Pages were shared with iPixxel. Click Connect again, choose Edit settings, and tick your Page (and its business portfolio if asked).',
     );
     expect(prisma.metaPageConnection.upsert).not.toHaveBeenCalled();
@@ -202,7 +212,7 @@ describe('MetaLeadsService.handleOAuthCallback page discovery', () => {
       p2: { body: { id: 'p2', name: 'Page Two', access_token: 'PT2' } },
     };
 
-    const result = await service.handleOAuthCallback('code', state);
+    const result = await service.handleOAuthCallback('code', signedState());
 
     expect(result.connected).toBe(1);
     expect(savedPageIds()).toEqual(['p2']);
@@ -218,7 +228,7 @@ describe('MetaLeadsService.handleOAuthCallback page discovery', () => {
       body: { error: { message: 'Invalid OAuth access token' } },
     };
 
-    await expect(service.handleOAuthCallback('code', state)).rejects.toThrow(
+    await expect(service.handleOAuthCallback('code', signedState())).rejects.toThrow(
       'No Facebook Pages were shared with iPixxel',
     );
     expect(warnings()).toContain('Invalid OAuth access token');

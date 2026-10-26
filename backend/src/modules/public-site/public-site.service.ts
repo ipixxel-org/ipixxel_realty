@@ -2,6 +2,7 @@ import { Injectable, NotFoundException } from '@nestjs/common';
 import type { Prisma } from '@prisma/client';
 import { PrismaService } from '../../database/prisma.service';
 import { FieldDef, roleField } from '../../common/utils/field-template.util';
+import type { TrackEventDto } from './dto/track-event.dto';
 
 function readTemplate(v: Prisma.JsonValue): FieldDef[] {
   return (Array.isArray(v) ? v : []) as unknown as FieldDef[];
@@ -438,18 +439,8 @@ export class PublicSiteService {
       orderBy,
     });
     if (!page) {
-      const draft = await this.prisma.landingPage.findFirst({
-        where: {
-          ...scope,
-          OR: whereOr,
-          // Billing v2: a page taken offline by a smaller plan is not served.
-          billingOfflineAt: null,
-        },
-        include,
-        orderBy: [{ updatedAt: 'desc' }],
-      });
-      if (draft) return draft;
-
+      // Drafts are private. They are only readable through the authenticated
+      // admin/org preview endpoints, never from the public site.
       throw new NotFoundException('Landing page not found or not published');
     }
 
@@ -467,8 +458,8 @@ export class PublicSiteService {
   }
 
   async resolveById(id: string) {
-    const page = await this.prisma.landingPage.findUnique({
-      where: { id },
+    const page = await this.prisma.landingPage.findFirst({
+      where: { id, status: 'published' },
       include: {
         organisation: {
           select: {
@@ -500,10 +491,14 @@ export class PublicSiteService {
     return page;
   }
 
-  async recordPublicTrack(dto: { landingPageId: string; eventType?: string; metadata?: any }) {
+  async recordPublicTrack(dto: TrackEventDto) {
     if (!dto?.landingPageId) return { ok: false };
-    const page = await this.prisma.landingPage.findUnique({
-      where: { id: dto.landingPageId },
+    const metadata = dto.metadata ?? {};
+    // Public endpoint: keep payloads small so it cannot be used as free
+    // unbounded JSON storage.
+    if (JSON.stringify(metadata).length > 2000) return { ok: false };
+    const page = await this.prisma.landingPage.findFirst({
+      where: { id: dto.landingPageId, status: 'published' },
       select: { id: true, orgId: true },
     });
     if (!page) return { ok: false };
@@ -512,7 +507,7 @@ export class PublicSiteService {
         orgId: page.orgId,
         landingPageId: page.id,
         eventType: dto.eventType || 'page_view',
-        metadata: (dto.metadata ?? {}) as Prisma.InputJsonValue,
+        metadata: metadata as Prisma.InputJsonValue,
       },
     }).catch(() => {});
     return { ok: true };
