@@ -1,5 +1,5 @@
-import { formatINR } from "./pricing";
-import type { BillingOverview, OrgPlanRequest, PendingUpgrade, RequestPayment, RequestQuote } from "./types";
+import { formatDate, formatINR } from "./pricing";
+import type { BillingOverview, OrgPlanRequest, PendingUpgrade, PlanChangeBlockedReason, RequestPayment, RequestQuote } from "./types";
 
 /** "22 Oct" (UTC calendar day, like the API). */
 function shortDay(iso: string): string {
@@ -19,6 +19,40 @@ export function pendingRequestText(p: Pick<PendingUpgrade, "fromPlan" | "toPlan"
 /** The waiting request that blocks plan changes, or null (a paid order under review doesn't). */
 export function blockingRequest(o: Pick<BillingOverview, "pendingUpgrade"> | null | undefined): PendingUpgrade | null {
   return o?.pendingUpgrade?.status === "pending_approval" ? o.pendingUpgrade : null;
+}
+
+/**
+ * The one "a change is scheduled" message — the API refuses with the same
+ * words (change_scheduled): "You've scheduled a change to Basic on 25 Nov
+ * 2026. Click 'Keep Starter' to undo it before choosing another plan."
+ */
+export function scheduledChangeText(currentPlan: string, targetPlan: string, startsAt: string | null | undefined): string {
+  return `You've scheduled a change to ${targetPlan}${startsAt ? ` on ${formatDate(startsAt)}` : ""}. Click 'Keep ${currentPlan}' to undo it before choosing another plan.`;
+}
+
+type BlockFields = Pick<
+  BillingOverview,
+  "pendingUpgrade" | "plan" | "cancelAt" | "downgradeTo" | "downgradeAt" | "planChangeBlockedReason" | "planChangeBlockedMessage"
+>;
+
+/**
+ * The one check for "can they change plan now?": null, or why not with the
+ * message for the tooltip / note. Uses the overview's planChangeBlockedReason;
+ * payloads without it (older API) are worked out the same way.
+ */
+export function planChangeBlock(o: BlockFields | null | undefined): { reason: PlanChangeBlockedReason; message: string } | null {
+  if (!o) return null;
+  if (o.planChangeBlockedReason === null) return null;
+  if (o.planChangeBlockedReason && o.planChangeBlockedMessage) return { reason: o.planChangeBlockedReason, message: o.planChangeBlockedMessage };
+  const waiting = blockingRequest(o);
+  if (waiting) return { reason: "request_pending", message: pendingRequestText(waiting) };
+  if (!o.plan.isFree && (o.cancelAt || o.downgradeTo)) {
+    return {
+      reason: "change_scheduled",
+      message: scheduledChangeText(o.plan.name, o.downgradeTo?.name ?? "Basic", o.downgradeTo ? o.downgradeAt : o.cancelAt),
+    };
+  }
+  return null;
 }
 
 /** How the Super Admin can be paid for a request (Mark as paid). */

@@ -9,6 +9,7 @@ import {
 import {
   closeScheduledChange,
   recordScheduledChange,
+  scheduledChangeBlock,
 } from '../../common/utils/scheduled-change.util';
 import { pendingRequestMessage } from '../package-change-requests/package-change-requests.service';
 import {
@@ -80,6 +81,17 @@ export class BillingPlanChangeService {
       .catch(() => undefined);
   }
 
+  /**
+   * One scheduled change at a time: choosing another plan (or Basic) is
+   * refused until the scheduled one is undone ("Keep <plan>") or takes effect.
+   */
+  private async refuseWhileScheduled(
+    sub: Parameters<typeof scheduledChangeBlock>[1],
+  ) {
+    const scheduled = await scheduledChangeBlock(this.prisma, sub);
+    if (scheduled) throw billingError('change_scheduled', scheduled);
+  }
+
   async cancel(
     orgId: string,
     userId: string,
@@ -89,6 +101,7 @@ export class BillingPlanChangeService {
     if (!sub || isFreePlan(sub.plan)) {
       throw billingError('nothing_to_cancel', "You're already on Basic.");
     }
+    await this.refuseWhileScheduled(sub);
     const reason = dto.reason?.trim() || null;
     if (
       sub.status === 'expired' ||
@@ -103,7 +116,6 @@ export class BillingPlanChangeService {
       });
       await moveToFreePlan(this.prisma, { ...sub, cancelReason: reason });
     } else {
-      // A scheduled downgrade is replaced: cancelling wins.
       await this.prisma.subscription.update({
         where: { id: sub.id },
         data: {
@@ -179,6 +191,7 @@ export class BillingPlanChangeService {
         "You're on the free plan — there's nothing to downgrade.",
       );
     }
+    await this.refuseWhileScheduled(sub);
     const overdueManual = await this.manualOverdue(sub);
     if (sub.status !== 'active' && sub.status !== 'trial' && !overdueManual) {
       throw billingError(

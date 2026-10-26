@@ -4,7 +4,7 @@ import { useState } from "react";
 import { Icon } from "@/components/icons";
 import { useToast } from "@/components/ui/toast";
 import { formatDate, formatINR, packagePriceText, planPrice, renewalPriceNote, renewalPriceText, round2 } from "@/lib/billing/pricing";
-import { blockingRequest, pendingRequestText } from "@/lib/billing/requests";
+import { blockingRequest, pendingRequestText, planChangeBlock } from "@/lib/billing/requests";
 import type { BillingOverview, RetentionSummary } from "@/lib/billing/types";
 import { useBillingEnv, useOptionalOrgBilling } from "./context";
 import { BillingDialog, DialogActions } from "./dialog";
@@ -223,6 +223,50 @@ export function UndoButton({ label, run, done, onDone }: { label: string; run: (
     >
       {label}
     </button>
+  );
+}
+
+/**
+ * A change to Basic / a smaller plan is scheduled, so this plan change can't
+ * start: the message, "Keep <plan>" (undo) and the way back to the plans.
+ * Shown instead of the checkout / downgrade form.
+ */
+export function ScheduledChangeNote({ overview: o }: { overview: BillingOverview }) {
+  const { client } = useBillingEnv();
+  const block = planChangeBlock(o);
+  if (block?.reason !== "change_scheduled") return null;
+  const plan = o.paidPlan ?? o.plan;
+  return (
+    <div data-testid="change-scheduled-note">
+      <Banner
+        tone="amber"
+        icon="calendar"
+        title={
+          o.downgradeTo
+            ? `Change to ${o.downgradeTo.name} scheduled for ${formatDate(o.downgradeAt!)}`
+            : `Change to Basic scheduled for ${formatDate(o.cancelAt!)}`
+        }
+        actions={
+          <>
+            {o.downgradeTo ? (
+              <>
+                <BLink to="chooseWhatStays" className="btn btn-ghost btn-sm">
+                  Choose what stays
+                </BLink>
+                <UndoButton label={`Keep ${plan.name}`} run={() => client.undoDowngrade()} done={`You'll stay on ${plan.name}.`} />
+              </>
+            ) : (
+              <UndoButton label={`Keep ${plan.name}`} run={() => client.undoCancel()} done={`You'll stay on ${plan.name} — it renews as usual.`} />
+            )}
+            <BLink to="plans" className="btn btn-ghost btn-sm">
+              See plans
+            </BLink>
+          </>
+        }
+      >
+        {block.message}
+      </Banner>
+    </div>
   );
 }
 

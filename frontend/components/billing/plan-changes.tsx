@@ -6,7 +6,8 @@ import { useToast } from "@/components/ui/toast";
 import { isOverdueManual, planChangeRoute } from "@/lib/billing/direction";
 import { formatDate, packagePriceText, planPrice } from "@/lib/billing/pricing";
 import type { BillingInterval } from "@/lib/billing/types";
-import { BillingBanner, PicksSummary } from "./banners";
+import { planChangeBlock } from "@/lib/billing/requests";
+import { PicksSummary, ScheduledChangeNote } from "./banners";
 import { useBillingEnv, useBillingQuery, useOrgBilling } from "./context";
 import { BillingDialog, DialogActions } from "./dialog";
 import { Banner, BillingRedirect, BLink, countLabel, ErrorNote, Kv, Loading, Section, useCheckoutLive } from "./ui";
@@ -77,8 +78,9 @@ export function DowngradeScreen({ planId, interval: wanted }: { planId: string; 
   const toMonthly = target.id === o.plan.id && o.interval === "yearly" && interval === "monthly";
   const per = interval === "yearly" ? "year" : "month";
 
-  if (o.downgradeTo) return <BillingBanner overview={{ ...o, status: "downgrade_scheduled" }} />;
-  if (o.status === "cancellation_scheduled") return <BillingBanner overview={o} />;
+  // A change is already scheduled: the message and "Keep <plan>" instead of the form.
+  const block = planChangeBlock(o);
+  if (block?.reason === "change_scheduled") return <ScheduledChangeNote overview={o} />;
   // Manual mode with the renewal overdue: Basic happens now; a paid plan is a request.
   const overdueManual = isOverdueManual(o, live);
   // Same rule as the plan cards: a bigger plan (or a paid plan while overdue in
@@ -214,8 +216,8 @@ export function DowngradeScreen({ planId, interval: wanted }: { planId: string; 
         <button
           type="button"
           className="btn btn-primary"
-          disabled={!canEdit || blocked}
-          title={blocked ? `Get within ${target.name}'s limits first` : undefined}
+          disabled={!canEdit || blocked || !!block}
+          title={block ? block.message : blocked ? `Get within ${target.name}'s limits first` : undefined}
           onClick={() => setConfirm(true)}
         >
           <Icon name="arrow-down" size={15} /> {toMonthly ? "Confirm switch to monthly" : toBasic ? `Move to ${target.name}` : "Confirm plan change"}

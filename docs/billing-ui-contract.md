@@ -29,6 +29,7 @@ client is the reference behaviour (see `frontend/lib/billing/__tests__/mock-clie
 | Manual-mode requests | `listOrgRequests`, `withdrawRequest`; `CheckoutPreview.usageConflict`; `PendingUpgrade.fromPlan`; `BillingOverview.rejectedUpgrade`; approval applies "choose what stays" | `billing-ledger.service.ts` (`listRequests`), `checkout-state.ts`, `common/utils/plan-quota.util.ts` (`usageOverLimits`, `assertPlanFitsAfterRetention`), `package-change-requests.service.ts` (`pendingRequestMessage`, required rejection reason); frontend `components/billing/requests.tsx`, `lib/billing/requests.ts` |
 | Manual mode: Mark as paid → Approve | Request renewal (`startCheckout` `purpose: "renewal"` in manual mode), overdue changes at full price, `OrgPlanRequest.label` / `overdue` / `total` / `payment` / `movedToBasicAt`, `PendingUpgrade.label` / `paid`; Super Admin `PUT` / `DELETE /admin/package-change-requests/:id/payment` | `checkout-quote.ts` (`quoteOverdueChange`), `package-change-requests.service.ts` (`markPaid`, approve / reject), `plan-change.util.ts` (`periodStart`), `moveToFreePlan` (Option A marker); frontend `components/billing/admin/mark-paid-dialog.tsx`; migration `20261024090000_manual_request_payments` |
 | Scheduled changes on the Requests list | Every scheduled change (to Basic via cancel-at-period-end, or a smaller plan / yearly → monthly via `scheduleDowngrade`) is a row in `listOrgRequests` and the Super Admin package request lists: `OrgPlanRequest.kind` `scheduled_change`, statuses `scheduled` / `done` / `undone` / `replaced`, `startsAt`, `reason`; no approval, never pending | `common/utils/scheduled-change.util.ts` (`recordScheduledChange`, `closeScheduledChange`), `billing-plan-change.service.ts`, `applyPlanChange`, `moveToFreePlan` / `applyScheduledPlan` (sweep), `billing-ledger.service.ts`; frontend `components/billing/requests.tsx` (Keep <plan>), `components/billing/admin/package-requests.tsx` (read-only); migration `20261026090000_scheduled_plan_changes` |
+| Scheduled change blocks plan changes | `change_scheduled` refusal (checkout start, legacy request, `scheduleDowngrade`, `cancelPlan`); `BillingOverview.planChangeBlockedReason` / `planChangeBlockedMessage` | `common/utils/scheduled-change.util.ts` (`scheduledChangeBlock`), `billing-checkout.service.ts`, `billing-plan-change.service.ts`, `package-change-requests.service.ts`, `billing-overview.ts` (`planChangeBlock`); frontend `lib/billing/requests.ts` (`planChangeBlock`), `components/billing/banners.tsx` (`ScheduledChangeNote`), `plans.tsx`, `checkout.tsx`, `plan-changes.tsx` |
 | Manual mode: coupon on the request | Super Admin `PUT` / `DELETE /admin/package-change-requests/:id/coupon`; Mark as paid amount = the request total; `OrgPlanRequest.quote` / admin row `quote`; `SubscriptionDetail.paymentMode`; org-level offline payment / apply coupon refused in manual mode (`use_request`) | `package-change-requests.service.ts` (`applyCoupon` / `removeCoupon`), `request-coupon.ts`, `coupon-lookup.ts` (`findCouponFor`, shared with checkout), `coupon-settlement.ts`; migration `20261025090000_request_coupon` |
 | Fixes after testing (2) | one `plan_locked` error; list filters `viewOnly` / `offline` / `paused` / `needsReassign`; invoice email; `packagePriceText` | `common/utils/plan-lock.util.ts`, `billing-invoice-mailer.service.ts`, `lead-assignee.util.ts`; frontend `lib/plan-lock.ts`, `PlanLockBadge` (`components/billing/locked.tsx`); migration `20261016093000_billing_invoice_email` |
 
@@ -311,10 +312,21 @@ Package Requests → Open → the org's "Package requests" section: **Mark as pa
   `undoCancel` / `undoDowngrade`) / `replaced` (an upgrade, a renewal of the same plan, an approval,
   another scheduled change, fall back to Basic after grace, or the scheduled plan was archived). One
   open row per org at a time.
-- Never `pending`, so they don't disable plan buttons, don't trigger `request_pending`, can't be
-  approved / rejected / withdrawn, and aren't in the Super Admin Pending filter (only All). Scheduling a
-  change while an approval request is pending is still refused (`request_pending`). The legacy org
-  history and `BillingOverview.rejectedUpgrade` ignore them.
+- Never `pending`, so they don't trigger `request_pending`, can't be approved / rejected /
+  withdrawn, and aren't in the Super Admin Pending filter (only All). Scheduling a change while an
+  approval request is pending is still refused (`request_pending`). The legacy org history and
+  `BillingOverview.rejectedUpgrade` ignore them.
+- **A scheduled change blocks other plan changes** (both modes), the same way a pending request
+  does, until it takes effect or is undone ("Keep <plan>"). The API refuses checkout start (online
+  and manual, any purpose except `renewal`), the legacy request endpoint, `scheduleDowngrade` and
+  `cancelPlan` with `change_scheduled`: "You've scheduled a change to Basic on 25 Nov 2026. Click
+  'Keep Starter' to undo it before choosing another plan." (`scheduledChangeBlock` /
+  `scheduledChangeMessage` in `common/utils/scheduled-change.util.ts`; the date is when it
+  applies). The UI: every plan card action is disabled with that message as its tooltip (Change plan
+  in the action row stays clickable); the checkout (not a renewal) and the downgrade / move to Basic
+  pages show the message with "Keep <plan>" instead of the form. Still allowed: "Keep <plan>"
+  (banner, Requests tab, that note), the renewal (Pay now / Request renewal, at the scheduled plan's
+  price) and "choose what stays" for the scheduled plan.
 - `OrgPlanRequest` for a scheduled change: `label` "Change to Basic" / "Change to Growth",
   `fromPlan` → `toPlan`, `interval`, `startsAt`, `reason`, `amount` (null = "Nothing to pay now",
   else "₹999 + GST from 22 Dec"), `total` / `quote` / `payment` null, `decidedAt` = when it closed.
@@ -375,12 +387,18 @@ Package Requests → Open → the org's "Package requests" section: **Mark as pa
 - **Refusals** (400 `{ code, message }` → `BillingError.code`): `plan_not_found`, `free_plan`,
   `same_plan` (same plan + interval, even when lapsed), `lower_plan` (only while a paid plan is
   active — that's a downgrade), `yearly_to_monthly`, `billing_details_incomplete` (was `billing_profile_required`),
-  `request_pending` (a second request, or online start while a manual request waits — "You already have a pending request (…). Wait for approval or withdraw it."), `choose_what_stays` (manual mode, over the target's limits before choosing what stays), `amount_too_small` (online
+  `request_pending` (a second request, or online start while a manual request waits — "You already have a pending request (…). Wait for approval or withdraw it."), `change_scheduled` (a change to Basic / a smaller plan is scheduled — "You've scheduled a change to Basic on 25 Nov 2026. Click 'Keep Starter' to undo it before choosing another plan."; renewals are not refused), `choose_what_stays` (manual mode, over the target's limits before choosing what stays), `amount_too_small` (online
   total under ₹1), renewal codes (step 3 notes), and on the old endpoints
   `paid_plan_requires_checkout` / `paid_renewal_requires_checkout`.
 - **One open order per org:** starting a new online checkout cancels the org's older pending
   ones (advisory lock). Pending online checkouts expire after 30 minutes (sweeper). Manual mode
   returns the existing pending request instead of creating a second one.
+- **`BillingOverview.planChangeBlockedReason`** (`"request_pending" | "change_scheduled" | null`)
+  and **`planChangeBlockedMessage`** (the same words the API refuses with): the one check the UI uses
+  to disable plan changes (`planChangeBlock()` in `lib/billing/requests.ts`, which works the same
+  out from `pendingUpgrade` / `cancelAt` / `downgradeTo` when an older payload lacks it).
+  `request_pending` while `pendingUpgrade.status === "pending_approval"`; `change_scheduled` while
+  `cancelAt` or `downgradeTo` is set.
 - **`BillingOverview.pendingUpgrade`:** a manual request awaiting approval, or a paid checkout
   in `needs_review`; `null` otherwise. The UI shows a banner and disables a second request.
 - **Fulfilment:** the plan is applied on `payment.captured` (from `confirmCheckout`'s verify or

@@ -5,7 +5,7 @@ import { Icon } from "@/components/icons";
 import { Seg } from "@/components/superadmin/seg";
 import { formatINR, packagePriceText, yearlySaving } from "@/lib/billing/pricing";
 import { isOverdueManual, planChangeRoute } from "@/lib/billing/direction";
-import { blockingRequest, pendingRequestText } from "@/lib/billing/requests";
+import { planChangeBlock } from "@/lib/billing/requests";
 import type { BillingInterval, BillingPlan } from "@/lib/billing/types";
 import { useBillingQuery, useOrgBilling } from "./context";
 import { BLink, countLabel, ErrorNote, Loading, PlanPrice, Section, planFeatureRows, useCheckoutLive } from "./ui";
@@ -56,15 +56,16 @@ export function PlansScreen({
   const current = overview.plan;
 
   const pending = overview.pendingUpgrade;
-  // A request waiting for approval blocks every other plan change until it's decided or withdrawn.
-  const waiting = blockingRequest(overview);
+  // A request waiting for approval, or a scheduled change to Basic / a smaller
+  // plan, blocks every other plan change until it's decided / undone.
+  const block = planChangeBlock(overview);
   // Manual mode with the renewal overdue: every paid plan is a request at its
   // full price (the missed term continues); Basic moves the org straight away.
   const overdueManual = isOverdueManual(overview, live);
-  /** A plan action link — disabled, with the reason, while a request is waiting. */
+  /** A plan action link — disabled, with the reason, while plan changes are blocked. */
   const go = (to: "checkout" | "downgrade", params: Record<string, string | undefined>, className: string, children: ReactNode) =>
-    waiting ? (
-      <span title={pendingRequestText(waiting)} style={{ display: "flex", width: "100%" }}>
+    block ? (
+      <span title={block.message} data-testid="plan-action-blocked" style={{ display: "flex", width: "100%" }}>
         <button type="button" className={className} disabled style={{ width: "100%", justifyContent: "center", opacity: 0.65, cursor: "not-allowed" }}>
           {children}
         </button>

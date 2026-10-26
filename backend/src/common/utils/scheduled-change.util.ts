@@ -5,8 +5,10 @@ import type { PrismaClient } from '@prisma/client';
  * recorded in package_change_requests as kind 'scheduled_change' so they show
  * in Settings → Billing → Requests. No approval: a row is `scheduled`, then
  * `done` (it took effect), `undone` ("Keep <plan>") or `replaced` (an upgrade,
- * renewal or another change superseded it). Never `pending`, so it never
- * blocks anything. A closed row has its date in reviewed_at.
+ * renewal or another change superseded it). Never `pending` (no approval),
+ * but while one is scheduled other plan changes are refused with
+ * `change_scheduled` (scheduledChangeBlock) until it takes effect or is
+ * undone. A closed row has its date in reviewed_at.
  */
 type ScheduledDb = Partial<Pick<PrismaClient, 'packageChangeRequest'>>;
 
@@ -79,4 +81,71 @@ export async function closeScheduledChange(
       data: { status, reviewedAt: now },
     });
   }
+}
+
+/** "25 Nov 2026" (UTC calendar day, like the UI's formatDate). */
+const longDay = (d: Date) =>
+  d.toLocaleDateString('en-IN', {
+    day: 'numeric',
+    month: 'short',
+    year: 'numeric',
+    timeZone: 'UTC',
+  });
+
+/**
+ * The one "a change is scheduled" message (API and UI say the same):
+ * "You've scheduled a change to Basic on 25 Nov 2026. Click 'Keep Starter'
+ * to undo it before choosing another plan."
+ */
+export function scheduledChangeMessage(
+  currentPlan: string,
+  targetPlan: string,
+  startsAt: Date | null | undefined,
+): string {
+  const on = startsAt ? ` on ${longDay(startsAt)}` : '';
+  return `You've scheduled a change to ${targetPlan}${on}. Click 'Keep ${currentPlan}' to undo it before choosing another plan.`;
+}
+
+/**
+ * The refusal message while a change to Basic or a smaller plan is
+ * scheduled on this subscription, or null. Renewals, "Keep <plan>" and
+ * "choose what stays" stay allowed: callers check this only before a new
+ * plan change (checkout, change request, scheduling another change).
+ */
+export async function scheduledChangeBlock(
+  db: Pick<PrismaClient, 'plan'>,
+  sub: {
+    status: string;
+    cancelAtPeriodEnd: boolean;
+    scheduledPlanId: string | null;
+    renewsAt: Date | null;
+    graceEndsAt: Date | null;
+    plan: { name: string };
+  } | null,
+): Promise<string | null> {
+  if (!sub || (!sub.cancelAtPeriodEnd && !sub.scheduledPlanId)) return null;
+  if (sub.cancelAtPeriodEnd) {
+    // The free plan (same lookup as findFreePlan; not imported to avoid a cycle).
+    const free =
+      (await db.plan.findFirst({
+        where: { isSystem: true, isActive: true },
+      })) ??
+      (await db.plan.findFirst({
+        where: { isActive: true, priceMonthly: 0, priceYearly: 0 },
+        orderBy: { createdAt: 'asc' },
+      }));
+    return scheduledChangeMessage(
+      sub.plan.name,
+      free?.name ?? 'Basic',
+      sub.status === 'past_due' ? sub.graceEndsAt : sub.renewsAt,
+    );
+  }
+  const target = await db.plan.findUnique({
+    where: { id: sub.scheduledPlanId! },
+  });
+  return scheduledChangeMessage(
+    sub.plan.name,
+    target?.name ?? 'a smaller plan',
+    sub.renewsAt,
+  );
 }

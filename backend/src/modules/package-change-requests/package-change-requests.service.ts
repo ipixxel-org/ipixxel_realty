@@ -25,6 +25,7 @@ import {
 import { isFreePlan } from '../billing/plan-modules';
 import { billingNow } from '../../common/utils/billing-clock.util';
 import { applyOrgSubscriptionLifecycle } from '../../common/utils/subscription-lifecycle.util';
+import { scheduledChangeBlock } from '../../common/utils/scheduled-change.util';
 import { orgBillingRecipientsWhere } from '../../common/utils/notification-recipients.util';
 import { CreatePackageChangeRequestDto } from './dto/create-package-change-request.dto';
 import {
@@ -207,6 +208,19 @@ export class PackageChangeRequestsService {
           existingPending.targetPlan.name,
           existingPending.createdAt,
         ),
+      });
+    }
+    // A change to Basic / a smaller plan is scheduled: undo it ("Keep <plan>")
+    // first. A renewal (at the scheduled plan's price) is still allowed.
+    const scheduled = opts.renewal
+      ? null
+      : await scheduledChangeBlock(this.prisma, sub);
+    if (scheduled) {
+      throw new BadRequestException({
+        statusCode: 400,
+        error: 'Bad Request',
+        code: 'change_scheduled',
+        message: scheduled,
       });
     }
 
