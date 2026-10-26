@@ -237,6 +237,7 @@ export class OrgBillingV2Service {
           }
         : undefined,
       retention: retentionSummary,
+      freePlanName: ranked.find(isFreePlan)?.name,
     });
   }
 

@@ -6,9 +6,10 @@ import { useToast } from "@/components/ui/toast";
 import { BILLING_FIELD_LABEL } from "@/lib/billing/details";
 import { planChangeRoute } from "@/lib/billing/direction";
 import { formatDate, formatINR, packagePriceText, stateName } from "@/lib/billing/pricing";
-import { pendingRequestText } from "@/lib/billing/requests";
+import { pendingRequestText, planChangeBlock } from "@/lib/billing/requests";
 import type { BillingDetailsField, BillingInterval, BillingOverview, BillingProfile, CheckoutPreview, PendingUpgrade } from "@/lib/billing/types";
 import { useBillingEnv, useBillingQuery, useOrgBilling } from "./context";
+import { ScheduledChangeNote } from "./banners";
 import { usePayment } from "./payment";
 import { WithdrawRequestButton } from "./requests";
 import { Banner, BillingRedirect, BLink, ErrorNote, Loading, Section, useCheckoutLive } from "./ui";
@@ -485,6 +486,10 @@ export function CheckoutScreen({
       />
     );
   }
+
+  // A change to Basic / a smaller plan is scheduled: no other plan change until
+  // it's undone ("Keep <plan>"). Renewals still go through (at its price).
+  if (!renewal && planChangeBlock(overview)?.reason === "change_scheduled") return <ScheduledChangeNote overview={overview} />;
 
   // A waiting upgrade request doesn't block paying a renewal online. In manual
   // mode a renewal is a request too, so one waiting request blocks it.

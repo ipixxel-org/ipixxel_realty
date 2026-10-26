@@ -72,11 +72,8 @@ const code = (p: Promise<unknown>) =>
   );
 
 describe('cancel at the end of the term', () => {
-  it('schedules it (replacing a scheduled downgrade) and can be undone', async () => {
-    const { service, row, db } = setup({
-      scheduledPlanId: 'growth',
-      scheduledInterval: 'monthly',
-    });
+  it('schedules it and can be undone', async () => {
+    const { service, row, db } = setup();
     await service.cancel('org-1', 'u1', { reason: 'Too expensive' });
     expect(row()).toMatchObject({
       planId: 'pro',

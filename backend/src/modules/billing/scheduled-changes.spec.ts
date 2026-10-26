@@ -114,17 +114,21 @@ describe('scheduled plan changes on the Requests list', () => {
     expect((await list())[0].status).toBe('done');
   });
 
-  it('a new choice replaces the scheduled one; Keep marks the new one Undone', async () => {
+  it('another choice is refused (change_scheduled); after Keep, a new one can be scheduled', async () => {
     const { service, rows } = setup();
     await service.scheduleDowngrade('org-1', 'u1', { planId: 'growth' });
-    // Not pending: the next change isn't refused with request_pending.
+    expect(await code(service.cancel('org-1', 'u1', {}))).toBe(
+      'change_scheduled',
+    );
+    expect(rows().map((r: any) => [r.targetPlanId, r.status])).toEqual([
+      ['growth', 'scheduled'],
+    ]);
+    await service.undoDowngrade('org-1', 'u1');
     await service.cancel('org-1', 'u1', {});
     expect(rows().map((r: any) => [r.targetPlanId, r.status])).toEqual([
-      ['growth', 'replaced'],
+      ['growth', 'undone'],
       ['basic', 'scheduled'],
     ]);
-    await service.undoCancel('org-1', 'u1');
-    expect(rows()[1].status).toBe('undone');
   });
 
   it("is never pending: not in Super Admin's Pending filter, still in All", async () => {

@@ -19,6 +19,8 @@ import {
   billingDetailsFromOrg,
   missingBillingDetails,
 } from './org-billing-details';
+import { scheduledChangeMessage } from '../../common/utils/scheduled-change.util';
+import { pendingRequestMessage } from '../package-change-requests/package-change-requests.service';
 
 const DAY_MS = 86_400_000;
 export const GST_RATE = 0.18;
@@ -74,6 +76,41 @@ export interface OverviewInput {
   /** Step 6: what's paused / view-only / offline right now. */
   locked?: { users: number; projects: number; landingPages: number };
   retention?: RetentionSummaryV2 | null;
+  /** The free plan's name, for "a change to Basic is scheduled" (default "Basic"). */
+  freePlanName?: string;
+}
+
+/** What blocks a plan change right now (see BillingOverviewV2.planChangeBlockedReason). */
+export function planChangeBlock(
+  input: Pick<OverviewInput, 'pendingUpgrade' | 'plan' | 'freePlanName'>,
+  sub: OverviewInput['subscription'],
+): Pick<
+  BillingOverviewV2,
+  'planChangeBlockedReason' | 'planChangeBlockedMessage'
+> {
+  const pending = input.pendingUpgrade;
+  if (pending?.status === 'pending_approval') {
+    return {
+      planChangeBlockedReason: 'request_pending',
+      planChangeBlockedMessage: pendingRequestMessage(
+        pending.fromPlan?.name,
+        pending.toPlan.name,
+        new Date(pending.createdAt),
+      ),
+    };
+  }
+  if (sub && !input.plan.isFree && (sub.cancelAtPeriodEnd || sub.scheduled)) {
+    const toBasic = !!sub.cancelAtPeriodEnd;
+    return {
+      planChangeBlockedReason: 'change_scheduled',
+      planChangeBlockedMessage: scheduledChangeMessage(
+        input.plan.name,
+        toBasic ? (input.freePlanName ?? 'Basic') : sub.scheduled!.plan.name,
+        toBasic && sub.status === 'past_due' ? sub.graceEndsAt : sub.renewsAt,
+      ),
+    };
+  }
+  return { planChangeBlockedReason: null, planChangeBlockedMessage: null };
 }
 
 export function deriveStatus(
@@ -151,6 +188,7 @@ export function buildOverview(input: OverviewInput): BillingOverviewV2 {
     billingDetailsMissing: missingBillingDetails(billingProfile),
     pendingUpgrade: input.pendingUpgrade ?? null,
     rejectedUpgrade: input.rejectedUpgrade ?? null,
+    ...planChangeBlock(input, sub),
     periodStart: periodStart ? isoDate(periodStart) : null,
     periodEnd: periodEnd ? isoDate(periodEnd) : null,
     daysLeftInPeriod:

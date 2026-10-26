@@ -46,6 +46,7 @@ import {
   type QuotePlan,
 } from './checkout-quote';
 import { expireStaleCheckouts } from './checkout-state';
+import { scheduledChangeBlock } from '../../common/utils/scheduled-change.util';
 import { findCouponFor } from './coupon-lookup';
 import {
   normaliseCouponCode,
@@ -196,6 +197,18 @@ export class BillingCheckoutService implements OnModuleInit {
   ): Promise<StartCheckoutResultV2> {
     await expireStaleCheckouts(this.prisma, orgId);
     const renewal = dto.purpose === 'renewal';
+    // A change to Basic / a smaller plan is scheduled: no other plan change
+    // until it's undone ("Keep <plan>") or takes effect. Renewals still go
+    // through (at the scheduled plan's price, quoteRenewal).
+    if (!renewal) {
+      await applyOrgSubscriptionLifecycle(this.prisma, orgId);
+      const sub = await this.prisma.subscription.findFirst({
+        where: { orgId, status: { not: 'cancelled' } },
+        include: { plan: true },
+      });
+      const scheduled = await scheduledChangeBlock(this.prisma, sub);
+      if (scheduled) throw billingError('change_scheduled', scheduled);
+    }
     const ctx = await this.quote(
       orgId,
       dto.planId,

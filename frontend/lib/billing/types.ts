@@ -275,6 +275,8 @@ export interface RenewalBreakdown {
   total: number;
 }
 
+export type PlanChangeBlockedReason = "request_pending" | "change_scheduled";
+
 export interface BillingOverview {
   orgName: string;
   ownerName: string;
@@ -299,6 +301,16 @@ export interface BillingOverview {
   pendingUpgrade: PendingUpgrade | null;
   /** Set while the latest package request is a rejected one (null otherwise). */
   rejectedUpgrade: RejectedUpgrade | null;
+  /**
+   * Why plan changes are blocked right now: 'request_pending' (an approval
+   * request waits) or 'change_scheduled' (a change to Basic / a smaller plan
+   * is scheduled, until it's undone or takes effect); null when nothing
+   * blocks. Read it through planChangeBlock() (lib/billing/requests.ts),
+   * which also works out older payloads without it.
+   */
+  planChangeBlockedReason?: PlanChangeBlockedReason | null;
+  /** The same words the API refuses with (tooltip / note). */
+  planChangeBlockedMessage?: string | null;
   periodStart: string | null;
   /** Renewal date (end of the current or unpaid period). */
   periodEnd: string | null;

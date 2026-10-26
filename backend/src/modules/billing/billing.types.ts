@@ -60,6 +60,8 @@ export interface UsageItemV2 {
   limit: number | null;
 }
 
+export type PlanChangeBlockedReasonV2 = 'request_pending' | 'change_scheduled';
+
 export interface BillingOverviewV2 {
   orgName: string;
   ownerName: string;
@@ -83,6 +85,16 @@ export interface BillingOverviewV2 {
   pendingUpgrade: PendingUpgradeV2 | null;
   /** Set while the org's latest package request is a rejected one (shown with its reason). */
   rejectedUpgrade: RejectedUpgradeV2 | null;
+  /**
+   * Why plan changes (plan cards, checkout, change request, downgrade) are
+   * blocked right now, or null: 'request_pending' while an approval request
+   * waits; 'change_scheduled' while a change to Basic / a smaller plan is
+   * scheduled (until it's undone or takes effect). Renewals, "Keep <plan>"
+   * and "choose what stays" are never blocked by 'change_scheduled'.
+   */
+  planChangeBlockedReason: PlanChangeBlockedReasonV2 | null;
+  /** The same words the API refuses with (tooltip / note); null when not blocked. */
+  planChangeBlockedMessage: string | null;
   periodStart: string | null;
   periodEnd: string | null;
   daysLeftInPeriod: number;
