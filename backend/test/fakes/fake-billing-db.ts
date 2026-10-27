@@ -185,6 +185,12 @@ export interface Seed {
   users?: Row[];
   projects?: Row[];
   landingPages?: Row[];
+  /**
+   * organisation_templates rows ({ orgId, templateId, assignedAt,
+   * billingPausedAt, template: { name } }). When given, the template count
+   * comes from these rows (non-paused) instead of usage.templates.
+   */
+  templates?: Row[];
   usage?: {
     users?: number;
     projects?: number;
@@ -293,11 +299,36 @@ export function createFakeBillingDb(seed: Seed) {
   const projects = table([...(seed.projects ?? [])], 'proj');
   db.project = { ...projects, count: async () => usage.projects };
   const pages = table([...(seed.landingPages ?? [])], 'page');
-  db.landingPage = { ...pages, count: async () => usage.landingPages };
+  db.landingPage = {
+    ...pages,
+    count: async () => usage.landingPages,
+    // Only the shape retention.util asks for: by sourceTemplateId.
+    groupBy: async ({ where }: { where?: Where }) => {
+      const groups = new Map<string, Row[]>();
+      for (const r of pages.rows.filter((p) => matches(p, where))) {
+        const key = r.sourceTemplateId as string;
+        groups.set(key, [...(groups.get(key) ?? []), r]);
+      }
+      return [...groups].map(([sourceTemplateId, rs]) => ({
+        sourceTemplateId,
+        _count: { _all: rs.length },
+        _max: {
+          createdAt: rs
+            .map((r) => r.createdAt as Date)
+            .reduce((a, b) => (a > b ? a : b)),
+        },
+      }));
+    },
+  };
   db.refreshToken = table([], 'rt');
   db.retentionChoice = table([], 'ret');
   db.lead = { groupBy: async () => [] };
-  db.organisationTemplate = { count: async () => usage.templates };
+  const templates = table([...(seed.templates ?? [])], 'ot');
+  db.organisationTemplate = {
+    ...templates,
+    count: async (args?: { where?: Where }) =>
+      seed.templates ? templates.count(args) : usage.templates,
+  };
 
   let chain = Promise.resolve();
   db.$transaction = (fn: (tx: Row) => Promise<unknown>) => {

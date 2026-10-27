@@ -1500,6 +1500,9 @@ model RetentionChoice {
   userIds        String[] @map("user_ids")
   projectIds     String[] @map("project_ids")
   landingPageIds String[] @map("landing_page_ids")
+  // Template ids (organisation_templates.template_id). Empty on choices saved
+  // before templates could be paused: the default picks apply to those.
+  templateIds    String[] @default([]) @map("template_ids")
   updatedById    String?  @map("updated_by_id")
   createdAt      DateTime @default(now()) @map("created_at")
   updatedAt      DateTime @updatedAt @map("updated_at")
@@ -1603,6 +1606,9 @@ model OrganisationTemplate {
   templateId String   @map("template_id")
   assignedAt DateTime @default(now()) @map("assigned_at")
   assignedBy String?  @map("assigned_by")
+  // Billing v2: paused because the plan allows fewer templates. Can't be
+  // used for new landing pages; pages already made from it are unaffected.
+  billingPausedAt DateTime? @map("billing_paused_at")
 
   organisation Organisation @relation(fields: [orgId], references: [id], onDelete: Cascade)
   template     Template     @relation(fields: [templateId], references: [id], onDelete: Cascade)

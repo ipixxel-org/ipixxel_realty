@@ -23,4 +23,10 @@ export class SaveRetentionChoicesDto {
   @ArrayMaxSize(5000)
   @IsString({ each: true })
   landingPageIds!: string[];
+  /** Optional so older clients still save; missing = the default picks. */
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(5000)
+  @IsString({ each: true })
+  templateIds?: string[];
 }

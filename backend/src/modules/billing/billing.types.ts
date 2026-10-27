@@ -114,7 +114,12 @@ export interface BillingOverviewV2 {
   /** How renewalAmount is made up — the same calculation as the renewal checkout. */
   renewalBreakdown: RenewalBreakdownV2 | null;
   usage: UsageItemV2[];
-  locked: { users: number; projects: number; landingPages: number };
+  locked: {
+    users: number;
+    projects: number;
+    landingPages: number;
+    templates: number;
+  };
   /** What stays on the plan the org is moving to (grace / cancel / downgrade / Basic). */
   retention: RetentionSummaryV2 | null;
 }
@@ -138,6 +143,7 @@ export interface RetentionSummaryV2 {
   users: string[];
   projects: string[];
   landingPages: string[];
+  templates: string[];
 }
 
 export interface RetentionItemV2 {
@@ -157,6 +163,7 @@ export interface RetentionChoicesV2 {
   users: RetentionItemV2[];
   projects: RetentionItemV2[];
   landingPages: RetentionItemV2[];
+  templates: RetentionItemV2[];
 }
 
 export interface AccessStatusV2 {
@@ -167,6 +174,8 @@ export interface AccessStatusV2 {
   pausedUserIds: string[];
   viewOnlyProjectIds: string[];
   offlineLandingPageIds: string[];
+  /** Assigned templates that can't be used for new landing pages. */
+  pausedTemplateIds: string[];
 }
 
 export type AfterGraceBehavior = 'fall_back_to_basic' | 'restrict' | 'cancel';
@@ -392,7 +401,7 @@ export interface ConfirmCheckoutResultV2 {
  */
 export interface UsageConflictV2 {
   items: {
-    key: 'users' | 'projects' | 'landingPages';
+    key: 'users' | 'projects' | 'landingPages' | 'templates';
     limit: number;
     used: number;
   }[];

@@ -74,7 +74,12 @@ export interface OverviewInput {
     interval: BillingInterval;
   } | null;
   /** Step 6: what's paused / view-only / offline right now. */
-  locked?: { users: number; projects: number; landingPages: number };
+  locked?: {
+    users: number;
+    projects: number;
+    landingPages: number;
+    templates: number;
+  };
   retention?: RetentionSummaryV2 | null;
   /** The free plan's name, for "a change to Basic is scheduled" (default "Basic"). */
   freePlanName?: string;
@@ -271,7 +276,12 @@ export function buildOverview(input: OverviewInput): BillingOverviewV2 {
         limit: plan.limits.templates,
       },
     ],
-    locked: input.locked ?? { users: 0, projects: 0, landingPages: 0 },
+    locked: input.locked ?? {
+      users: 0,
+      projects: 0,
+      landingPages: 0,
+      templates: 0,
+    },
     retention: input.retention ?? null,
   };
 }

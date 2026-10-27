@@ -36,6 +36,8 @@ import { ConfirmModal } from "@/components/ui/confirm-modal";
 import { useAuth } from "@/lib/auth-context";
 import { apiFetch } from "@/lib/api";
 import { Reveal } from "@/components/superadmin/reveal";
+import { PlanLockBadge, usePlanLocks } from "@/components/billing/locked";
+import { PLAN_LOCK_COPY } from "@/lib/plan-lock";
 import { TemplateCover, TierBadge } from "@/components/superadmin/templates/shared";
 import { SiteRenderer } from "@/components/openpage/renderer/SiteRenderer";
 import { siteFromLandingPage } from "@/lib/openpage/content";
@@ -106,6 +108,9 @@ export default function OrgTemplatesPage() {
   const [category, setCategory] = useState("all");
   const [tierFilter, setTierFilter] = useState<string>("all");
   const [propertyTypeFilter, setPropertyTypeFilter] = useState<string>("all");
+  // Billing v2: "paused" = templates the plan paused (no new pages from them).
+  const [statusFilter, setStatusFilter] = useState<"all" | "paused">("all");
+  const planLocks = usePlanLocks();
   const [sortBy, setSortBy] = useState<string>("latest");
   const [activeTab, setActiveTab] = useState<"all" | "free" | "paid" | "premium" | "my">("my");
   const [favorites, setFavorites] = useState<Record<string, boolean>>({});
@@ -290,13 +295,15 @@ export default function OrgTemplatesPage() {
 
   const rows = result?.data ?? [];
   const total = result?.total ?? 0;
-  const isFiltered = Boolean(search || (category && category !== "all") || (tierFilter && tierFilter !== "all") || (propertyTypeFilter && propertyTypeFilter !== "all"));
+  const isFiltered = Boolean(search || (category && category !== "all") || (tierFilter && tierFilter !== "all") || (propertyTypeFilter && propertyTypeFilter !== "all") || statusFilter !== "all");
 
   const previewCfg = previewData ? ensureConfig(previewData) : null;
   const previewedTmpl = availableData?.data.find((t) => t.id === previewId);
   const previewedIsAssigned =
     !!previewId &&
     (rows.some((r) => r.id === previewId) || (previewedTmpl?.isAssigned ?? false));
+  const isPaused = (t: { id: string; paused?: boolean }) => Boolean(t.paused) || rows.some((r) => r.id === t.id && r.paused);
+  const previewedIsPaused = !!previewId && isPaused({ id: previewId, paused: previewedTmpl?.paused });
 
   const availablePlans = availableData?.plans ?? [];
   const filteredAvailable = (availableData?.data ?? []).filter((t) => {
@@ -368,7 +375,10 @@ export default function OrgTemplatesPage() {
       }
     }
 
-    // 5. Tier dropdown filter
+    // 5. Billing v2 status filter
+    if (statusFilter === "paused" && !isPaused(tmpl)) return false;
+
+    // 6. Tier dropdown filter
     if (tierFilter !== "all") {
       if (tierFilter === "free" && (tmpl.tier ?? "free") !== "free") return false;
       if (tierFilter === "paid" && tmpl.tier !== "paid" && tmpl.tier !== "premium") return false;
@@ -391,6 +401,8 @@ export default function OrgTemplatesPage() {
 
   async function handleCardUse(tmpl: OrgTemplateSummary) {
     const isAssigned = rows.some((r) => r.id === tmpl.id) || Boolean(tmpl.isAssigned);
+    // A paused template can't be used for new landing pages (the API refuses too).
+    if (isPaused(tmpl)) return;
     if (isAssigned) {
       openUseTemplate(tmpl.id, tmpl.name);
     } else {
@@ -1035,6 +1047,22 @@ export default function OrgTemplatesPage() {
           <option value="Residential">Residential</option>
         </select>
 
+        {/* Billing v2: templates the plan paused */}
+        {planLocks.active ? (
+          <select
+            className="tpl-filter-select"
+            value={statusFilter}
+            style={{ flex: "0 0 115px", width: 115, flexShrink: 0 }}
+            onChange={(e) => {
+              setStatusFilter(e.target.value as "all" | "paused");
+              setPage(1);
+            }}
+          >
+            <option value="all">All Statuses</option>
+            <option value="paused">{PLAN_LOCK_COPY.template_paused.badge}</option>
+          </select>
+        ) : null}
+
         {/* Plans Dropdown */}
         <select
           className="tpl-filter-select"
@@ -1154,6 +1182,7 @@ export default function OrgTemplatesPage() {
                   setCategory("all");
                   setPropertyTypeFilter("all");
                   setTierFilter("all");
+                  setStatusFilter("all");
                   setActiveTab("all");
                 }}
               >
@@ -1181,6 +1210,7 @@ export default function OrgTemplatesPage() {
                 key={tmpl.id}
                 tmpl={tmpl}
                 isAssigned={isAssigned}
+                paused={isPaused(tmpl)}
                 isFavorite={!!favorites[tmpl.id]}
                 onToggleFavorite={() =>
                   setFavorites((prev) => ({ ...prev, [tmpl.id]: !prev[tmpl.id] }))
@@ -1236,7 +1266,10 @@ export default function OrgTemplatesPage() {
                           }}
                         />
                         <div>
-                          <div style={{ fontWeight: 700, color: "#0f172a" }}>{tmpl.name}</div>
+                          <div style={{ fontWeight: 700, color: "#0f172a" }}>
+                            {tmpl.name}
+                            {isPaused(tmpl) ? <PlanLockBadge kind="template_paused" style={{ marginLeft: 6 }} /> : null}
+                          </div>
                           <div style={{ fontSize: 11.5, color: "#64748b" }}>{meta.headline}</div>
                         </div>
                       </div>
@@ -1265,6 +1298,8 @@ export default function OrgTemplatesPage() {
                           className="tpl-btn-use"
                           style={{ height: 30, padding: "0 12px" }}
                           onClick={() => handleCardUse(tmpl)}
+                          disabled={isPaused(tmpl)}
+                          title={isPaused(tmpl) ? PLAN_LOCK_COPY.template_paused.tooltip : undefined}
                         >
                           <Plus size={12} /> Use
                         </button>
@@ -1384,13 +1419,15 @@ export default function OrgTemplatesPage() {
                   <button
                     type="button"
                     className="btn btn-primary btn-sm"
+                    disabled={previewedIsPaused}
+                    title={previewedIsPaused ? PLAN_LOCK_COPY.template_paused.tooltip : undefined}
                     onClick={() => {
                       const id = previewId;
                       const name = previewData?.name ?? previewedTmpl?.name ?? "Landing Page";
                       closePreview();
                       openUseTemplate(id, name);
                     }}
-                    style={{ display: "inline-flex", alignItems: "center", gap: 6, fontWeight: 700 }}
+                    style={{ display: "inline-flex", alignItems: "center", gap: 6, fontWeight: 700, ...(previewedIsPaused ? { opacity: 0.5, cursor: "not-allowed" } : {}) }}
                   >
                     <Sparkles size={14} /> Use this template
                   </button>
@@ -1678,6 +1715,7 @@ function getTemplateMeta(name: string, thumbnail?: string | null, category?: str
 function TplCard({
   tmpl,
   isAssigned,
+  paused = false,
   isFavorite,
   onToggleFavorite,
   onPreview,
@@ -1692,6 +1730,8 @@ function TplCard({
 }: {
   tmpl: OrgTemplateSummary;
   isAssigned: boolean;
+  /** Billing v2: paused by the plan — no new landing pages from it. */
+  paused?: boolean;
   isFavorite: boolean;
   onToggleFavorite: () => void;
   onPreview: () => void;
@@ -1749,7 +1789,10 @@ function TplCard({
         <h3 className="tpl-card-title" title={tmpl.name}>
           {tmpl.name}
         </h3>
-        <div className="tpl-card-meta">{meta.type}</div>
+        <div className="tpl-card-meta">
+          {meta.type}
+          {paused ? <PlanLockBadge kind="template_paused" style={{ marginLeft: 6 }} /> : null}
+        </div>
 
         {/* Action Buttons Row */}
         <div className="tpl-card-actions" style={{ position: "relative" }}>
@@ -1760,7 +1803,13 @@ function TplCard({
 
           {isAssigned ? (
             canUse ? (
-              <button type="button" className="tpl-btn-use" onClick={onUse}>
+              <button
+                type="button"
+                className="tpl-btn-use"
+                onClick={onUse}
+                disabled={paused}
+                title={paused ? PLAN_LOCK_COPY.template_paused.tooltip : undefined}
+              >
                 <Plus size={13} />
                 <span>Use Template</span>
               </button>

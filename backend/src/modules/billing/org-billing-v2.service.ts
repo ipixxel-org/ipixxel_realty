@@ -4,6 +4,7 @@ import { PrismaService } from '../../database/prisma.service';
 import {
   countBillableOrgUsers,
   countOrgLandingPages,
+  countOrgTemplates,
   countOrgProjects,
 } from '../../common/utils/plan-quota.util';
 import {
@@ -102,7 +103,7 @@ export class OrgBillingV2Service {
       countBillableOrgUsers(this.prisma, orgId),
       countOrgProjects(this.prisma, orgId),
       countOrgLandingPages(this.prisma, orgId),
-      this.prisma.organisationTemplate.count({ where: { orgId } }),
+      countOrgTemplates(this.prisma, orgId),
       getBillingExpiryConfig(this.prisma),
       this.mode.getMode(),
       findPendingUpgrade(this.prisma, orgId),
@@ -234,6 +235,7 @@ export class OrgBillingV2Service {
             users: paused.pausedUserIds.length,
             projects: paused.viewOnlyProjectIds.length,
             landingPages: paused.offlineLandingPageIds.length,
+            templates: paused.pausedTemplateIds.length,
           }
         : undefined,
       retention: retentionSummary,
@@ -258,6 +260,7 @@ export class OrgBillingV2Service {
             pausedUserIds: [],
             viewOnlyProjectIds: [],
             offlineLandingPageIds: [],
+            pausedTemplateIds: [],
           }),
     };
   }

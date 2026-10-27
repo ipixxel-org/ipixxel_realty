@@ -98,7 +98,8 @@ export function assertTemplateQuota(
 //               billing ("choose what stays") do not consume a seat.
 //   - projects: every project counts, regardless of status — except ones
 //               made view-only by billing.
-//   - templates: assigned OrganisationTemplate rows.
+//   - templates: assigned OrganisationTemplate rows, except ones paused by
+//               billing.
 //   - landingPages: LandingPage rows with pageType 'landing' — thank-you
 //               companion pages are linked from a landing page, not sold
 //               separately, so they do NOT consume an extra slot.
@@ -111,6 +112,19 @@ interface ProjectCountPrisma {
 }
 interface LandingPageCountPrisma {
   landingPage: { count: (args: any) => Promise<number> };
+}
+interface TemplateCountPrisma {
+  organisationTemplate: { count: (args: any) => Promise<number> };
+}
+
+/** Templates that use a plan slot: assigned and not paused by billing. */
+export function countOrgTemplates(
+  prisma: TemplateCountPrisma,
+  orgId: string,
+): Promise<number> {
+  return prisma.organisationTemplate.count({
+    where: { orgId, billingPausedAt: null },
+  });
 }
 
 export function countBillableOrgUsers(
@@ -153,12 +167,10 @@ export function countOrgTotalLandingPages(
 
 // --- Downgrade guard ---
 
-interface CountPrisma
-  extends UserCountPrisma,
-    ProjectCountPrisma,
-    LandingPageCountPrisma {
-  organisationTemplate: { count: (args: any) => Promise<number> };
-}
+type CountPrisma = UserCountPrisma &
+  ProjectCountPrisma &
+  LandingPageCountPrisma &
+  TemplateCountPrisma;
 
 /**
  * Reject switching an org onto `targetPlan` when the org is already using more
@@ -172,9 +184,9 @@ export interface UsageOverLimit {
   limit: number;
   used: number;
   /**
-   * "Choose what stays" can make it fit (users, projects and published
-   * landing pages are paused / taken offline); templates and created pages
-   * can't be.
+   * "Choose what stays" can make it fit (users, projects, published
+   * landing pages and templates are paused / taken offline); created pages
+   * (landingPagesCreate) can't be.
    */
   fixable: boolean;
 }
@@ -190,6 +202,7 @@ const FIXABLE: ReadonlySet<PlanLimitKey> = new Set([
   'users',
   'projects',
   'landingPages',
+  'templates',
 ]);
 
 /** Every limit of `targetPlan` the org's current usage is over (empty = fits). */
@@ -202,7 +215,7 @@ export async function usageOverLimits(
     await Promise.all([
       countOrgProjects(prisma, orgId),
       countBillableOrgUsers(prisma, orgId),
-      prisma.organisationTemplate.count({ where: { orgId } }),
+      countOrgTemplates(prisma, orgId),
       countOrgLandingPages(prisma, orgId),
       countOrgTotalLandingPages(prisma, orgId),
     ]);
@@ -251,8 +264,8 @@ export async function assertPlanFitsCurrentUsage(
 
 /**
  * Like assertPlanFitsCurrentUsage, but only for what "choose what stays"
- * can't fix (templates, created landing pages): users, projects and
- * published pages over the limit are paused by applyRetention when the plan
+ * can't fix (created landing pages): users, projects, published pages and
+ * templates over the limit are paused by applyRetention when the plan
  * changes, using the org's saved choice or the default picks.
  */
 export async function assertPlanFitsAfterRetention(

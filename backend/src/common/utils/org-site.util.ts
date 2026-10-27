@@ -37,7 +37,11 @@ export async function provisionOrgPortal(
     let templateId = preferredTemplateId ?? null;
     if (!templateId) {
       const assigned = await tx.organisationTemplate.findFirst({
-        where: { orgId: org.id, template: { status: 'published', pageType: 'landing' } },
+        where: {
+          orgId: org.id,
+          billingPausedAt: null,
+          template: { status: 'published', pageType: 'landing' },
+        },
         orderBy: { assignedAt: 'asc' },
         select: { templateId: true },
       });

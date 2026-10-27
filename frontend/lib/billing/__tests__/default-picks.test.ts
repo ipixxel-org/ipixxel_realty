@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { defaultPicks, rankLandingPages, rankProjects, rankUsers, type PickUser } from "../default-picks";
+import { defaultPicks, rankLandingPages, rankProjects, rankTemplates, rankUsers, type PickUser } from "../default-picks";
 import { DEMO_LANDING_PAGES, DEMO_PROJECTS, DEMO_USERS, PLANS } from "../mock/data";
 
 const data = { users: DEMO_USERS, projects: DEMO_PROJECTS, landingPages: DEMO_LANDING_PAGES };
@@ -33,5 +33,23 @@ describe("default picks", () => {
     expect(ranked[0].item.id).toBe("lp1");
     expect(ranked[0].reason).toBe("142 leads in the last 30 days");
     expect(ranked.filter((r) => r.picked)).toHaveLength(1);
+  });
+});
+
+describe("template default picks (same rule as backend retention.util)", () => {
+  it("most pages made, then most recently used, then most recently assigned", () => {
+    const t = (id: string, pagesMade: number, lastUsedAt: string | null, assignedAt: string) => ({ id, name: id, pagesMade, lastUsedAt, assignedAt });
+    const templates = [
+      t("new-unused", 0, null, "2026-10-20"),
+      t("old-unused", 0, null, "2026-08-01"),
+      t("two-old", 2, "2026-09-01", "2026-07-01"),
+      t("two-recent", 2, "2026-10-15", "2026-07-01"),
+      t("five", 5, "2026-06-01", "2026-05-01"),
+    ];
+    const ranked = rankTemplates(templates, 2);
+    expect(ranked.map((r) => r.item.id)).toEqual(["five", "two-recent", "two-old", "new-unused", "old-unused"]);
+    expect(ranked.filter((r) => r.picked).map((r) => r.item.id)).toEqual(["five", "two-recent"]);
+    expect(ranked[4].reason).toBe("No landing pages made from it yet");
+    expect(defaultPicks({ users: [], projects: [], landingPages: [], templates }, { users: null, projects: null, landingPages: null, templates: 1 }).templates).toEqual(["five"]);
   });
 });

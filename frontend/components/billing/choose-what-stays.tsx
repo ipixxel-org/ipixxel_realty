@@ -8,7 +8,7 @@ import type { RetentionChoices, RetentionItem } from "@/lib/billing/types";
 import { useBillingEnv, useBillingQuery, useOptionalOrgBilling } from "./context";
 import { Banner, BLink, countLabel, ErrorNote, Loading, Section } from "./ui";
 
-type Kind = "users" | "projects" | "landingPages";
+type Kind = "users" | "projects" | "landingPages" | "templates";
 
 function TickList({
   title,
@@ -68,7 +68,14 @@ function Editor({ choices, onSaved }: { choices: RetentionChoices; onSaved: (c: 
   const billing = useOptionalOrgBilling();
   const { toast } = useToast();
   const pick = (list: RetentionItem[]) => list.filter((x) => x.selected).map((x) => x.id);
-  const [sel, setSel] = useState<Record<Kind, string[]>>({ users: pick(choices.users), projects: pick(choices.projects), landingPages: pick(choices.landingPages) });
+  // Templates are missing from older responses (and the walkthrough mock): then there's no Templates section.
+  const templates = choices.templates;
+  const [sel, setSel] = useState<Record<Kind, string[]>>({
+    users: pick(choices.users),
+    projects: pick(choices.projects),
+    landingPages: pick(choices.landingPages),
+    templates: pick(templates ?? []),
+  });
   const [dirty, setDirty] = useState(false);
   const [busy, setBusy] = useState(false);
   const t = choices.targetPlan;
@@ -80,18 +87,27 @@ function Editor({ choices, onSaved }: { choices: RetentionChoices; onSaved: (c: 
 
   function resetDefaults() {
     const d = (list: RetentionItem[]) => list.filter((x) => x.defaultPicked).map((x) => x.id);
-    setSel({ users: d(choices.users), projects: d(choices.projects), landingPages: d(choices.landingPages) });
+    setSel({ users: d(choices.users), projects: d(choices.projects), landingPages: d(choices.landingPages), templates: d(templates ?? []) });
     setDirty(true);
   }
 
   async function save() {
     setBusy(true);
     try {
-      const saved = await client.saveRetentionChoices({ targetPlanId: t.id, userIds: sel.users, projectIds: sel.projects, landingPageIds: sel.landingPages });
+      const saved = await client.saveRetentionChoices({
+        targetPlanId: t.id,
+        userIds: sel.users,
+        projectIds: sel.projects,
+        landingPageIds: sel.landingPages,
+        ...(templates ? { templateIds: sel.templates } : {}),
+      });
       setDirty(false);
       onSaved(saved);
       void billing?.refresh();
-      toast({ variant: "success", title: "Saved", description: `${sel.users.length} users, ${sel.projects.length} projects and ${sel.landingPages.length} landing pages stay active on ${t.name}.` });
+      const kept = templates
+        ? `${sel.users.length} users, ${sel.projects.length} projects, ${sel.landingPages.length} landing pages and ${sel.templates.length} templates`
+        : `${sel.users.length} users, ${sel.projects.length} projects and ${sel.landingPages.length} landing pages`;
+      toast({ variant: "success", title: "Saved", description: `${kept} stay active on ${t.name}.` });
     } catch (e) {
       toast({ variant: "error", title: "Couldn't save", description: e instanceof Error ? e.message : undefined });
     } finally {
@@ -101,12 +117,13 @@ function Editor({ choices, onSaved }: { choices: RetentionChoices; onSaved: (c: 
 
   return (
     <div className="bl-stack">
-      <Banner tone="info" icon="info" title={`On ${t.name}: ${countLabel(t.limits.users, "user", "users")}, ${countLabel(t.limits.projects, "project", "projects")}, ${countLabel(t.limits.landingPages, "landing page", "landing pages")}`}>
+      <Banner tone="info" icon="info" title={`On ${t.name}: ${countLabel(t.limits.users, "user", "users")}, ${countLabel(t.limits.projects, "project", "projects")}, ${countLabel(t.limits.landingPages, "landing page", "landing pages")}${templates ? `, ${countLabel(t.limits.templates, "template", "templates")}` : ""}`}>
         {choices.appliesOn ? `This applies if you move to ${t.name} on ${formatDate(choices.appliesOn)}. ` : `You're on ${t.name} now — changes apply straight away. `}
-        Anything you untick is paused, never deleted: paused people can&apos;t sign in, projects become view-only and landing pages go offline. Leads keep coming in.
+        Anything you untick is paused, never deleted: paused people can&apos;t sign in, projects become view-only and landing pages go offline. A paused template can&apos;t be
+        used for new landing pages; pages already made from it stay live and editable. Leads keep coming in.
         <div style={{ marginTop: 6 }}>
           If you don&apos;t choose, we keep the owner first, then admins, then whoever signed in most recently; the most recently updated projects; and the landing pages with the
-          most leads in the last 30 days.
+          most leads in the last 30 days; and the templates used for the most landing pages (then the most recently used, then the most recently added).
         </div>
       </Banner>
       <TickList title="Users" noun="users" items={choices.users} selected={sel.users} limit={t.limits.users} onToggle={(id) => toggle("users", id)} />
@@ -126,6 +143,16 @@ function Editor({ choices, onSaved }: { choices: RetentionChoices; onSaved: (c: 
         limit={t.limits.landingPages}
         onToggle={(id) => toggle("landingPages", id)}
       />
+      {templates ? (
+        <TickList
+          title="Templates"
+          noun={t.limits.templates === 1 ? "template" : "templates"}
+          items={templates}
+          selected={sel.templates}
+          limit={t.limits.templates}
+          onToggle={(id) => toggle("templates", id)}
+        />
+      ) : null}
       <div className="bl-row">
         <button type="button" className="btn btn-primary" disabled={!canEdit || busy} onClick={() => void save()}>
           <Icon name="check" size={15} /> {busy ? "Saving…" : "Save"}
@@ -146,6 +173,6 @@ export function ChooseWhatStaysScreen({ targetPlanId }: { targetPlanId?: string 
   const [version, setVersion] = useState(0);
   const { data, error } = useBillingQuery((c) => c.getRetentionChoices({ targetPlanId }), [targetPlanId, version]);
   if (error) return <ErrorNote message={error} />;
-  if (!data) return <Loading what="your users, projects and pages" />;
+  if (!data) return <Loading what="your users, projects, pages and templates" />;
   return <Editor key={`${data.targetPlan.id}-${version}`} choices={data} onSaved={() => setVersion((v) => v + 1)} />;
 }
