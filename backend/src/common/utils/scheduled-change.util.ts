@@ -1,4 +1,4 @@
-import type { PrismaClient } from '@prisma/client';
+import { Prisma, type PrismaClient } from '@prisma/client';
 
 /**
  * Scheduled plan changes (to Basic, or a smaller plan / yearly → monthly) are
@@ -25,6 +25,8 @@ export interface ScheduledChangeInput {
   reason?: string | null;
   /** The smaller plan's price from then (rupees, before GST); null for Basic. */
   amount: number | null;
+  /** "Choose what stays" for the plan (whatStaysFor); null when everything fits. */
+  whatStays?: Prisma.InputJsonValue | object | null;
   now?: Date;
 }
 
@@ -48,6 +50,7 @@ export async function recordScheduledChange(
       reason: input.reason ?? null,
       startsAt: input.startsAt ?? now,
       scheduledAmount: input.amount,
+      whatStays: input.whatStays ?? undefined,
     },
   });
 }
@@ -55,18 +58,26 @@ export async function recordScheduledChange(
 /**
  * Close the org's open scheduled change. `outcome` is 'undone' / 'replaced',
  * or the plan the org has just moved to: `done` when that's the change it
- * scheduled, otherwise `replaced`.
+ * scheduled, otherwise `replaced`. `applied` works out "choose what stays"
+ * as it's being applied (whatStaysFor(…, applied = true)); only called for a
+ * `done` row, and stored on it.
  */
 export async function closeScheduledChange(
   db: ScheduledDb,
   orgId: string,
   outcome: 'undone' | 'replaced' | { planId: string; interval: string },
   now: Date = new Date(),
+  applied?: () => Promise<unknown>,
 ): Promise<void> {
   if (!db.packageChangeRequest) return;
   const open = await db.packageChangeRequest.findMany({
     where: { orgId, kind: SCHEDULED_CHANGE, status: 'scheduled' },
-    select: { id: true, targetPlanId: true, billingCycle: true },
+    select: {
+      id: true,
+      targetPlanId: true,
+      billingCycle: true,
+      whatStays: true,
+    },
   });
   for (const row of open) {
     const status =
@@ -76,9 +87,22 @@ export async function closeScheduledChange(
             row.billingCycle === outcome.interval
           ? 'done'
           : 'replaced';
+    // Taking effect: its copy of "choose what stays" is what was applied.
+    const copy =
+      status !== 'done'
+        ? undefined
+        : applied
+          ? await applied()
+          : row.whatStays && typeof row.whatStays === 'object'
+            ? { ...row.whatStays, applied: true }
+            : undefined;
     await db.packageChangeRequest.updateMany({
       where: { id: row.id, status: 'scheduled' },
-      data: { status, reviewedAt: now },
+      data: {
+        status,
+        reviewedAt: now,
+        ...(copy !== undefined ? { whatStays: copy ?? Prisma.DbNull } : {}),
+      },
     });
   }
 }

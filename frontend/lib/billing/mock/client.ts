@@ -416,6 +416,13 @@ export function createMockBillingClient(opts: { initial?: Partial<MockState>; pe
       return ok(deriveRetention(get(), today, target.id));
     },
 
+    // The sample org only: Super Admin's view is the same lists, never locked.
+    getAdminRetentionChoices: (req) => ok({ ...deriveRetention(get(), today, req.targetPlanId), locked: false }),
+    saveAdminRetentionChoices({ orgId: _orgId, ...req }) {
+      void _orgId;
+      return client.saveRetentionChoices(req);
+    },
+
     getAccessStatus: () => ok(deriveAccess(get())),
 
     listInvoices: (req) =>

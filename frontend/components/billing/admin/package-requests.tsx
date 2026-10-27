@@ -23,6 +23,8 @@ import {
   requestStage,
   requestTitle,
   scheduledAmountText,
+  scheduledDateText,
+  scheduledEffectiveDate,
 } from "@/lib/billing/requests";
 import type { RequestQuote, ScheduledChangeStatus } from "@/lib/billing/types";
 import type { PackageChangeRequestRow } from "@/lib/types";
@@ -30,6 +32,8 @@ import { Empty, ErrorNote, Loading, Section } from "../ui";
 import { MarkPaidDialog, type MarkPaidValues } from "./mark-paid-dialog";
 import { RejectRequestDialog } from "./reject-request-dialog";
 import { NoApprovalTag, whatStaysSummary } from "../requests";
+import { ChooseWhatStaysScreen } from "../choose-what-stays";
+import { BillingDialog } from "../dialog";
 
 /** Anchor of the section; Package Requests → Open scrolls here. */
 export const PACKAGE_REQUESTS_ANCHOR = "package-requests";
@@ -76,7 +80,7 @@ export function requestQuote(r: PackageChangeRequestRow): RequestQuote | null {
 }
 
 export function requestAmountText(r: PackageChangeRequestRow): string | null {
-  if (isScheduledChange(r)) return scheduledAmountText(r.scheduledAmount, r.startsAt);
+  if (isScheduledChange(r)) return scheduledAmountText(r.scheduledAmount, scheduledEffectiveDate({ status: r.status, startsAt: r.startsAt, decidedAt: r.reviewedAt }));
   const c = r.billingCheckout;
   // With a coupon: "₹1,499 − ₹300 coupon + GST".
   if (r.quote?.couponCode) return requestPriceText(r.quote);
@@ -96,6 +100,54 @@ export function requestAmountText(r: PackageChangeRequestRow): string | null {
  * Scheduled changes (to Basic / a smaller plan) are listed read-only: they
  * need no approval.
  */
+/**
+ * Super Admin "Choose what stays" for one organisation — any time, also after
+ * the org's own choice is locked. Before the change applies it updates the
+ * saved choice; once the org is on that plan it applies straight away (and the
+ * org is notified). Without `requestId` it's for the org's current plan.
+ */
+export function AdminWhatStaysButton({
+  orgId,
+  orgName,
+  requestId,
+  targetPlanId,
+  label,
+  editable = true,
+  onSaved,
+}: {
+  orgId: string;
+  orgName?: string;
+  requestId?: string;
+  targetPlanId?: string;
+  label?: string;
+  /** false: "View what stays", read-only (older applied or closed rows). */
+  editable?: boolean;
+  onSaved?: () => void;
+}) {
+  const { hasPermission } = useAuth();
+  const [open, setOpen] = useState(false);
+  const canEdit = editable && hasPermission("admin_subscriptions", "edit");
+  label = label ?? (canEdit ? "Choose what stays" : "View what stays");
+  return (
+    <>
+      <button type="button" className="btn btn-ghost btn-sm" onClick={() => setOpen(true)} data-testid="admin-choose-what-stays">
+        {label}
+      </button>
+      <BillingDialog open={open} onClose={() => setOpen(false)} title={`${label}${orgName ? ` — ${orgName}` : ""}`} size="lg">
+        <ChooseWhatStaysScreen
+          admin={{ orgId, orgName }}
+          requestId={requestId}
+          targetPlanId={targetPlanId}
+          onSaved={() => {
+            setOpen(false);
+            onSaved?.();
+          }}
+        />
+      </BillingDialog>
+    </>
+  );
+}
+
 export function OrgPackageRequests({ orgId, onChanged }: { orgId: string; onChanged?: () => void }) {
   const { hasPermission } = useAuth();
   const { toast } = useToast();
@@ -248,7 +300,7 @@ export function OrgPackageRequests({ orgId, onChanged }: { orgId: string; onChan
                   <th>Change</th>
                   <th>Amount</th>
                   <th>Status</th>
-                  <th />
+                  <th style={{ textAlign: "right" }}>Action</th>
                 </tr>
               </thead>
               <tbody>
@@ -278,7 +330,11 @@ export function OrgPackageRequests({ orgId, onChanged }: { orgId: string; onChan
                             {MOVED_TO_BASIC_WHILE_WAITING} ({formatDate(r.movedToBasicAt)})
                           </div>
                         ) : null}
-                        {scheduled && r.startsAt ? <div className="bl-small" style={{ marginTop: 4 }}>Starts {formatDate(r.startsAt)}</div> : null}
+                        {scheduled && scheduledDateText({ status: r.status, startsAt: r.startsAt, decidedAt: r.reviewedAt }) ? (
+                          <div className="bl-small" style={{ marginTop: 4 }} data-testid="scheduled-date">
+                            {scheduledDateText({ status: r.status, startsAt: r.startsAt, decidedAt: r.reviewedAt })}
+                          </div>
+                        ) : null}
                         {scheduled && r.reason ? (
                           <div className="bl-small bl-muted" style={{ marginTop: 2, maxWidth: 320 }}>
                             Reason: {r.reason}
@@ -381,6 +437,34 @@ export function OrgPackageRequests({ orgId, onChanged }: { orgId: string; onChan
                                 Reject
                               </button>
                             ) : null}
+                            {r.whatStays ? (
+                              <AdminWhatStaysButton
+                                orgId={orgId}
+                                orgName={r.organisation?.name}
+                                requestId={r.id}
+                                targetPlanId={r.targetPlanId}
+                                editable={!!r.whatStaysEditable}
+                                onSaved={() => {
+                                  void load();
+                                  onChanged?.();
+                                }}
+                              />
+                            ) : null}
+                          </div>
+                        ) : r.whatStays ? (
+                          // Editable while open, or for the row that put the org on its current plan; view-only otherwise.
+                          <div className="bl-row" style={{ justifyContent: "flex-end" }}>
+                            <AdminWhatStaysButton
+                              orgId={orgId}
+                              orgName={r.organisation?.name}
+                              requestId={r.id}
+                              targetPlanId={r.targetPlanId}
+                              editable={!!r.whatStaysEditable}
+                              onSaved={() => {
+                                void load();
+                                onChanged?.();
+                              }}
+                            />
                           </div>
                         ) : null}
                       </td>

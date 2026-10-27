@@ -11,6 +11,7 @@ import {
   requestPaymentView,
 } from '../package-change-requests/package-change-requests.service';
 import { requestQuoteView } from './request-coupon';
+import { orgWhatStaysAction } from '../../common/utils/what-stays-rows.util';
 
 /** The contract's Invoice. */
 export interface InvoiceV2 {
@@ -176,6 +177,8 @@ export class BillingLedgerService {
         offlinePayment: true,
       },
     });
+    // "Choose what stays" lives on the latest row only (rows are newest first).
+    const latestId = rows[0]?.id ?? null;
     return page(
       rows.map((r): OrgPlanRequestV2 => {
         const c = r.billingCheckout;
@@ -214,6 +217,7 @@ export class BillingLedgerService {
               : (r.reviewedAt ?? r.updatedAt).toISOString(),
           rejectionReason: r.status === 'rejected' ? r.rejectionReason : null,
           whatStays: (r.whatStays as WhatStays | null) ?? null,
+          whatStaysAction: orgWhatStaysAction(r, latestId),
           ...requestLabel(c, r.targetPlan.name),
           total: c ? toRupees(c.totalPaise) : null,
           payment: r.offlinePayment

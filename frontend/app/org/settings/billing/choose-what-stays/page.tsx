@@ -8,5 +8,5 @@ const one = (v: string | string[] | undefined) => (Array.isArray(v) ? v[0] : v);
 export default async function Page({ searchParams }: { searchParams: Search }) {
   if (!BILLING_V2) notFound();
   const q = await searchParams;
-  return <ChooseWhatStaysPage target={one(q.target)} back={one(q.back)} interval={one(q.interval)} />;
+  return <ChooseWhatStaysPage target={one(q.target)} back={one(q.back)} interval={one(q.interval)} request={one(q.request)} />;
 }

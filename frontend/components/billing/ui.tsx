@@ -320,3 +320,22 @@ export function useCheckoutLive(overview: BillingOverview | null): boolean {
 export function useRenewalLive(overview: BillingOverview | null): boolean {
   return useCheckoutLive(overview);
 }
+
+/* ------------------------------------------------ What stays (locked) */
+
+export const WHAT_STAYS_LOCKED_TEXT = "To change what stays, contact our support team";
+
+/**
+ * Shown instead of "Change what stays" once the change was decided or took
+ * effect: only our team can change it then (API code what_stays_locked).
+ */
+export function WhatStaysLockedNote({ compact = false }: { compact?: boolean }) {
+  return (
+    <span className="bl-row" data-testid="what-stays-locked" style={{ gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+      <span className={compact ? "bl-muted bl-small" : "bl-muted"}>{WHAT_STAYS_LOCKED_TEXT}</span>
+      <Link href="/org/support" className="btn btn-ghost btn-sm">
+        <Icon name="mail" size={14} /> Support
+      </Link>
+    </span>
+  );
+}

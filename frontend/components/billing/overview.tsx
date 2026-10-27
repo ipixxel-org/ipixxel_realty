@@ -9,7 +9,7 @@ export { RenewalReminderPopup };
 import { BillingDetailsSection, PendingUpgradeBanner, RejectedUpgradeBanner } from "./checkout";
 import { useOrgBilling } from "./context";
 import { InvoicesTable, PaymentHistoryTable } from "./invoices";
-import { BLink, countLabel, ErrorNote, Kv, Loading, RenewalPrice, SampleDataTag, Section, StatusBadge, UsageMeter } from "./ui";
+import { BLink, countLabel, ErrorNote, Kv, Loading, RenewalPrice, SampleDataTag, Section, StatusBadge, UsageMeter, WhatStaysLockedNote } from "./ui";
 
 function planLine(o: BillingOverview): string {
   if (o.plan.isFree) {
@@ -55,7 +55,29 @@ export function CurrentPlanCard({ overview: o }: { overview: BillingOverview }) 
   );
 }
 
+const ACTIVE_NOUN: Record<string, [string, string]> = {
+  users: ["user", "users"],
+  projects: ["project", "projects"],
+  landingPages: ["landing page", "landing pages"],
+  templates: ["template", "templates"],
+};
+
+/** "Active now: 3 of 5 projects, 1 of 1 template" — while anything is paused by the plan; null otherwise. */
+export function activeNowText(o: BillingOverview): string | null {
+  const locked = o.locked as Record<string, number | undefined>;
+  if (!o.usage.some((u) => (locked[u.key] ?? 0) > 0)) return null;
+  const parts = o.usage
+    .filter((u) => ACTIVE_NOUN[u.key])
+    .map((u) => {
+      const total = u.used + (locked[u.key] ?? 0);
+      const [one, many] = ACTIVE_NOUN[u.key];
+      return `${u.used} of ${total} ${total === 1 ? one : many}`;
+    });
+  return `Active now: ${parts.join(", ")}`;
+}
+
 export function UsageCard({ overview: o }: { overview: BillingOverview }) {
+  const activeNow = activeNowText(o);
   return (
     <Section title="Usage" sub={`Against the ${o.plan.name} plan's limits`}>
       <div className="bl-grid4">
@@ -63,6 +85,15 @@ export function UsageCard({ overview: o }: { overview: BillingOverview }) {
           <UsageMeter key={u.key} label={u.label} used={u.used} limit={u.limit} />
         ))}
       </div>
+      {activeNow ? (
+        // What's active vs paused now; View opens the live list (read-only — only our team can change it).
+        <div className="bl-row" style={{ marginTop: 12, gap: 8, alignItems: "center" }} data-testid="active-now">
+          <span>{activeNow}</span>
+          <BLink to="chooseWhatStays" params={{ target: o.plan.id }} className="btn btn-ghost btn-sm">
+            View
+          </BLink>
+        </div>
+      ) : null}
       <div className="bl-row" style={{ marginTop: 14, gap: 8 }}>
         <span className="chip">Team chat: {o.plan.modules.teamChat ? "on" : "off"}</span>
         <span className="chip">
@@ -100,10 +131,13 @@ export function BillingOverviewPanel({ showInvoices = true }: { showInvoices?: b
           <RequestRenewalButton overview={o} className="btn btn-ghost" />
         ) : null}
         {/* Manual mode: chosen per request (the request screen) or from the grace / Basic banners. */}
-        {o.paymentMode !== "manual" ? (
+        {/* On Basic already, what stays is view-only for the org (only our team can change it). */}
+        {o.paymentMode !== "manual" && !o.plan.isFree ? (
           <BLink to="chooseWhatStays" className="btn btn-ghost">
             Choose what stays
           </BLink>
+        ) : o.status === "moved_to_basic" ? (
+          <WhatStaysLockedNote />
         ) : null}
         <BLink to="coupons" className="btn btn-ghost">
           Coupons

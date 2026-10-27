@@ -8,7 +8,11 @@ import {
 import { orgBillingRecipientsWhere } from './notification-recipients.util';
 import { NO_SCHEDULED_CHANGE } from './plan-change.util';
 import { closeScheduledChange } from './scheduled-change.util';
-import { applyRetention, type RetentionDb } from './retention.util';
+import {
+  applyRetention,
+  whatStaysFor,
+  type RetentionDb,
+} from './retention.util';
 import { billingNow, isBillingV2Server } from './billing-clock.util';
 
 // ---------------------------------------------------------------------------
@@ -448,7 +452,7 @@ type ChangeDb = Pick<
   RetentionDb &
   Partial<Pick<PrismaClient, 'auditLog' | 'packageChangeRequest'>>;
 
-async function notifyOrgAdmins(
+export async function notifyOrgAdmins(
   prisma: ChangeDb,
   sub: Subscription,
   type: NotificationType,
@@ -520,12 +524,14 @@ export async function moveToFreePlan(
       previousInterval: sub.billingCycle,
     },
   });
-  // A scheduled move to Basic is done; any other scheduled change is replaced.
+  // A scheduled move to Basic is done (with what stays as it's applied);
+  // any other scheduled change is replaced.
   await closeScheduledChange(
     prisma,
     sub.orgId,
     { planId: free.id, interval: 'monthly' },
     now,
+    () => whatStaysFor(prisma, sub.orgId, free, true),
   );
   const retention = await applyRetention(prisma, sub.orgId, free);
   // Option A (manual mode): a request still waiting stays pending; it notes
@@ -599,7 +605,13 @@ async function applyScheduledPlan(
       ...NO_SCHEDULED_CHANGE,
     },
   });
-  await closeScheduledChange(prisma, sub.orgId, { planId: plan.id, interval });
+  await closeScheduledChange(
+    prisma,
+    sub.orgId,
+    { planId: plan.id, interval },
+    billingNow(),
+    () => whatStaysFor(prisma, sub.orgId, plan, true),
+  );
   await applyRetention(prisma, sub.orgId, plan);
   await prisma.auditLog
     ?.create({

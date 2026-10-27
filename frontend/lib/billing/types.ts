@@ -174,6 +174,12 @@ export interface OrgPlanRequest {
   rejectionReason: string | null;
   /** What they chose to keep on the new plan; null when nothing had to be chosen. */
   whatStays: WhatStays | null;
+  /**
+   * The row's what-stays button: "change" on the latest row while open, "view"
+   * on every other row with a record; null = everything fit. Missing (older
+   * backend / mock): worked out from the status.
+   */
+  whatStaysAction?: "change" | "view" | null;
   /** "Renewal of Pro" (same plan) or "Change to Starter". */
   label?: string;
   /** Sent while the renewal was overdue (grace): full price, the missed term continues. */
@@ -422,7 +428,15 @@ export interface StartCheckoutRequest {
   interval: BillingInterval;
   couponCode?: string;
   purpose: "purchase" | "renewal";
+  /** Over the plan's limits: the option the org picked (see WhatStaysChoice). */
+  whatStaysChoice?: WhatStaysChoice;
 }
+
+/**
+ * "Keep the default picks" or "I'll choose what stays" (needs a saved choice
+ * that fits) — picked every time a change is over the target's limits.
+ */
+export type WhatStaysChoice = "default" | "saved";
 
 export type StartCheckoutResponse =
   /** Nothing to pay (e.g. a 100% coupon) — the plan is already active. */
@@ -502,12 +516,16 @@ export interface AdminCheckoutRow {
 
 export interface CancelPlanRequest {
   reason?: string;
+  /** Over Basic's limits: the option the org picked. */
+  whatStaysChoice?: WhatStaysChoice;
 }
 
 export interface ScheduleDowngradeRequest {
   planId: PlanId;
   /** Defaults to the current interval; same plan yearly → monthly is a downgrade too. */
   interval?: BillingInterval;
+  /** Over the smaller plan's limits: the option the org picked. */
+  whatStaysChoice?: WhatStaysChoice;
 }
 
 /* ---------------------------------------------------- Choose what stays */
@@ -528,6 +546,13 @@ export interface RetentionItem {
 export interface GetRetentionChoicesRequest {
   /** Defaults to the scheduled downgrade target, else the free plan. */
   targetPlanId?: PlanId;
+  /** The request / scheduled change it belongs to (its plan is the target). */
+  requestId?: string;
+}
+
+/** Super Admin: the same, for one organisation (default target: its current plan). */
+export interface AdminRetentionRequest extends GetRetentionChoicesRequest {
+  orgId: string;
 }
 
 export interface RetentionChoices {
@@ -535,6 +560,18 @@ export interface RetentionChoices {
   /** When the choice takes effect; null when already on the target plan. */
   appliesOn: string | null;
   isDefault: boolean;
+  /**
+   * The org can only look: the change was decided or took effect (or it's
+   * the plan they're on). Super Admin can still change it. Missing = false.
+   */
+  locked?: boolean;
+  /**
+   * What the lists are. Missing / "live": today's state (or the planned choice).
+   * "history": an older row's copy from when it applied (viewDate).
+   * "not_applied": a rejected / withdrawn row's request.
+   */
+  view?: "live" | "history" | "not_applied";
+  viewDate?: string | null;
   users: RetentionItem[];
   projects: RetentionItem[];
   landingPages: RetentionItem[];
@@ -548,6 +585,12 @@ export interface SaveRetentionChoicesRequest {
   projectIds: string[];
   landingPageIds: string[];
   templateIds?: string[];
+  /** The request / scheduled change it belongs to. */
+  requestId?: string;
+}
+
+export interface AdminSaveRetentionRequest extends SaveRetentionChoicesRequest {
+  orgId: string;
 }
 
 /* ---------------------------------------------------------- Locked states */
@@ -724,6 +767,8 @@ export interface AdminPaymentRow extends PaymentRecord {
 }
 
 export interface SubscriptionDetail extends SubscriptionRow {
+  /** No request set the current plan (assigned directly): "Change what stays" sits on the org page. */
+  whatStaysOrgLevel?: boolean;
   renewalAmount: number;
   graceDays: number;
   /** Manual mode hides "Mark paid offline" and "Apply coupon" (the org's request does both). */

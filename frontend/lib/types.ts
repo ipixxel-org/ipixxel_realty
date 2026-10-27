@@ -890,6 +890,8 @@ export interface PackageChangeRequestRow {
   targetPlan?: Plan | OrgBillingPlan;
   /** Billing v2 manual mode: what the org chose to keep on the target plan (null = everything fits). */
   whatStays?: import("./billing/types").WhatStays | null;
+  /** Super Admin can change what stays on this row (open, or the one for the current plan); else view-only. */
+  whatStaysEditable?: boolean;
   /** "Renewal of Pro" (same plan) or "Change to Starter". */
   label?: string;
   /** Sent while the renewal was overdue (grace). */

@@ -9,6 +9,8 @@ import {
 /** GET /org/billing/retention?targetPlanId= */
 export class RetentionQueryDto {
   @IsOptional() @IsString() targetPlanId?: string;
+  /** The request / scheduled change it belongs to (its plan is the target). */
+  @IsOptional() @IsString() requestId?: string;
 }
 
 /** PUT /org/billing/retention */
@@ -29,4 +31,6 @@ export class SaveRetentionChoicesDto {
   @ArrayMaxSize(5000)
   @IsString({ each: true })
   templateIds?: string[];
+  /** The request / scheduled change it belongs to (Requests tab, Super Admin). */
+  @IsOptional() @IsString() requestId?: string;
 }

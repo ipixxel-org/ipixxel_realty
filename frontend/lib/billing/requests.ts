@@ -113,3 +113,17 @@ export function scheduledAmountText(amount: number | null | undefined, startsAt:
   if (!amount) return "Nothing to pay now";
   return `${formatINR(amount)} + GST${startsAt ? ` from ${shortDay(startsAt)}` : ""}`;
 }
+
+/**
+ * When a scheduled change starts: the real date once it took effect ("Took
+ * effect 27 Oct 2026" — e.g. a move to Basic during grace applies straight
+ * away, before the date it was scheduled for), else "Starts 26 Nov 2026".
+ */
+export function scheduledEffectiveDate(r: { status: string; startsAt?: string | null; decidedAt?: string | null }): string | null {
+  return r.status === "done" && r.decidedAt ? r.decidedAt : (r.startsAt ?? null);
+}
+
+export function scheduledDateText(r: { status: string; startsAt?: string | null; decidedAt?: string | null }): string | null {
+  if (r.status === "done" && r.decidedAt) return `Took effect ${formatDate(r.decidedAt)}`;
+  return r.startsAt ? `Starts ${formatDate(r.startsAt)}` : null;
+}

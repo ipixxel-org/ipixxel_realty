@@ -12,6 +12,12 @@ import {
   scheduledChangeBlock,
 } from '../../common/utils/scheduled-change.util';
 import { pendingRequestMessage } from '../package-change-requests/package-change-requests.service';
+import { whatStaysFor } from '../../common/utils/retention.util';
+import {
+  applyWhatStaysChoice,
+  assertWhatStaysConfirmed,
+  pickedWhatStays,
+} from './what-stays';
 import {
   billingError,
   BillingCheckoutService,
@@ -103,6 +109,14 @@ export class BillingPlanChangeService {
     }
     await this.refuseWhileScheduled(sub);
     const reason = dto.reason?.trim() || null;
+    // Over Basic's limits: the org picks "Keep the default picks" or "I'll
+    // choose what stays" (a saved choice that fits) first.
+    const free = await findFreePlan(this.prisma);
+    const choice = pickedWhatStays(dto);
+    if (free) {
+      await assertWhatStaysConfirmed(this.prisma, orgId, free, choice);
+      await applyWhatStaysChoice(this.prisma, orgId, free.id, choice);
+    }
     if (
       sub.status === 'expired' ||
       sub.status === 'paused' ||
@@ -125,7 +139,6 @@ export class BillingPlanChangeService {
           changeScheduledAt: new Date(),
         },
       });
-      const free = await findFreePlan(this.prisma);
       if (free) {
         await recordScheduledChange(this.prisma, {
           orgId,
@@ -136,6 +149,7 @@ export class BillingPlanChangeService {
           startsAt: sub.status === 'past_due' ? sub.graceEndsAt : sub.renewsAt,
           reason,
           amount: null,
+          whatStays: await whatStaysFor(this.prisma, orgId, free),
         });
       }
       await this.audit(
@@ -211,7 +225,9 @@ export class BillingPlanChangeService {
     }
     // Moving to the free plan is cancelling.
     if (isFreePlan(target)) {
-      return this.cancel(orgId, userId, {});
+      return this.cancel(orgId, userId, {
+        whatStaysChoice: pickedWhatStays(dto),
+      });
     }
     // Manual mode, renewal overdue: any paid plan is a change request at its
     // full price (the missed term continues) — the same as Change plan sends.
@@ -220,6 +236,7 @@ export class BillingPlanChangeService {
         planId: target.id,
         interval: dto.interval ?? sub.billingCycle,
         purpose: 'purchase',
+        whatStaysChoice: pickedWhatStays(dto),
       });
       return this.overview.getOverview(orgId);
     }
@@ -263,8 +280,11 @@ export class BillingPlanChangeService {
         ),
       );
     }
-    // Over the smaller plan's limits is fine: what doesn't fit is paused
-    // when it starts ("choose what stays", retention.util).
+    // Over the smaller plan's limits is fine once "choose what stays" is
+    // confirmed: what doesn't fit is paused when it starts (retention.util).
+    const choice = pickedWhatStays(dto);
+    await assertWhatStaysConfirmed(this.prisma, orgId, target, choice);
+    await applyWhatStaysChoice(this.prisma, orgId, target.id, choice);
 
     await this.prisma.subscription.update({
       where: { id: sub.id },
@@ -283,6 +303,7 @@ export class BillingPlanChangeService {
       interval,
       startsAt: sub.renewsAt,
       amount: interval === 'yearly' ? target.priceYearly : target.priceMonthly,
+      whatStays: await whatStaysFor(this.prisma, orgId, target),
     });
     await this.audit(
       orgId,

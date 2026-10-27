@@ -22,6 +22,8 @@ import type {
   CouponRow,
   ExtendGraceRequest,
   GetRetentionChoicesRequest,
+  AdminRetentionRequest,
+  AdminSaveRetentionRequest,
   Invoice,
   LifecycleRunResult,
   LifecycleSettings,
@@ -122,6 +124,10 @@ export interface BillingClient {
   listSubscriptions(req: ListSubscriptionsRequest): Promise<SubscriptionList>;
   /** GET /admin/billing/subscriptions/:orgId */
   getSubscription(orgId: string): Promise<SubscriptionDetail>;
+  /** GET /admin/billing/subscriptions/:orgId/retention?targetPlanId=&requestId= — never locked. */
+  getAdminRetentionChoices(req: AdminRetentionRequest): Promise<RetentionChoices>;
+  /** PUT /admin/billing/subscriptions/:orgId/retention — applied at once when the org is on that plan. */
+  saveAdminRetentionChoices(req: AdminSaveRetentionRequest): Promise<RetentionChoices>;
   /** POST /admin/billing/subscriptions/:orgId/extend-grace */
   extendGrace(req: ExtendGraceRequest): Promise<SubscriptionDetail>;
   /** POST /admin/billing/subscriptions/:orgId/offline-payment */

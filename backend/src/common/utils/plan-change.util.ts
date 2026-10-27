@@ -1,7 +1,7 @@
 import { ConflictException } from '@nestjs/common';
 import type { Prisma } from '@prisma/client';
 import { orgBillingRecipientsWhere } from './notification-recipients.util';
-import { applyRetention } from './retention.util';
+import { applyRetention, whatStaysFor } from './retention.util';
 import { billingNow } from './billing-clock.util';
 import { closeScheduledChange } from './scheduled-change.util';
 
@@ -169,6 +169,7 @@ export async function applyPlanChange(
     input.organisationId,
     { planId: plan.id, interval: input.toInterval },
     now,
+    () => whatStaysFor(tx, input.organisationId, plan, true, now),
   );
 
   // "Choose what stays": a bigger plan brings paused things back; a smaller

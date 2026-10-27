@@ -141,6 +141,9 @@ describe("customer walkthrough", () => {
     // Right: Basic already scheduled, with the undo.
     expect(screen.getByText(/Change to Basic scheduled for/)).toBeInTheDocument();
     expect(screen.getAllByRole("button", { name: "Keep Pro" })).toHaveLength(1);
+    // Over Growth's limits: pick an option first.
+    const keep = screen.queryByRole("radio", { name: "Keep the default picks" });
+    if (keep) fireEvent.click(keep);
     fireEvent.click(screen.getByRole("button", { name: /Confirm plan change/ }));
     fireEvent.click(screen.getByRole("button", { name: "Schedule plan change" }));
     await settle();

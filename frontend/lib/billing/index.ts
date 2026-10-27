@@ -54,6 +54,9 @@ export const REAL_FUNCTIONS: Record<BillingFunction, boolean> = {
   // Manual mode: the org's requests list and withdrawing a pending request.
   listOrgRequests: true,
   withdrawRequest: true,
+  // Choose what stays rules: Super Admin can change it any time.
+  getAdminRetentionChoices: true,
+  saveAdminRetentionChoices: true,
   getCompanyDetails: true,
   saveCompanyDetails: true,
   runLifecycleCheck: true,

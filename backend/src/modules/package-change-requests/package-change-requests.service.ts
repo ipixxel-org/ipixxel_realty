@@ -7,6 +7,11 @@ import {
 } from '../../common/utils/plan-quota.util';
 import { applyPlanChange } from '../../common/utils/plan-change.util';
 import { whatStaysFor } from '../../common/utils/retention.util';
+import {
+  adminWhatStaysEditable,
+  currentPlanId,
+  latestRequest,
+} from '../../common/utils/what-stays-rows.util';
 import { settleCoupon } from '../billing/coupon-settlement';
 import { findCouponFor } from '../billing/coupon-lookup';
 import { normaliseCouponCode } from '../billing/coupon-rules';
@@ -442,12 +447,28 @@ export class PackageChangeRequestsService {
       }),
       this.prisma.packageChangeRequest.count({ where }),
     ]);
+    // Super Admin "Choose what stays": editable only on each org's latest row
+    // (open, or applied with the org on its plan); every other row with a
+    // record gets "View what stays" (history).
+    const latestByOrg = new Map<string, string | null>();
+    const planByOrg = new Map<string, string | null>();
+    for (const orgId of new Set(rows.map((r) => r.orgId))) {
+      latestByOrg.set(orgId, (await latestRequest(this.prisma, orgId))?.id ?? null);
+      planByOrg.set(orgId, await currentPlanId(this.prisma, orgId));
+    }
 
     return {
       data: rows.map((r) => {
         const { offlinePayment, ...rest } = r;
         return {
           ...rest,
+          whatStaysEditable:
+            !!r.whatStays &&
+            adminWhatStaysEditable(
+              r,
+              latestByOrg.get(r.orgId) ?? null,
+              planByOrg.get(r.orgId) ?? null,
+            ),
           ...requestLabel(r.billingCheckout, r.targetPlan.name),
           payment: offlinePayment ? requestPaymentView(offlinePayment) : null,
           quote: r.billingCheckout ? requestQuoteView(r.billingCheckout) : null,

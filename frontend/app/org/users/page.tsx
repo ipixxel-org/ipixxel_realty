@@ -759,15 +759,15 @@ export default function OrgUsersPage() {
                                   textAlign: "left",
                                 }}
                               >
-                                {/* A paused user (billing v2) comes back only through "Change what stays" or an upgrade. */}
+                                {/* A paused user (billing v2) comes back through an upgrade, or our support team changing what stays. */}
                                 {locks.userPaused(user.id) && (
                                   <Link
-                                    href="/org/settings/billing/choose-what-stays"
+                                    href="/org/support"
                                     className="btn btn-ghost btn-sm"
                                     style={{ justifyContent: "flex-start", width: "100%" }}
                                     title={PLAN_LOCK_COPY.user_paused.tooltip}
                                   >
-                                    Change what stays
+                                    Contact support
                                   </Link>
                                 )}
                                 {user.status === "disabled" && canActivate && !locks.userPaused(user.id) && (

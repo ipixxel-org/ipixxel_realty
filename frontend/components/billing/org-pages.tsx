@@ -49,7 +49,7 @@ export function PlansPage({ coupon, interval }: { coupon?: string; interval?: st
   );
 }
 
-export function CheckoutPage({ plan, interval, renew, coupon }: { plan?: string; interval?: string; renew?: string; coupon?: string }) {
+export function CheckoutPage({ plan, interval, renew, coupon, pick }: { plan?: string; interval?: string; renew?: string; coupon?: string; pick?: string }) {
   const renewal = renew === "1";
   return (
     <Guard>
@@ -61,7 +61,13 @@ export function CheckoutPage({ plan, interval, renew, coupon }: { plan?: string;
         back={renewal ? { to: "overview", label: "Billing" } : { to: "plans", label: "Plans" }}
         sampleFns={["listPlans", "getBillingOverview"]}
       />
-      <CheckoutScreen planId={plan ?? "growth"} interval={toInterval(interval)} renewal={renewal} initialCoupon={renewal ? undefined : coupon || undefined} />
+      <CheckoutScreen
+        planId={plan ?? "growth"}
+        interval={toInterval(interval)}
+        renewal={renewal}
+        initialCoupon={renewal ? undefined : coupon || undefined}
+        initialPick={pick === "saved" ? "saved" : null}
+      />
     </Guard>
   );
 }
@@ -106,11 +112,15 @@ export function CheckoutFailurePage(p: { plan?: string; interval?: string; reaso
   );
 }
 
-export function DowngradePage({ plan, interval }: { plan?: string; interval?: string }) {
+export function DowngradePage({ plan, interval, pick }: { plan?: string; interval?: string; pick?: string }) {
   return (
     <Guard>
       <PageHead eyebrow={EYEBROW} icon="arrow-down" title="Change plan" sub="See when it starts and what doesn't fit, before you confirm." back={{ to: "plans", label: "Plans" }} sampleFns={["getRetentionChoices", "scheduleDowngrade"]} />
-      <DowngradeScreen planId={plan ?? "growth"} interval={interval === "monthly" || interval === "yearly" ? interval : undefined} />
+      <DowngradeScreen
+          planId={plan ?? "growth"}
+          interval={interval === "monthly" || interval === "yearly" ? interval : undefined}
+          initialPick={pick === "saved" ? "saved" : null}
+        />
     </Guard>
   );
 }
@@ -177,7 +187,7 @@ export function RequestsPage() {
 }
 
 /** `back="checkout"` (from the request screen): Back returns to that request. */
-export function ChooseWhatStaysPage({ target, back, interval }: { target?: string; back?: string; interval?: string }) {
+export function ChooseWhatStaysPage({ target, back, interval, request }: { target?: string; back?: string; interval?: string; request?: string }) {
   const { overview } = useOrgBilling();
   return (
     <Guard>
@@ -188,7 +198,9 @@ export function ChooseWhatStaysPage({ target, back, interval }: { target?: strin
         sub="When you move to a smaller plan, pick what stays active. Everything else is paused, never deleted."
         back={
           back === "checkout" && target
-            ? { to: "checkout", params: { plan: target, interval: interval === "yearly" ? "yearly" : "monthly" }, label: "Back to your request" }
+            ? { to: "checkout", params: { plan: target, interval: interval === "yearly" ? "yearly" : "monthly", pick: "saved" }, label: "Back to your request" }
+            : back === "downgrade" && target
+              ? { to: "downgrade", params: { plan: target, interval, pick: "saved" }, label: "Back to your plan change" }
             : back === "requests"
               ? { to: "requests", label: "Back to requests" }
               : { to: "overview", label: "Billing" }
@@ -197,7 +209,7 @@ export function ChooseWhatStaysPage({ target, back, interval }: { target?: strin
       />
       <div className="bl-stack">
         {overview ? <BillingBanner overview={overview} /> : null}
-        <ChooseWhatStaysScreen targetPlanId={target} />
+        <ChooseWhatStaysScreen targetPlanId={target} requestId={request} />
       </div>
     </Guard>
   );

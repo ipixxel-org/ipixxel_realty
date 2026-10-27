@@ -13,6 +13,8 @@ import {
   requestStage,
   requestTitle,
   scheduledAmountText,
+  scheduledDateText,
+  scheduledEffectiveDate,
 } from "@/lib/billing/requests";
 import type { OrgPlanRequest, WhatStays } from "@/lib/billing/types";
 import { UndoButton } from "./banners";
@@ -62,39 +64,22 @@ export function whatStaysSummary(w: WhatStays): string {
   }).join(" · ");
 }
 
-/** What the request keeps on the new plan, with the names, and a link to change it while pending. */
-export function WhatStaysCell({ whatStays: w, pending }: { whatStays: WhatStays | null; pending: boolean }) {
+/**
+ * What the request keeps on the new plan: the short summary and one button —
+ * "Change what stays" while it's open (pending, or a scheduled change not yet
+ * in effect), "View" once decided or applied. Both open the choose-what-stays
+ * page for this request; the API makes it read-only once it's locked.
+ */
+export function WhatStaysCell({ whatStays: w, editable, requestId }: { whatStays: WhatStays | null; editable: boolean; requestId?: string }) {
   if (!w) return <span className="bl-muted">Everything fits</span>;
-  const source = w.applied ? "Applied when approved" : w.choice === "saved" ? "Your choice" : "Our default picks";
   return (
     <div className="bl-small" data-testid="what-stays">
       <div>
-        Keeps <b>{whatStaysSummary(w)}</b>
+        {editable ? "Keeps" : "Kept"} <b>{whatStaysSummary(w)}</b>
       </div>
-      <div className="bl-muted">{source}</div>
-      <details style={{ marginTop: 4 }}>
-        <summary style={{ cursor: "pointer" }}>See what stays</summary>
-        {WHAT_STAYS_GROUPS.map(([k, noun]) => {
-          const g = w[k];
-          if (!g) return null;
-          return (
-            <div key={k} style={{ marginTop: 6 }}>
-              <div style={{ textTransform: "capitalize", fontWeight: 600 }}>
-                {noun} (limit {g.limit})
-              </div>
-              <div>Stays active: {g.kept.map((i) => i.name).join(", ") || "—"}</div>
-              <div className="bl-muted">
-                {w.applied ? "Paused" : "Will be paused"}: {g.paused.map((i) => i.name).join(", ") || "—"}
-              </div>
-            </div>
-          );
-        })}
-      </details>
-      {pending ? (
-        <BLink to="chooseWhatStays" params={{ target: w.planId, back: "requests" }} className="btn btn-ghost btn-sm" style={{ marginTop: 6 }}>
-          Change what stays
-        </BLink>
-      ) : null}
+      <BLink to="chooseWhatStays" params={{ target: w.planId, back: "requests", request: requestId }} className="btn btn-ghost btn-sm" style={{ marginTop: 6 }}>
+        {editable ? "Change what stays" : "View"}
+      </BLink>
     </div>
   );
 }
@@ -218,7 +203,7 @@ export function RequestsTable({ pageSize = 10 }: { pageSize?: number }) {
                           {MOVED_TO_BASIC_WHILE_WAITING} ({formatDate(r.movedToBasicAt)})
                         </div>
                       ) : null}
-                      {scheduled && r.startsAt ? <div className="bl-small" style={{ marginTop: 4 }}>Starts {formatDate(r.startsAt)}</div> : null}
+                      {scheduled && scheduledDateText(r) ? <div className="bl-small" style={{ marginTop: 4 }} data-testid="scheduled-date">{scheduledDateText(r)}</div> : null}
                       {scheduled && r.reason ? (
                         <div className="bl-small bl-muted" style={{ marginTop: 2, maxWidth: 320 }}>
                           Reason: {r.reason}
@@ -227,7 +212,7 @@ export function RequestsTable({ pageSize = 10 }: { pageSize?: number }) {
                     </td>
                     <td style={{ whiteSpace: "nowrap" }}>
                       {/* With a coupon: "₹1,499 − ₹300 coupon + GST". */}
-                      {scheduled ? scheduledAmountText(r.amount, r.startsAt) : r.quote?.couponCode ? <span data-testid="request-coupon-amount">{requestPriceText(r.quote)}</span> : (requestAmount(r) ?? <span className="bl-muted">—</span>)}
+                      {scheduled ? scheduledAmountText(r.amount, scheduledEffectiveDate(r)) : r.quote?.couponCode ? <span data-testid="request-coupon-amount">{requestPriceText(r.quote)}</span> : (requestAmount(r) ?? <span className="bl-muted">—</span>)}
                       {r.total != null ? (
                         <div className="bl-muted bl-small">
                           {formatINR(r.total)} incl. GST{r.quote?.couponCode ? ` · coupon ${r.quote.couponCode}` : ""}
@@ -235,7 +220,11 @@ export function RequestsTable({ pageSize = 10 }: { pageSize?: number }) {
                       ) : null}
                     </td>
                     <td>
-                      {scheduled ? <span className="bl-muted">—</span> : <WhatStaysCell whatStays={r.whatStays} pending={r.status === "pending"} />}
+                      <WhatStaysCell
+                        whatStays={r.whatStays}
+                        editable={r.whatStaysAction ? r.whatStaysAction === "change" : r.status === "pending" || r.status === "scheduled"}
+                        requestId={r.id}
+                      />
                     </td>
                     <td>
                       <span className={`badge ${STATUS_BADGE[r.status]}`}>{requestStage(r)}</span>

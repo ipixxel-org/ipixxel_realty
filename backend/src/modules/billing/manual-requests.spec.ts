@@ -157,6 +157,23 @@ describe("manual mode: a request over the target plan's limits", () => {
     });
   });
 
+  it('"Keep the default picks" sends it without a saved choice; the request records choice "default"', async () => {
+    const { service, db } = setup();
+    const res = await service.start('org-1', 'u-1', {
+      ...toStarter,
+      acceptDefaultPicks: true,
+    });
+    expect(res).toMatchObject({ status: 'pending_approval' });
+    const request = db.packageChangeRequest.rows.find(
+      (r: any) => r.id === (res as { requestId: string }).requestId,
+    );
+    expect(request.whatStays).toMatchObject({
+      planId: 'starter',
+      choice: 'default',
+      users: { limit: 2, total: 3 },
+    });
+  });
+
   it('no conflict → nothing extra', async () => {
     const { service, usage } = setup();
     usage.users = 2;
@@ -188,7 +205,10 @@ describe("manual mode: a request over the target plan's limits", () => {
     ).toMatchObject({
       choicesFit: true,
     });
-    const res = await service.start('org-1', 'u-1', toStarter);
+    const res = await service.start('org-1', 'u-1', {
+      ...toStarter,
+      whatStaysChoice: 'saved',
+    });
     expect(res).toMatchObject({ status: 'pending_approval' });
     expect(submitOrgRequest.mock.calls[0][3]).toEqual({
       usage: 'after_retention',
@@ -205,7 +225,7 @@ describe("manual mode: a request over the target plan's limits", () => {
     expect(paused()).toEqual(['u-2']); // u-3 was chosen to stay
   });
 
-  it('approval without saved choices uses the default picks (like a scheduled downgrade)', async () => {
+  it('"Keep the default picks" drops an earlier saved choice; approval uses the defaults', async () => {
     const { service, retention, requests, db, paused } = setup();
     await retention.saveChoices('org-1', 'u-1', {
       targetPlanId: 'starter',
@@ -213,8 +233,15 @@ describe("manual mode: a request over the target plan's limits", () => {
       projectIds: [],
       landingPageIds: [],
     });
-    const res = await service.start('org-1', 'u-1', toStarter);
-    db.retentionChoice.rows.length = 0; // choices cleared before approval
+    const res = await service.start('org-1', 'u-1', {
+      ...toStarter,
+      whatStaysChoice: 'default',
+    });
+    expect(db.retentionChoice.rows).toHaveLength(0);
+    const request = db.packageChangeRequest.rows.find(
+      (r: any) => r.id === (res as { requestId: string }).requestId,
+    );
+    expect(request.whatStays.choice).toBe('default');
     await markPaid(requests, db, (res as { requestId: string }).requestId);
     await requests.adminApproveRequest(
       (res as { requestId: string }).requestId,
@@ -234,7 +261,10 @@ describe('the request keeps what they chose to keep', () => {
       projectIds: [],
       landingPageIds: [],
     });
-    const res = (await service.start('org-1', 'u-admin', toStarter)) as {
+    const res = (await service.start('org-1', 'u-admin', {
+      ...toStarter,
+      whatStaysChoice: 'saved',
+    })) as {
       requestId: string;
     };
     const request = () => db.packageChangeRequest.rows[0];
@@ -283,7 +313,10 @@ describe('withdrawing a request', () => {
       projectIds: [],
       landingPageIds: [],
     });
-    const res = (await service.start('org-1', 'u-1', toStarter)) as {
+    const res = (await service.start('org-1', 'u-1', {
+      ...toStarter,
+      whatStaysChoice: 'saved',
+    })) as {
       requestId: string;
     };
     await requests.cancelOrgRequest('org-1', res.requestId, 'u-1');
@@ -293,9 +326,12 @@ describe('withdrawing a request', () => {
       where: { status: 'pending' },
     });
     expect(pending).toHaveLength(0);
-    // …and a new request can be sent again.
+    // …and a new request can be sent again (picking an option again).
     await expect(
-      service.start('org-1', 'u-1', toStarter),
+      service.start('org-1', 'u-1', {
+        ...toStarter,
+        whatStaysChoice: 'saved',
+      }),
     ).resolves.toMatchObject({
       status: 'pending_approval',
     });

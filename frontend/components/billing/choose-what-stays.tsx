@@ -1,12 +1,18 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Icon } from "@/components/icons";
 import { useToast } from "@/components/ui/toast";
 import { formatDate } from "@/lib/billing/pricing";
-import type { RetentionChoices, RetentionItem } from "@/lib/billing/types";
+import type { RetentionChoices, RetentionItem, WhatStaysChoice } from "@/lib/billing/types";
 import { useBillingEnv, useBillingQuery, useOptionalOrgBilling } from "./context";
-import { Banner, BLink, countLabel, ErrorNote, Loading, Section } from "./ui";
+import { Banner, BLink, countLabel, ErrorNote, Loading, Section, WhatStaysLockedNote } from "./ui";
+
+/** Super Admin editing one organisation's choice (any time; applied at once when it's on that plan). */
+export interface WhatStaysAdmin {
+  orgId: string;
+  orgName?: string;
+}
 
 type Kind = "users" | "projects" | "landingPages" | "templates";
 
@@ -63,7 +69,17 @@ function TickList({
   );
 }
 
-function Editor({ choices, onSaved }: { choices: RetentionChoices; onSaved: (c: RetentionChoices) => void }) {
+function Editor({
+  choices,
+  onSaved,
+  requestId,
+  admin,
+}: {
+  choices: RetentionChoices;
+  onSaved: (c: RetentionChoices) => void;
+  requestId?: string;
+  admin?: WhatStaysAdmin;
+}) {
   const { client, canEdit } = useBillingEnv();
   const billing = useOptionalOrgBilling();
   const { toast } = useToast();
@@ -94,13 +110,15 @@ function Editor({ choices, onSaved }: { choices: RetentionChoices; onSaved: (c: 
   async function save() {
     setBusy(true);
     try {
-      const saved = await client.saveRetentionChoices({
+      const req = {
         targetPlanId: t.id,
         userIds: sel.users,
         projectIds: sel.projects,
         landingPageIds: sel.landingPages,
         ...(templates ? { templateIds: sel.templates } : {}),
-      });
+        ...(requestId ? { requestId } : {}),
+      };
+      const saved = admin ? await client.saveAdminRetentionChoices({ orgId: admin.orgId, ...req }) : await client.saveRetentionChoices(req);
       setDirty(false);
       onSaved(saved);
       void billing?.refresh();
@@ -118,7 +136,13 @@ function Editor({ choices, onSaved }: { choices: RetentionChoices; onSaved: (c: 
   return (
     <div className="bl-stack">
       <Banner tone="info" icon="info" title={`On ${t.name}: ${countLabel(t.limits.users, "user", "users")}, ${countLabel(t.limits.projects, "project", "projects")}, ${countLabel(t.limits.landingPages, "landing page", "landing pages")}${templates ? `, ${countLabel(t.limits.templates, "template", "templates")}` : ""}`}>
-        {choices.appliesOn ? `This applies if you move to ${t.name} on ${formatDate(choices.appliesOn)}. ` : `You're on ${t.name} now — changes apply straight away. `}
+        {admin
+          ? choices.appliesOn
+            ? `This applies when ${admin.orgName ?? "the organisation"} moves to ${t.name} on ${formatDate(choices.appliesOn)}. `
+            : `${admin.orgName ?? "The organisation"} is on ${t.name} now — saving applies straight away and they're notified. `
+          : choices.appliesOn
+            ? `This applies if you move to ${t.name} on ${formatDate(choices.appliesOn)}. `
+            : `You're on ${t.name} now — changes apply straight away. `}
         Anything you untick is paused, never deleted: paused people can&apos;t sign in, projects become view-only and landing pages go offline. A paused template can&apos;t be
         used for new landing pages; pages already made from it stay live and editable. Leads keep coming in.
         <div style={{ marginTop: 6 }}>
@@ -160,19 +184,206 @@ function Editor({ choices, onSaved }: { choices: RetentionChoices; onSaved: (c: 
         <button type="button" className="btn btn-ghost" onClick={resetDefaults}>
           Reset to the picks we suggest
         </button>
-        <BLink to="overview" className="btn btn-ghost">
-          Back to billing
-        </BLink>
-        <span className="bl-muted">{dirty ? "Unsaved changes" : choices.isDefault ? "Showing the picks we suggest" : "Showing your saved choice"}</span>
+        {admin ? null : (
+          <BLink to="overview" className="btn btn-ghost">
+            Back to billing
+          </BLink>
+        )}
+        <span className="bl-muted">{dirty ? "Unsaved changes" : choices.isDefault ? "Showing the picks we suggest" : admin ? "Showing their saved choice" : "Showing your saved choice"}</span>
       </div>
     </div>
   );
 }
 
-export function ChooseWhatStaysScreen({ targetPlanId }: { targetPlanId?: string }) {
+/** What stays, read-only: once the change was decided or took effect only our team can change it. */
+export function WhatStaysReadOnly({ choices, admin = false }: { choices: RetentionChoices; admin?: boolean }) {
+  const t = choices.targetPlan;
+  const groups = [
+    ["Users", choices.users],
+    ["Projects", choices.projects],
+    ["Landing pages", choices.landingPages],
+    ["Templates", choices.templates],
+  ] as const;
+  return (
+    <div className="bl-stack" data-testid="what-stays-read-only">
+      {choices.view === "history" ? (
+        // An older row: its copy from that time, never edited.
+        <Banner tone="gray" icon="clock" title={`What stayed on ${t.name}`}>
+          <span data-testid="what-stays-history">
+            What stayed when this change applied{choices.viewDate ? ` on ${formatDate(choices.viewDate)}` : ""}. This is history; your current setup may be
+            different. See the latest request for what&apos;s active now.
+          </span>
+        </Banner>
+      ) : choices.view === "not_applied" ? (
+        <Banner tone="gray" icon="info" title={`Change to ${t.name}`}>
+          <span data-testid="what-stays-not-applied">What was requested (not applied).</span>
+        </Banner>
+      ) : (
+        <Banner tone="gray" icon="lock" title={`Active now on ${t.name}`}>
+          {admin ? (
+            "View only: only the latest request's choice can be changed."
+          ) : (
+            <>
+              {choices.isDefault ? "Our default picks. " : "Your choice. "}
+              <WhatStaysLockedNote />
+            </>
+          )}
+        </Banner>
+      )}
+      {groups.map(([title, items]) => {
+        if (!items?.length) return null;
+        const kept = items.filter((i) => i.selected);
+        const paused = items.filter((i) => !i.selected);
+        return (
+          <Section key={title} title={title} sub={`${kept.length} of ${items.length} stay active`}>
+            <div className="bl-small">
+              <div>
+                <b>Stays active:</b> {kept.map((i) => i.name).join(", ") || "—"}
+              </div>
+              <div className="bl-muted">
+                <b>Paused:</b> {paused.map((i) => i.name).join(", ") || "—"}
+              </div>
+            </div>
+          </Section>
+        );
+      })}
+      {admin ? null : (
+        <div className="bl-row">
+          <BLink to="overview" className="btn btn-ghost">
+            Back to billing
+          </BLink>
+        </div>
+      )}
+    </div>
+  );
+}
+
+export function ChooseWhatStaysScreen({
+  targetPlanId,
+  requestId,
+  admin,
+  onSaved,
+}: {
+  targetPlanId?: string;
+  /** The request / scheduled change it belongs to (Requests tab, Super Admin rows). */
+  requestId?: string;
+  admin?: WhatStaysAdmin;
+  onSaved?: (c: RetentionChoices) => void;
+}) {
   const [version, setVersion] = useState(0);
-  const { data, error } = useBillingQuery((c) => c.getRetentionChoices({ targetPlanId }), [targetPlanId, version]);
+  const { data, error } = useBillingQuery(
+    (c) => (admin ? c.getAdminRetentionChoices({ orgId: admin.orgId, targetPlanId, requestId }) : c.getRetentionChoices({ targetPlanId, requestId })),
+    [targetPlanId, requestId, admin?.orgId, version],
+  );
   if (error) return <ErrorNote message={error} />;
-  if (!data) return <Loading what="your users, projects, pages and templates" />;
-  return <Editor key={`${data.targetPlan.id}-${version}`} choices={data} onSaved={() => setVersion((v) => v + 1)} />;
+  if (!data) return <Loading what={admin ? "their users, projects, pages and templates" : "your users, projects, pages and templates"} />;
+  if (data.locked) return <WhatStaysReadOnly choices={data} admin={!!admin} />;
+  return (
+    <Editor
+      key={`${data.targetPlan.id}-${version}`}
+      choices={data}
+      requestId={requestId}
+      admin={admin}
+      onSaved={(c) => {
+        setVersion((v) => v + 1);
+        onSaved?.(c);
+      }}
+    />
+  );
+}
+
+/** The picked option and whether the main button may go ahead. */
+export interface WhatStaysPick {
+  choice: WhatStaysChoice | null;
+  /** "Keep the default picks", or "I'll choose" with a saved choice that fits. */
+  ready: boolean;
+}
+
+/**
+ * Over the target plan's limits: two radio options, picked every time (none
+ * is selected when the page opens). "Keep the default picks" lists what we'd
+ * keep; "I'll choose what stays" opens the Choose what stays screen and,
+ * once saved, lists their picks with Edit. `chooseParams` is where that
+ * screen's Back returns to (the request or plan change, with this option
+ * selected again).
+ */
+export function WhatStaysOptions({
+  targetPlanId,
+  initialChoice = null,
+  chooseParams,
+  onChange,
+}: {
+  targetPlanId: string;
+  /** Only when coming back from Choose what stays (`pick=saved`); otherwise nothing is selected. */
+  initialChoice?: WhatStaysChoice | null;
+  chooseParams: Record<string, string | undefined>;
+  onChange: (pick: WhatStaysPick) => void;
+}) {
+  const { data, error } = useBillingQuery((c) => c.getRetentionChoices({ targetPlanId }), [targetPlanId]);
+  const [choice, setChoice] = useState<WhatStaysChoice | null>(initialChoice);
+  const saved = !!data && !data.isDefault;
+  const ready = choice === "default" || (choice === "saved" && saved);
+  useEffect(() => {
+    onChange({ choice, ready });
+    // onChange is the parent's state setter wrapper; re-run only when the pick changes.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [choice, ready]);
+
+  if (error) return <ErrorNote message={error} />;
+  if (!data) return <Loading what="what stays" />;
+  const groups = [
+    ["Users", data.users],
+    ["Projects", data.projects],
+    ["Landing pages", data.landingPages],
+    ["Templates", data.templates],
+  ] as const;
+  const list = (pick: (i: RetentionItem) => boolean) => (
+    <div className="bl-picks bl-small" style={{ marginTop: 4 }}>
+      {groups.map(([title, items]) =>
+        items?.length ? (
+          <div key={title}>
+            <b>{title}:</b> {items.filter(pick).map((i) => i.name).join(", ") || "none"}
+          </div>
+        ) : null,
+      )}
+    </div>
+  );
+  const name = `what-stays-${targetPlanId}`;
+  const choose = { target: targetPlanId, ...chooseParams };
+  return (
+    <div className="bl-stack" style={{ gap: 10 }} data-testid="what-stays-options" role="radiogroup" aria-label="What stays">
+      <div>
+        <label className="bl-row" style={{ gap: 8, alignItems: "center", cursor: "pointer" }}>
+          <input type="radio" name={name} checked={choice === "default"} onChange={() => setChoice("default")} />
+          <b>Keep the default picks</b>
+        </label>
+        <div style={{ marginLeft: 24 }} data-testid="what-stays-defaults">
+          {list((i) => i.defaultPicked)}
+        </div>
+      </div>
+      <div>
+        <label className="bl-row" style={{ gap: 8, alignItems: "center", cursor: "pointer" }}>
+          <input type="radio" name={name} checked={choice === "saved"} onChange={() => setChoice("saved")} />
+          <b>I&apos;ll choose what stays</b>
+        </label>
+        {choice === "saved" ? (
+          <div style={{ marginLeft: 24, marginTop: 4 }} data-testid="what-stays-own">
+            {saved ? (
+              <>
+                <div className="bl-muted bl-small">Your earlier choice</div>
+                {list((i) => i.selected)}
+                <BLink to="chooseWhatStays" params={choose} className="btn btn-ghost btn-sm" style={{ marginTop: 4 }}>
+                  Edit
+                </BLink>
+              </>
+            ) : (
+              <BLink to="chooseWhatStays" params={choose} className="btn btn-primary btn-sm">
+                Choose what stays
+              </BLink>
+            )}
+          </div>
+        ) : null}
+      </div>
+    </div>
+  );
 }
