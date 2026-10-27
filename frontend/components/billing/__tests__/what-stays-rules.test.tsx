@@ -13,7 +13,8 @@ import { ChooseWhatStaysScreen } from "@/components/billing/choose-what-stays";
 import { OrgPackageRequests } from "@/components/billing/admin/package-requests";
 import { RequestsTable } from "@/components/billing/requests";
 import { UsageCard } from "@/components/billing/overview";
-import { OrgLevelWhatStays } from "@/components/billing/admin/admin-pages";
+import { AdminSubscriptionDetailBody } from "@/components/billing/admin/admin-pages";
+import { ChooseWhatStaysPage } from "@/components/billing/org-pages";
 import type { BillingClient } from "@/lib/billing/client";
 import { createMockBillingClient } from "@/lib/billing/mock/client";
 import { initialMockState, type MockState } from "@/lib/billing/mock/state";
@@ -372,14 +373,38 @@ describe("one place: the latest row", () => {
     expect(screen.getByTestId("what-stays-locked")).toHaveTextContent("To change what stays, contact our support team");
   });
 
-  it("Super Admin org page: the top Change what stays only when no request set the plan", async () => {
+  it("Super Admin org page: the standalone Choose what stays sits in the action row, only when no request set the plan", async () => {
+    api.list.mockResolvedValue({ data: [], total: 0, page: 1, pageSize: 10 });
     const base = createMockBillingClient();
     const detail = await base.getSubscription((await base.listSubscriptions({ page: 1, pageSize: 10 } as never)).data[0].orgId);
-    let view = await show({ ...base, getSubscription: async () => ({ ...detail, whatStaysOrgLevel: false }) }, <OrgLevelWhatStays orgId="org-1" version={0} onSaved={() => undefined} />);
+    let view = await show({ ...base, getSubscription: async () => ({ ...detail, whatStaysOrgLevel: false }) }, <AdminSubscriptionDetailBody orgId={detail.orgId} />);
     expect(screen.queryByTestId("org-level-what-stays")).toBeNull();
     view.unmount();
-    view = await show({ ...base, getSubscription: async () => ({ ...detail, whatStaysOrgLevel: true }) }, <OrgLevelWhatStays orgId="org-1" version={0} onSaved={() => undefined} />);
-    expect(within(screen.getByTestId("org-level-what-stays")).getByRole("button", { name: "Change what stays" })).toBeInTheDocument();
+    view = await show({ ...base, getSubscription: async () => ({ ...detail, whatStaysOrgLevel: true }) }, <AdminSubscriptionDetailBody orgId={detail.orgId} />);
+    const row = screen.getByTestId("subscription-actions");
+    expect(within(row).getByTestId("org-level-what-stays")).toBeInTheDocument();
+    expect(within(row).getByRole("button", { name: "Choose what stays" })).toBeInTheDocument();
+    // Next to the Cancel (move to Basic) button, and nowhere else on the page.
+    expect(within(row).getByRole("button", { name: "Cancel" }).parentElement!.nextElementSibling).toBe(within(row).getByTestId("org-level-what-stays"));
+    expect(screen.getAllByTestId("org-level-what-stays")).toHaveLength(1);
+  });
+
+  it("Super Admin org page order: actions, plan summary, Package requests, Payments, then Timeline and Coupon in use", async () => {
+    api.list.mockResolvedValue({ data: [], total: 0, page: 1, pageSize: 10 });
+    const base = createMockBillingClient();
+    const detail = await base.getSubscription((await base.listSubscriptions({ page: 1, pageSize: 10 } as never)).data[0].orgId);
+    await show({ ...base, getSubscription: async () => detail }, <AdminSubscriptionDetailBody orgId={detail.orgId} />);
+    const order = [
+      screen.getByTestId("subscription-actions"),
+      screen.getByText(detail.orgName, { selector: "h2, h3, .bl-section-title, *" }),
+      screen.getByText("Package requests"),
+      screen.getByText("Payments"),
+      screen.getByText("Timeline"),
+      screen.getByText("Coupon in use"),
+    ];
+    for (let i = 1; i < order.length; i++) {
+      expect(order[i - 1].compareDocumentPosition(order[i]) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    }
   });
 
   it("org billing page: Active now with a View link while anything is paused", async () => {
@@ -394,5 +419,137 @@ describe("one place: the latest row", () => {
     expect(line).toHaveTextContent("3 of 5 projects");
     expect(line).toHaveTextContent("1 of 1 template");
     expect(within(line).getByRole("link", { name: "View" })).toHaveAttribute("href", `/org/settings/billing/choose-what-stays?target=${o.plan.id}`);
+  });
+});
+
+describe("Choose what stays: Save keeps the ticks and goes back", () => {
+  const item = (id: string, picked: boolean, locked = false) => ({ id, name: `User ${id}`, detail: "", reason: "", defaultPicked: picked, selected: picked, locked });
+  async function defaults(base: BillingClient): Promise<RetentionChoices> {
+    const growth = (await base.listPlans()).find((p) => p.id === "growth")!;
+    // Growth allows 5 users; 7 here. The default picks are u1–u5.
+    return {
+      targetPlan: { ...growth, limits: { ...growth.limits, users: 5 } },
+      appliesOn: "2026-11-27T00:00:00.000Z",
+      isDefault: true,
+      locked: false,
+      users: [item("u1", true, true), item("u2", true), item("u3", true), item("u4", true), item("u5", true), item("u6", false), item("u7", false)],
+      projects: [],
+      landingPages: [],
+    };
+  }
+
+  it("the first Save sends exactly what's ticked (not the default picks) and keeps showing it", async () => {
+    const base = createMockBillingClient({ initial: manual() });
+    const before = await defaults(base);
+    // The server keeps answering with the pre-save picks (a late or cached reload must not win).
+    const save = vi.fn(async (req: { userIds: string[] }) => ({
+      ...before,
+      isDefault: false,
+      users: before.users.map((u) => ({ ...u, selected: req.userIds.includes(u.id) })),
+    }));
+    await show({ ...base, getRetentionChoices: async () => before, saveRetentionChoices: save as never }, <ChooseWhatStaysScreen targetPlanId="growth" />);
+    fireEvent.click(screen.getByRole("checkbox", { name: "User u2" }));
+    fireEvent.click(screen.getByRole("checkbox", { name: "User u3" }));
+    fireEvent.click(screen.getByRole("checkbox", { name: "User u6" }));
+    fireEvent.click(screen.getByRole("checkbox", { name: "User u7" }));
+    fireEvent.click(screen.getByRole("button", { name: /Save/ }));
+    await settle();
+    expect(save).toHaveBeenCalledTimes(1);
+    expect(save.mock.calls[0][0]).toEqual(expect.objectContaining({ targetPlanId: "growth", userIds: ["u1", "u4", "u5", "u6", "u7"] }));
+    // After the save the editor shows the saved ticks, not the old defaults.
+    expect(screen.getByRole("checkbox", { name: "User u6" })).toBeChecked();
+    expect(screen.getByRole("checkbox", { name: "User u2" })).not.toBeChecked();
+    expect(screen.getByText("Showing your saved choice")).toBeInTheDocument();
+  });
+
+  async function onPage(back: string, extra: Record<string, string> = {}) {
+    const base = createMockBillingClient({ initial: manual() });
+    const before = await defaults(base);
+    const overview = vi.spyOn(base, "getBillingOverview");
+    const go = vi.fn(() => true);
+    const client: BillingClient = { ...base, getRetentionChoices: async () => before, saveRetentionChoices: async () => ({ ...before, isDefault: false }) };
+    render(
+      <ToastProvider>
+        <BillingEnvProvider client={client} canEdit onNavigate={go}>
+          <OrgBillingProvider>
+            <ChooseWhatStaysPage target="growth" back={back} {...extra} />
+          </OrgBillingProvider>
+        </BillingEnvProvider>
+      </ToastProvider>,
+    );
+    await settle();
+    return { go, overview };
+  }
+
+  it("Save returns to the request page (plan + interval kept, \"I'll choose\" selected) after reloading the overview", async () => {
+    const { go, overview } = await onPage("checkout", { interval: "yearly" });
+    const loadsBefore = overview.mock.calls.length;
+    fireEvent.click(screen.getByRole("button", { name: /Save/ }));
+    await settle();
+    expect(overview.mock.calls.length).toBeGreaterThan(loadsBefore);
+    expect(go).toHaveBeenLastCalledWith("checkout", { plan: "growth", interval: "yearly", pick: "saved" });
+    // The overview reload happened before going back.
+    expect(overview.mock.invocationCallOrder.at(-1)!).toBeLessThan(go.mock.invocationCallOrder.at(-1)!);
+  });
+
+  it("Save returns to the downgrade page and to the Requests tab", async () => {
+    let page = await onPage("downgrade", { interval: "monthly" });
+    fireEvent.click(screen.getByRole("button", { name: /Save/ }));
+    await settle();
+    expect(page.go).toHaveBeenLastCalledWith("downgrade", { plan: "growth", interval: "monthly", pick: "saved" });
+    cleanup();
+    page = await onPage("requests", { request: "req-1" });
+    fireEvent.click(screen.getByRole("button", { name: /Save/ }));
+    await settle();
+    expect(page.go).toHaveBeenLastCalledWith("requests", undefined);
+  });
+
+  it("Back (instead of Save) returns to the same page without saving", async () => {
+    await onPage("checkout", { interval: "monthly" });
+    const links = screen.getAllByRole("link", { name: "Back to your request" });
+    // The page header's Back and the one next to Save.
+    expect(links).toHaveLength(2);
+    const cancel = links[1];
+    expect(cancel).toHaveAttribute("href", "/org/settings/billing/checkout?plan=growth&interval=monthly&pick=saved");
+  });
+
+  it("back on the request page: \"I'll choose\" is selected and shows the saved choice; Send is enabled", async () => {
+    const base = createMockBillingClient({ initial: manual({ situation: "basic" }) });
+    const saved = (r: RetentionChoices): RetentionChoices => ({ ...r, isDefault: false, users: r.users.map((u, i) => ({ ...u, selected: i === 0 })) });
+    const client: BillingClient = {
+      ...base,
+      previewCheckout: async (req) => ({ ...(await base.previewCheckout(req)), usageConflict: { items: [{ key: "users", limit: 5, used: 8 }], choicesFit: true } }) as CheckoutPreview,
+      getRetentionChoices: async (req) => saved(await base.getRetentionChoices(req)),
+    };
+    await show(client, <CheckoutScreen planId="pro" interval="monthly" initialPick="saved" />);
+    expect(screen.getByRole("radio", { name: OWN })).toBeChecked();
+    expect(screen.getByTestId("what-stays-own")).toHaveTextContent("Your earlier choice");
+    expect(screen.getByRole("button", { name: /Send change request/ })).toBeEnabled();
+  });
+});
+
+describe("Send change request waits for an option", () => {
+  it("disabled with nothing selected even when the preview doesn't report the conflict (usage over the plan)", async () => {
+    const base = createMockBillingClient({ initial: manual({ situation: "basic" }) });
+    const o = await base.getBillingOverview();
+    const usage = o.usage.map((u) => (u.key === "users" ? { ...u, used: 8 } : u));
+    const client: BillingClient = {
+      ...base,
+      getBillingOverview: async () => ({ ...o, usage }),
+      previewCheckout: async (req) => ({ ...(await base.previewCheckout(req)), usageConflict: null, usageError: null }) as CheckoutPreview,
+    };
+    await show(client, <CheckoutScreen planId="growth" interval="monthly" />);
+    const send = screen.getByRole("button", { name: /Send change request/ });
+    expect(screen.getByRole("radio", { name: DEFAULT })).not.toBeChecked();
+    expect(screen.getByRole("radio", { name: OWN })).not.toBeChecked();
+    expect(send).toBeDisabled();
+    fireEvent.click(screen.getByRole("radio", { name: OWN }));
+    expect(send).toBeDisabled();
+    expect(within(screen.getByTestId("what-stays-own")).getByRole("link", { name: "Choose what stays" })).toHaveAttribute(
+      "href",
+      "/org/settings/billing/choose-what-stays?target=growth&back=checkout&interval=monthly",
+    );
+    fireEvent.click(screen.getByRole("radio", { name: DEFAULT }));
+    expect(send).toBeEnabled();
   });
 });

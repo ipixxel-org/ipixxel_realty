@@ -7,8 +7,8 @@ import { CheckoutScreen } from "./checkout";
 import { CheckoutFailure, CheckoutSuccess } from "./checkout-result";
 import { OrgCouponsScreen } from "./coupons-org";
 import { RequestsTable } from "./requests";
-import { ChooseWhatStaysScreen } from "./choose-what-stays";
-import { useBillingQuery, useOrgBilling } from "./context";
+import { ChooseWhatStaysScreen, type WhatStaysBack } from "./choose-what-stays";
+import { useBillingEnv, useBillingQuery, useOrgBilling } from "./context";
 import { InvoicesTable, PaymentHistoryTable } from "./invoices";
 import { DowngradeScreen, MoveToBasicScreen } from "./plan-changes";
 import { PlansScreen } from "./plans";
@@ -187,8 +187,18 @@ export function RequestsPage() {
 }
 
 /** `back="checkout"` (from the request screen): Back returns to that request. */
+/** Where Choose what stays returns to (Save and Cancel): the page in `back=`, with "I'll choose what stays" selected. */
+export function whatStaysBackTarget({ target, back, interval }: { target?: string; back?: string; interval?: string }): WhatStaysBack | null {
+  if (back === "checkout" && target) return { to: "checkout", params: { plan: target, interval: toInterval(interval), pick: "saved" }, label: "Back to your request" };
+  if (back === "downgrade" && target) return { to: "downgrade", params: { plan: target, interval, pick: "saved" }, label: "Back to your plan change" };
+  if (back === "requests") return { to: "requests", label: "Back to requests" };
+  return null;
+}
+
 export function ChooseWhatStaysPage({ target, back, interval, request }: { target?: string; back?: string; interval?: string; request?: string }) {
   const { overview } = useOrgBilling();
+  const { nav } = useBillingEnv();
+  const returnTo = whatStaysBackTarget({ target, back, interval });
   return (
     <Guard>
       <PageHead
@@ -196,20 +206,18 @@ export function ChooseWhatStaysPage({ target, back, interval, request }: { targe
         icon="check"
         title="Choose what stays"
         sub="When you move to a smaller plan, pick what stays active. Everything else is paused, never deleted."
-        back={
-          back === "checkout" && target
-            ? { to: "checkout", params: { plan: target, interval: interval === "yearly" ? "yearly" : "monthly", pick: "saved" }, label: "Back to your request" }
-            : back === "downgrade" && target
-              ? { to: "downgrade", params: { plan: target, interval, pick: "saved" }, label: "Back to your plan change" }
-            : back === "requests"
-              ? { to: "requests", label: "Back to requests" }
-              : { to: "overview", label: "Billing" }
-        }
+        back={returnTo ?? { to: "overview", label: "Billing" }}
         sampleFns={["getRetentionChoices"]}
       />
       <div className="bl-stack">
         {overview ? <BillingBanner overview={overview} /> : null}
-        <ChooseWhatStaysScreen targetPlanId={target} requestId={request} />
+        <ChooseWhatStaysScreen
+          targetPlanId={target}
+          requestId={request}
+          back={returnTo ?? undefined}
+          // Saved: back to the page that opened it (it loads everything again on arrival).
+          onSaved={returnTo ? () => (nav.replace ?? nav.go)(returnTo.to, returnTo.params) : undefined}
+        />
       </div>
     </Guard>
   );

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { readListQuery, replaceListQuery } from "@/app/admin-console/subscriptions/subscriptions-shared";
 import { Icon } from "@/components/icons";
 import { ListPager } from "@/components/ui/list-pager";
@@ -355,14 +355,33 @@ function ActionDialog({
   );
 }
 
-export function SubscriptionDetailView({ orgId, initialAction = null }: { orgId: string; initialAction?: SubscriptionAction | null }) {
+/**
+ * One organisation's billing, top to bottom: the action row, the plan
+ * summary, `children` (Package requests on the org page), Payments, then the
+ * Timeline and Coupon in use. `actions` adds buttons to the action row.
+ * A new `version` reloads it (after a request is approved, …).
+ */
+export function SubscriptionDetailView({
+  orgId,
+  initialAction = null,
+  version = 0,
+  actions,
+  children,
+}: {
+  orgId: string;
+  initialAction?: SubscriptionAction | null;
+  version?: number;
+  actions?: (d: SubscriptionDetail) => ReactNode;
+  children?: ReactNode;
+}) {
   const { canEdit } = useBillingEnv();
   const { toast } = useToast();
-  const { data, error } = useBillingQuery((c) => c.getSubscription(orgId), [orgId]);
-  const [override, setOverride] = useState<SubscriptionDetail | null>(null);
+  const { data, error } = useBillingQuery((c) => c.getSubscription(orgId), [orgId, version]);
+  // An action's result, until the next reload.
+  const [override, setOverride] = useState<{ version: number; detail: SubscriptionDetail } | null>(null);
   const [action, setAction] = useState<SubscriptionAction | null>(initialAction);
   if (error) return <ErrorNote message={error} />;
-  const d = override ?? data;
+  const d = (override?.version === version ? override.detail : null) ?? data;
   if (!d) return <Loading what="subscription" />;
   const inGrace = d.status === "past_due" || d.status === "grace_ending";
   const paid = !d.plan.isFree;
@@ -390,11 +409,12 @@ export function SubscriptionDetailView({ orgId, initialAction = null }: { orgId:
 
   return (
     <div className="bl-stack">
-      <div className="bl-row">
+      <div className="bl-row" data-testid="subscription-actions">
         {actionButton("grace", "btn btn-ghost", <><Icon name="clock" size={15} /> Extend grace</>)}
         {actionButton("offline", "btn btn-ghost", <><Icon name="check" size={15} /> Mark paid offline</>)}
         {actionButton("coupon", "btn btn-ghost", <><Icon name="tag" size={15} /> Apply coupon</>)}
         {actionButton("cancel", "btn btn-danger", "Cancel")}
+        {actions?.(d)}
       </div>
       <Section title={d.orgName} sub={`${d.city}, ${d.state} · ${d.users} users`}>
         <div className="bl-grid4">
@@ -414,27 +434,7 @@ export function SubscriptionDetailView({ orgId, initialAction = null }: { orgId:
           </div>
         ) : null}
       </Section>
-      <div className="bl-split">
-        <Section title="Timeline" sub="Bought, renewed, missed payments, grace, moved to Basic">
-          <SubscriptionTimeline events={d.timeline} />
-        </Section>
-        <Section title="Coupon in use">
-          {d.coupon ? (
-            <div style={{ display: "grid", gap: 6 }}>
-              <div className="bl-row" style={{ gap: 8 }}>
-                <span className="badge b-violet bl-mono">{d.coupon.coupon.code}</span>
-                <BLink to="adminCoupon" params={{ code: d.coupon.coupon.code }} className="bl-muted">
-                  Usage →
-                </BLink>
-              </div>
-              <div style={{ fontSize: 13 }}>{describeCoupon(d.coupon.coupon)}</div>
-              <div className="bl-muted">{d.coupon.coupon.description}</div>
-            </div>
-          ) : (
-            <div className="bl-muted">No coupon on this subscription.</div>
-          )}
-        </Section>
-      </div>
+      {children}
       <Section title="Payments" flush>
         {d.payments.length === 0 ? (
           <Empty>No payments — this organisation has only used the free plan.</Empty>
@@ -476,13 +476,34 @@ export function SubscriptionDetailView({ orgId, initialAction = null }: { orgId:
           </div>
         )}
       </Section>
+      <div className="bl-split">
+        <Section title="Timeline" sub="Bought, renewed, missed payments, grace, moved to Basic">
+          <SubscriptionTimeline events={d.timeline} />
+        </Section>
+        <Section title="Coupon in use">
+          {d.coupon ? (
+            <div style={{ display: "grid", gap: 6 }}>
+              <div className="bl-row" style={{ gap: 8 }}>
+                <span className="badge b-violet bl-mono">{d.coupon.coupon.code}</span>
+                <BLink to="adminCoupon" params={{ code: d.coupon.coupon.code }} className="bl-muted">
+                  Usage →
+                </BLink>
+              </div>
+              <div style={{ fontSize: 13 }}>{describeCoupon(d.coupon.coupon)}</div>
+              <div className="bl-muted">{d.coupon.coupon.description}</div>
+            </div>
+          ) : (
+            <div className="bl-muted">No coupon on this subscription.</div>
+          )}
+        </Section>
+      </div>
       <ActionDialog
         key={action ?? "none"}
         action={action && !viaRequest(action) ? action : null}
         detail={d}
         onClose={() => setAction(null)}
         onDone={(next, message) => {
-          setOverride(next);
+          setOverride({ version, detail: next });
           setAction(null);
           toast({ variant: "success", title: "Done", description: message });
         }}

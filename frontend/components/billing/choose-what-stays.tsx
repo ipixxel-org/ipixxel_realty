@@ -5,7 +5,7 @@ import { Icon } from "@/components/icons";
 import { useToast } from "@/components/ui/toast";
 import { formatDate } from "@/lib/billing/pricing";
 import type { RetentionChoices, RetentionItem, WhatStaysChoice } from "@/lib/billing/types";
-import { useBillingEnv, useBillingQuery, useOptionalOrgBilling } from "./context";
+import { useBillingEnv, useBillingQuery, useOptionalOrgBilling, type BillingRoute, type RouteParams } from "./context";
 import { Banner, BLink, countLabel, ErrorNote, Loading, Section, WhatStaysLockedNote } from "./ui";
 
 /** Super Admin editing one organisation's choice (any time; applied at once when it's on that plan). */
@@ -15,6 +15,13 @@ export interface WhatStaysAdmin {
 }
 
 type Kind = "users" | "projects" | "landingPages" | "templates";
+
+/** Where the page was opened from (`back=`): Save and Cancel return there. */
+export interface WhatStaysBack {
+  to: BillingRoute;
+  params?: RouteParams;
+  label: string;
+}
 
 function TickList({
   title,
@@ -74,11 +81,13 @@ function Editor({
   onSaved,
   requestId,
   admin,
+  back,
 }: {
   choices: RetentionChoices;
   onSaved: (c: RetentionChoices) => void;
   requestId?: string;
   admin?: WhatStaysAdmin;
+  back?: WhatStaysBack;
 }) {
   const { client, canEdit } = useBillingEnv();
   const billing = useOptionalOrgBilling();
@@ -120,8 +129,9 @@ function Editor({
       };
       const saved = admin ? await client.saveAdminRetentionChoices({ orgId: admin.orgId, ...req }) : await client.saveRetentionChoices(req);
       setDirty(false);
+      // Fresh overview before going back, so the page we return to never shows old values.
+      await billing?.refresh();
       onSaved(saved);
-      void billing?.refresh();
       const kept = templates
         ? `${sel.users.length} users, ${sel.projects.length} projects, ${sel.landingPages.length} landing pages and ${sel.templates.length} templates`
         : `${sel.users.length} users, ${sel.projects.length} projects and ${sel.landingPages.length} landing pages`;
@@ -185,8 +195,8 @@ function Editor({
           Reset to the picks we suggest
         </button>
         {admin ? null : (
-          <BLink to="overview" className="btn btn-ghost">
-            Back to billing
+          <BLink to={back?.to ?? "overview"} params={back?.params} className="btn btn-ghost">
+            {back ? back.label : "Back to billing"}
           </BLink>
         )}
         <span className="bl-muted">{dirty ? "Unsaved changes" : choices.isDefault ? "Showing the picks we suggest" : admin ? "Showing their saved choice" : "Showing your saved choice"}</span>
@@ -262,30 +272,39 @@ export function ChooseWhatStaysScreen({
   targetPlanId,
   requestId,
   admin,
+  back,
   onSaved,
 }: {
   targetPlanId?: string;
   /** The request / scheduled change it belongs to (Requests tab, Super Admin rows). */
   requestId?: string;
   admin?: WhatStaysAdmin;
+  /** Cancel goes here (the page that opened it). */
+  back?: WhatStaysBack;
   onSaved?: (c: RetentionChoices) => void;
 }) {
-  const [version, setVersion] = useState(0);
   const { data, error } = useBillingQuery(
     (c) => (admin ? c.getAdminRetentionChoices({ orgId: admin.orgId, targetPlanId, requestId }) : c.getRetentionChoices({ targetPlanId, requestId })),
-    [targetPlanId, requestId, admin?.orgId, version],
+    [targetPlanId, requestId, admin?.orgId],
   );
-  if (error) return <ErrorNote message={error} />;
-  if (!data) return <Loading what={admin ? "their users, projects, pages and templates" : "your users, projects, pages and templates"} />;
-  if (data.locked) return <WhatStaysReadOnly choices={data} admin={!!admin} />;
+  // After a save, show what the save returned. (Remounting on a refetch used
+  // to start the editor from the old, pre-save data: the default picks.)
+  const [fresh, setFresh] = useState<RetentionChoices | null>(null);
+  const [saves, setSaves] = useState(0);
+  const shown = fresh ?? data;
+  if (error && !shown) return <ErrorNote message={error} />;
+  if (!shown) return <Loading what={admin ? "their users, projects, pages and templates" : "your users, projects, pages and templates"} />;
+  if (shown.locked) return <WhatStaysReadOnly choices={shown} admin={!!admin} />;
   return (
     <Editor
-      key={`${data.targetPlan.id}-${version}`}
-      choices={data}
+      key={`${shown.targetPlan.id}-${saves}`}
+      choices={shown}
       requestId={requestId}
       admin={admin}
+      back={back}
       onSaved={(c) => {
-        setVersion((v) => v + 1);
+        setFresh(c);
+        setSaves((n) => n + 1);
         onSaved?.(c);
       }}
     />
