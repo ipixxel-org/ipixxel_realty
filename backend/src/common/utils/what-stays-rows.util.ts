@@ -9,10 +9,17 @@ export const OPEN_REQUEST_STATUSES = ['pending', 'scheduled'] as const;
 export const APPLIED_REQUEST_STATUSES = ['approved', 'done'] as const;
 
 /**
- * The applied request (approved request, or scheduled change done) that put
- * the org on its current plan: the latest applied one to that plan. Super
- * Admin can still change what stays on it (applied at once); older applied
- * rows are history.
+ * The row that put the org on its current plan: the latest row whose change
+ * actually took effect (an approved request, or a scheduled change that's
+ * done), when its plan is the org's current plan — else none (the plan was
+ * set some other way, e.g. by Super Admin or a payment; the org-level
+ * "Change what stays" covers that). Super Admin can still change what stays
+ * on it (applied at once); older applied rows are history.
+ *
+ * "Latest" is when the row was last written (updated_at, the database
+ * clock): an applied row is only written again when it's applied or when
+ * Super Admin edits this same row. reviewed_at can't be used — approvals
+ * take it from billingNow(), which BILLING_CLOCK_OVERRIDE moves in testing.
  */
 export async function currentPlanRequestId(
   db: Pick<PrismaClient, 'subscription' | 'packageChangeRequest'>,
@@ -23,11 +30,14 @@ export async function currentPlanRequestId(
     select: { planId: true },
   });
   if (!sub) return null;
-  const latest = await db.packageChangeRequest.findFirst({
+  const applied = await db.packageChangeRequest.findMany({
     where: { orgId, status: { in: [...APPLIED_REQUEST_STATUSES] } },
-    orderBy: [{ reviewedAt: 'desc' }, { createdAt: 'desc' }],
-    select: { id: true, targetPlanId: true },
+    select: { id: true, targetPlanId: true, updatedAt: true },
   });
+  const time = (d: Date | null | undefined) => (d ? new Date(d).getTime() : 0);
+  const latest = applied.sort(
+    (a, b) => time(b.updatedAt) - time(a.updatedAt),
+  )[0];
   return latest?.targetPlanId === sub.planId ? latest.id : null;
 }
 

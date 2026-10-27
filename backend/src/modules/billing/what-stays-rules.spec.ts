@@ -2,6 +2,7 @@
 import { applyOrgSubscriptionLifecycle } from '../../common/utils/subscription-lifecycle.util';
 import { BillingPlanChangeService } from './billing-plan-change.service';
 import { BillingRetentionService } from './billing-retention.service';
+import { currentPlanRequestId } from '../../common/utils/what-stays-rows.util';
 import { createFakeBillingDb } from '../../../test/fakes/fake-billing-db';
 
 /**
@@ -460,5 +461,71 @@ describe('the read-only page shows what the request recorded', () => {
       'u-3',
     ]);
     expect(c.projects).toEqual([]);
+  });
+});
+
+describe('the current-plan row is the latest change that took effect', () => {
+  // Like the Super Admin screenshot: two approved changes to Starter (their
+  // review date moved ahead by the testing clock), then the move to Basic
+  // took effect (a Done scheduled change) — the org is on Basic.
+  function rows(db: any) {
+    const applied = (
+      id: string,
+      kind: string,
+      status: string,
+      targetPlanId: string,
+      reviewedAt: Date,
+      updatedAt: Date,
+    ) => ({
+      id,
+      orgId: 'org-1',
+      currentPlanId: 'growth',
+      targetPlanId,
+      billingCycle: 'monthly',
+      kind,
+      status,
+      reviewedAt,
+      createdAt: updatedAt,
+      updatedAt,
+      whatStays: { planId: targetPlanId, choice: 'default', applied: true },
+    });
+    db.packageChangeRequest.rows.push(
+      applied('req-a', 'request', 'approved', 'starter', d(31), d(-2)),
+      applied('req-b', 'request', 'approved', 'starter', d(31), d(-1)),
+      applied('to-basic', 'scheduled_change', 'done', 'basic', d(0), d(0)),
+    );
+  }
+
+  it('a Done scheduled change is the current-plan row: editable, applied at once; older approved rows are refused', async () => {
+    const { db, retention, pausedUsers } = setup({ planId: 'basic' });
+    rows(db);
+    expect(await currentPlanRequestId(db as never, 'org-1')).toBe('to-basic');
+    expect(
+      (await retention.adminGetChoices('org-1', undefined, 'to-basic')).locked,
+    ).toBe(false);
+    expect(
+      (await retention.adminGetChoices('org-1', undefined, 'req-b')).locked,
+    ).toBe(true);
+
+    const c = await retention.adminSaveChoices('org-1', 'admin-1', {
+      ...keep(['u-admin', 'u-3'], 'basic'),
+      requestId: 'to-basic',
+    });
+    expect(c.locked).toBe(false);
+    expect(pausedUsers()).toEqual(['u-2', 'u-4']); // applied at once
+    for (const old of ['req-a', 'req-b']) {
+      await expect(
+        retention.adminSaveChoices('org-1', 'admin-1', {
+          ...keep(['u-admin', 'u-2']),
+          requestId: old,
+        }),
+      ).rejects.toMatchObject({ response: { code: 'what_stays_old_request' } });
+    }
+  });
+
+  it('a current plan no row set (e.g. assigned by Super Admin): no row is editable', async () => {
+    const { db } = setup({ planId: 'growth' });
+    rows(db);
+    expect(await currentPlanRequestId(db as never, 'org-1')).toBeNull();
   });
 });

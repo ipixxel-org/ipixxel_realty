@@ -11,10 +11,11 @@ import { BillingEnvProvider, OrgBillingProvider } from "@/components/billing/con
 import { CheckoutScreen } from "@/components/billing/checkout";
 import { ChooseWhatStaysScreen } from "@/components/billing/choose-what-stays";
 import { OrgPackageRequests } from "@/components/billing/admin/package-requests";
+import { RequestsTable } from "@/components/billing/requests";
 import type { BillingClient } from "@/lib/billing/client";
 import { createMockBillingClient } from "@/lib/billing/mock/client";
 import { initialMockState, type MockState } from "@/lib/billing/mock/state";
-import type { CheckoutPreview, RetentionChoices, UsageConflict } from "@/lib/billing/types";
+import type { CheckoutPreview, OrgPlanRequest, RetentionChoices, UsageConflict } from "@/lib/billing/types";
 import type { PackageChangeRequestRow } from "@/lib/types";
 
 vi.mock("next/navigation", () => ({
@@ -228,5 +229,77 @@ describe("choose what stays once it's decided", () => {
     fireEvent.click(screen.getByRole("button", { name: /Save/ }));
     await settle();
     expect(save).toHaveBeenCalledWith(expect.objectContaining({ orgId: "org-9", requestId: "req-1", targetPlanId: data.targetPlan.id }));
+  });
+});
+
+describe("scheduled changes that took effect", () => {
+  const STARTS = "2026-11-26T00:00:00.000Z";
+  const DONE = "2026-10-27T09:00:00.000Z";
+  const adminRow = (over: Partial<PackageChangeRequestRow>) =>
+    ({
+      id: "to-basic",
+      orgId: "org-1",
+      currentPlanId: "starter",
+      targetPlanId: "basic",
+      billingCycle: "monthly",
+      status: "done",
+      kind: "scheduled_change",
+      startsAt: STARTS,
+      reviewedAt: DONE,
+      scheduledAmount: null,
+      createdAt: "2026-10-27T08:00:00.000Z",
+      updatedAt: DONE,
+      organisation: { id: "org-1", name: "Acme", slug: "acme", city: "Pune" },
+      requestedBy: null,
+      reviewedBy: null,
+      currentPlan: { id: "starter", name: "Starter", priceMonthly: 999, priceYearly: 9990 },
+      targetPlan: { id: "basic", name: "Basic", priceMonthly: 0, priceYearly: 0 },
+      label: "Change to Basic",
+      payment: null,
+      billingCheckout: null,
+      whatStays: { planId: "basic", planName: "Basic", choice: "default", applied: true, projects: { limit: 2, total: 5, kept: [], paused: [] } },
+      ...over,
+    }) as unknown as PackageChangeRequestRow;
+
+  it("Super Admin: a Done move to Basic (the current plan's row) is editable and shows when it really took effect", async () => {
+    api.list.mockReset().mockResolvedValue({
+      data: [adminRow({ whatStaysEditable: true }), adminRow({ id: "old", kind: "request", status: "approved", targetPlanId: "starter", whatStaysEditable: false } as never)],
+      total: 2,
+      page: 1,
+      limit: 100,
+    });
+    await show(createMockBillingClient(), <OrgPackageRequests orgId="org-1" />);
+    const [done, old] = screen.getAllByTestId("org-package-request");
+    const lastCell = (r: HTMLElement) => r.querySelectorAll("td")[r.querySelectorAll("td").length - 1] as HTMLElement;
+    expect(within(lastCell(done)).getByRole("button", { name: "Choose what stays" })).toBeInTheDocument();
+    expect(within(lastCell(old)).getByRole("button", { name: "View what stays" })).toBeInTheDocument();
+    expect(within(done).getByTestId("scheduled-date")).toHaveTextContent("Took effect 27 Oct 2026");
+    expect(done).not.toHaveTextContent("Starts 26 Nov 2026");
+  });
+
+  it("org Requests tab: the same real date; a still-scheduled row keeps its start date", async () => {
+    const base = createMockBillingClient({ initial: manual() });
+    const orgRow = (over: Partial<OrgPlanRequest>): OrgPlanRequest => ({
+      id: "s",
+      kind: "scheduled_change",
+      requestedAt: "2026-10-27T08:00:00.000Z",
+      requestedBy: "Vidya C",
+      fromPlan: { id: "starter", name: "Starter" },
+      toPlan: { id: "basic", name: "Basic" },
+      interval: "monthly",
+      amount: null,
+      amountNote: null,
+      status: "done",
+      decidedAt: DONE,
+      rejectionReason: null,
+      whatStays: null,
+      startsAt: STARTS,
+      ...over,
+    });
+    const rows = [orgRow({}), orgRow({ id: "s2", status: "scheduled", decidedAt: null })];
+    await show({ ...base, listOrgRequests: async () => ({ data: rows, total: 2, page: 1, pageSize: 10 }) }, <RequestsTable />);
+    const [done, scheduled] = screen.getAllByTestId("org-plan-request");
+    expect(within(done).getByTestId("scheduled-date")).toHaveTextContent("Took effect 27 Oct 2026");
+    expect(within(scheduled).getByTestId("scheduled-date")).toHaveTextContent("Starts 26 Nov 2026");
   });
 });

@@ -13,6 +13,8 @@ import {
   requestStage,
   requestTitle,
   scheduledAmountText,
+  scheduledDateText,
+  scheduledEffectiveDate,
 } from "@/lib/billing/requests";
 import type { OrgPlanRequest, WhatStays } from "@/lib/billing/types";
 import { UndoButton } from "./banners";
@@ -201,7 +203,7 @@ export function RequestsTable({ pageSize = 10 }: { pageSize?: number }) {
                           {MOVED_TO_BASIC_WHILE_WAITING} ({formatDate(r.movedToBasicAt)})
                         </div>
                       ) : null}
-                      {scheduled && r.startsAt ? <div className="bl-small" style={{ marginTop: 4 }}>Starts {formatDate(r.startsAt)}</div> : null}
+                      {scheduled && scheduledDateText(r) ? <div className="bl-small" style={{ marginTop: 4 }} data-testid="scheduled-date">{scheduledDateText(r)}</div> : null}
                       {scheduled && r.reason ? (
                         <div className="bl-small bl-muted" style={{ marginTop: 2, maxWidth: 320 }}>
                           Reason: {r.reason}
@@ -210,7 +212,7 @@ export function RequestsTable({ pageSize = 10 }: { pageSize?: number }) {
                     </td>
                     <td style={{ whiteSpace: "nowrap" }}>
                       {/* With a coupon: "₹1,499 − ₹300 coupon + GST". */}
-                      {scheduled ? scheduledAmountText(r.amount, r.startsAt) : r.quote?.couponCode ? <span data-testid="request-coupon-amount">{requestPriceText(r.quote)}</span> : (requestAmount(r) ?? <span className="bl-muted">—</span>)}
+                      {scheduled ? scheduledAmountText(r.amount, scheduledEffectiveDate(r)) : r.quote?.couponCode ? <span data-testid="request-coupon-amount">{requestPriceText(r.quote)}</span> : (requestAmount(r) ?? <span className="bl-muted">—</span>)}
                       {r.total != null ? (
                         <div className="bl-muted bl-small">
                           {formatINR(r.total)} incl. GST{r.quote?.couponCode ? ` · coupon ${r.quote.couponCode}` : ""}

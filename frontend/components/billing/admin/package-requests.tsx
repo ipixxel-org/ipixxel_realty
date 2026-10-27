@@ -23,6 +23,8 @@ import {
   requestStage,
   requestTitle,
   scheduledAmountText,
+  scheduledDateText,
+  scheduledEffectiveDate,
 } from "@/lib/billing/requests";
 import type { RequestQuote, ScheduledChangeStatus } from "@/lib/billing/types";
 import type { PackageChangeRequestRow } from "@/lib/types";
@@ -78,7 +80,7 @@ export function requestQuote(r: PackageChangeRequestRow): RequestQuote | null {
 }
 
 export function requestAmountText(r: PackageChangeRequestRow): string | null {
-  if (isScheduledChange(r)) return scheduledAmountText(r.scheduledAmount, r.startsAt);
+  if (isScheduledChange(r)) return scheduledAmountText(r.scheduledAmount, scheduledEffectiveDate({ status: r.status, startsAt: r.startsAt, decidedAt: r.reviewedAt }));
   const c = r.billingCheckout;
   // With a coupon: "₹1,499 − ₹300 coupon + GST".
   if (r.quote?.couponCode) return requestPriceText(r.quote);
@@ -328,7 +330,11 @@ export function OrgPackageRequests({ orgId, onChanged }: { orgId: string; onChan
                             {MOVED_TO_BASIC_WHILE_WAITING} ({formatDate(r.movedToBasicAt)})
                           </div>
                         ) : null}
-                        {scheduled && r.startsAt ? <div className="bl-small" style={{ marginTop: 4 }}>Starts {formatDate(r.startsAt)}</div> : null}
+                        {scheduled && scheduledDateText({ status: r.status, startsAt: r.startsAt, decidedAt: r.reviewedAt }) ? (
+                          <div className="bl-small" style={{ marginTop: 4 }} data-testid="scheduled-date">
+                            {scheduledDateText({ status: r.status, startsAt: r.startsAt, decidedAt: r.reviewedAt })}
+                          </div>
+                        ) : null}
                         {scheduled && r.reason ? (
                           <div className="bl-small bl-muted" style={{ marginTop: 2, maxWidth: 320 }}>
                             Reason: {r.reason}
