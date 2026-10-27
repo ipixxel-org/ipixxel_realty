@@ -113,6 +113,7 @@ export function AdminWhatStaysButton({
   targetPlanId,
   label,
   editable = true,
+  className = "btn btn-ghost btn-sm",
   onSaved,
 }: {
   orgId: string;
@@ -120,6 +121,7 @@ export function AdminWhatStaysButton({
   requestId?: string;
   targetPlanId?: string;
   label?: string;
+  className?: string;
   /** false: "View what stays", read-only (older applied or closed rows). */
   editable?: boolean;
   onSaved?: () => void;
@@ -130,7 +132,7 @@ export function AdminWhatStaysButton({
   label = label ?? (canEdit ? "Choose what stays" : "View what stays");
   return (
     <>
-      <button type="button" className="btn btn-ghost btn-sm" onClick={() => setOpen(true)} data-testid="admin-choose-what-stays">
+      <button type="button" className={className} onClick={() => setOpen(true)} data-testid="admin-choose-what-stays">
         {label}
       </button>
       <BillingDialog open={open} onClose={() => setOpen(false)} title={`${label}${orgName ? ` — ${orgName}` : ""}`} size="lg">

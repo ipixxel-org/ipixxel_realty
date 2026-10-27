@@ -242,11 +242,18 @@ decided or takes effect; after that only Super Admin can change it. Helpers: `bi
   screen and the grace-period change show two radio buttons whenever the org is over the target's
   limits (`WhatStaysOptions` in `choose-what-stays.tsx`; it replaces the old "your choice" box):
   - **Keep the default picks** — the list we'd keep (users, projects, landing pages, templates) under it;
-  - **I'll choose what stays** — a "Choose what stays" button (the existing screen; its Back returns
-    with `pick=saved` so this option is selected again); with a saved choice, "Your earlier choice"
-    and its picks with **Edit**.
-  Neither is selected when the page opens, even with an earlier choice. The main button waits for
-  "Keep the default picks", or "I'll choose" with a saved choice. No conflict: no options.
+  - **I'll choose what stays** — a "Choose what stays" button (the existing screen, opened with
+    `back=checkout|downgrade|requests`, keeping plan / interval / request); with a saved choice, "Your
+    earlier choice" and its picks with **Edit**.
+  Neither is selected when the page opens, even with an earlier choice. The main button (Send change
+  request / schedule) is disabled until "Keep the default picks", or "I'll choose" with a saved
+  choice. No conflict: no options. On the checkout, if the preview has no `usageConflict`, the
+  overview's usage against the plan's limits decides (same check as the downgrade page).
+- **Choose what stays screen:** Save sends exactly what's ticked, reloads the overview, then goes back
+  to the `back=` page (checkout / downgrade with `pick=saved`, so "I'll choose" is selected; or the
+  Requests tab), which loads the preview and retention again on arrival. The button next to Save
+  (and the header's Back) returns there without saving. Without `back=` it stays and shows what was
+  saved. Billing API calls use `cache: "no-store"` so a page never shows a cached old value.
 - **API:** `startCheckout` (manual), `POST /org/billing/cancel` and `POST /org/billing/downgrade` take
   `whatStaysChoice: 'default' | 'saved'` (`acceptDefaultPicks: true` from older clients = `default`).
   Over the limits, nothing sent → `choose_what_stays` ("Pro allows 5 users; you have 8…"); `saved`
@@ -305,7 +312,9 @@ decided or takes effect; after that only Super Admin can change it. Helpers: `bi
 - **Super Admin UI:** org detail → Package requests, **Action** column (last): Mark as paid /
   Approve / Reject as before, then **Choose what stays** on the editable latest row, **View what
   stays** (read-only, same headers as the org) on every other row with a record, nothing without one.
-  The separate "Change what stays" at the top of the org page shows only when no request set the
+  Org page order: action row (Extend grace, Cancel = move to Basic, **Choose what stays**), plan
+  summary, Package requests, Payments, then Timeline and Coupon in use. The action row's standalone
+  **Choose what stays** shows only when no request set the
   current plan (`SubscriptionDetail.whatStaysOrgLevel`; `currentPlanSetByRow` — the latest applied
   row, by `updated_at`, isn't for the current plan, e.g. assigned directly). Saving there without a
   `requestId` while a request set the plan → **`what_stays_use_latest`**.

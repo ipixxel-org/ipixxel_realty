@@ -5,7 +5,7 @@ import { Icon } from "@/components/icons";
 import { useAuth } from "@/lib/auth-context";
 import { BLink, PageHead } from "../ui";
 import { billingClient } from "@/lib/billing";
-import { BillingEnvProvider, useBillingQuery } from "../context";
+import { BillingEnvProvider } from "../context";
 import { AdminBillingEnv } from "./admin-env";
 import { CheckoutsNeedingReview } from "./checkouts-review";
 import { BLANK_COUPON, CouponForm, CouponsList, CouponUsage, EditCoupon } from "./coupons";
@@ -13,6 +13,7 @@ import { LifecycleSettingsCard } from "./lifecycle";
 import { AdminEditPlan, AdminPlansEditor } from "./plans-editor";
 import { CompanyTaxDetailsCard } from "./company";
 import { AdminPaymentsView } from "./payments";
+import type { SubscriptionDetail } from "@/lib/billing/types";
 import { SubscriptionDetailView, SubscriptionsList } from "./subscriptions";
 import { AdminWhatStaysButton, OrgPackageRequests } from "./package-requests";
 
@@ -94,34 +95,44 @@ export interface SubscriptionsListOrigin {
 }
 
 /**
- * "Change what stays" for the org's current plan — only when no request set
- * that plan (assigned directly). Otherwise it's on the latest request in
+ * "Choose what stays" for the org's current plan, in the action row — only
+ * when no request set that plan (an automatic move to Basic, a Super Admin
+ * cancel, a plan assigned directly). Otherwise it's on the latest request in
  * Package requests (one place).
  */
-export function OrgLevelWhatStays({ orgId, version, onSaved }: { orgId: string; version: number; onSaved: () => void }) {
-  const { data } = useBillingQuery((c) => c.getSubscription(orgId), [orgId, version]);
-  if (!data?.whatStaysOrgLevel) return null;
+export function OrgLevelWhatStays({ detail, onSaved }: { detail: SubscriptionDetail; onSaved: () => void }) {
+  if (!detail.whatStaysOrgLevel) return null;
   return (
-    <div className="bl-row" data-testid="org-level-what-stays">
-      <AdminWhatStaysButton orgId={orgId} label="Change what stays" onSaved={onSaved} />
-    </div>
+    <span style={{ display: "inline-flex" }} data-testid="org-level-what-stays">
+      <AdminWhatStaysButton orgId={detail.orgId} orgName={detail.orgName} label="Choose what stays" className="btn btn-ghost" onSaved={onSaved} />
+    </span>
+  );
+}
+
+/**
+ * The org page, top to bottom: action row (Extend grace, Cancel = move to
+ * Basic, Choose what stays), plan summary, Package requests, Payments, then
+ * Timeline and Coupon in use.
+ */
+export function AdminSubscriptionDetailBody({ orgId }: { orgId: string }) {
+  // Approving / rejecting a request or saving what stays changes the plan: reload the billing view.
+  const [version, setVersion] = useState(0);
+  const reload = () => setVersion((v) => v + 1);
+  return (
+    <SubscriptionDetailView orgId={orgId} version={version} actions={(d) => <OrgLevelWhatStays detail={d} onSaved={reload} />}>
+      <OrgPackageRequests orgId={orgId} onChanged={reload} />
+    </SubscriptionDetailView>
   );
 }
 
 export function AdminSubscriptionDetailPage({ orgId, origin = {} }: { orgId: string; origin?: SubscriptionsListOrigin }) {
-  // Approving / rejecting a request changes the plan: reload the billing view.
-  const [version, setVersion] = useState(0);
   const back = origin.from
     ? { tab: origin.from, status: origin.status, plan: origin.plan, q: origin.q, page: origin.page }
     : {};
   return (
     <Guard>
       <PageHead eyebrow="Subscriptions" icon="organisation" title="Organisation billing" back={{ to: "adminSubscriptions", params: back, label: "Subscriptions" }} sampleFns={["getSubscription"]} />
-      <div className="bl-stack">
-        <SubscriptionDetailView key={version} orgId={orgId} />
-        <OrgLevelWhatStays orgId={orgId} version={version} onSaved={() => setVersion((v) => v + 1)} />
-        <OrgPackageRequests orgId={orgId} onChanged={() => setVersion((v) => v + 1)} />
-      </div>
+      <AdminSubscriptionDetailBody orgId={orgId} />
     </Guard>
   );
 }

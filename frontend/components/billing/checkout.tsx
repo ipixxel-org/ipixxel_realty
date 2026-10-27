@@ -438,7 +438,8 @@ export function CheckoutScreen({
   }
 
   async function pay() {
-    const whatStaysChoice = preview?.usageConflict && wsPick.choice ? wsPick.choice : undefined;
+    // A choice exists only once the options were shown (an over-limit change); the backend uses it only then.
+    const whatStaysChoice = wsPick.choice ?? undefined;
     await payment.start({ planId, interval, couponCode: coupon ?? undefined, purpose, ...(whatStaysChoice ? { whatStaysChoice } : {}) });
   }
 
@@ -517,7 +518,15 @@ export function CheckoutScreen({
   const missingDetails = overview.billingDetailsMissing;
   // Manual mode over the target's limits: send once they've picked an option
   // (the default picks, or their own saved choice).
-  const conflict = preview?.usageConflict ?? null;
+  // If the preview doesn't say (an older or cached response), the usage on
+  // the overview decides, the same check as the downgrade page.
+  const overByUsage = overview.usage
+    .filter((u) => target.limits[u.key] != null && u.used > target.limits[u.key]!)
+    .map((u) => ({ key: u.key, limit: target.limits[u.key]!, used: u.used }));
+  const conflict =
+    preview?.usageConflict ??
+    (!online && !renewal && preview && !tooSmall && target.id !== overview.plan.id && overByUsage.length ? { items: overByUsage, choicesFit: false } : null);
+  // Disabled until one option is picked: "Keep the default picks", or "I'll choose" with a saved choice.
   const mustChoose = !!conflict && !wsPick.ready;
   // A request waiting for approval: the button keeps its label (Send change request / Pay) but is disabled.
   const waiting = pendingUpgrade?.status === "pending_approval";

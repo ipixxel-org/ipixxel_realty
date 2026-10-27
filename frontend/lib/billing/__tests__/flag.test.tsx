@@ -217,7 +217,7 @@ describe("billing v2 flag", () => {
       </ToastProvider>,
     );
     await settle();
-    expect(apiFetch).toHaveBeenCalledWith("/org/billing/v2");
+    expect(apiFetch).toHaveBeenCalledWith("/org/billing/v2", { cache: "no-store" });
     expect(screen.getByText("Your Growth plan has expired")).toBeInTheDocument();
     // Manual mode: the renewal is a request (Request renewal → the renewal request screen).
     expect(screen.getByRole("link", { name: /Request renewal/ })).toHaveAttribute("href", expect.stringContaining("renew=1"));
@@ -464,7 +464,7 @@ describe("billing v2 flag", () => {
     await settle();
     expect(screen.getByText(/You have 3 users; Basic allows 1/)).toBeInTheDocument();
     expect(screen.getByText(/the extra ones are paused, not deleted/)).toBeInTheDocument();
-    expect(apiFetch).toHaveBeenCalledWith("/org/billing/retention?targetPlanId=uuid-basic");
+    expect(apiFetch).toHaveBeenCalledWith("/org/billing/retention?targetPlanId=uuid-basic", { cache: "no-store" });
     expect(screen.getByText(/Asha Rao/)).toBeInTheDocument(); // the default pick that stays
     // Disabled until one of the two options is picked.
     expect(screen.getByRole("button", { name: /Move to Basic/ })).toBeDisabled();

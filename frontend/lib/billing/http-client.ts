@@ -11,7 +11,9 @@ type Impl = Partial<Omit<BillingClient, "isMock" | "isReal">>;
 /** API errors carry customer-facing messages (and a `code` to branch on) — surface them as BillingError. */
 async function call<T>(path: string, init?: RequestInit): Promise<T> {
   try {
-    return await apiFetch<T>(path, init);
+    // Never from the browser's HTTP cache: billing pages must show the latest
+    // saved state (e.g. right after "Choose what stays" is saved).
+    return await apiFetch<T>(path, { cache: "no-store", ...init });
   } catch (e) {
     if (e instanceof ApiError) {
       throw new BillingError(e.message, e.body?.code ?? null);

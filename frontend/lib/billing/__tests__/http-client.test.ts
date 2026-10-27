@@ -131,3 +131,14 @@ describe("billing http client — step 2", () => {
     await expect(httpBilling.previewCheckout!({ planId: "p1", interval: "monthly" })).rejects.toMatchObject({ message: "Network down", code: null });
   });
 });
+
+describe("billing http client — fresh data", () => {
+  it("never reads from the browser's HTTP cache (GET and PUT)", async () => {
+    await httpBilling.getRetentionChoices!({ targetPlanId: "pro" });
+    expect(apiFetch.mock.calls.at(-1)![1]).toEqual(expect.objectContaining({ cache: "no-store" }));
+    await httpBilling.getBillingOverview!();
+    expect(apiFetch.mock.calls.at(-1)![1]).toEqual(expect.objectContaining({ cache: "no-store" }));
+    await httpBilling.saveRetentionChoices!({ targetPlanId: "pro", userIds: [], projectIds: [], landingPageIds: [] });
+    expect(apiFetch.mock.calls.at(-1)![1]).toEqual(expect.objectContaining({ cache: "no-store", method: "PUT" }));
+  });
+});
