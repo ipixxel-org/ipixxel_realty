@@ -98,9 +98,6 @@ export function requestAmountText(r: PackageChangeRequestRow): string | null {
  * Scheduled changes (to Basic / a smaller plan) are listed read-only: they
  * need no approval.
  */
-/** Rows Super Admin can change what stays on: still open, or applied (then it applies at once). */
-const WHAT_STAYS_EDITABLE = new Set(["pending", "scheduled", "approved", "done"]);
-
 /**
  * Super Admin "Choose what stays" for one organisation — any time, also after
  * the org's own choice is locked. Before the change applies it updates the
@@ -112,7 +109,8 @@ export function AdminWhatStaysButton({
   orgName,
   requestId,
   targetPlanId,
-  label = "Choose what stays",
+  label,
+  editable = true,
   onSaved,
 }: {
   orgId: string;
@@ -120,11 +118,14 @@ export function AdminWhatStaysButton({
   requestId?: string;
   targetPlanId?: string;
   label?: string;
+  /** false: "View what stays", read-only (older applied or closed rows). */
+  editable?: boolean;
   onSaved?: () => void;
 }) {
   const { hasPermission } = useAuth();
   const [open, setOpen] = useState(false);
-  if (!hasPermission("admin_subscriptions", "edit")) return null;
+  const canEdit = editable && hasPermission("admin_subscriptions", "edit");
+  label = label ?? (canEdit ? "Choose what stays" : "View what stays");
   return (
     <>
       <button type="button" className="btn btn-ghost btn-sm" onClick={() => setOpen(true)} data-testid="admin-choose-what-stays">
@@ -297,7 +298,7 @@ export function OrgPackageRequests({ orgId, onChanged }: { orgId: string; onChan
                   <th>Change</th>
                   <th>Amount</th>
                   <th>Status</th>
-                  <th />
+                  <th style={{ textAlign: "right" }}>Action</th>
                 </tr>
               </thead>
               <tbody>
@@ -337,20 +338,6 @@ export function OrgPackageRequests({ orgId, onChanged }: { orgId: string; onChan
                           // What the org chose to keep (the rest is paused on approval).
                           <div className="bl-small" style={{ marginTop: 4 }} data-testid="admin-what-stays">
                             Keeps {whatStaysSummary(r.whatStays)}
-                            {WHAT_STAYS_EDITABLE.has(r.status) ? (
-                              <div style={{ marginTop: 4 }}>
-                                <AdminWhatStaysButton
-                                  orgId={orgId}
-                                  orgName={r.organisation?.name}
-                                  requestId={r.id}
-                                  targetPlanId={r.targetPlanId}
-                                  onSaved={() => {
-                                    void load();
-                                    onChanged?.();
-                                  }}
-                                />
-                              </div>
-                            ) : null}
                           </div>
                         ) : null}
                       </td>
@@ -444,6 +431,34 @@ export function OrgPackageRequests({ orgId, onChanged }: { orgId: string; onChan
                                 Reject
                               </button>
                             ) : null}
+                            {r.whatStays ? (
+                              <AdminWhatStaysButton
+                                orgId={orgId}
+                                orgName={r.organisation?.name}
+                                requestId={r.id}
+                                targetPlanId={r.targetPlanId}
+                                editable={!!r.whatStaysEditable}
+                                onSaved={() => {
+                                  void load();
+                                  onChanged?.();
+                                }}
+                              />
+                            ) : null}
+                          </div>
+                        ) : r.whatStays ? (
+                          // Editable while open, or for the row that put the org on its current plan; view-only otherwise.
+                          <div className="bl-row" style={{ justifyContent: "flex-end" }}>
+                            <AdminWhatStaysButton
+                              orgId={orgId}
+                              orgName={r.organisation?.name}
+                              requestId={r.id}
+                              targetPlanId={r.targetPlanId}
+                              editable={!!r.whatStaysEditable}
+                              onSaved={() => {
+                                void load();
+                                onChanged?.();
+                              }}
+                            />
                           </div>
                         ) : null}
                       </td>

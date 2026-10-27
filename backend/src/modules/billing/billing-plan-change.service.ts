@@ -13,7 +13,11 @@ import {
 } from '../../common/utils/scheduled-change.util';
 import { pendingRequestMessage } from '../package-change-requests/package-change-requests.service';
 import { whatStaysFor } from '../../common/utils/retention.util';
-import { assertWhatStaysConfirmed } from './what-stays';
+import {
+  applyWhatStaysChoice,
+  assertWhatStaysConfirmed,
+  pickedWhatStays,
+} from './what-stays';
 import {
   billingError,
   BillingCheckoutService,
@@ -105,16 +109,13 @@ export class BillingPlanChangeService {
     }
     await this.refuseWhileScheduled(sub);
     const reason = dto.reason?.trim() || null;
-    // Over Basic's limits: "choose what stays" must be confirmed first (a
-    // saved choice that fits, or the default picks).
+    // Over Basic's limits: the org picks "Keep the default picks" or "I'll
+    // choose what stays" (a saved choice that fits) first.
     const free = await findFreePlan(this.prisma);
+    const choice = pickedWhatStays(dto);
     if (free) {
-      await assertWhatStaysConfirmed(
-        this.prisma,
-        orgId,
-        free,
-        dto.acceptDefaultPicks,
-      );
+      await assertWhatStaysConfirmed(this.prisma, orgId, free, choice);
+      await applyWhatStaysChoice(this.prisma, orgId, free.id, choice);
     }
     if (
       sub.status === 'expired' ||
@@ -225,7 +226,7 @@ export class BillingPlanChangeService {
     // Moving to the free plan is cancelling.
     if (isFreePlan(target)) {
       return this.cancel(orgId, userId, {
-        acceptDefaultPicks: dto.acceptDefaultPicks,
+        whatStaysChoice: pickedWhatStays(dto),
       });
     }
     // Manual mode, renewal overdue: any paid plan is a change request at its
@@ -235,7 +236,7 @@ export class BillingPlanChangeService {
         planId: target.id,
         interval: dto.interval ?? sub.billingCycle,
         purpose: 'purchase',
-        acceptDefaultPicks: dto.acceptDefaultPicks,
+        whatStaysChoice: pickedWhatStays(dto),
       });
       return this.overview.getOverview(orgId);
     }
@@ -281,12 +282,9 @@ export class BillingPlanChangeService {
     }
     // Over the smaller plan's limits is fine once "choose what stays" is
     // confirmed: what doesn't fit is paused when it starts (retention.util).
-    await assertWhatStaysConfirmed(
-      this.prisma,
-      orgId,
-      target,
-      dto.acceptDefaultPicks,
-    );
+    const choice = pickedWhatStays(dto);
+    await assertWhatStaysConfirmed(this.prisma, orgId, target, choice);
+    await applyWhatStaysChoice(this.prisma, orgId, target.id, choice);
 
     await this.prisma.subscription.update({
       where: { id: sub.id },

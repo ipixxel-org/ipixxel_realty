@@ -6,11 +6,25 @@ import type { UsageConflictV2 } from './billing.types';
 
 /**
  * "Choose what stays" is part of every plan change where the org is over the
- * target plan's limits. The org confirms it once — a saved choice for that
- * plan that fits, or "Keep the default picks shown above" — and can change it
- * until the change is decided or takes effect. After that only Super Admin
- * can change it (admin endpoints in BillingRetentionService).
+ * target plan's limits. Every time, the org picks one of two options
+ * (whatStaysChoice): 'default' ("Keep the default picks") or 'saved' ("I'll
+ * choose what stays", which needs a saved choice that fits). They can change
+ * it until the change is decided or takes effect; after that only Super Admin
+ * can — for an open request, or the one that put the org on its current plan
+ * (admin endpoints in BillingRetentionService).
  */
+
+export type WhatStaysChoice = 'default' | 'saved';
+
+/** The option the org picked; `acceptDefaultPicks: true` (older clients) means 'default'. */
+export function pickedWhatStays(dto: {
+  whatStaysChoice?: WhatStaysChoice;
+  acceptDefaultPicks?: boolean;
+}): WhatStaysChoice | undefined {
+  return (
+    dto.whatStaysChoice ?? (dto.acceptDefaultPicks ? 'default' : undefined)
+  );
+}
 
 export const WHAT_STAYS_LOCKED_MESSAGE =
   'To change what stays, contact our support team.';
@@ -45,29 +59,66 @@ export async function whatStaysConflict(
 }
 
 /**
- * Refuse a plan change the org is over on until they've confirmed what stays:
- * a saved choice that fits, or `acceptDefaultPicks` (the checkbox). Which one
- * was used ends up in whatStays.choice ('saved' / 'default').
+ * Refuse a plan change the org is over on until they've picked an option:
+ * nothing picked, or 'saved' without a saved choice that fits →
+ * choose_what_stays. Returns the conflict (null when nothing is over).
  */
 export async function assertWhatStaysConfirmed(
   db: Db,
   orgId: string,
   target: { id: string; name: string; limits: unknown },
-  acceptDefaultPicks: boolean | undefined,
-): Promise<void> {
+  choice: WhatStaysChoice | undefined,
+): Promise<UsageConflictV2 | null> {
   const conflict = await whatStaysConflict(db, orgId, target);
-  if (conflict && !conflict.choicesFit && !acceptDefaultPicks) {
+  if (conflict) refuseUnlessPicked(target.name, conflict, choice);
+  return conflict;
+}
+
+/** The same check when the conflict is already worked out (checkout preview). */
+export function refuseUnlessPicked(
+  planName: string,
+  conflict: UsageConflictV2,
+  choice: WhatStaysChoice | undefined,
+): void {
+  if (!choice) {
     throw billingError(
       'choose_what_stays',
-      usageConflictMessage(target.name, conflict),
+      usageConflictMessage(planName, conflict),
+    );
+  }
+  if (choice === 'saved' && !conflict.choicesFit) {
+    throw billingError(
+      'choose_what_stays',
+      `Save your choice of what stays on ${planName} first, or keep the default picks.`,
     );
   }
 }
 
-/** A request / scheduled change the org can still change what stays for. */
-export const OPEN_REQUEST_STATUSES = ['pending', 'scheduled'] as const;
-/** A request / scheduled change that was applied (the org moved to its plan). */
-export const APPLIED_REQUEST_STATUSES = ['approved', 'done'] as const;
+/**
+ * "Keep the default picks" means the defaults apply even when an earlier
+ * choice was saved for that plan: drop it (whatStays.choice is then
+ * 'default'). Call once the change is accepted.
+ */
+export async function applyWhatStaysChoice(
+  db: Pick<PrismaClient, 'retentionChoice'>,
+  orgId: string,
+  targetPlanId: string,
+  choice: WhatStaysChoice | undefined,
+): Promise<void> {
+  if (choice !== 'default') return;
+  await db.retentionChoice.deleteMany({
+    where: { organisationId: orgId, targetPlanId },
+  });
+}
+
+export {
+  OPEN_REQUEST_STATUSES,
+  APPLIED_REQUEST_STATUSES,
+  WHAT_STAYS_OLD_REQUEST_MESSAGE,
+  adminCanEditWhatStays,
+  currentPlanRequestId,
+} from '../../common/utils/what-stays-rows.util';
+import { OPEN_REQUEST_STATUSES } from '../../common/utils/what-stays-rows.util';
 
 /**
  * Whether the org may no longer change what stays for `targetPlanId`:

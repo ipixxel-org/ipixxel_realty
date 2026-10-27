@@ -152,17 +152,30 @@ describe('confirm what stays before the plan change', () => {
     ]);
   });
 
-  it('a saved choice that fits is enough; moving to Basic needs it too', async () => {
+  it('"I\'ll choose" needs a saved choice that fits; nothing picked is refused even with one', async () => {
     const { changes, retention, db } = setup();
     await expect(changes.cancel('org-1', 'u-admin', {})).rejects.toMatchObject({
       response: { code: 'choose_what_stays' },
+    });
+    await expect(
+      changes.cancel('org-1', 'u-admin', { whatStaysChoice: 'saved' }),
+    ).rejects.toMatchObject({
+      response: {
+        code: 'choose_what_stays',
+        message:
+          'Save your choice of what stays on Basic first, or keep the default picks.',
+      },
     });
     await retention.saveChoices(
       'org-1',
       'u-admin',
       keep(['u-admin', 'u-2'], 'basic'),
     );
-    await changes.cancel('org-1', 'u-admin', {});
+    // A saved choice alone isn't enough: the org picks an option every time.
+    await expect(changes.cancel('org-1', 'u-admin', {})).rejects.toMatchObject({
+      response: { code: 'choose_what_stays' },
+    });
+    await changes.cancel('org-1', 'u-admin', { whatStaysChoice: 'saved' });
     expect(db.subscription.rows[0].cancelAtPeriodEnd).toBe(true);
     const row = db.packageChangeRequest.rows.find(
       (r: any) => r.kind === 'scheduled_change',
@@ -340,5 +353,112 @@ describe('Super Admin can change what stays any time', () => {
         requestId: id,
       }),
     ).rejects.toMatchObject({ response: { code: 'request_closed' } });
+  });
+});
+
+describe('the picked option', () => {
+  it('"Keep the default picks" applies the defaults even over an earlier saved choice', async () => {
+    const { changes, retention, db } = setup();
+    await retention.saveChoices('org-1', 'u-admin', keep(['u-admin', 'u-2']));
+    await changes.scheduleDowngrade('org-1', 'u-admin', {
+      planId: 'starter',
+      whatStaysChoice: 'default',
+    });
+    expect(db.retentionChoice.rows).toHaveLength(0);
+    const row = db.packageChangeRequest.rows.find(
+      (r: any) => r.kind === 'scheduled_change',
+    );
+    expect(row.whatStays.choice).toBe('default');
+  });
+});
+
+describe('Super Admin: only open rows and the current plan’s row can change', () => {
+  it('older applied rows are view-only and refused', async () => {
+    const { db, changes, retention } = setup();
+    await changes.scheduleDowngrade('org-1', 'u-admin', {
+      planId: 'starter',
+      whatStaysChoice: 'default',
+    });
+    db.subscription.rows[0].renewsAt = new Date(Date.now() - 60_000);
+    await applyOrgSubscriptionLifecycle(db as never, 'org-1');
+    const current = db.packageChangeRequest.rows.find(
+      (r: any) => r.kind === 'scheduled_change',
+    );
+    expect(current.status).toBe('done');
+    // An older approved request (to Growth), from before.
+    db.packageChangeRequest.rows.push({
+      id: 'req-old',
+      orgId: 'org-1',
+      currentPlanId: 'basic',
+      targetPlanId: 'growth',
+      billingCycle: 'monthly',
+      kind: 'request',
+      status: 'approved',
+      reviewedAt: d(-90),
+      createdAt: d(-91),
+      whatStays: { planId: 'growth', choice: 'default', applied: true },
+    });
+
+    expect(
+      (await retention.adminGetChoices('org-1', undefined, current.id)).locked,
+    ).toBe(false);
+    expect(
+      (await retention.adminGetChoices('org-1', undefined, 'req-old')).locked,
+    ).toBe(true);
+    await expect(
+      retention.adminSaveChoices('org-1', 'admin-1', {
+        ...keep(['u-admin', 'u-2'], 'growth'),
+        requestId: 'req-old',
+      }),
+    ).rejects.toMatchObject({
+      response: {
+        code: 'what_stays_old_request',
+        message:
+          "Only an open request's choice, or the one for the organisation's current plan, can be changed.",
+      },
+    });
+    // The current plan's row still works.
+    await expect(
+      retention.adminSaveChoices('org-1', 'admin-1', {
+        ...keep(['u-admin', 'u-2']),
+        requestId: current.id,
+      }),
+    ).resolves.toMatchObject({ locked: false });
+  });
+});
+
+describe('the read-only page shows what the request recorded', () => {
+  it("a decided request: its own copy (kept / paused), not today's picks", async () => {
+    const { retention, db, addRequest } = setup();
+    const id = addRequest('rejected');
+    db.packageChangeRequest.rows.find((r: any) => r.id === id).whatStays = {
+      planId: 'starter',
+      planName: 'Starter',
+      choice: 'saved',
+      applied: false,
+      users: {
+        limit: 2,
+        total: 4,
+        kept: [
+          { id: 'u-admin', name: 'u-admin' },
+          { id: 'u-4', name: 'u-4' },
+        ],
+        paused: [
+          { id: 'u-2', name: 'u-2' },
+          { id: 'u-3', name: 'u-3' },
+        ],
+      },
+    };
+    const c = await retention.getChoices('org-1', undefined, id);
+    expect(c).toMatchObject({ locked: true, isDefault: false });
+    expect(c.users.filter((u) => u.selected).map((u) => u.id)).toEqual([
+      'u-admin',
+      'u-4',
+    ]);
+    expect(c.users.filter((u) => !u.selected).map((u) => u.id)).toEqual([
+      'u-2',
+      'u-3',
+    ]);
+    expect(c.projects).toEqual([]);
   });
 });

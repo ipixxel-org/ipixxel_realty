@@ -62,6 +62,12 @@ import {
   type BillingDetailsField,
 } from './org-billing-details';
 import { BillingInvoiceMailer } from './billing-invoice-mailer.service';
+import {
+  applyWhatStaysChoice,
+  pickedWhatStays,
+  refuseUnlessPicked,
+  type WhatStaysChoice,
+} from './what-stays';
 import { isFreePlan, isInternalPlan, planRanker } from './plan-modules';
 import type {
   CheckoutPreviewV2,
@@ -230,23 +236,17 @@ export class BillingCheckoutService implements OnModuleInit {
     if (ctx.couponError) throw billingError('coupon_invalid', ctx.couponError);
     // Never take money for a plan the org doesn't fit (fulfil would hold it).
     if (ctx.usageError) throw billingError('plan_too_small', ctx.usageError);
-    // Manual mode over the target's limits: send only once they've confirmed
-    // what stays — a saved choice that fits, or the default picks (checkbox).
-    if (
-      ctx.usageConflict &&
-      !ctx.usageConflict.choicesFit &&
-      !dto.acceptDefaultPicks
-    ) {
-      throw billingError(
-        'choose_what_stays',
-        usageConflictMessage(ctx.quote.toPlan.name, ctx.usageConflict),
-      );
+    // Manual mode over the target's limits: send only once they've picked an
+    // option — the default picks, or their own saved choice (which must fit).
+    const choice = pickedWhatStays(dto);
+    if (ctx.usageConflict) {
+      refuseUnlessPicked(ctx.quote.toPlan.name, ctx.usageConflict, choice);
     }
     // Nothing to pay (a 100% coupon): apply it now, in either mode.
     if (ctx.quote.totalPaise === 0)
-      return this.activateFree(orgId, userId, ctx);
+      return this.activateFree(orgId, userId, ctx, choice);
     return ctx.mode.mode === 'manual'
-      ? this.startManual(orgId, userId, ctx)
+      ? this.startManual(orgId, userId, ctx, choice)
       : this.startOnline(orgId, userId, ctx);
   }
 
@@ -255,8 +255,12 @@ export class BillingCheckoutService implements OnModuleInit {
     orgId: string,
     userId: string,
     ctx: QuoteContext,
+    choice?: WhatStaysChoice,
   ): Promise<StartCheckoutResultV2> {
     const q = ctx.quote;
+    if (ctx.usageConflict) {
+      await applyWhatStaysChoice(this.prisma, orgId, q.toPlan.id, choice);
+    }
     const checkout = await this.prisma.billingCheckout.create({
       data: this.checkoutData(orgId, userId, ctx, ctx.mode.mode),
     });
@@ -288,6 +292,7 @@ export class BillingCheckoutService implements OnModuleInit {
     orgId: string,
     userId: string,
     ctx: QuoteContext,
+    choice?: WhatStaysChoice,
   ): Promise<StartCheckoutResultV2> {
     const q = ctx.quote;
     const existing = await this.pendingRequest(orgId);
@@ -328,7 +333,9 @@ export class BillingCheckoutService implements OnModuleInit {
       },
     });
     if (ctx.usageConflict) {
-      // Keep a copy of what they chose to keep with the request (Requests tab).
+      // "Keep the default picks" drops an earlier saved choice for the plan;
+      // then keep a copy of what stays with the request (Requests tab).
+      await applyWhatStaysChoice(this.prisma, orgId, q.toPlan.id, choice);
       await this.saveWhatStays(orgId, requestId, q.toPlan.id);
     }
     return {

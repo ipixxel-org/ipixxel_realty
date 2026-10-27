@@ -4,6 +4,8 @@ import type { Plan, Subscription } from '@prisma/client';
 import { PrismaService } from '../../database/prisma.service';
 import {
   applyRetention,
+  type WhatStays,
+  type WhatStaysGroup,
   RETENTION_KINDS,
   loadRetentionCandidates,
   pickRetention,
@@ -18,9 +20,12 @@ import {
   notifyOrgAdmins,
 } from '../../common/utils/subscription-lifecycle.util';
 import {
+  adminCanEditWhatStays,
   APPLIED_REQUEST_STATUSES,
+  currentPlanRequestId,
   OPEN_REQUEST_STATUSES,
   WHAT_STAYS_LOCKED_MESSAGE,
+  WHAT_STAYS_OLD_REQUEST_MESSAGE,
   whatStaysLockedForOrg,
 } from './what-stays';
 import { billingError } from './billing-checkout.service';
@@ -96,12 +101,16 @@ export class BillingRetentionService {
     targetPlanId?: string,
     requestId?: string,
   ) {
-    let request: { id: string; status: string; targetPlanId: string } | null =
-      null;
+    let request: {
+      id: string;
+      status: string;
+      targetPlanId: string;
+      whatStays: Prisma.JsonValue;
+    } | null = null;
     if (requestId) {
       request = await this.prisma.packageChangeRequest.findFirst({
         where: { id: requestId, orgId },
-        select: { id: true, status: true, targetPlanId: true },
+        select: { id: true, status: true, targetPlanId: true, whatStays: true },
       });
       if (!request) {
         throw billingError('request_not_found', 'That request was not found.');
@@ -136,7 +145,7 @@ export class BillingRetentionService {
     requestId?: string,
   ): Promise<RetentionChoicesV2> {
     const { sub, active } = await this.context(orgId);
-    const { target } = await this.resolveTarget(
+    const { target, request } = await this.resolveTarget(
       orgId,
       sub,
       active,
@@ -149,24 +158,83 @@ export class BillingRetentionService {
       target.id,
       requestId,
     );
+    if (locked && request?.whatStays) {
+      return this.fromSnapshot(sub, active, target, request.whatStays);
+    }
     return this.choicesFor(orgId, sub, active, target, locked);
   }
 
-  /** GET /admin/billing/subscriptions/:orgId/retention — never locked. */
+  /**
+   * A decided request's own copy of what stays (kept / paused, only the
+   * limits it was over), shaped like RetentionChoices for the read-only page:
+   * history, not today's picks.
+   */
+  private fromSnapshot(
+    sub: SubWithPlan | null,
+    active: Plan[],
+    target: Plan,
+    snapshot: Prisma.JsonValue,
+  ): RetentionChoicesV2 {
+    const w = snapshot as unknown as WhatStays;
+    const group = (g?: WhatStaysGroup): RetentionItemV2[] =>
+      g
+        ? [
+            ...g.kept.map((i) => ({ ...i, selected: true })),
+            ...g.paused.map((i) => ({ ...i, selected: false })),
+          ].map((i) => ({
+            id: i.id,
+            name: i.name,
+            detail: '',
+            reason: '',
+            defaultPicked: w.choice === 'default' && i.selected,
+            selected: i.selected,
+            locked: false,
+          }))
+        : [];
+    const rank = planRanker(
+      active.some((p) => p.id === target.id) ? active : [...active, target],
+    )(target);
+    return {
+      targetPlan: toBillingPlan(target, rank),
+      appliesOn: this.appliesOn(sub, target),
+      isDefault: w.choice !== 'saved',
+      locked: true,
+      users: group(w.users),
+      projects: group(w.projects),
+      landingPages: group(w.landingPages),
+      templates: group(w.templates),
+    };
+  }
+
+  /**
+   * GET /admin/billing/subscriptions/:orgId/retention. Without a request:
+   * the org's current plan, editable. For a request: editable while it's open
+   * or when it put the org on its current plan; older rows are view-only
+   * (`locked`).
+   */
   async adminGetChoices(
     orgId: string,
     targetPlanId?: string,
     requestId?: string,
   ): Promise<RetentionChoicesV2> {
     const { sub, active } = await this.context(orgId);
-    const { target } = await this.resolveTarget(
+    const { target, request } = await this.resolveTarget(
       orgId,
       sub,
       active,
       targetPlanId ?? (requestId ? undefined : sub?.planId),
       requestId,
     );
-    return this.choicesFor(orgId, sub, active, target, false);
+    const locked = request
+      ? !adminCanEditWhatStays(
+          request,
+          await currentPlanRequestId(this.prisma, orgId),
+        )
+      : false;
+    if (locked && request?.whatStays) {
+      return this.fromSnapshot(sub, active, target, request.whatStays);
+    }
+    return this.choicesFor(orgId, sub, active, target, locked);
   }
 
   private async choicesFor(
@@ -326,6 +394,18 @@ export class BillingRetentionService {
       throw billingError(
         'request_closed',
         "This change wasn't applied, so there's nothing to change.",
+      );
+    }
+    // An older applied row is history: only the one that put the org on its
+    // current plan can still be changed (applied at once).
+    if (
+      request &&
+      requestApplied &&
+      request.id !== (await currentPlanRequestId(this.prisma, orgId))
+    ) {
+      throw billingError(
+        'what_stays_old_request',
+        WHAT_STAYS_OLD_REQUEST_MESSAGE,
       );
     }
     const ids = await this.validate(orgId, target, dto);

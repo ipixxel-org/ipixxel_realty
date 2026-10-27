@@ -1,10 +1,10 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Icon } from "@/components/icons";
 import { useToast } from "@/components/ui/toast";
 import { formatDate } from "@/lib/billing/pricing";
-import type { RetentionChoices, RetentionItem } from "@/lib/billing/types";
+import type { RetentionChoices, RetentionItem, WhatStaysChoice } from "@/lib/billing/types";
 import { useBillingEnv, useBillingQuery, useOptionalOrgBilling } from "./context";
 import { Banner, BLink, countLabel, ErrorNote, Loading, Section, WhatStaysLockedNote } from "./ui";
 
@@ -196,7 +196,7 @@ function Editor({
 }
 
 /** What stays, read-only: once the change was decided or took effect only our team can change it. */
-export function WhatStaysReadOnly({ choices }: { choices: RetentionChoices }) {
+export function WhatStaysReadOnly({ choices, admin = false }: { choices: RetentionChoices; admin?: boolean }) {
   const t = choices.targetPlan;
   const groups = [
     ["Users", choices.users],
@@ -207,8 +207,14 @@ export function WhatStaysReadOnly({ choices }: { choices: RetentionChoices }) {
   return (
     <div className="bl-stack" data-testid="what-stays-read-only">
       <Banner tone="gray" icon="lock" title={`What stays on ${t.name}`}>
-        {choices.isDefault ? "Our default picks. " : "Your choice. "}
-        <WhatStaysLockedNote />
+        {admin ? (
+          "View only: only an open request's choice, or the one for the organisation's current plan, can be changed."
+        ) : (
+          <>
+            {choices.isDefault ? "Our default picks. " : "Your choice. "}
+            <WhatStaysLockedNote />
+          </>
+        )}
       </Banner>
       {groups.map(([title, items]) => {
         if (!items?.length) return null;
@@ -227,11 +233,13 @@ export function WhatStaysReadOnly({ choices }: { choices: RetentionChoices }) {
           </Section>
         );
       })}
-      <div className="bl-row">
-        <BLink to="overview" className="btn btn-ghost">
-          Back to billing
-        </BLink>
-      </div>
+      {admin ? null : (
+        <div className="bl-row">
+          <BLink to="overview" className="btn btn-ghost">
+            Back to billing
+          </BLink>
+        </div>
+      )}
     </div>
   );
 }
@@ -255,7 +263,7 @@ export function ChooseWhatStaysScreen({
   );
   if (error) return <ErrorNote message={error} />;
   if (!data) return <Loading what={admin ? "their users, projects, pages and templates" : "your users, projects, pages and templates"} />;
-  if (data.locked && !admin) return <WhatStaysReadOnly choices={data} />;
+  if (data.locked) return <WhatStaysReadOnly choices={data} admin={!!admin} />;
   return (
     <Editor
       key={`${data.targetPlan.id}-${version}`}
@@ -270,55 +278,98 @@ export function ChooseWhatStaysScreen({
   );
 }
 
+/** The picked option and whether the main button may go ahead. */
+export interface WhatStaysPick {
+  choice: WhatStaysChoice | null;
+  /** "Keep the default picks", or "I'll choose" with a saved choice that fits. */
+  ready: boolean;
+}
+
 /**
- * Over the target plan's limits with no saved choice: the main button waits
- * for this tick (or a saved choice). `showPicks` lists the default picks
- * above the checkbox, for screens that don't show them already.
+ * Over the target plan's limits: two radio options, picked every time (none
+ * is selected when the page opens). "Keep the default picks" lists what we'd
+ * keep; "I'll choose what stays" opens the Choose what stays screen and,
+ * once saved, lists their picks with Edit. `chooseParams` is where that
+ * screen's Back returns to (the request or plan change, with this option
+ * selected again).
  */
-export function KeepDefaultPicks({
+export function WhatStaysOptions({
   targetPlanId,
-  checked,
+  initialChoice = null,
+  chooseParams,
   onChange,
-  showPicks = true,
 }: {
   targetPlanId: string;
-  checked: boolean;
-  onChange: (on: boolean) => void;
-  showPicks?: boolean;
+  /** Only when coming back from Choose what stays (`pick=saved`); otherwise nothing is selected. */
+  initialChoice?: WhatStaysChoice | null;
+  chooseParams: Record<string, string | undefined>;
+  onChange: (pick: WhatStaysPick) => void;
 }) {
-  const { data } = useBillingQuery((c) => (showPicks ? c.getRetentionChoices({ targetPlanId }) : Promise.resolve(null)), [targetPlanId, showPicks]);
-  const groups = data
-    ? ([
-        ["Users", data.users],
-        ["Projects", data.projects],
-        ["Landing pages", data.landingPages],
-        ["Templates", data.templates],
-      ] as const)
-    : [];
-  return (
-    <div className="bl-stack" style={{ gap: 6 }} data-testid="keep-default-picks">
-      {showPicks && data ? (
-        <div className="bl-picks bl-small">
-          <div className="bl-muted" style={{ fontWeight: 700 }}>
-            What stays on {data.targetPlan.name} if you don&apos;t choose
+  const { data, error } = useBillingQuery((c) => c.getRetentionChoices({ targetPlanId }), [targetPlanId]);
+  const [choice, setChoice] = useState<WhatStaysChoice | null>(initialChoice);
+  const saved = !!data && !data.isDefault;
+  const ready = choice === "default" || (choice === "saved" && saved);
+  useEffect(() => {
+    onChange({ choice, ready });
+    // onChange is the parent's state setter wrapper; re-run only when the pick changes.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [choice, ready]);
+
+  if (error) return <ErrorNote message={error} />;
+  if (!data) return <Loading what="what stays" />;
+  const groups = [
+    ["Users", data.users],
+    ["Projects", data.projects],
+    ["Landing pages", data.landingPages],
+    ["Templates", data.templates],
+  ] as const;
+  const list = (pick: (i: RetentionItem) => boolean) => (
+    <div className="bl-picks bl-small" style={{ marginTop: 4 }}>
+      {groups.map(([title, items]) =>
+        items?.length ? (
+          <div key={title}>
+            <b>{title}:</b> {items.filter(pick).map((i) => i.name).join(", ") || "none"}
           </div>
-          {groups.map(([title, items]) =>
-            items?.length ? (
-              <div key={title}>
-                <b>{title}:</b>{" "}
-                {items
-                  .filter((i) => i.defaultPicked)
-                  .map((i) => i.name)
-                  .join(", ") || "none"}
-              </div>
-            ) : null,
-          )}
+        ) : null,
+      )}
+    </div>
+  );
+  const name = `what-stays-${targetPlanId}`;
+  const choose = { target: targetPlanId, ...chooseParams };
+  return (
+    <div className="bl-stack" style={{ gap: 10 }} data-testid="what-stays-options" role="radiogroup" aria-label="What stays">
+      <div>
+        <label className="bl-row" style={{ gap: 8, alignItems: "center", cursor: "pointer" }}>
+          <input type="radio" name={name} checked={choice === "default"} onChange={() => setChoice("default")} />
+          <b>Keep the default picks</b>
+        </label>
+        <div style={{ marginLeft: 24 }} data-testid="what-stays-defaults">
+          {list((i) => i.defaultPicked)}
         </div>
-      ) : null}
-      <label className="bl-row" style={{ gap: 8, alignItems: "center", cursor: "pointer" }}>
-        <input type="checkbox" checked={checked} onChange={(e) => onChange(e.target.checked)} />
-        <span>Keep the default picks shown above</span>
-      </label>
+      </div>
+      <div>
+        <label className="bl-row" style={{ gap: 8, alignItems: "center", cursor: "pointer" }}>
+          <input type="radio" name={name} checked={choice === "saved"} onChange={() => setChoice("saved")} />
+          <b>I&apos;ll choose what stays</b>
+        </label>
+        {choice === "saved" ? (
+          <div style={{ marginLeft: 24, marginTop: 4 }} data-testid="what-stays-own">
+            {saved ? (
+              <>
+                <div className="bl-muted bl-small">Your earlier choice</div>
+                {list((i) => i.selected)}
+                <BLink to="chooseWhatStays" params={choose} className="btn btn-ghost btn-sm" style={{ marginTop: 4 }}>
+                  Edit
+                </BLink>
+              </>
+            ) : (
+              <BLink to="chooseWhatStays" params={choose} className="btn btn-primary btn-sm">
+                Choose what stays
+              </BLink>
+            )}
+          </div>
+        ) : null}
+      </div>
     </div>
   );
 }

@@ -7,6 +7,10 @@ import {
 } from '../../common/utils/plan-quota.util';
 import { applyPlanChange } from '../../common/utils/plan-change.util';
 import { whatStaysFor } from '../../common/utils/retention.util';
+import {
+  adminCanEditWhatStays,
+  currentPlanRequestId,
+} from '../../common/utils/what-stays-rows.util';
 import { settleCoupon } from '../billing/coupon-settlement';
 import { findCouponFor } from '../billing/coupon-lookup';
 import { normaliseCouponCode } from '../billing/coupon-rules';
@@ -442,12 +446,21 @@ export class PackageChangeRequestsService {
       }),
       this.prisma.packageChangeRequest.count({ where }),
     ]);
+    // Super Admin "Choose what stays": editable on open rows and on the one
+    // that put the org on its current plan; every other row is view-only.
+    const currentByOrg = new Map<string, string | null>();
+    for (const orgId of new Set(rows.map((r) => r.orgId))) {
+      currentByOrg.set(orgId, await currentPlanRequestId(this.prisma, orgId));
+    }
 
     return {
       data: rows.map((r) => {
         const { offlinePayment, ...rest } = r;
         return {
           ...rest,
+          whatStaysEditable:
+            !!r.whatStays &&
+            adminCanEditWhatStays(r, currentByOrg.get(r.orgId) ?? null),
           ...requestLabel(r.billingCheckout, r.targetPlan.name),
           payment: offlinePayment ? requestPaymentView(offlinePayment) : null,
           quote: r.billingCheckout ? requestQuoteView(r.billingCheckout) : null,

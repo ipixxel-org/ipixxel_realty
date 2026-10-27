@@ -422,9 +422,15 @@ export interface StartCheckoutRequest {
   interval: BillingInterval;
   couponCode?: string;
   purpose: "purchase" | "renewal";
-  /** Over the plan's limits with no saved choice: the org ticked "Keep the default picks shown above". */
-  acceptDefaultPicks?: boolean;
+  /** Over the plan's limits: the option the org picked (see WhatStaysChoice). */
+  whatStaysChoice?: WhatStaysChoice;
 }
+
+/**
+ * "Keep the default picks" or "I'll choose what stays" (needs a saved choice
+ * that fits) — picked every time a change is over the target's limits.
+ */
+export type WhatStaysChoice = "default" | "saved";
 
 export type StartCheckoutResponse =
   /** Nothing to pay (e.g. a 100% coupon) — the plan is already active. */
@@ -504,16 +510,16 @@ export interface AdminCheckoutRow {
 
 export interface CancelPlanRequest {
   reason?: string;
-  /** Over Basic's limits with no saved choice: "Keep the default picks shown above". */
-  acceptDefaultPicks?: boolean;
+  /** Over Basic's limits: the option the org picked. */
+  whatStaysChoice?: WhatStaysChoice;
 }
 
 export interface ScheduleDowngradeRequest {
   planId: PlanId;
   /** Defaults to the current interval; same plan yearly → monthly is a downgrade too. */
   interval?: BillingInterval;
-  /** Over the smaller plan's limits with no saved choice: "Keep the default picks shown above". */
-  acceptDefaultPicks?: boolean;
+  /** Over the smaller plan's limits: the option the org picked. */
+  whatStaysChoice?: WhatStaysChoice;
 }
 
 /* ---------------------------------------------------- Choose what stays */

@@ -18,7 +18,7 @@ import type { OrgPlanRequest, WhatStays } from "@/lib/billing/types";
 import { UndoButton } from "./banners";
 import { useBillingEnv, useBillingQuery, useOrgBilling } from "./context";
 import { BillingDialog, DialogActions } from "./dialog";
-import { BLink, Empty, ErrorNote, Loading, Section, WhatStaysLockedNote } from "./ui";
+import { BLink, Empty, ErrorNote, Loading, Section } from "./ui";
 
 const STATUS_BADGE: Record<OrgPlanRequest["status"], string> = {
   pending: "b-amber",
@@ -63,47 +63,21 @@ export function whatStaysSummary(w: WhatStays): string {
 }
 
 /**
- * What the request keeps on the new plan, with the names. While it's open
- * (pending, or a scheduled change not yet in effect) "Change what stays";
- * once decided or in effect it's view-only: "View what stays" and "contact
- * our support team".
+ * What the request keeps on the new plan: the short summary and one button —
+ * "Change what stays" while it's open (pending, or a scheduled change not yet
+ * in effect), "View" once decided or applied. Both open the choose-what-stays
+ * page for this request; the API makes it read-only once it's locked.
  */
 export function WhatStaysCell({ whatStays: w, editable, requestId }: { whatStays: WhatStays | null; editable: boolean; requestId?: string }) {
   if (!w) return <span className="bl-muted">Everything fits</span>;
-  const source = w.applied ? "Applied" : w.choice === "saved" ? "Your choice" : "Our default picks";
   return (
     <div className="bl-small" data-testid="what-stays">
       <div>
         Keeps <b>{whatStaysSummary(w)}</b>
       </div>
-      <div className="bl-muted">{source}</div>
-      <details style={{ marginTop: 4 }}>
-        <summary style={{ cursor: "pointer" }}>{editable ? "See what stays" : "View what stays"}</summary>
-        {WHAT_STAYS_GROUPS.map(([k, noun]) => {
-          const g = w[k];
-          if (!g) return null;
-          return (
-            <div key={k} style={{ marginTop: 6 }}>
-              <div style={{ textTransform: "capitalize", fontWeight: 600 }}>
-                {noun} (limit {g.limit})
-              </div>
-              <div>Stays active: {g.kept.map((i) => i.name).join(", ") || "—"}</div>
-              <div className="bl-muted">
-                {w.applied ? "Paused" : "Will be paused"}: {g.paused.map((i) => i.name).join(", ") || "—"}
-              </div>
-            </div>
-          );
-        })}
-      </details>
-      {editable ? (
-        <BLink to="chooseWhatStays" params={{ target: w.planId, back: "requests", request: requestId }} className="btn btn-ghost btn-sm" style={{ marginTop: 6 }}>
-          Change what stays
-        </BLink>
-      ) : (
-        <div style={{ marginTop: 6 }}>
-          <WhatStaysLockedNote compact />
-        </div>
-      )}
+      <BLink to="chooseWhatStays" params={{ target: w.planId, back: "requests", request: requestId }} className="btn btn-ghost btn-sm" style={{ marginTop: 6 }}>
+        {editable ? "Change what stays" : "View"}
+      </BLink>
     </div>
   );
 }

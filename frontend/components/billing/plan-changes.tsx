@@ -7,10 +7,10 @@ import { isOverdueManual, planChangeRoute } from "@/lib/billing/direction";
 import { formatDate, packagePriceText, planPrice } from "@/lib/billing/pricing";
 import type { BillingInterval } from "@/lib/billing/types";
 import { planChangeBlock } from "@/lib/billing/requests";
-import { PicksSummary, ScheduledChangeNote } from "./banners";
+import { ScheduledChangeNote } from "./banners";
 import { useBillingEnv, useBillingQuery, useOrgBilling } from "./context";
 import { BillingDialog, DialogActions } from "./dialog";
-import { KeepDefaultPicks } from "./choose-what-stays";
+import { WhatStaysOptions, type WhatStaysPick } from "./choose-what-stays";
 import { Banner, BillingRedirect, BLink, countLabel, ErrorNote, Kv, Loading, Section, useCheckoutLive } from "./ui";
 
 function ConfirmDialog({
@@ -59,17 +59,25 @@ const REASONS = ["Too expensive", "Missing a feature we need", "Project finished
 /** "23 Dec 2026", or a fallback when there's no date. */
 const onDate = (iso: string | null | undefined, fallback: string) => (iso ? formatDate(iso) : fallback);
 
-export function DowngradeScreen({ planId, interval: wanted }: { planId: string; interval?: BillingInterval }) {
+export function DowngradeScreen({
+  planId,
+  interval: wanted,
+  initialPick = null,
+}: {
+  planId: string;
+  interval?: BillingInterval;
+  /** Back from Choose what stays (`pick=saved`): "I'll choose what stays" stays selected. */
+  initialPick?: WhatStaysPick["choice"];
+}) {
   const { client, nav, canEdit } = useBillingEnv();
   const { overview, refresh } = useOrgBilling();
   const { toast } = useToast();
   const { data: plans } = useBillingQuery((c) => c.listPlans(), []);
-  const { data: retention } = useBillingQuery((c) => c.getRetentionChoices({ targetPlanId: planId }), [planId]);
   const [confirm, setConfirm] = useState(false);
   const [busy, setBusy] = useState(false);
   const [reason, setReason] = useState("");
-  // Over the smaller plan's limits with no saved choice: "Keep the default picks shown above".
-  const [acceptDefaults, setAcceptDefaults] = useState(false);
+  // Over the smaller plan's limits: "Keep the default picks" / "I'll choose what stays", picked every time.
+  const [wsPick, setWsPick] = useState<WhatStaysPick>({ choice: null, ready: false });
   const live = useCheckoutLive(overview);
   if (!overview || !plans) return <Loading />;
   const target = plans.find((p) => p.id === planId);
@@ -115,15 +123,14 @@ export function DowngradeScreen({ planId, interval: wanted }: { planId: string; 
   // Until "choose what stays" is live, nothing can be paused: the org has to fit first.
   const canPause = client.isMock || client.isReal("saveRetentionChoices");
   const blocked = over.length > 0 && !canPause;
-  // "Choose what stays" is part of the change: confirmed by a saved choice or the default-picks tick.
-  const needsConfirm = over.length > 0 && canPause && (!retention || (retention.isDefault && !acceptDefaults));
-  const confirmDefaults = over.length > 0 && !!retention?.isDefault && acceptDefaults;
+  // "Choose what stays" is part of the change: one of the two options, picked every time.
+  const needsConfirm = over.length > 0 && canPause && !wsPick.ready;
   const fewerPages = (target.modules.metaPages ?? Infinity) < (o.plan.modules.metaPages ?? Infinity);
 
   async function schedule() {
     setBusy(true);
     try {
-      const extra = confirmDefaults ? { acceptDefaultPicks: true } : {};
+      const extra = over.length > 0 && wsPick.choice ? { whatStaysChoice: wsPick.choice } : {};
       const next = toBasic
         ? await client.cancelPlan({ reason: reason || undefined, ...extra })
         : await client.scheduleDowngrade({ planId: target!.id, interval, ...extra });
@@ -164,16 +171,7 @@ export function DowngradeScreen({ planId, interval: wanted }: { planId: string; 
           <div style={{ marginTop: 6 }}>Remove or deactivate the extra ones first, then come back to schedule the plan change. Nothing changes until then.</div>
         </Banner>
       ) : over.length ? (
-        <Banner
-          tone="amber"
-          icon="alert"
-          title={`You're over ${target.name}'s limits`}
-          actions={
-            <BLink to="chooseWhatStays" params={{ target: target.id }} className="btn btn-primary btn-sm">
-              Choose what stays
-            </BLink>
-          }
-        >
+        <Banner tone="amber" icon="alert" title={`You're over ${target.name}'s limits`}>
           <ul style={{ margin: "4px 0 0", paddingLeft: 18 }}>
             {over.map((u) => (
               <li key={u.key}>
@@ -181,21 +179,15 @@ export function DowngradeScreen({ planId, interval: wanted }: { planId: string; 
               </li>
             ))}
           </ul>
-          <div style={{ marginTop: 6 }}>On {effective ? formatDate(effective) : "that date"} the extra ones are paused, not deleted. Choose which stay, or we keep the ones below.</div>
-          {retention ? (
-            <PicksSummary
-              retention={{
-                targetPlanId: target.id,
-                targetPlanName: target.name,
-                isDefault: retention.isDefault,
-                users: retention.users.filter((x) => x.selected).map((x) => x.name),
-                projects: retention.projects.filter((x) => x.selected).map((x) => x.name),
-                landingPages: retention.landingPages.filter((x) => x.selected).map((x) => x.name),
-                templates: retention.templates?.filter((x) => x.selected).map((x) => x.name),
-              }}
-            />
-          ) : null}
-          {retention?.isDefault ? <KeepDefaultPicks targetPlanId={target.id} checked={acceptDefaults} onChange={setAcceptDefaults} showPicks={false} /> : null}
+          <div style={{ marginTop: 6, marginBottom: 8 }}>
+            {now ? "Straight away" : `On ${effective ? formatDate(effective) : "that date"}`} the extra ones are paused, not deleted. Pick what stays:
+          </div>
+          <WhatStaysOptions
+            targetPlanId={target.id}
+            initialChoice={initialPick}
+            chooseParams={{ back: "downgrade", interval }}
+            onChange={setWsPick}
+          />
         </Banner>
       ) : (
         <Banner tone="green" icon="check" title={`Everything fits on ${target.name}`}>
@@ -234,7 +226,7 @@ export function DowngradeScreen({ planId, interval: wanted }: { planId: string; 
               : blocked
                 ? `Get within ${target.name}'s limits first`
                 : needsConfirm
-                  ? `Choose what stays on ${target.name}, or keep the default picks, first`
+                  ? `Pick what stays on ${target.name} first`
                   : undefined
           }
           onClick={() => setConfirm(true)}

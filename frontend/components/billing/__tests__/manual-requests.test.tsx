@@ -94,21 +94,18 @@ describe("request screen over the target plan's limits", () => {
     return client;
   }
 
-  it("shows the notice and keeps Send disabled until the choices fit", async () => {
+  it("shows the notice and keeps Send disabled until an option is picked", async () => {
     const conflict = { items: [{ key: "users" as const, limit: 5, used: 8 }], choicesFit: false };
-    const view = await show(withConflict(conflict), <CheckoutScreen planId="pro" interval="monthly" />);
+    await show(withConflict(conflict), <CheckoutScreen planId="pro" interval="monthly" />);
     const note = screen.getByTestId("usage-conflict");
     expect(note).toHaveTextContent("Pro allows 5 users; you have 8. Choose which 5 stay active when this change is approved.");
+    expect(screen.getByRole("button", { name: /Send change request/ })).toBeDisabled();
+    fireEvent.click(within(note).getByRole("radio", { name: "I'll choose what stays" }));
     expect(within(note).getByRole("link", { name: "Choose what stays" })).toHaveAttribute(
       "href",
       "/org/settings/billing/choose-what-stays?target=pro&back=checkout&interval=monthly",
     );
     expect(screen.getByRole("button", { name: /Send change request/ })).toBeDisabled();
-    view.unmount();
-
-    await show(withConflict({ ...conflict, choicesFit: true }), <CheckoutScreen planId="pro" interval="monthly" />);
-    expect(screen.getByTestId("usage-conflict")).toHaveTextContent("You've chosen what stays on Pro");
-    expect(screen.getByRole("button", { name: /Send change request/ })).toBeEnabled();
   });
 
   it("no conflict → nothing extra", async () => {
@@ -233,7 +230,7 @@ describe("Requests show what they chose to keep", () => {
     ...over,
   });
 
-  it("pending: the summary, the names, and a link to change it; decided: view-only (View what stays, contact support); none: everything fits", async () => {
+  it("the summary and one button: Change what stays while open, View once decided; no inline lists", async () => {
     const rows = [
       req({ id: "p", whatStays: whatStays(false) }),
       req({ id: "a", status: "approved", decidedAt: "2026-10-21T10:00:00.000Z", whatStays: whatStays(true) }),
@@ -243,20 +240,22 @@ describe("Requests show what they chose to keep", () => {
     await show({ ...base, listOrgRequests: async () => ({ data: rows, total: 3, page: 1, pageSize: 10 }) }, <RequestsTable />);
     const [pending, approved, none] = screen.getAllByTestId("org-plan-request");
     const p = within(pending).getByTestId("what-stays");
-    expect(p).toHaveTextContent("Keeps 2 of 3 users");
-    expect(p).toHaveTextContent("Your choice");
-    expect(p).toHaveTextContent("Stays active: Rohan, Arjun");
-    expect(p).toHaveTextContent("Will be paused: Priya");
+    expect(p).toHaveTextContent(/^Keeps 2 of 3 usersChange what stays$/);
+    expect(p.querySelector("details")).toBeNull();
+    expect(within(p).getAllByRole("link")).toHaveLength(1);
     expect(within(p).getByRole("link", { name: "Change what stays" })).toHaveAttribute(
       "href",
       "/org/settings/billing/choose-what-stays?target=pro&back=requests&request=p",
     );
     const a = within(approved).getByTestId("what-stays");
-    expect(a).toHaveTextContent("Applied");
-    expect(a).toHaveTextContent("View what stays");
-    expect(a).toHaveTextContent("Paused: Priya");
-    expect(within(a).queryByRole("link", { name: "Change what stays" })).toBeNull();
-    expect(within(a).getByTestId("what-stays-locked")).toHaveTextContent("To change what stays, contact our support team");
+    expect(a).toHaveTextContent(/^Keeps 2 of 3 usersView$/);
+    expect(a).not.toHaveTextContent("Priya");
+    expect(within(a).getAllByRole("link")).toHaveLength(1);
+    // The same page, read-only for a decided request (the API says locked).
+    expect(within(a).getByRole("link", { name: "View" })).toHaveAttribute(
+      "href",
+      "/org/settings/billing/choose-what-stays?target=pro&back=requests&request=a",
+    );
     expect(none).toHaveTextContent("Everything fits");
   });
 

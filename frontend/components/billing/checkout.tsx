@@ -12,7 +12,7 @@ import { useBillingEnv, useBillingQuery, useOrgBilling } from "./context";
 import { ScheduledChangeNote } from "./banners";
 import { usePayment } from "./payment";
 import { WithdrawRequestButton } from "./requests";
-import { KeepDefaultPicks } from "./choose-what-stays";
+import { WhatStaysOptions, type WhatStaysPick } from "./choose-what-stays";
 import { Banner, BillingRedirect, BLink, ErrorNote, Loading, Section, useCheckoutLive } from "./ui";
 
 /* ---------------------------------------------------------- Billing details */
@@ -241,42 +241,39 @@ export function usageConflictLines(planName: string, conflict: NonNullable<Check
 }
 
 /**
- * Manual mode, the target plan is smaller than what the org uses: pick what
- * stays (saved for that plan, applied when the request is approved) before sending.
+ * Manual mode, the target plan is smaller than what the org uses: what's over,
+ * then the two options (keep the default picks / I'll choose what stays),
+ * picked every time before sending. Applied when the request is approved.
  */
 export function UsageConflictNote({
   planId,
   planName,
   interval,
   conflict,
-  acceptDefaults = false,
-  onAcceptDefaults,
+  initialChoice = null,
+  onPick,
 }: {
   planId: string;
   planName: string;
   interval: BillingInterval;
   conflict: NonNullable<CheckoutPreview["usageConflict"]>;
-  /** The "Keep the default picks shown above" tick (only asked while there's no saved choice). */
-  acceptDefaults?: boolean;
-  onAcceptDefaults?: (on: boolean) => void;
+  /** "saved" only when coming back from Choose what stays. */
+  initialChoice?: WhatStaysPick["choice"];
+  onPick?: (pick: WhatStaysPick) => void;
 }) {
-  const fits = conflict.choicesFit;
   return (
     <div className="bl-stack" style={{ gap: 8, marginTop: 10 }} data-testid="usage-conflict">
-      <Banner
-        tone={fits ? "green" : "amber"}
-        icon={fits ? "check" : "info"}
-        title={fits ? `You've chosen what stays on ${planName}` : `Choose what stays on ${planName}`}
-        actions={
-          <BLink to="chooseWhatStays" params={{ target: planId, back: "checkout", interval }} className={`btn btn-sm ${fits ? "btn-ghost" : "btn-primary"}`}>
-            {fits ? "Change what stays" : "Choose what stays"}
-          </BLink>
-        }
-      >
-        {usageConflictLines(planName, conflict).join(" ")}
-        {fits ? " Everything else is paused (never deleted) when the change is approved." : ""}
+      <Banner tone="amber" icon="info" title={`Choose what stays on ${planName}`}>
+        {usageConflictLines(planName, conflict).join(" ")} Everything else is paused (never deleted) when the change is approved.
       </Banner>
-      {!fits && onAcceptDefaults ? <KeepDefaultPicks targetPlanId={planId} checked={acceptDefaults} onChange={onAcceptDefaults} /> : null}
+      {onPick ? (
+        <WhatStaysOptions
+          targetPlanId={planId}
+          initialChoice={initialChoice}
+          chooseParams={{ back: "checkout", interval }}
+          onChange={onPick}
+        />
+      ) : null}
     </div>
   );
 }
@@ -335,9 +332,12 @@ export function CheckoutScreen({
   initialCoupon,
   autoPay = false,
   renewal = false,
+  initialPick,
 }: {
   planId: string;
   interval: BillingInterval;
+  /** Back from Choose what stays (`pick=saved`): "I'll choose what stays" stays selected. */
+  initialPick?: WhatStaysPick["choice"];
   /** Pay for the next term of the current plan (Pay now while organisation details are incomplete). */
   renewal?: boolean;
   /** Walkthrough steps show one part at a time. */
@@ -355,8 +355,8 @@ export function CheckoutScreen({
   const [preview, setPreview] = useState<CheckoutPreview | null>(null);
   const [previewError, setPreviewError] = useState<string | null>(null);
   const [checking, setChecking] = useState(false);
-  // Over the new plan's limits with no saved choice: "Keep the default picks shown above".
-  const [acceptDefaults, setAcceptDefaults] = useState(false);
+  // Over the new plan's limits: "Keep the default picks" / "I'll choose what stays", picked every time.
+  const [wsPick, setWsPick] = useState<WhatStaysPick>({ choice: null, ready: false });
   const autoDone = useRef(false);
   const purpose = renewal ? "renewal" : "purchase";
   // Online = Razorpay Checkout; otherwise the order is a request our team approves.
@@ -438,8 +438,8 @@ export function CheckoutScreen({
   }
 
   async function pay() {
-    const confirmDefaults = !!preview?.usageConflict && !preview.usageConflict.choicesFit && acceptDefaults;
-    await payment.start({ planId, interval, couponCode: coupon ?? undefined, purpose, ...(confirmDefaults ? { acceptDefaultPicks: true } : {}) });
+    const whatStaysChoice = preview?.usageConflict && wsPick.choice ? wsPick.choice : undefined;
+    await payment.start({ planId, interval, couponCode: coupon ?? undefined, purpose, ...(whatStaysChoice ? { whatStaysChoice } : {}) });
   }
 
   // Walkthrough: open the payment popup on arrival.
@@ -515,10 +515,10 @@ export function CheckoutScreen({
   const tooSmall = preview?.usageError ?? null;
   // Every invoice field must be filled in (Settings → General) before paying.
   const missingDetails = overview.billingDetailsMissing;
-  // Manual mode over the target's limits: send once they've chosen what stays
-  // (a saved choice that fits) or ticked "Keep the default picks shown above".
+  // Manual mode over the target's limits: send once they've picked an option
+  // (the default picks, or their own saved choice).
   const conflict = preview?.usageConflict ?? null;
-  const mustChoose = !!conflict && !conflict.choicesFit && !acceptDefaults;
+  const mustChoose = !!conflict && !wsPick.ready;
   // A request waiting for approval: the button keeps its label (Send change request / Pay) but is disabled.
   const waiting = pendingUpgrade?.status === "pending_approval";
   const buttonReason =
@@ -531,7 +531,7 @@ export function CheckoutScreen({
         : missingDetails.length
           ? "Complete your organisation details to continue"
           : mustChoose
-            ? "Choose what stays on the new plan, or keep the default picks, first"
+            ? "Pick what stays on the new plan first"
             : undefined;
   const disabled = !canEdit || payment.busy || !!pendingUpgrade || !!tooSmall || missingDetails.length > 0 || mustChoose;
 
@@ -567,7 +567,7 @@ export function CheckoutScreen({
             {preview ? (
               <>
                 <PriceSummary preview={preview} renewalMode={overview.renewalMode} />
-                {conflict && !pendingUpgrade ? <UsageConflictNote planId={target.id} planName={target.name} interval={interval} conflict={conflict} acceptDefaults={acceptDefaults} onAcceptDefaults={setAcceptDefaults} /> : null}
+                {conflict && !pendingUpgrade ? <UsageConflictNote planId={target.id} planName={target.name} interval={interval} conflict={conflict} initialChoice={initialPick ?? null} onPick={setWsPick} /> : null}
                 {missingDetails.length && !parts.includes("details") ? (
                   <MissingDetailsNote missing={missingDetails} />
                 ) : tooSmall ? (

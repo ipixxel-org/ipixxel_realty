@@ -182,8 +182,8 @@ period rule (`applyPlanChange`).
   stay active when this change is approved." with "Choose what stays"
   (`/org/settings/billing/choose-what-stays?target=<plan>&back=checkout&interval=…`, whose Back
   returns to the request). Choices are saved for the target plan (`retention_choices`, one per
-  org). Send — and `startCheckout` (`choose_what_stays`) — waits until `choicesFit` or the
-  "Keep the default picks shown above" tick (`acceptDefaultPicks`; see "Choose what stays rules").
+  org). Send — and `startCheckout` (`choose_what_stays`) — waits until one of the two
+  options is picked (`whatStaysChoice`; see "Choose what stays rules").
   Created landing pages (`landingPagesCreate`) over the limit are still a `usageError` (they
   can't be paused); templates go through choose what stays since 2026-10-27. Online mode is unchanged.
 - **Approval** of a v2 request (one with a checkout) checks only what can't be paused
@@ -206,9 +206,9 @@ period rule (`applyPlanChange`).
   (`whatStaysFor` in `retention.util.ts`). Saved when the request is sent, refreshed when they change
   their choice for that plan while it's pending, and on approval replaced with what was actually kept
   (`applied: true`). `OrgPlanRequest.whatStays` (null = everything fits): the Requests tab shows
-  "Keeps 2 of 3 users", the names, and "Change what stays" while pending
-  (`choose-what-stays?target=…&back=requests&request=<id>`), "View what stays" once decided.
-  Super Admin's Package requests section shows the summary and "Choose what stays".
+  "Keeps 2 of 3 users" with one button: "Change what stays" while pending, "View" once decided
+  (`choose-what-stays?target=…&back=requests&request=<id>`). Super Admin's Package requests section
+  shows the summary, with the what-stays button in its Action column.
 - **One request at a time:** checkout start (both modes), the legacy request endpoint and scheduling a
   downgrade all refuse with `request_pending` and the same message until the request is approved,
   rejected or withdrawn.
@@ -233,16 +233,25 @@ period rule (`applyPlanChange`).
 ### Choose what stays rules (both modes, 2026-10-27)
 
 One rule: "Choose what stays" is part of every plan change where the org is over the target plan's
-limits. The org confirms it once; they can change it until the change is decided or takes effect;
-after that only Super Admin can change it. Helpers: `billing/what-stays.ts`.
+limits. The org picks an option every time; they can change their choice until the change is
+decided or takes effect; after that only Super Admin can change it. Helpers: `billing/what-stays.ts`,
+`common/utils/what-stays-rows.util.ts`.
 
-- **Confirm before the button works:** the Move to Basic / downgrade page, the manual change
-  request screen and the grace-period change disable their main button until the org has a saved
-  choice for that plan that fits, or ticks **"Keep the default picks shown above"** (the picks are
-  listed above it). The API refuses without one — `startCheckout` (manual), `POST /org/billing/cancel`
-  and `POST /org/billing/downgrade` → `choose_what_stays` (same "Pro allows 5 users; you have 8…"
-  message) — unless `acceptDefaultPicks: true` is sent. Nothing over: no tick, nothing extra.
-  Which one was used is `whatStays.choice` (`saved` / `default`).
+- **Two options, picked every time:** the Move to Basic / downgrade page, the manual change request
+  screen and the grace-period change show two radio buttons whenever the org is over the target's
+  limits (`WhatStaysOptions` in `choose-what-stays.tsx`; it replaces the old "your choice" box):
+  - **Keep the default picks** — the list we'd keep (users, projects, landing pages, templates) under it;
+  - **I'll choose what stays** — a "Choose what stays" button (the existing screen; its Back returns
+    with `pick=saved` so this option is selected again); with a saved choice, "Your earlier choice"
+    and its picks with **Edit**.
+  Neither is selected when the page opens, even with an earlier choice. The main button waits for
+  "Keep the default picks", or "I'll choose" with a saved choice. No conflict: no options.
+- **API:** `startCheckout` (manual), `POST /org/billing/cancel` and `POST /org/billing/downgrade` take
+  `whatStaysChoice: 'default' | 'saved'` (`acceptDefaultPicks: true` from older clients = `default`).
+  Over the limits, nothing sent → `choose_what_stays` ("Pro allows 5 users; you have 8…"); `saved`
+  without a saved choice that fits → `choose_what_stays` "Save your choice of what stays on Pro first,
+  or keep the default picks." `default` drops an earlier saved choice for that plan once the change is
+  accepted, so the defaults really apply. `whatStays.choice` records the option (`default` / `saved`).
 - **Scheduled changes keep a copy:** `package_change_requests.what_stays` is now filled for
   `scheduled_change` rows too (when scheduled; refreshed while scheduled; replaced with what was
   actually kept, `applied: true`, when it takes effect — `done`). No migration — the column exists.
@@ -252,25 +261,35 @@ after that only Super Admin can change it. Helpers: `billing/what-stays.ts`.
   done / undone / replaced, or the target is the plan the org is already on, it's refused:
   **`what_stays_locked`** "To change what stays, contact our support team." (so the org can no
   longer swap items on its current plan). `GET` returns `locked: true` then and the page shows a
-  read-only list (stays active / paused) with that note and a Support button (`/org/support`).
-  Without `requestId` the lock is "the org is on that plan"; a new request to a plan whose last
-  request was rejected starts a fresh choice.
-- **Org UI when locked:** Requests tab rows show "View what stays" + the note; the "You're on Basic
-  now" banner, the overview action row (on Basic), locked-item notices (`PlanLockNotice`) and the
-  paused-user menu show the note / "Contact support" instead of "Change what stays". Lock copy
-  (`plan_locked` messages) now says "Upgrade, or contact our support team to change what stays".
-  Still editable (links kept): the grace banner, the scheduled-change banners and the request screen.
-- **Super Admin any time:** `GET/PUT /admin/billing/subscriptions/:orgId/retention?targetPlanId=&requestId=`
+  read-only list (stays active / paused) with that note and a Support button (`/org/support`). For a
+  decided request the list is that request's own copy (history), not today's picks. Without
+  `requestId` the lock is "the org is on that plan"; a new request to a plan whose last request was
+  rejected starts a fresh choice.
+- **Org Requests tab:** the What stays column shows only the summary ("Keeps 3 of 5 projects" /
+  "Everything fits") and one button — **Change what stays** while the row is open, **View** once
+  decided or applied — both opening `choose-what-stays?target=…&back=requests&request=<id>`
+  (read-only when locked). No inline lists.
+- **Org UI when locked:** the "You're on Basic now" banner, the overview action row (on Basic),
+  locked-item notices (`PlanLockNotice`) and the paused-user menu show the note / "Contact support"
+  instead of "Change what stays". Lock copy (`plan_locked` messages) says "Upgrade, or contact our
+  support team to change what stays". Still editable (links kept): the grace banner, the
+  scheduled-change banners and the request screen.
+- **Super Admin:** `GET/PUT /admin/billing/subscriptions/:orgId/retention?targetPlanId=&requestId=`
   (admin_subscriptions view / edit). Same validation (owner always stays, limits, known ids).
-  Before the change applies it updates the saved choice and the request's copy; once applied (the
-  org is on that plan, request `approved` / `done` or no request) it applies at once — pauses and
-  unpauses — and the request's copy becomes what was kept (`applied: true`). A request that never
-  applied (rejected / withdrawn / undone / replaced) → `request_closed`. Audit log
-  `retention_choices_saved_by_admin` (actor + `metadata.admin` name and email, `appliedNow`,
-  `requestId`, the ids); the org's billing admins get a notification "Our team updated what stays
-  active on your plan" (type `package_change_request`). UI: "Choose what stays" on each Package
-  requests row with a `whatStays` (pending / scheduled / approved / done) and "Change what stays"
-  on the org billing page (current plan), both opening the same component in admin mode.
+  Editable: open rows (pending / scheduled) and the row that put the org on its **current** plan (the
+  latest applied one to that plan, `currentPlanRequestId`); saving an open row updates the saved
+  choice and its copy, saving the current-plan row (or no request: the current plan) applies at once
+  — pauses and unpauses — and the copy becomes what was kept. Older applied rows: `GET` is
+  `locked` (their copy) and `PUT` → **`what_stays_old_request`** "Only an open request's choice, or
+  the one for the organisation's current plan, can be changed."; never-applied rows (rejected /
+  withdrawn / undone / replaced) → `request_closed`. Audit log `retention_choices_saved_by_admin`
+  (actor + `metadata.admin` name and email, `appliedNow`, `requestId`, the ids); the org's billing
+  admins get "Our team updated what stays active on your plan" (type `package_change_request`).
+- **Super Admin UI:** org detail → Package requests has an **Action** column (last) with Mark as
+  paid / Approve / Reject as before and the what-stays button: **Choose what stays** where
+  `whatStaysEditable` (on each row of `GET /admin/package-change-requests`), **View what stays**
+  (read-only) on every other row with a conflict, nothing without one. The org billing page keeps
+  its own "Change what stays" for the current plan.
 
 ### Manual mode: every paid action is a request (Mark as paid → Approve)
 
