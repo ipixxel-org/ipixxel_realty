@@ -249,7 +249,8 @@ describe("lists: one shared lock badge and a filter", () => {
     expect(within(ravi).queryByText("Active")).toBeNull();
     fireEvent.click(within(ravi).getByTitle("More options"));
     expect(within(ravi).queryByText("Activate user")).toBeNull();
-    expect(within(ravi).getByText("Change what stays")).toBeInTheDocument();
+    // What's paused on the current plan is changed by our support team now.
+    expect(within(ravi).getByRole("link", { name: "Contact support" })).toHaveAttribute("href", "/org/support");
     const filter = screen.getAllByRole("combobox").find((el) => within(el).queryByRole("option", { name: "Paused" }))!;
     fireEvent.change(filter, { target: { value: "paused" } });
     await waitFor(() => expect(api.calls.some((c) => c.startsWith("/org/users?") && c.includes("paused=true") && !c.includes("status="))).toBe(true));

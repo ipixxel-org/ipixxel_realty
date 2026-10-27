@@ -330,19 +330,30 @@ describe('moving to a smaller plan pauses what does not fit; buying again restor
     expect(row('landingPage', 'lp1').status).toBe('published');
   });
 
-  it('on Basic already, changing what stays swaps it at once', async () => {
+  it('on Basic already: the org can no longer swap; Super Admin can, applied at once', async () => {
     const { db, retention, pausedUsers } = setup({
       ...ended,
       cancelAtPeriodEnd: true,
     });
     await applyOrgSubscriptionLifecycle(db as never, 'org-1');
     expect(pausedUsers().sort()).toEqual(['u-3', 'u-4']);
-    await retention.saveChoices('org-1', 'u-admin', {
+    const swap = {
       targetPlanId: 'basic',
       userIds: ['u-admin', 'u-3'],
       projectIds: ['p1'],
       landingPageIds: ['lp2'],
+    };
+    await expect(
+      retention.saveChoices('org-1', 'u-admin', swap),
+    ).rejects.toMatchObject({
+      response: {
+        code: 'what_stays_locked',
+        message: 'To change what stays, contact our support team.',
+      },
     });
+    expect((await retention.getChoices('org-1')).locked).toBe(true);
+    expect(pausedUsers().sort()).toEqual(['u-3', 'u-4']);
+    await retention.adminSaveChoices('org-1', 'admin-1', swap);
     expect(pausedUsers().sort()).toEqual(['u-2', 'u-4']);
   });
 

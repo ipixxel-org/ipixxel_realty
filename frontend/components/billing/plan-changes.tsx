@@ -10,6 +10,7 @@ import { planChangeBlock } from "@/lib/billing/requests";
 import { PicksSummary, ScheduledChangeNote } from "./banners";
 import { useBillingEnv, useBillingQuery, useOrgBilling } from "./context";
 import { BillingDialog, DialogActions } from "./dialog";
+import { KeepDefaultPicks } from "./choose-what-stays";
 import { Banner, BillingRedirect, BLink, countLabel, ErrorNote, Kv, Loading, Section, useCheckoutLive } from "./ui";
 
 function ConfirmDialog({
@@ -67,6 +68,8 @@ export function DowngradeScreen({ planId, interval: wanted }: { planId: string; 
   const [confirm, setConfirm] = useState(false);
   const [busy, setBusy] = useState(false);
   const [reason, setReason] = useState("");
+  // Over the smaller plan's limits with no saved choice: "Keep the default picks shown above".
+  const [acceptDefaults, setAcceptDefaults] = useState(false);
   const live = useCheckoutLive(overview);
   if (!overview || !plans) return <Loading />;
   const target = plans.find((p) => p.id === planId);
@@ -112,12 +115,18 @@ export function DowngradeScreen({ planId, interval: wanted }: { planId: string; 
   // Until "choose what stays" is live, nothing can be paused: the org has to fit first.
   const canPause = client.isMock || client.isReal("saveRetentionChoices");
   const blocked = over.length > 0 && !canPause;
+  // "Choose what stays" is part of the change: confirmed by a saved choice or the default-picks tick.
+  const needsConfirm = over.length > 0 && canPause && (!retention || (retention.isDefault && !acceptDefaults));
+  const confirmDefaults = over.length > 0 && !!retention?.isDefault && acceptDefaults;
   const fewerPages = (target.modules.metaPages ?? Infinity) < (o.plan.modules.metaPages ?? Infinity);
 
   async function schedule() {
     setBusy(true);
     try {
-      const next = toBasic ? await client.cancelPlan({ reason: reason || undefined }) : await client.scheduleDowngrade({ planId: target!.id, interval });
+      const extra = confirmDefaults ? { acceptDefaultPicks: true } : {};
+      const next = toBasic
+        ? await client.cancelPlan({ reason: reason || undefined, ...extra })
+        : await client.scheduleDowngrade({ planId: target!.id, interval, ...extra });
       await refresh();
       setConfirm(false);
       if (next.plan.isFree) toast({ variant: "success", title: `You're on ${target!.name} now` });
@@ -186,6 +195,7 @@ export function DowngradeScreen({ planId, interval: wanted }: { planId: string; 
               }}
             />
           ) : null}
+          {retention?.isDefault ? <KeepDefaultPicks targetPlanId={target.id} checked={acceptDefaults} onChange={setAcceptDefaults} showPicks={false} /> : null}
         </Banner>
       ) : (
         <Banner tone="green" icon="check" title={`Everything fits on ${target.name}`}>
@@ -217,8 +227,16 @@ export function DowngradeScreen({ planId, interval: wanted }: { planId: string; 
         <button
           type="button"
           className="btn btn-primary"
-          disabled={!canEdit || blocked || !!block}
-          title={block ? block.message : blocked ? `Get within ${target.name}'s limits first` : undefined}
+          disabled={!canEdit || blocked || !!block || needsConfirm}
+          title={
+            block
+              ? block.message
+              : blocked
+                ? `Get within ${target.name}'s limits first`
+                : needsConfirm
+                  ? `Choose what stays on ${target.name}, or keep the default picks, first`
+                  : undefined
+          }
           onClick={() => setConfirm(true)}
         >
           <Icon name="arrow-down" size={15} /> {toMonthly ? "Confirm switch to monthly" : toBasic ? `Move to ${target.name}` : "Confirm plan change"}

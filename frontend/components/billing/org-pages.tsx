@@ -177,7 +177,7 @@ export function RequestsPage() {
 }
 
 /** `back="checkout"` (from the request screen): Back returns to that request. */
-export function ChooseWhatStaysPage({ target, back, interval }: { target?: string; back?: string; interval?: string }) {
+export function ChooseWhatStaysPage({ target, back, interval, request }: { target?: string; back?: string; interval?: string; request?: string }) {
   const { overview } = useOrgBilling();
   return (
     <Guard>
@@ -197,7 +197,7 @@ export function ChooseWhatStaysPage({ target, back, interval }: { target?: strin
       />
       <div className="bl-stack">
         {overview ? <BillingBanner overview={overview} /> : null}
-        <ChooseWhatStaysScreen targetPlanId={target} />
+        <ChooseWhatStaysScreen targetPlanId={target} requestId={request} />
       </div>
     </Guard>
   );

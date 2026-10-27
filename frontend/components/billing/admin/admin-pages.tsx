@@ -14,7 +14,7 @@ import { AdminEditPlan, AdminPlansEditor } from "./plans-editor";
 import { CompanyTaxDetailsCard } from "./company";
 import { AdminPaymentsView } from "./payments";
 import { SubscriptionDetailView, SubscriptionsList } from "./subscriptions";
-import { OrgPackageRequests } from "./package-requests";
+import { AdminWhatStaysButton, OrgPackageRequests } from "./package-requests";
 
 /** Super Admin billing pages (v2). Mounted only with NEXT_PUBLIC_BILLING_V2=true. */
 
@@ -104,6 +104,10 @@ export function AdminSubscriptionDetailPage({ orgId, origin = {} }: { orgId: str
       <PageHead eyebrow="Subscriptions" icon="organisation" title="Organisation billing" back={{ to: "adminSubscriptions", params: back, label: "Subscriptions" }} sampleFns={["getSubscription"]} />
       <div className="bl-stack">
         <SubscriptionDetailView key={version} orgId={orgId} />
+        {/* Support requests after the org's choice is locked: what stays on its current plan, applied at once. */}
+        <div className="bl-row">
+          <AdminWhatStaysButton orgId={orgId} label="Change what stays" onSaved={() => setVersion((v) => v + 1)} />
+        </div>
         <OrgPackageRequests orgId={orgId} onChanged={() => setVersion((v) => v + 1)} />
       </div>
     </Guard>

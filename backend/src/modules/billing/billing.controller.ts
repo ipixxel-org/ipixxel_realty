@@ -126,7 +126,11 @@ export class OrgBillingV2Controller {
     @CurrentUser() user: JwtPayload,
     @Query() query: RetentionQueryDto,
   ) {
-    return this.retention.getChoices(user.orgId as string, query.targetPlanId);
+    return this.retention.getChoices(
+      user.orgId as string,
+      query.targetPlanId,
+      query.requestId,
+    );
   }
 
   @RequirePermission('billing', 'edit')
@@ -223,7 +227,31 @@ export class AdminBillingController {
     private readonly coupons: AdminCouponsService,
     private readonly subscriptions: AdminSubscriptionsService,
     private readonly ledger: BillingLedgerService,
+    private readonly retention: BillingRetentionService,
   ) {}
+
+  // Choose what stays for an org, any time (support requests after the org's
+  // choice is locked). Applied at once when the org is on that plan.
+  @Get('subscriptions/:orgId/retention')
+  getRetention(
+    @Param('orgId') orgId: string,
+    @Query() query: RetentionQueryDto,
+  ) {
+    return this.retention.adminGetChoices(
+      orgId,
+      query.targetPlanId,
+      query.requestId,
+    );
+  }
+
+  @Put('subscriptions/:orgId/retention')
+  saveRetention(
+    @CurrentUser() user: JwtPayload,
+    @Param('orgId') orgId: string,
+    @Body() dto: SaveRetentionChoicesDto,
+  ) {
+    return this.retention.adminSaveChoices(orgId, user.sub, dto);
+  }
 
   // Step 7: subscriptions, payments, refunds
   @Get('subscriptions')

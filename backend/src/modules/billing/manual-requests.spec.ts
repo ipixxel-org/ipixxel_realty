@@ -157,6 +157,23 @@ describe("manual mode: a request over the target plan's limits", () => {
     });
   });
 
+  it('"Keep the default picks" sends it without a saved choice; the request records choice "default"', async () => {
+    const { service, db } = setup();
+    const res = await service.start('org-1', 'u-1', {
+      ...toStarter,
+      acceptDefaultPicks: true,
+    });
+    expect(res).toMatchObject({ status: 'pending_approval' });
+    const request = db.packageChangeRequest.rows.find(
+      (r: any) => r.id === (res as { requestId: string }).requestId,
+    );
+    expect(request.whatStays).toMatchObject({
+      planId: 'starter',
+      choice: 'default',
+      users: { limit: 2, total: 3 },
+    });
+  });
+
   it('no conflict → nothing extra', async () => {
     const { service, usage } = setup();
     usage.users = 2;

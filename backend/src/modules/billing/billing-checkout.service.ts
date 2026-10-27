@@ -230,8 +230,13 @@ export class BillingCheckoutService implements OnModuleInit {
     if (ctx.couponError) throw billingError('coupon_invalid', ctx.couponError);
     // Never take money for a plan the org doesn't fit (fulfil would hold it).
     if (ctx.usageError) throw billingError('plan_too_small', ctx.usageError);
-    // Manual mode over the target's limits: send only once they've chosen what stays.
-    if (ctx.usageConflict && !ctx.usageConflict.choicesFit) {
+    // Manual mode over the target's limits: send only once they've confirmed
+    // what stays — a saved choice that fits, or the default picks (checkbox).
+    if (
+      ctx.usageConflict &&
+      !ctx.usageConflict.choicesFit &&
+      !dto.acceptDefaultPicks
+    ) {
       throw billingError(
         'choose_what_stays',
         usageConflictMessage(ctx.quote.toPlan.name, ctx.usageConflict),

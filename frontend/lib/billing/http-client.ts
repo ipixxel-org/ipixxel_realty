@@ -26,6 +26,15 @@ const post = (body: unknown): RequestInit => ({ method: "POST", body: JSON.strin
 const del: RequestInit = { method: "DELETE" };
 
 /** "?a=1&b=x" from the defined values, or "". */
+/** "?targetPlanId=…&requestId=…" (encodeURIComponent, like the other path params). */
+function retentionQuery(req: { targetPlanId?: string; requestId?: string }): string {
+  const parts = [
+    req.targetPlanId ? `targetPlanId=${encodeURIComponent(req.targetPlanId)}` : null,
+    req.requestId ? `requestId=${encodeURIComponent(req.requestId)}` : null,
+  ].filter(Boolean);
+  return parts.length ? `?${parts.join("&")}` : "";
+}
+
 function qs(params: Record<string, string | number | undefined | null>): string {
   const s = new URLSearchParams();
   for (const [k, v] of Object.entries(params)) if (v !== undefined && v !== null && v !== "") s.set(k, String(v));
@@ -72,8 +81,7 @@ export const httpBilling: Impl = {
   listOrgOptions: () => call("/admin/billing/org-options"),
 
   // Step 6 — choose what stays on a smaller plan
-  getRetentionChoices: (req) =>
-    call(`/org/billing/retention${req.targetPlanId ? `?targetPlanId=${encodeURIComponent(req.targetPlanId)}` : ""}`),
+  getRetentionChoices: (req) => call(`/org/billing/retention${retentionQuery(req)}`),
   saveRetentionChoices: (req) => call("/org/billing/retention", put(req)),
 
   // Step 7 — invoices, payment history, Super Admin subscriptions and payments.
@@ -83,6 +91,8 @@ export const httpBilling: Impl = {
   listSubscriptions: (req) =>
     call(`/admin/billing/subscriptions${qs({ status: req.status, planId: req.planId, q: req.q, page: req.page, pageSize: req.pageSize })}`),
   getSubscription: (orgId) => call(`/admin/billing/subscriptions/${encodeURIComponent(orgId)}`),
+  getAdminRetentionChoices: ({ orgId, ...req }) => call(`/admin/billing/subscriptions/${encodeURIComponent(orgId)}/retention${retentionQuery(req)}`),
+  saveAdminRetentionChoices: ({ orgId, ...body }) => call(`/admin/billing/subscriptions/${encodeURIComponent(orgId)}/retention`, put(body)),
   extendGrace: ({ orgId, ...body }) => call(`/admin/billing/subscriptions/${encodeURIComponent(orgId)}/extend-grace`, post(body)),
   markPaidOffline: ({ orgId, ...body }) => call(`/admin/billing/subscriptions/${encodeURIComponent(orgId)}/offline-payment`, post(body)),
   applyCoupon: ({ orgId, ...body }) => call(`/admin/billing/subscriptions/${encodeURIComponent(orgId)}/coupon`, post(body)),

@@ -12,6 +12,7 @@ import { useBillingEnv, useBillingQuery, useOrgBilling } from "./context";
 import { ScheduledChangeNote } from "./banners";
 import { usePayment } from "./payment";
 import { WithdrawRequestButton } from "./requests";
+import { KeepDefaultPicks } from "./choose-what-stays";
 import { Banner, BillingRedirect, BLink, ErrorNote, Loading, Section, useCheckoutLive } from "./ui";
 
 /* ---------------------------------------------------------- Billing details */
@@ -248,11 +249,16 @@ export function UsageConflictNote({
   planName,
   interval,
   conflict,
+  acceptDefaults = false,
+  onAcceptDefaults,
 }: {
   planId: string;
   planName: string;
   interval: BillingInterval;
   conflict: NonNullable<CheckoutPreview["usageConflict"]>;
+  /** The "Keep the default picks shown above" tick (only asked while there's no saved choice). */
+  acceptDefaults?: boolean;
+  onAcceptDefaults?: (on: boolean) => void;
 }) {
   const fits = conflict.choicesFit;
   return (
@@ -270,6 +276,7 @@ export function UsageConflictNote({
         {usageConflictLines(planName, conflict).join(" ")}
         {fits ? " Everything else is paused (never deleted) when the change is approved." : ""}
       </Banner>
+      {!fits && onAcceptDefaults ? <KeepDefaultPicks targetPlanId={planId} checked={acceptDefaults} onChange={onAcceptDefaults} /> : null}
     </div>
   );
 }
@@ -348,6 +355,8 @@ export function CheckoutScreen({
   const [preview, setPreview] = useState<CheckoutPreview | null>(null);
   const [previewError, setPreviewError] = useState<string | null>(null);
   const [checking, setChecking] = useState(false);
+  // Over the new plan's limits with no saved choice: "Keep the default picks shown above".
+  const [acceptDefaults, setAcceptDefaults] = useState(false);
   const autoDone = useRef(false);
   const purpose = renewal ? "renewal" : "purchase";
   // Online = Razorpay Checkout; otherwise the order is a request our team approves.
@@ -429,7 +438,8 @@ export function CheckoutScreen({
   }
 
   async function pay() {
-    await payment.start({ planId, interval, couponCode: coupon ?? undefined, purpose });
+    const confirmDefaults = !!preview?.usageConflict && !preview.usageConflict.choicesFit && acceptDefaults;
+    await payment.start({ planId, interval, couponCode: coupon ?? undefined, purpose, ...(confirmDefaults ? { acceptDefaultPicks: true } : {}) });
   }
 
   // Walkthrough: open the payment popup on arrival.
@@ -505,9 +515,10 @@ export function CheckoutScreen({
   const tooSmall = preview?.usageError ?? null;
   // Every invoice field must be filled in (Settings → General) before paying.
   const missingDetails = overview.billingDetailsMissing;
-  // Manual mode over the target's limits: send once they've chosen what stays.
+  // Manual mode over the target's limits: send once they've chosen what stays
+  // (a saved choice that fits) or ticked "Keep the default picks shown above".
   const conflict = preview?.usageConflict ?? null;
-  const mustChoose = !!conflict && !conflict.choicesFit;
+  const mustChoose = !!conflict && !conflict.choicesFit && !acceptDefaults;
   // A request waiting for approval: the button keeps its label (Send change request / Pay) but is disabled.
   const waiting = pendingUpgrade?.status === "pending_approval";
   const buttonReason =
@@ -520,7 +531,7 @@ export function CheckoutScreen({
         : missingDetails.length
           ? "Complete your organisation details to continue"
           : mustChoose
-            ? "Choose what stays on the new plan first"
+            ? "Choose what stays on the new plan, or keep the default picks, first"
             : undefined;
   const disabled = !canEdit || payment.busy || !!pendingUpgrade || !!tooSmall || missingDetails.length > 0 || mustChoose;
 
@@ -556,7 +567,7 @@ export function CheckoutScreen({
             {preview ? (
               <>
                 <PriceSummary preview={preview} renewalMode={overview.renewalMode} />
-                {conflict && !pendingUpgrade ? <UsageConflictNote planId={target.id} planName={target.name} interval={interval} conflict={conflict} /> : null}
+                {conflict && !pendingUpgrade ? <UsageConflictNote planId={target.id} planName={target.name} interval={interval} conflict={conflict} acceptDefaults={acceptDefaults} onAcceptDefaults={setAcceptDefaults} /> : null}
                 {missingDetails.length && !parts.includes("details") ? (
                   <MissingDetailsNote missing={missingDetails} />
                 ) : tooSmall ? (

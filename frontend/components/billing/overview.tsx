@@ -9,7 +9,7 @@ export { RenewalReminderPopup };
 import { BillingDetailsSection, PendingUpgradeBanner, RejectedUpgradeBanner } from "./checkout";
 import { useOrgBilling } from "./context";
 import { InvoicesTable, PaymentHistoryTable } from "./invoices";
-import { BLink, countLabel, ErrorNote, Kv, Loading, RenewalPrice, SampleDataTag, Section, StatusBadge, UsageMeter } from "./ui";
+import { BLink, countLabel, ErrorNote, Kv, Loading, RenewalPrice, SampleDataTag, Section, StatusBadge, UsageMeter, WhatStaysLockedNote } from "./ui";
 
 function planLine(o: BillingOverview): string {
   if (o.plan.isFree) {
@@ -100,10 +100,13 @@ export function BillingOverviewPanel({ showInvoices = true }: { showInvoices?: b
           <RequestRenewalButton overview={o} className="btn btn-ghost" />
         ) : null}
         {/* Manual mode: chosen per request (the request screen) or from the grace / Basic banners. */}
-        {o.paymentMode !== "manual" ? (
+        {/* On Basic already, what stays is view-only for the org (only our team can change it). */}
+        {o.paymentMode !== "manual" && !o.plan.isFree ? (
           <BLink to="chooseWhatStays" className="btn btn-ghost">
             Choose what stays
           </BLink>
+        ) : o.status === "moved_to_basic" ? (
+          <WhatStaysLockedNote />
         ) : null}
         <BLink to="coupons" className="btn btn-ghost">
           Coupons

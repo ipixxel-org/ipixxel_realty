@@ -71,6 +71,9 @@ describe("choosing Basic", () => {
     await show(client, <DowngradeScreen planId="basic" />);
 
     fireEvent.change(screen.getByLabelText("Why are you moving to Basic? (optional)"), { target: { value: "Too expensive" } });
+    // Over Basic's limits with no saved choice: confirm the default picks first.
+    expect(screen.getByRole("button", { name: /Move to Basic/ })).toBeDisabled();
+    fireEvent.click(screen.getByRole("checkbox", { name: "Keep the default picks shown above" }));
     fireEvent.click(screen.getByRole("button", { name: /Move to Basic/ }));
     await settle();
     expect(screen.getByText(/^Move to Basic on \d{1,2} \w{3} \d{4}\?$/)).toBeInTheDocument();
@@ -79,7 +82,7 @@ describe("choosing Basic", () => {
     fireEvent.click(buttons[buttons.length - 1]);
     await settle();
 
-    expect(cancelPlan).toHaveBeenCalledWith({ reason: "Too expensive" });
+    expect(cancelPlan).toHaveBeenCalledWith({ reason: "Too expensive", acceptDefaultPicks: true });
     expect(client.snapshot().situation).toBe("cancellation_scheduled");
     // Toast and banner say the same thing.
     expect(screen.getAllByText(/^Change to Basic scheduled for \d{1,2} \w{3} \d{4}$/).length).toBeGreaterThanOrEqual(2);
@@ -95,6 +98,8 @@ describe("choosing Basic", () => {
   it("a smaller paid plan uses the same style: Change to … scheduled, Keep Pro", async () => {
     const client = createMockBillingClient({ initial: { situation: "active", paidPlanId: "pro" } });
     await show(client, <DowngradeScreen planId="growth" />);
+    const keep = screen.queryByRole("checkbox", { name: "Keep the default picks shown above" });
+    if (keep) fireEvent.click(keep);
     fireEvent.click(screen.getByRole("button", { name: /Confirm plan change/ }));
     expect(screen.getByText(/^Change to Growth on \d{1,2} \w{3} \d{4}\?$/)).toBeInTheDocument();
     expect(screen.getByText("You keep Pro until then.")).toBeInTheDocument();

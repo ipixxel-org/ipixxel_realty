@@ -7,7 +7,7 @@ import { PLAN_LOCK_COPY, type PlanLockKind } from "@/lib/plan-lock";
 import type { AccessStatus, BillingPlan } from "@/lib/billing/types";
 import { useOptionalBillingEnv, useOptionalOrgBilling } from "./context";
 import { BillingDialog, DialogActions } from "./dialog";
-import { Banner, BLink } from "./ui";
+import { Banner, BLink, WHAT_STAYS_LOCKED_TEXT } from "./ui";
 
 /* ------------------------------------------------------------ Access status */
 
@@ -91,8 +91,9 @@ export function PlanLockNotice({ kind }: { kind: PlanLockKind }) {
       <Link href="/org/settings/billing/plans" className="btn btn-primary btn-sm">
         Upgrade
       </Link>
-      <Link href="/org/settings/billing/choose-what-stays" className="btn btn-ghost btn-sm">
-        Change what stays
+      {/* What's paused on the current plan can only be changed by our team now. */}
+      <Link href="/org/support" className="btn btn-ghost btn-sm" title={WHAT_STAYS_LOCKED_TEXT}>
+        Contact support
       </Link>
     </div>
   );
@@ -107,8 +108,8 @@ export function PlanLockNotice({ kind }: { kind: PlanLockKind }) {
 export function PausedAccountNotice({ orgName, ownerName, planName, userLimit }: { orgName: string; ownerName: string; planName: string; userLimit: number }) {
   return (
     <div className="form-alert" role="alert" style={{ lineHeight: 1.5, marginBottom: 14 }}>
-      <b>Your account is paused.</b> {orgName} is on the free {planName} plan, which allows {userLimit} users. Ask {ownerName} (owner) to buy a plan again or to add you
-      in “Choose what stays”. Your data is safe.
+      <b>Your account is paused.</b> {orgName} is on the free {planName} plan, which allows {userLimit} users. Ask {ownerName} (owner) to buy a plan again, or to
+      contact our support team to change what stays. Your data is safe.
     </div>
   );
 }

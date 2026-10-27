@@ -1,4 +1,5 @@
 import {
+  IsBoolean,
   IsIn,
   IsNotEmpty,
   IsOptional,
@@ -25,6 +26,12 @@ export class StartCheckoutDto {
   /** 'renewal' pays for one more term of the current plan (planId + interval must match it). */
   @IsOptional() @IsIn(['purchase', 'renewal']) purpose?: 'purchase' | 'renewal';
   @IsOptional() @IsString() @MaxLength(40) couponCode?: string;
+  /**
+   * Over the plan's limits with no saved "choose what stays": the org ticked
+   * "Keep the default picks shown above". Without it (or a saved choice that
+   * fits) the request is refused with choose_what_stays.
+   */
+  @IsOptional() @IsBoolean() acceptDefaultPicks?: boolean;
 }
 
 /** POST /org/billing/checkout/confirm — Razorpay Checkout's success payload. */

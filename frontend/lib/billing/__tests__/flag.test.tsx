@@ -440,7 +440,7 @@ describe("billing v2 flag", () => {
     expect(errors).toEqual([]);
   });
 
-  it("downgrade over the smaller plan's limits: shows what stays and can be scheduled", async () => {
+  it("downgrade over the smaller plan's limits: shows what stays; the button waits for a saved choice or the default-picks tick", async () => {
     backend.overview = overview({
       plan: GROWTH,
       paidPlan: GROWTH,
@@ -467,6 +467,9 @@ describe("billing v2 flag", () => {
     expect(apiFetch).toHaveBeenCalledWith("/org/billing/retention?targetPlanId=uuid-basic");
     expect(screen.getByText(/Asha Rao/)).toBeInTheDocument(); // the default pick that stays
     expect(screen.getByRole("link", { name: /Choose what stays/ })).toBeInTheDocument();
+    // No saved choice: disabled until "Keep the default picks shown above" is ticked.
+    expect(screen.getByRole("button", { name: /Move to Basic/ })).toBeDisabled();
+    fireEvent.click(screen.getByRole("checkbox", { name: "Keep the default picks shown above" }));
     expect(screen.getByRole("button", { name: /Move to Basic/ })).toBeEnabled();
     expect(errors).toEqual([]);
   });
@@ -518,6 +521,9 @@ describe("billing v2 flag", () => {
         // manual mode: requests list and withdraw
         "listOrgRequests",
         "withdrawRequest",
+        // choose what stays rules: Super Admin any time
+        "getAdminRetentionChoices",
+        "saveAdminRetentionChoices",
         "getCompanyDetails",
         "saveCompanyDetails",
         "runLifecycleCheck",

@@ -267,6 +267,7 @@ describe("org, manual mode", () => {
     const cancelPlan = vi.spyOn(client, "cancelPlan");
     await show(client, <DowngradeScreen planId="basic" />);
     expect(screen.getByText("Straight away")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("checkbox", { name: "Keep the default picks shown above" }));
     fireEvent.click(screen.getByRole("button", { name: /Move to Basic/ }));
     expect(screen.getByText("Move to Basic now?")).toBeInTheDocument();
     expect(screen.getByText(/renewal is overdue, so the move happens straight away/)).toBeInTheDocument();

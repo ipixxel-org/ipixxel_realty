@@ -1,0 +1,103 @@
+import type { PrismaClient } from '@prisma/client';
+import { usageOverLimits } from '../../common/utils/plan-quota.util';
+import { savedChoiceFor } from '../../common/utils/retention.util';
+import { billingError, usageConflictMessage } from './billing-checkout.service';
+import type { UsageConflictV2 } from './billing.types';
+
+/**
+ * "Choose what stays" is part of every plan change where the org is over the
+ * target plan's limits. The org confirms it once — a saved choice for that
+ * plan that fits, or "Keep the default picks shown above" — and can change it
+ * until the change is decided or takes effect. After that only Super Admin
+ * can change it (admin endpoints in BillingRetentionService).
+ */
+
+export const WHAT_STAYS_LOCKED_MESSAGE =
+  'To change what stays, contact our support team.';
+
+type Db = Parameters<typeof usageOverLimits>[0] &
+  Parameters<typeof savedChoiceFor>[0];
+
+/**
+ * What the org is over on `target` that "choose what stays" fixes (null when
+ * nothing), and whether their saved choice for it fits. A choice saved before
+ * templates could be paused has no template picks (null): the default picks
+ * apply to those, and they fit.
+ */
+export async function whatStaysConflict(
+  db: Db,
+  orgId: string,
+  target: { id: string; limits: unknown },
+): Promise<UsageConflictV2 | null> {
+  const over = (await usageOverLimits(db, orgId, target)).filter(
+    (o) => o.fixable,
+  );
+  if (!over.length) return null;
+  const saved = await savedChoiceFor(db, orgId, target.id);
+  const items = over.map((o) => ({
+    key: o.key as UsageConflictV2['items'][number]['key'],
+    limit: o.limit,
+    used: o.used,
+  }));
+  const choicesFit =
+    !!saved && items.every((i) => (saved[i.key]?.length ?? 0) <= i.limit);
+  return { items, choicesFit };
+}
+
+/**
+ * Refuse a plan change the org is over on until they've confirmed what stays:
+ * a saved choice that fits, or `acceptDefaultPicks` (the checkbox). Which one
+ * was used ends up in whatStays.choice ('saved' / 'default').
+ */
+export async function assertWhatStaysConfirmed(
+  db: Db,
+  orgId: string,
+  target: { id: string; name: string; limits: unknown },
+  acceptDefaultPicks: boolean | undefined,
+): Promise<void> {
+  const conflict = await whatStaysConflict(db, orgId, target);
+  if (conflict && !conflict.choicesFit && !acceptDefaultPicks) {
+    throw billingError(
+      'choose_what_stays',
+      usageConflictMessage(target.name, conflict),
+    );
+  }
+}
+
+/** A request / scheduled change the org can still change what stays for. */
+export const OPEN_REQUEST_STATUSES = ['pending', 'scheduled'] as const;
+/** A request / scheduled change that was applied (the org moved to its plan). */
+export const APPLIED_REQUEST_STATUSES = ['approved', 'done'] as const;
+
+/**
+ * Whether the org may no longer change what stays for `targetPlanId`:
+ * - for a given request: once it's no longer pending / scheduled;
+ * - otherwise: when the org is already on that plan (the change took
+ *   effect — swapping what's paused on the current plan is Super Admin only).
+ * Before a change is sent, while it's pending or scheduled, and in grace
+ * before falling back to Basic, it's editable.
+ */
+export async function whatStaysLockedForOrg(
+  db: Pick<PrismaClient, 'subscription' | 'packageChangeRequest'>,
+  orgId: string,
+  targetPlanId: string,
+  requestId?: string,
+): Promise<boolean> {
+  if (requestId) {
+    const request = await db.packageChangeRequest.findFirst({
+      where: { id: requestId, orgId },
+      select: { status: true },
+    });
+    if (!request) {
+      throw billingError('request_not_found', 'That request was not found.');
+    }
+    return !(OPEN_REQUEST_STATUSES as readonly string[]).includes(
+      request.status,
+    );
+  }
+  const sub = await db.subscription.findFirst({
+    where: { orgId, status: { not: 'cancelled' } },
+    select: { planId: true },
+  });
+  return sub?.planId === targetPlanId;
+}

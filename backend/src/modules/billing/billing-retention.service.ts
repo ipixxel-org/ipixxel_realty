@@ -1,5 +1,6 @@
 import { Injectable } from '@nestjs/common';
-import type { Plan, Prisma, Subscription } from '@prisma/client';
+import { Prisma } from '@prisma/client';
+import type { Plan, Subscription } from '@prisma/client';
 import { PrismaService } from '../../database/prisma.service';
 import {
   applyRetention,
@@ -14,7 +15,14 @@ import {
 import {
   findFreePlan,
   getBillingExpiryConfig,
+  notifyOrgAdmins,
 } from '../../common/utils/subscription-lifecycle.util';
+import {
+  APPLIED_REQUEST_STATUSES,
+  OPEN_REQUEST_STATUSES,
+  WHAT_STAYS_LOCKED_MESSAGE,
+  whatStaysLockedForOrg,
+} from './what-stays';
 import { billingError } from './billing-checkout.service';
 import { planRanker, toBillingPlan } from './plan-modules';
 import type {
@@ -36,9 +44,10 @@ type SubWithPlan = Subscription & { plan: Plan };
 
 /**
  * Billing v2 step 6 — "choose what stays". Which users, projects, landing
- * pages and templates stay active on a smaller plan: shown, chosen and saved here; applied
- * by retention.util whenever the plan changes (and at once when the org is
- * already on that plan).
+ * pages and templates stay active on a smaller plan: shown, chosen and saved
+ * here; applied by retention.util whenever the plan changes. The org can
+ * change it until the change is decided or takes effect (what-stays.ts);
+ * Super Admin any time (applied at once when the org is on that plan).
  */
 @Injectable()
 export class BillingRetentionService {
@@ -75,17 +84,98 @@ export class BillingRetentionService {
     return sub.renewsAt ? isoDate(sub.renewsAt) : null;
   }
 
-  async getChoices(
+  /**
+   * The plan to choose for: the request's plan when `requestId` is given
+   * (it must be this org's), else `targetPlanId`, else the plan the org is
+   * heading to.
+   */
+  private async resolveTarget(
     orgId: string,
+    sub: SubWithPlan | null,
+    active: Plan[],
     targetPlanId?: string,
-  ): Promise<RetentionChoicesV2> {
-    const { sub, active } = await this.context(orgId);
-    const target = targetPlanId
-      ? active.find((p) => p.id === targetPlanId)
+    requestId?: string,
+  ) {
+    let request: { id: string; status: string; targetPlanId: string } | null =
+      null;
+    if (requestId) {
+      request = await this.prisma.packageChangeRequest.findFirst({
+        where: { id: requestId, orgId },
+        select: { id: true, status: true, targetPlanId: true },
+      });
+      if (!request) {
+        throw billingError('request_not_found', 'That request was not found.');
+      }
+      if (targetPlanId && targetPlanId !== request.targetPlanId) {
+        throw billingError(
+          'plan_not_found',
+          "That plan isn't the one this request is for.",
+        );
+      }
+    }
+    const id = request?.targetPlanId ?? targetPlanId;
+    const target = id
+      ? (active.find((p) => p.id === id) ??
+        // A request's plan may have been archived since; still show it.
+        (request ? await this.prisma.plan.findUnique({ where: { id } }) : null))
       : await this.defaultTarget(sub, active);
     if (!target) {
       throw billingError('plan_not_found', 'That plan is not available.');
     }
+    return { target, request };
+  }
+
+  /**
+   * GET /org/billing/retention. `locked`: the org can only look (the change
+   * was decided or took effect — whatStaysLockedForOrg); Super Admin can
+   * still change it.
+   */
+  async getChoices(
+    orgId: string,
+    targetPlanId?: string,
+    requestId?: string,
+  ): Promise<RetentionChoicesV2> {
+    const { sub, active } = await this.context(orgId);
+    const { target } = await this.resolveTarget(
+      orgId,
+      sub,
+      active,
+      targetPlanId,
+      requestId,
+    );
+    const locked = await whatStaysLockedForOrg(
+      this.prisma,
+      orgId,
+      target.id,
+      requestId,
+    );
+    return this.choicesFor(orgId, sub, active, target, locked);
+  }
+
+  /** GET /admin/billing/subscriptions/:orgId/retention — never locked. */
+  async adminGetChoices(
+    orgId: string,
+    targetPlanId?: string,
+    requestId?: string,
+  ): Promise<RetentionChoicesV2> {
+    const { sub, active } = await this.context(orgId);
+    const { target } = await this.resolveTarget(
+      orgId,
+      sub,
+      active,
+      targetPlanId ?? (requestId ? undefined : sub?.planId),
+      requestId,
+    );
+    return this.choicesFor(orgId, sub, active, target, false);
+  }
+
+  private async choicesFor(
+    orgId: string,
+    sub: SubWithPlan | null,
+    active: Plan[],
+    target: Plan,
+    locked: boolean,
+  ): Promise<RetentionChoicesV2> {
     const ranked = rankRetention(
       await loadRetentionCandidates(this.prisma, orgId),
     );
@@ -93,7 +183,9 @@ export class BillingRetentionService {
     const saved = await savedChoiceFor(this.prisma, orgId, target.id);
     const defaults = pickRetention(ranked, limits, null);
     const selected = pickRetention(ranked, limits, saved);
-    const rank = planRanker(active)(target);
+    const rank = planRanker(
+      active.some((p) => p.id === target.id) ? active : [...active, target],
+    )(target);
 
     const item = (
       id: string,
@@ -115,6 +207,7 @@ export class BillingRetentionService {
       targetPlan: toBillingPlan(target, rank),
       appliesOn: this.appliesOn(sub, target),
       isDefault: !saved,
+      locked,
       users: ranked.users.map((u) => {
         const login = u.lastLoginAt
           ? `last login ${shortDate(u.lastLoginAt)}`
@@ -167,16 +260,133 @@ export class BillingRetentionService {
     };
   }
 
+  /**
+   * PUT /org/billing/retention. Only while the change isn't decided yet:
+   * before it's sent, while the request is pending or the change scheduled,
+   * in grace before falling back to Basic. After that (and on the plan the
+   * org is already on) it's what_stays_locked — Super Admin only.
+   */
   async saveChoices(
     orgId: string,
     userId: string,
     dto: SaveRetentionChoicesDto,
   ): Promise<RetentionChoicesV2> {
     const { sub, active } = await this.context(orgId);
-    const target = active.find((p) => p.id === dto.targetPlanId);
-    if (!target) {
-      throw billingError('plan_not_found', 'That plan is not available.');
+    const { target } = await this.resolveTarget(
+      orgId,
+      sub,
+      active,
+      dto.targetPlanId,
+      dto.requestId,
+    );
+    if (
+      await whatStaysLockedForOrg(this.prisma, orgId, target.id, dto.requestId)
+    ) {
+      throw billingError('what_stays_locked', WHAT_STAYS_LOCKED_MESSAGE);
     }
+    const ids = await this.validate(orgId, target, dto);
+    await this.store(orgId, userId, target.id, ids);
+    await this.refreshOpenCopies(orgId, target);
+    await this.audit(orgId, userId, 'retention_choices_saved', {
+      targetPlanId: target.id,
+      requestId: dto.requestId ?? null,
+      ...ids,
+    });
+    return this.getChoices(orgId, target.id, dto.requestId);
+  }
+
+  /**
+   * PUT /admin/billing/subscriptions/:orgId/retention — Super Admin, any time.
+   * Before the change is applied it updates the saved choice (and the
+   * request's copy); once applied (the org is on that plan) it applies at
+   * once: pauses and unpauses to match. A request that was rejected,
+   * withdrawn, undone or replaced never applied: request_closed.
+   */
+  async adminSaveChoices(
+    orgId: string,
+    adminId: string,
+    dto: SaveRetentionChoicesDto,
+  ): Promise<RetentionChoicesV2> {
+    const { sub, active } = await this.context(orgId);
+    const { target, request } = await this.resolveTarget(
+      orgId,
+      sub,
+      active,
+      dto.targetPlanId,
+      dto.requestId,
+    );
+    const requestApplied =
+      !!request &&
+      (APPLIED_REQUEST_STATUSES as readonly string[]).includes(request.status);
+    if (
+      request &&
+      !requestApplied &&
+      !(OPEN_REQUEST_STATUSES as readonly string[]).includes(request.status)
+    ) {
+      throw billingError(
+        'request_closed',
+        "This change wasn't applied, so there's nothing to change.",
+      );
+    }
+    const ids = await this.validate(orgId, target, dto);
+    await this.store(orgId, adminId, target.id, ids);
+    const applyNow = sub?.planId === target.id && (!request || requestApplied);
+    if (applyNow) {
+      await applyRetention(this.prisma, orgId, target);
+      if (request) {
+        const whatStays = await whatStaysFor(this.prisma, orgId, target, true);
+        await this.prisma.packageChangeRequest.update({
+          where: { id: request.id },
+          data: {
+            whatStays: whatStays
+              ? (whatStays as unknown as Prisma.InputJsonValue)
+              : Prisma.DbNull,
+          },
+        });
+      }
+    } else {
+      await this.refreshOpenCopies(orgId, target);
+    }
+    const admin = await this.prisma.user
+      .findUnique({
+        where: { id: adminId },
+        select: { firstName: true, lastName: true, email: true },
+      })
+      .catch(() => null);
+    await this.audit(orgId, adminId, 'retention_choices_saved_by_admin', {
+      targetPlanId: target.id,
+      requestId: request?.id ?? null,
+      appliedNow: applyNow,
+      admin: admin
+        ? {
+            name:
+              [admin.firstName, admin.lastName].filter(Boolean).join(' ') ||
+              admin.email,
+            email: admin.email,
+          }
+        : { id: adminId },
+      ...ids,
+    });
+    if (sub) {
+      await notifyOrgAdmins(
+        this.prisma,
+        sub,
+        'package_change_request',
+        'Our team updated what stays active on your plan',
+        applyNow
+          ? `Our support team changed which users, projects, landing pages and templates stay active on ${target.name}. Anything else is paused, never deleted.`
+          : `Our support team changed which users, projects, landing pages and templates stay active when you move to ${target.name}.`,
+      ).catch(() => undefined);
+    }
+    return this.adminGetChoices(orgId, target.id, request?.id);
+  }
+
+  /** Same rules for everyone: known ids, within the limits, owner always in. */
+  private async validate(
+    orgId: string,
+    target: Plan,
+    dto: SaveRetentionChoicesDto,
+  ) {
     const ranked = rankRetention(
       await loadRetentionCandidates(this.prisma, orgId),
     );
@@ -219,59 +429,75 @@ export class BillingRetentionService {
     if (owner && !ids.users.includes(owner.id)) {
       throw billingError('retention_owner', 'The owner always stays active.');
     }
+    return ids;
+  }
 
-    await this.prisma.retentionChoice.upsert({
+  private store(
+    orgId: string,
+    actorId: string,
+    targetPlanId: string,
+    ids: Record<(typeof RETENTION_KINDS)[number], string[]>,
+  ) {
+    const data = {
+      targetPlanId,
+      userIds: ids.users,
+      projectIds: ids.projects,
+      landingPageIds: ids.landingPages,
+      templateIds: ids.templates,
+      updatedById: actorId,
+    };
+    return this.prisma.retentionChoice.upsert({
       where: { organisationId: orgId },
-      create: {
-        organisationId: orgId,
-        targetPlanId: target.id,
-        userIds: ids.users,
-        projectIds: ids.projects,
-        landingPageIds: ids.landingPages,
-        templateIds: ids.templates,
-        updatedById: userId,
-      },
-      update: {
-        targetPlanId: target.id,
-        userIds: ids.users,
-        projectIds: ids.projects,
-        landingPageIds: ids.landingPages,
-        templateIds: ids.templates,
-        updatedById: userId,
-      },
+      create: { organisationId: orgId, ...data },
+      update: data,
     });
-    // Already on that plan (e.g. moved to Basic): swap what's paused now.
-    // A pending request to this plan keeps a copy of the choice (Requests tab).
-    const pending = await this.prisma.packageChangeRequest.findFirst({
-      where: { orgId, status: 'pending', targetPlanId: target.id },
+  }
+
+  /**
+   * A pending request or scheduled change to this plan keeps a copy of the
+   * choice (Requests tab); refresh it.
+   */
+  private async refreshOpenCopies(orgId: string, target: Plan) {
+    const open = await this.prisma.packageChangeRequest.findMany({
+      where: {
+        orgId,
+        status: { in: [...OPEN_REQUEST_STATUSES] },
+        targetPlanId: target.id,
+      },
       select: { id: true },
     });
-    if (pending) {
-      const whatStays = await whatStaysFor(this.prisma, orgId, target);
+    if (!open.length) return;
+    const whatStays = await whatStaysFor(this.prisma, orgId, target);
+    for (const row of open) {
       await this.prisma.packageChangeRequest.update({
-        where: { id: pending.id },
+        where: { id: row.id },
         data: {
-          whatStays: (whatStays ?? undefined) as
-            Prisma.InputJsonValue | undefined,
+          whatStays: whatStays
+            ? (whatStays as unknown as Prisma.InputJsonValue)
+            : Prisma.DbNull,
         },
       });
     }
-    if (sub?.planId === target.id) {
-      await applyRetention(this.prisma, orgId, target);
-    }
-    await this.prisma.auditLog
+  }
+
+  private audit(
+    orgId: string,
+    actorId: string,
+    action: string,
+    metadata: Record<string, unknown>,
+  ) {
+    return this.prisma.auditLog
       .create({
         data: {
           orgId,
-          actorId: userId,
-          action: 'retention_choices_saved',
+          actorId,
+          action,
           entity: 'RetentionChoice',
           entityId: orgId,
-          metadata: { targetPlanId: target.id, ...ids },
+          metadata: metadata as Prisma.InputJsonValue,
         },
       })
       .catch(() => undefined);
-    return this.getChoices(orgId, target.id);
   }
 
   /**

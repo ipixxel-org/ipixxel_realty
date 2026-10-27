@@ -30,6 +30,8 @@ import { Empty, ErrorNote, Loading, Section } from "../ui";
 import { MarkPaidDialog, type MarkPaidValues } from "./mark-paid-dialog";
 import { RejectRequestDialog } from "./reject-request-dialog";
 import { NoApprovalTag, whatStaysSummary } from "../requests";
+import { ChooseWhatStaysScreen } from "../choose-what-stays";
+import { BillingDialog } from "../dialog";
 
 /** Anchor of the section; Package Requests → Open scrolls here. */
 export const PACKAGE_REQUESTS_ANCHOR = "package-requests";
@@ -96,6 +98,53 @@ export function requestAmountText(r: PackageChangeRequestRow): string | null {
  * Scheduled changes (to Basic / a smaller plan) are listed read-only: they
  * need no approval.
  */
+/** Rows Super Admin can change what stays on: still open, or applied (then it applies at once). */
+const WHAT_STAYS_EDITABLE = new Set(["pending", "scheduled", "approved", "done"]);
+
+/**
+ * Super Admin "Choose what stays" for one organisation — any time, also after
+ * the org's own choice is locked. Before the change applies it updates the
+ * saved choice; once the org is on that plan it applies straight away (and the
+ * org is notified). Without `requestId` it's for the org's current plan.
+ */
+export function AdminWhatStaysButton({
+  orgId,
+  orgName,
+  requestId,
+  targetPlanId,
+  label = "Choose what stays",
+  onSaved,
+}: {
+  orgId: string;
+  orgName?: string;
+  requestId?: string;
+  targetPlanId?: string;
+  label?: string;
+  onSaved?: () => void;
+}) {
+  const { hasPermission } = useAuth();
+  const [open, setOpen] = useState(false);
+  if (!hasPermission("admin_subscriptions", "edit")) return null;
+  return (
+    <>
+      <button type="button" className="btn btn-ghost btn-sm" onClick={() => setOpen(true)} data-testid="admin-choose-what-stays">
+        {label}
+      </button>
+      <BillingDialog open={open} onClose={() => setOpen(false)} title={`${label}${orgName ? ` — ${orgName}` : ""}`} size="lg">
+        <ChooseWhatStaysScreen
+          admin={{ orgId, orgName }}
+          requestId={requestId}
+          targetPlanId={targetPlanId}
+          onSaved={() => {
+            setOpen(false);
+            onSaved?.();
+          }}
+        />
+      </BillingDialog>
+    </>
+  );
+}
+
 export function OrgPackageRequests({ orgId, onChanged }: { orgId: string; onChanged?: () => void }) {
   const { hasPermission } = useAuth();
   const { toast } = useToast();
@@ -288,6 +337,20 @@ export function OrgPackageRequests({ orgId, onChanged }: { orgId: string; onChan
                           // What the org chose to keep (the rest is paused on approval).
                           <div className="bl-small" style={{ marginTop: 4 }} data-testid="admin-what-stays">
                             Keeps {whatStaysSummary(r.whatStays)}
+                            {WHAT_STAYS_EDITABLE.has(r.status) ? (
+                              <div style={{ marginTop: 4 }}>
+                                <AdminWhatStaysButton
+                                  orgId={orgId}
+                                  orgName={r.organisation?.name}
+                                  requestId={r.id}
+                                  targetPlanId={r.targetPlanId}
+                                  onSaved={() => {
+                                    void load();
+                                    onChanged?.();
+                                  }}
+                                />
+                              </div>
+                            ) : null}
                           </div>
                         ) : null}
                       </td>

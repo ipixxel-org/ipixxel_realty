@@ -9,7 +9,7 @@ import type { BillingOverview, RetentionSummary } from "@/lib/billing/types";
 import { useBillingEnv, useOptionalOrgBilling } from "./context";
 import { BillingDialog, DialogActions } from "./dialog";
 import { usePayment } from "./payment";
-import { Banner, BLink, useRenewalLive } from "./ui";
+import { Banner, BLink, useRenewalLive, WhatStaysLockedNote } from "./ui";
 
 /** Re-fetch the shared overview after an action (no-op outside OrgBillingProvider). */
 function useRefresh() {
@@ -390,9 +390,8 @@ export function BillingBanner({ overview }: { overview: BillingOverview }) {
               <BLink to="checkout" params={{ plan: plan.id, interval: o.interval }} className="btn btn-primary btn-sm">
                 Buy {plan.name} again · {packagePriceText(planPrice(plan, o.interval))}
               </BLink>
-              <BLink to="chooseWhatStays" className="btn btn-ghost btn-sm">
-                Change what stays
-              </BLink>
+              {/* The move took effect: what stays is view-only for the org now. */}
+              <WhatStaysLockedNote />
             </>
           }
         >

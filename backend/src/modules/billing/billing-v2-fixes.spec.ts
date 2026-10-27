@@ -259,6 +259,7 @@ describe('"Run lifecycle check now"', () => {
       {} as never,
       {} as never,
       {} as never,
+      {} as never,
     );
     expect(() =>
       controller.runLifecycle({

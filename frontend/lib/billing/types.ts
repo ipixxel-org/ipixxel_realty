@@ -422,6 +422,8 @@ export interface StartCheckoutRequest {
   interval: BillingInterval;
   couponCode?: string;
   purpose: "purchase" | "renewal";
+  /** Over the plan's limits with no saved choice: the org ticked "Keep the default picks shown above". */
+  acceptDefaultPicks?: boolean;
 }
 
 export type StartCheckoutResponse =
@@ -502,12 +504,16 @@ export interface AdminCheckoutRow {
 
 export interface CancelPlanRequest {
   reason?: string;
+  /** Over Basic's limits with no saved choice: "Keep the default picks shown above". */
+  acceptDefaultPicks?: boolean;
 }
 
 export interface ScheduleDowngradeRequest {
   planId: PlanId;
   /** Defaults to the current interval; same plan yearly → monthly is a downgrade too. */
   interval?: BillingInterval;
+  /** Over the smaller plan's limits with no saved choice: "Keep the default picks shown above". */
+  acceptDefaultPicks?: boolean;
 }
 
 /* ---------------------------------------------------- Choose what stays */
@@ -528,6 +534,13 @@ export interface RetentionItem {
 export interface GetRetentionChoicesRequest {
   /** Defaults to the scheduled downgrade target, else the free plan. */
   targetPlanId?: PlanId;
+  /** The request / scheduled change it belongs to (its plan is the target). */
+  requestId?: string;
+}
+
+/** Super Admin: the same, for one organisation (default target: its current plan). */
+export interface AdminRetentionRequest extends GetRetentionChoicesRequest {
+  orgId: string;
 }
 
 export interface RetentionChoices {
@@ -535,6 +548,11 @@ export interface RetentionChoices {
   /** When the choice takes effect; null when already on the target plan. */
   appliesOn: string | null;
   isDefault: boolean;
+  /**
+   * The org can only look: the change was decided or took effect (or it's
+   * the plan they're on). Super Admin can still change it. Missing = false.
+   */
+  locked?: boolean;
   users: RetentionItem[];
   projects: RetentionItem[];
   landingPages: RetentionItem[];
@@ -548,6 +566,12 @@ export interface SaveRetentionChoicesRequest {
   projectIds: string[];
   landingPageIds: string[];
   templateIds?: string[];
+  /** The request / scheduled change it belongs to. */
+  requestId?: string;
+}
+
+export interface AdminSaveRetentionRequest extends SaveRetentionChoicesRequest {
+  orgId: string;
 }
 
 /* ---------------------------------------------------------- Locked states */

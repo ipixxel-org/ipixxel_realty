@@ -67,14 +67,18 @@ describe('"Choose what stays" on Settings → Billing', () => {
     expect(within(actionRow()).getByRole("link", { name: "Choose what stays" })).toBeInTheDocument();
   });
 
-  it("stays in the grace and \"You're on Basic now\" banners in manual mode", async () => {
-    for (const situation of ["payment_due", "moved_to_basic"] as const) {
-      const view = await show(createMockBillingClient({ initial: manual({ situation }) }), <BillingOverviewPanel showInvoices={false} />);
-      expect(within(actionRow()).queryByRole("link", { name: "Choose what stays" })).toBeNull();
-      // Grace: "Choose what stays"; on Basic: "Change what stays".
-      expect(screen.getAllByRole("link", { name: /(Choose|Change) what stays/ }).length).toBeGreaterThan(0);
-      view.unmount();
-    }
+  it("grace banner: Choose what stays; \"You're on Basic now\": view-only, contact support", async () => {
+    let view = await show(createMockBillingClient({ initial: manual({ situation: "payment_due" }) }), <BillingOverviewPanel showInvoices={false} />);
+    expect(within(actionRow()).queryByRole("link", { name: "Choose what stays" })).toBeNull();
+    expect(screen.getAllByRole("link", { name: "Choose what stays" }).length).toBeGreaterThan(0);
+    view.unmount();
+    // The move took effect: no "Change what stays" for the org any more.
+    view = await show(createMockBillingClient({ initial: manual({ situation: "moved_to_basic" }) }), <BillingOverviewPanel showInvoices={false} />);
+    expect(screen.queryByRole("link", { name: /(Choose|Change) what stays/ })).toBeNull();
+    const note = screen.getAllByTestId("what-stays-locked")[0];
+    expect(note).toHaveTextContent("To change what stays, contact our support team");
+    expect(within(note).getByRole("link", { name: /Support/ })).toHaveAttribute("href", "/org/support");
+    view.unmount();
   });
 });
 
@@ -229,7 +233,7 @@ describe("Requests show what they chose to keep", () => {
     ...over,
   });
 
-  it("pending: the summary, the names, and a link to change it; decided: what was applied; none: everything fits", async () => {
+  it("pending: the summary, the names, and a link to change it; decided: view-only (View what stays, contact support); none: everything fits", async () => {
     const rows = [
       req({ id: "p", whatStays: whatStays(false) }),
       req({ id: "a", status: "approved", decidedAt: "2026-10-21T10:00:00.000Z", whatStays: whatStays(true) }),
@@ -245,12 +249,14 @@ describe("Requests show what they chose to keep", () => {
     expect(p).toHaveTextContent("Will be paused: Priya");
     expect(within(p).getByRole("link", { name: "Change what stays" })).toHaveAttribute(
       "href",
-      "/org/settings/billing/choose-what-stays?target=pro&back=requests",
+      "/org/settings/billing/choose-what-stays?target=pro&back=requests&request=p",
     );
     const a = within(approved).getByTestId("what-stays");
-    expect(a).toHaveTextContent("Applied when approved");
+    expect(a).toHaveTextContent("Applied");
+    expect(a).toHaveTextContent("View what stays");
     expect(a).toHaveTextContent("Paused: Priya");
-    expect(within(a).queryByRole("link")).toBeNull();
+    expect(within(a).queryByRole("link", { name: "Change what stays" })).toBeNull();
+    expect(within(a).getByTestId("what-stays-locked")).toHaveTextContent("To change what stays, contact our support team");
     expect(none).toHaveTextContent("Everything fits");
   });
 

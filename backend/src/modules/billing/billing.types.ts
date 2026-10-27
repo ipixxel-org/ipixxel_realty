@@ -160,6 +160,12 @@ export interface RetentionChoicesV2 {
   targetPlan: BillingPlanV2;
   appliesOn: string | null;
   isDefault: boolean;
+  /**
+   * The org can only look: the change was decided or took effect (or it's
+   * the plan they're on). Changing it is then Super Admin only. Always false
+   * on the admin endpoint.
+   */
+  locked: boolean;
   users: RetentionItemV2[];
   projects: RetentionItemV2[];
   landingPages: RetentionItemV2[];

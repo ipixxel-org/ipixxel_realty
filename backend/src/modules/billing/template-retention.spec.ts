@@ -216,8 +216,8 @@ describe('pausing templates on a smaller plan', () => {
       ['t-used', true, expect.stringMatching(/^2 landing pages made from it/)],
       ['t-spare', false, expect.stringMatching(/^1 landing page made from it/)],
     ]);
-    // Already on Basic: saving swaps what's paused straight away.
-    await retention.saveChoices('org-1', 'u-admin', {
+    // Already on Basic: Super Admin's save swaps what's paused straight away.
+    await retention.adminSaveChoices('org-1', 'admin-1', {
       targetPlanId: 'basic',
       userIds: ['u-admin'],
       projectIds: [],
@@ -230,7 +230,7 @@ describe('pausing templates on a smaller plan', () => {
       't-used',
     ]);
     await expect(
-      retention.saveChoices('org-1', 'u-admin', {
+      retention.adminSaveChoices('org-1', 'admin-1', {
         targetPlanId: 'basic',
         userIds: ['u-admin'],
         projectIds: [],

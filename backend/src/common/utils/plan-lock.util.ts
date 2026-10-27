@@ -15,13 +15,13 @@ export type PlanLockKind =
 
 const MESSAGES: Record<PlanLockKind, string> = {
   project_view_only:
-    "This project is view-only because your plan's project limit is lower. Upgrade, or change what stays in Billing, to edit it again.",
+    "This project is view-only because your plan's project limit is lower. Upgrade, or contact our support team to change what stays, to edit it again.",
   landing_page_offline:
-    'This landing page is offline because your plan allows fewer live pages. Upgrade, or change what stays in Billing, to publish it again.',
+    'This landing page is offline because your plan allows fewer live pages. Upgrade, or contact our support team to change what stays, to publish it again.',
   user_paused:
-    "This user is paused because your plan's user limit is lower. Upgrade, or change what stays in Billing, to bring them back.",
+    "This user is paused because your plan's user limit is lower. Upgrade, or contact our support team to change what stays, to bring them back.",
   template_paused:
-    "This template is paused because your plan allows fewer templates, so it can't be used for new landing pages. Pages already made from it aren't affected. Upgrade, or change what stays in Billing, to use it again.",
+    "This template is paused because your plan allows fewer templates, so it can't be used for new landing pages. Pages already made from it aren't affected. Upgrade, or contact our support team to change what stays, to use it again.",
 };
 
 export function planLockedError(lock: PlanLockKind): ForbiddenException {
