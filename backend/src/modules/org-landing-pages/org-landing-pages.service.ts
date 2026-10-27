@@ -245,6 +245,9 @@ export class OrgLandingPagesService {
     if (!assignment) {
       throw new ForbiddenException('Template is not assigned to your organisation');
     }
+    // Paused by billing ("choose what stays"): no new pages from it. Pages
+    // already made from it are independent copies and aren't affected.
+    if (assignment.billingPausedAt) throw planLockedError('template_paused');
 
     const template = await this.prisma.template.findFirst({
       where: { id: dto.templateId, status: 'published', pageType: 'landing' },

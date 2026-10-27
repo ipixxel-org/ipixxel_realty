@@ -1,11 +1,13 @@
 /**
  * The "default picks" rule for moving to a smaller plan: which users,
- * projects and landing pages stay active when nobody chooses.
+ * projects, landing pages and templates stay active when nobody chooses.
  *
  * - Users: the owner first, then admins, then everyone else — each group by
  *   most recent login.
  * - Projects: most recently updated first.
  * - Landing pages: most leads in the last 30 days first.
+ * - Templates: most landing pages made from it first, then the most recently
+ *   used (latest page made from it), then the most recently assigned.
  *
  * Pure functions, unit-tested in `__tests__/default-picks.test.ts`. The
  * backend applies the same rule when an org moves to a smaller plan.
@@ -32,6 +34,16 @@ export interface PickLandingPage {
   id: string;
   name: string;
   leadsLast30Days: number;
+}
+
+export interface PickTemplate {
+  id: string;
+  name: string;
+  /** Landing pages made from it. */
+  pagesMade: number;
+  /** When the latest of those was made; null when none. */
+  lastUsedAt: string | null;
+  assignedAt: string;
 }
 
 export interface RankedItem<T> {
@@ -73,14 +85,32 @@ export function rankLandingPages<L extends PickLandingPage>(pages: L[], limit: n
   }));
 }
 
+export function rankTemplates<T extends PickTemplate>(templates: T[], limit: number): RankedItem<T>[] {
+  const sorted = [...templates].sort(
+    (a, b) =>
+      b.pagesMade - a.pagesMade ||
+      (b.lastUsedAt ?? "").localeCompare(a.lastUsedAt ?? "") ||
+      b.assignedAt.localeCompare(a.assignedAt) ||
+      a.name.localeCompare(b.name),
+  );
+  return sorted.map((t, i) => ({
+    item: t,
+    picked: i < limit,
+    reason: t.pagesMade
+      ? `${t.pagesMade} landing page${t.pagesMade === 1 ? "" : "s"} made from it` + (t.lastUsedAt ? ` · last used ${formatShortDate(t.lastUsedAt)}` : "")
+      : "No landing pages made from it yet",
+  }));
+}
+
 export function defaultPicks(
-  data: { users: PickUser[]; projects: PickProject[]; landingPages: PickLandingPage[] },
-  limits: Pick<PlanLimits, "users" | "projects" | "landingPages">,
+  data: { users: PickUser[]; projects: PickProject[]; landingPages: PickLandingPage[]; templates?: PickTemplate[] },
+  limits: Pick<PlanLimits, "users" | "projects" | "landingPages"> & Partial<Pick<PlanLimits, "templates">>,
 ) {
   const ids = <T extends { id: string }>(ranked: RankedItem<T>[]) => ranked.filter((r) => r.picked).map((r) => r.item.id);
   return {
     users: ids(rankUsers(data.users, limits.users ?? Infinity)),
     projects: ids(rankProjects(data.projects, limits.projects ?? Infinity)),
     landingPages: ids(rankLandingPages(data.landingPages, limits.landingPages ?? Infinity)),
+    templates: ids(rankTemplates(data.templates ?? [], limits.templates ?? Infinity)),
   };
 }

@@ -4,15 +4,20 @@ import { resolveLimit } from './plan-quota.util';
 // ---------------------------------------------------------------------------
 // Billing v2 "choose what stays". When an organisation is on a plan smaller
 // than what it has, the extra users are paused (can't sign in, no seat),
-// projects become view-only (don't count), and landing pages go offline
-// (unpublished, so they don't count either). Nothing is deleted. When the
-// plan has room again everything comes back.
+// projects become view-only (don't count), landing pages go offline
+// (unpublished, so they don't count either) and templates are paused (can't
+// be used for new landing pages; pages already made from them are separate
+// copies and stay as they are). Nothing is deleted. When the plan has room
+// again everything comes back.
 //
 // What stays: the org's saved choice for that plan (retention_choices), else
 // the default picks — the same rule as frontend/lib/billing/default-picks.ts:
 //   users          owner, then admins, then everyone else; each by latest sign-in
 //   projects       most recently updated
 //   landing pages  most leads in the last 30 days
+//   templates      most landing pages made from it, then the most recently
+//                  used (latest page made from it), then the most recently
+//                  assigned
 // applyRetention() is called on every plan change (plan-change.util,
 // subscription-lifecycle.util), so the state always matches the plan.
 // ---------------------------------------------------------------------------
@@ -27,6 +32,7 @@ export type RetentionDb = Pick<
   | 'lead'
   | 'refreshToken'
   | 'retentionChoice'
+  | 'organisationTemplate'
 >;
 
 export interface RetentionUser {
@@ -52,19 +58,31 @@ export interface RetentionPage {
   leadsLast30Days: number;
   offline: boolean;
 }
+export interface RetentionTemplate {
+  /** The template id (organisation_templates.template_id). */
+  id: string;
+  name: string;
+  /** Landing pages made from it (sourceTemplateId). */
+  pagesMade: number;
+  /** When the latest of those was made. */
+  lastUsedAt: Date | null;
+  assignedAt: Date;
+  paused: boolean;
+}
 export interface RetentionCandidates {
   users: RetentionUser[];
   projects: RetentionProject[];
   landingPages: RetentionPage[];
+  templates: RetentionTemplate[];
 }
 
-/** Everything that could be kept: active/pending users, projects, live or billing-offline landing pages. */
+/** Everything that could be kept: active/pending users, projects, live or billing-offline landing pages, assigned templates. */
 export async function loadRetentionCandidates(
   db: RetentionDb,
   orgId: string,
   now = new Date(),
 ): Promise<RetentionCandidates> {
-  const [users, projects, pages] = await Promise.all([
+  const [users, projects, pages, templates] = await Promise.all([
     db.user.findMany({
       where: { orgId, status: { in: ['active', 'pending'] } },
       orderBy: { createdAt: 'asc' },
@@ -95,10 +113,19 @@ export async function loadRetentionCandidates(
       },
       select: { id: true, name: true, slug: true, billingOfflineAt: true },
     }),
+    db.organisationTemplate.findMany({
+      where: { orgId },
+      select: {
+        templateId: true,
+        assignedAt: true,
+        billingPausedAt: true,
+        template: { select: { name: true } },
+      },
+    }),
   ]);
 
   const userIds = users.map((u) => u.id);
-  const [logins, leads] = await Promise.all([
+  const [logins, leads, used] = await Promise.all([
     userIds.length
       ? db.refreshToken.findMany({
           where: { userId: { in: userIds } },
@@ -120,7 +147,26 @@ export async function loadRetentionCandidates(
       : Promise.resolve(
           [] as { landingPageId: string | null; _count: { _all: number } }[],
         ),
+    templates.length
+      ? db.landingPage.groupBy({
+          by: ['sourceTemplateId'],
+          where: {
+            orgId,
+            pageType: 'landing',
+            sourceTemplateId: { in: templates.map((t) => t.templateId) },
+          },
+          _count: { _all: true },
+          _max: { createdAt: true },
+        })
+      : Promise.resolve(
+          [] as {
+            sourceTemplateId: string | null;
+            _count: { _all: number };
+            _max: { createdAt: Date | null };
+          }[],
+        ),
   ]);
+  const usedBy = new Map(used.map((u) => [u.sourceTemplateId, u]));
   const lastLogin = new Map(logins.map((l) => [l.userId, l.createdAt]));
   const leadCount = new Map(leads.map((l) => [l.landingPageId, l._count._all]));
 
@@ -152,6 +198,14 @@ export async function loadRetentionCandidates(
       leadsLast30Days: leadCount.get(p.id) ?? 0,
       offline: !!p.billingOfflineAt,
     })),
+    templates: templates.map((t) => ({
+      id: t.templateId,
+      name: t.template.name,
+      pagesMade: usedBy.get(t.templateId)?._count._all ?? 0,
+      lastUsedAt: usedBy.get(t.templateId)?._max.createdAt ?? null,
+      assignedAt: t.assignedAt,
+      paused: !!t.billingPausedAt,
+    })),
   };
 }
 
@@ -176,6 +230,13 @@ export function rankRetention(c: RetentionCandidates): RetentionCandidates {
       (a, b) =>
         b.leadsLast30Days - a.leadsLast30Days || a.name.localeCompare(b.name),
     ),
+    templates: [...c.templates].sort(
+      (a, b) =>
+        b.pagesMade - a.pagesMade ||
+        time(b.lastUsedAt) - time(a.lastUsedAt) ||
+        b.assignedAt.getTime() - a.assignedAt.getTime() ||
+        a.name.localeCompare(b.name),
+    ),
   };
 }
 
@@ -183,6 +244,7 @@ export interface RetentionLimits {
   users: number;
   projects: number;
   landingPages: number;
+  templates: number;
 }
 
 export const retentionLimits = (plan: {
@@ -191,13 +253,28 @@ export const retentionLimits = (plan: {
   users: resolveLimit(plan, 'users'),
   projects: resolveLimit(plan, 'projects'),
   landingPages: resolveLimit(plan, 'landingPages'),
+  templates: resolveLimit(plan, 'templates'),
 });
 
 export interface RetentionKeep {
   users: string[];
   projects: string[];
   landingPages: string[];
+  templates: string[];
 }
+
+/** A saved choice; `templates` is null on choices saved before templates could be paused. */
+export type SavedRetention = Omit<RetentionKeep, 'templates'> & {
+  templates: string[] | null;
+};
+
+export const RETENTION_KINDS = [
+  'users',
+  'projects',
+  'landingPages',
+  'templates',
+] as const;
+export type RetentionKind = (typeof RETENTION_KINDS)[number];
 
 /**
  * What stays on a plan. A saved choice wins (limited to what still exists and
@@ -206,12 +283,12 @@ export interface RetentionKeep {
 export function pickRetention(
   ranked: RetentionCandidates,
   limits: RetentionLimits,
-  choice: RetentionKeep | null,
+  choice: SavedRetention | RetentionKeep | null,
 ): RetentionKeep {
   const pick = <T extends { id: string }>(
     items: T[],
     limit: number,
-    chosen: string[] | undefined,
+    chosen: string[] | null | undefined,
     mustKeep: string[] = [],
   ) => {
     if (!Number.isFinite(limit) || items.length <= limit) {
@@ -236,6 +313,7 @@ export function pickRetention(
       limits.landingPages,
       choice?.landingPages,
     ),
+    templates: pick(ranked.templates, limits.templates, choice?.templates),
   };
 }
 
@@ -244,7 +322,7 @@ export async function savedChoiceFor(
   db: Pick<RetentionDb, 'retentionChoice'>,
   orgId: string,
   planId: string,
-): Promise<RetentionKeep | null> {
+): Promise<SavedRetention | null> {
   const row = await db.retentionChoice.findUnique({
     where: { organisationId: orgId },
   });
@@ -253,6 +331,7 @@ export async function savedChoiceFor(
         users: row.userIds,
         projects: row.projectIds,
         landingPages: row.landingPageIds,
+        templates: row.templateIds.length ? row.templateIds : null,
       }
     : null;
 }
@@ -279,6 +358,7 @@ export interface WhatStays {
   users?: WhatStaysGroup;
   projects?: WhatStaysGroup;
   landingPages?: WhatStaysGroup;
+  templates?: WhatStaysGroup;
 }
 
 /** What stays on `plan` with the saved choice (or the defaults); null when nothing is over. */
@@ -300,7 +380,7 @@ export async function whatStaysFor(
     applied,
   };
   let over = false;
-  for (const key of ['users', 'projects', 'landingPages'] as const) {
+  for (const key of RETENTION_KINDS) {
     const items: { id: string; name: string }[] = ranked[key];
     if (!Number.isFinite(limits[key]) || items.length <= limits[key]) continue;
     over = true;
@@ -315,9 +395,10 @@ export async function whatStaysFor(
   return over ? out : null;
 }
 
+export type RetentionCounts = Record<RetentionKind, number>;
 export interface RetentionResult {
-  paused: { users: number; projects: number; landingPages: number };
-  restored: { users: number; projects: number; landingPages: number };
+  paused: RetentionCounts;
+  restored: RetentionCounts;
 }
 
 /**
@@ -337,8 +418,8 @@ export async function applyRetention(
     await savedChoiceFor(db, orgId, plan.id),
   );
   const result: RetentionResult = {
-    paused: { users: 0, projects: 0, landingPages: 0 },
-    restored: { users: 0, projects: 0, landingPages: 0 },
+    paused: { users: 0, projects: 0, landingPages: 0, templates: 0 },
+    restored: { users: 0, projects: 0, landingPages: 0, templates: 0 },
   };
 
   // Users
@@ -424,5 +505,28 @@ export async function applyRetention(
   }
   result.paused.landingPages = offline.length;
   result.restored.landingPages = online.length;
+
+  // Templates: only new landing pages are blocked; pages already made from a
+  // paused template are untouched.
+  const pauseTemplates = ranked.templates
+    .filter((t) => !keep.templates.includes(t.id) && !t.paused)
+    .map((t) => t.id);
+  const restoreTemplates = ranked.templates
+    .filter((t) => keep.templates.includes(t.id) && t.paused)
+    .map((t) => t.id);
+  if (pauseTemplates.length) {
+    await db.organisationTemplate.updateMany({
+      where: { orgId, templateId: { in: pauseTemplates } },
+      data: { billingPausedAt: now },
+    });
+  }
+  if (restoreTemplates.length) {
+    await db.organisationTemplate.updateMany({
+      where: { orgId, templateId: { in: restoreTemplates } },
+      data: { billingPausedAt: null },
+    });
+  }
+  result.paused.templates = pauseTemplates.length;
+  result.restored.templates = restoreTemplates.length;
   return result;
 }

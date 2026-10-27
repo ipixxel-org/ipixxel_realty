@@ -601,6 +601,17 @@
   background: #065f46;
 }
 
+/* Paused template (billing v2) or busy: not clickable. */
+.tpl-btn-use:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  box-shadow: none;
+}
+
+.tpl-btn-use:disabled:hover {
+  background: #047857;
+}
+
 .tpl-btn-dots {
   width: 32px;
   height: 32px;

@@ -7,6 +7,7 @@ import { apiFetch } from "@/lib/api";
 import { Reveal } from "@/components/superadmin/reveal";
 import { CountUp } from "@/components/superadmin/count-up";
 import { Icon } from "@/components/icons";
+import { PlanLockBadge } from "@/components/billing/locked";
 import { FormActions, FormAlert, formPageStyles } from "@/components/forms/form-page";
 import { ConfirmModal } from "@/components/ui/confirm-modal";
 import { Modal } from "@/components/ui/modal";
@@ -1392,7 +1393,11 @@ export default function SuperAdminOrganisationDetailPage() {
                             <button type="button" onClick={() => setPreviewTpl(at.template)} className="absolute right-2 top-2 rounded-full bg-white/90 p-1.5 shadow" title="Preview"><Icon name="eye" size={14} /></button>
                           </div>
                           <div style={{ padding: 10 }}>
-                            <div style={{ fontWeight: 700, fontSize: 12 }}>{at.template.name}</div>
+                            <div style={{ fontWeight: 700, fontSize: 12 }}>
+                              {at.template.name}
+                              {/* Billing v2: paused by the org's plan — no new pages from it. */}
+                              {at.paused ? <PlanLockBadge kind="template_paused" style={{ marginLeft: 6 }} /> : null}
+                            </div>
                             <div style={{ fontSize: 11, color: "var(--muted)" }}>{at.template.slug}</div>
                             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, marginTop: 8 }}>
                               <div style={{ fontSize: 11, color: "var(--muted)" }}>

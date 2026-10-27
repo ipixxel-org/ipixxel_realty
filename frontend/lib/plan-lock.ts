@@ -4,7 +4,7 @@
  * everywhere. Every edit of a locked item is refused by the API with
  * `{ code: "plan_locked", lock }` (backend/src/common/utils/plan-lock.util.ts).
  */
-export type PlanLockKind = "project_view_only" | "landing_page_offline" | "user_paused";
+export type PlanLockKind = "project_view_only" | "landing_page_offline" | "user_paused" | "template_paused";
 
 export const PLAN_LOCK_COPY: Record<PlanLockKind, { badge: string; tooltip: string; error: string }> = {
   project_view_only: {
@@ -21,6 +21,11 @@ export const PLAN_LOCK_COPY: Record<PlanLockKind, { badge: string; tooltip: stri
     badge: "Paused",
     tooltip: "Paused because your plan's user limit is lower. Upgrade or change what stays.",
     error: "This user is paused because your plan's user limit is lower. Upgrade, or change what stays in Settings → Billing, to bring them back.",
+  },
+  template_paused: {
+    badge: "Paused",
+    tooltip: "Paused because your plan allows fewer templates: it can't be used for new landing pages. Pages already made from it aren't affected. Upgrade or change what stays.",
+    error: "This template is paused because your plan allows fewer templates, so it can't be used for new landing pages. Pages already made from it aren't affected. Upgrade, or change what stays in Settings → Billing, to use it again.",
   },
 };
 

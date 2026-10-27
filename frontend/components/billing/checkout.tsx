@@ -229,7 +229,7 @@ export function PriceSummary({ preview: p, renewalMode }: { preview: CheckoutPre
 
 type Part = "details" | "coupon" | "summary";
 
-const CONFLICT_NOUN = { users: ["user", "users"], projects: ["project", "projects"], landingPages: ["published landing page", "published landing pages"] } as const;
+const CONFLICT_NOUN = { users: ["user", "users"], projects: ["project", "projects"], landingPages: ["published landing page", "published landing pages"], templates: ["template", "templates"] } as const;
 
 /** "Pro allows 5 users; you have 8. Choose which 5 stay active when this change is approved." (same words as the API) */
 export function usageConflictLines(planName: string, conflict: NonNullable<CheckoutPreview["usageConflict"]>): string[] {

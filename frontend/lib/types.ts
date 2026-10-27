@@ -583,6 +583,10 @@ export interface OrgTemplateSummary {
   isAssigned?: boolean;
   isLocked?: boolean;
   lockReason?: string | null;
+  // Billing v2 "choose what stays": paused because the plan allows fewer
+  // templates — can't be used for new landing pages (pages already made from
+  // it are unaffected) and doesn't use a template slot.
+  paused?: boolean;
 }
 
 export interface OrgTemplatesListResponse {

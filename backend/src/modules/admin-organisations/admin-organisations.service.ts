@@ -937,6 +937,8 @@ export class AdminOrganisationsService {
       templateId: r.templateId,
       assignedAt: r.assignedAt,
       landingPageCount: countsByTemplate.get(r.templateId) ?? 0,
+      // Billing v2 "choose what stays": can't be used for new landing pages.
+      paused: !!r.billingPausedAt,
       template: {
         id: r.template.id,
         name: r.template.name,
@@ -952,7 +954,7 @@ export class AdminOrganisationsService {
     await this.getRealOrganisation(id);
     const currentAssignments = await this.prisma.organisationTemplate.findMany({
       where: { orgId: id },
-      select: { templateId: true },
+      select: { templateId: true, billingPausedAt: true },
     });
     const currentIds = new Set(currentAssignments.map((row) => row.templateId));
     const nextIds = new Set(templateIds);
@@ -973,16 +975,27 @@ export class AdminOrganisationsService {
       include: { plan: true },
     });
     if (sub) {
-      assertTemplateQuota(sub.plan, templateIds.length);
+      // Paused templates (billing v2) stay assigned but don't use a slot.
+      const nextIdSet = new Set(templateIds);
+      const keptPaused = currentAssignments.filter(
+        (row) => row.billingPausedAt && nextIdSet.has(row.templateId),
+      ).length;
+      assertTemplateQuota(sub.plan, nextIdSet.size - keptPaused);
     }
     if (templateIds.length > 0) {
       await assertEligibleTemplateIds(this.prisma, templateIds);
     }
     await this.prisma.$transaction(async (tx) => {
-      await tx.organisationTemplate.deleteMany({ where: { orgId: id } });
-      if (templateIds.length > 0) {
+      // Only remove what was taken off and add what's new, so kept rows keep
+      // their assignedAt and billing pause.
+      if (removedIds.length > 0) {
+        await tx.organisationTemplate.deleteMany({ where: { orgId: id, templateId: { in: removedIds } } });
+      }
+      const addedIds = [...nextIds].filter((templateId) => !currentIds.has(templateId));
+      if (addedIds.length > 0) {
         await tx.organisationTemplate.createMany({
-          data: templateIds.map((tid) => ({ orgId: id, templateId: tid, assignedBy: actor.sub })),
+          data: addedIds.map((tid) => ({ orgId: id, templateId: tid, assignedBy: actor.sub })),
+          skipDuplicates: true,
         });
       }
       await tx.auditLog.create({

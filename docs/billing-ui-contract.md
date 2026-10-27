@@ -177,14 +177,14 @@ period rule (`applyPlanChange`).
   button; the grace and "You're on Basic now" banners keep their links. A "Requests" link sits
   next to Coupons.
 - **Over the target's limits:** in manual mode the preview no longer returns `usageError` for
-  users / projects / published landing pages; it returns `usageConflict` `{ items: [{ key, limit,
+  users / projects / published landing pages / templates; it returns `usageConflict` `{ items: [{ key, limit,
   used }], choicesFit }`. The request screen shows "Pro allows 5 users; you have 8. Choose which 5
   stay active when this change is approved." with "Choose what stays"
   (`/org/settings/billing/choose-what-stays?target=<plan>&back=checkout&interval=…`, whose Back
   returns to the request). Choices are saved for the target plan (`retention_choices`, one per
   org). Send — and `startCheckout` (`choose_what_stays`) — waits until `choicesFit`.
-  Templates / created pages over the limit are still a `usageError` (they can't be paused).
-  Online mode is unchanged.
+  Created landing pages (`landingPagesCreate`) over the limit are still a `usageError` (they
+  can't be paused); templates go through choose what stays since 2026-10-27. Online mode is unchanged.
 - **Approval** of a v2 request (one with a checkout) checks only what can't be paused
   (`assertPlanFitsAfterRetention`); `applyPlanChange` → `applyRetention` then pauses the rest
   using the saved choice for that plan, or the default picks — like a scheduled downgrade.
@@ -201,7 +201,7 @@ period rule (`applyPlanChange`).
 - **What they chose stays with the request:** `package_change_requests.what_stays` (JSON, migration
   `20261023090000_package_request_what_stays`, guarded) holds a copy of "choose what stays" for the
   target plan — only the limits the org is over: `{ planId, planName, choice: "saved" | "default",
-  applied, users?, projects?, landingPages? }`, each `{ limit, total, kept: [{id,name}], paused }`
+  applied, users?, projects?, landingPages?, templates? }`, each `{ limit, total, kept: [{id,name}], paused }`
   (`whatStaysFor` in `retention.util.ts`). Saved when the request is sent, refreshed when they change
   their choice for that plan while it's pending, and on approval replaced with what was actually kept
   (`applied: true`). `OrgPlanRequest.whatStays` (null = everything fits): the Requests tab shows
@@ -510,11 +510,27 @@ Package Requests → Open → the org's "Package requests" section: **Mark as pa
   - landing pages: status `unpublished` + `landing_pages.billing_offline_at` (thank-you pages
     follow), so the public slug route answers 404 and the publish limit sees room. Publishing it
     by hand is refused (`plan_locked`); it comes back through "Change what stays" or an upgrade.
-  The counting rules (`plan-quota.util`) skip paused users and view-only projects.
+  - templates (2026-10-27): `organisation_templates.billing_paused_at` (migration
+    `20261027090000_template_retention`, guarded) — can't be used for NEW landing pages
+    (`POST /org/landing-pages` with that `templateId` → 403 `plan_locked`, `lock:
+    "template_paused"`; the signup site seeding skips it too). Landing pages already made from it
+    are independent copies: they stay live and editable and keep following the landing page
+    limits as before. Paused templates don't take a template slot. `GET /org/templates` and
+    `/org/templates/available` (and Super Admin `GET /admin/organisations/:id/templates`) return
+    `paused`; the template picker and Templates page show the "Paused" `PlanLockBadge` with its
+    tooltip and disable "Use", and the Templates page has a "Paused" status filter. Super Admin
+    `PUT /admin/organisations/:id/templates` now only removes/adds the changed rows, so kept
+    assignments keep their pause and `assignedAt`.
+  The counting rules (`plan-quota.util`) skip paused users, view-only projects and paused
+  templates (`countOrgTemplates`).
 - **What stays:** the org's saved choice for that plan (`billing.retention_choices`, one per
   org), else the default picks — owner, then admins, then latest sign-in (newest refresh token);
-  projects by latest update; landing pages by most leads in 30 days (`retention.util.ts`, same
-  rule as `default-picks.ts`). The owner always stays.
+  projects by latest update; landing pages by most leads in 30 days; templates by most landing
+  pages made from them (`sourceTemplateId`), then the most recently used (latest page made from
+  it), then the most recently assigned (`retention.util.ts`, same rule as `default-picks.ts`).
+  The owner always stays. `retention_choices.template_ids` holds the template picks; a choice
+  saved before templates could be paused (empty list) uses the default picks for templates, and
+  `templateIds` is optional on `PUT /org/billing/retention`.
 - **When it applies:** on every plan change — `applyPlanChange` (purchase, renewal, approval:
   a bigger plan restores everything), a cancellation or "fall back to Basic" taking effect, a
   scheduled downgrade taking effect — and at once when the org saves a choice for the plan it's
@@ -531,7 +547,10 @@ Package Requests → Open → the org's "Package requests" section: **Mark as pa
   allows 2 users."), `retention_owner`, `retention_unknown`, `plan_not_found`.
   `BillingOverview.retention` (a `RetentionSummary`) is filled while the org is heading to a
   smaller plan (grace with fall back, cancelling, downgrading) or is on Basic after a paid plan.
-  `getAccessStatus` returns the real paused / view-only / offline ids.
+  `getAccessStatus` returns the real paused / view-only / offline ids (plus `pausedTemplateIds`).
+  `RetentionChoices.templates`, `RetentionSummary.templates`, `BillingOverview.locked.templates`
+  ("1 template paused" on the "You're on Basic now" banner) and `UsageConflict` key `templates`
+  carry templates. The walkthrough mock doesn't fill them (all optional on the frontend).
 - **Not changed:** `GET /public/site/page-by-id/:id` (the builder preview) still serves any page,
   as it does for drafts. The public slug route still falls back to unpublished pages for pages
   unpublished by hand (existing behaviour); only billing-offline pages are excluded.

@@ -87,6 +87,7 @@ describe('default picks (same rule as the UI)', () => {
         offline: false,
       },
     ],
+    templates: [],
   };
   const ranked = rankRetention(c);
 
@@ -100,26 +101,34 @@ describe('default picks (same rule as the UI)', () => {
   });
 
   it('keeps the top N, or the saved choice (owner always in), and everything when unlimited', () => {
-    const limits = { users: 2, projects: 1, landingPages: 1 };
+    const limits = { users: 2, projects: 1, landingPages: 1, templates: 1 };
     expect(pickRetention(ranked, limits, null)).toEqual({
       users: ['o1', 'a1'],
       projects: ['p-new'],
       landingPages: ['lp-busy'],
+      templates: [],
     });
     expect(
       pickRetention(ranked, limits, {
         users: ['m2', 'm1'],
         projects: ['p-old'],
         landingPages: ['lp-quiet'],
+        templates: null,
       }),
     ).toEqual({
       users: ['o1', 'm1'],
       projects: ['p-old'],
       landingPages: ['lp-quiet'],
+      templates: [],
     });
     const all = pickRetention(
       ranked,
-      { users: Infinity, projects: Infinity, landingPages: Infinity },
+      {
+        users: Infinity,
+        projects: Infinity,
+        landingPages: Infinity,
+        templates: Infinity,
+      },
       null,
     );
     expect(all.users).toHaveLength(4);

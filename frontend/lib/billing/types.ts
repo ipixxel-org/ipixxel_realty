@@ -122,7 +122,7 @@ export interface BillingWarning {
 }
 
 export interface UsageConflict {
-  items: { key: "users" | "projects" | "landingPages"; limit: number; used: number }[];
+  items: { key: "users" | "projects" | "landingPages" | "templates"; limit: number; used: number }[];
   choicesFit: boolean;
 }
 
@@ -145,6 +145,7 @@ export interface WhatStays {
   users?: WhatStaysGroup;
   projects?: WhatStaysGroup;
   landingPages?: WhatStaysGroup;
+  templates?: WhatStaysGroup;
 }
 
 /** One plan change request on Settings → Billing → Requests (newest first). */
@@ -261,6 +262,8 @@ export interface RetentionSummary {
   users: string[];
   projects: string[];
   landingPages: string[];
+  /** Missing from older responses (mock / before templates could be paused). */
+  templates?: string[];
 }
 
 export interface RenewalBreakdown {
@@ -335,7 +338,7 @@ export interface BillingOverview {
   renewalBreakdown: RenewalBreakdown | null;
   usage: UsageItem[];
   /** How many items are paused / view-only / offline right now. */
-  locked: { users: number; projects: number; landingPages: number };
+  locked: { users: number; projects: number; landingPages: number; templates?: number };
   /** Present while a move to a smaller plan is pending or has happened. */
   retention: RetentionSummary | null;
 }
@@ -535,6 +538,8 @@ export interface RetentionChoices {
   users: RetentionItem[];
   projects: RetentionItem[];
   landingPages: RetentionItem[];
+  /** Assigned templates; a paused one can't be used for new landing pages. */
+  templates?: RetentionItem[];
 }
 
 export interface SaveRetentionChoicesRequest {
@@ -542,6 +547,7 @@ export interface SaveRetentionChoicesRequest {
   userIds: string[];
   projectIds: string[];
   landingPageIds: string[];
+  templateIds?: string[];
 }
 
 /* ---------------------------------------------------------- Locked states */
@@ -554,6 +560,8 @@ export interface AccessStatus {
   pausedUserIds: string[];
   viewOnlyProjectIds: string[];
   offlineLandingPageIds: string[];
+  /** Assigned templates that can't be used for new landing pages. */
+  pausedTemplateIds?: string[];
 }
 
 /* ----------------------------------------------------- Invoices & payments */

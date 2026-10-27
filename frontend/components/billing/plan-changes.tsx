@@ -182,13 +182,14 @@ export function DowngradeScreen({ planId, interval: wanted }: { planId: string; 
                 users: retention.users.filter((x) => x.selected).map((x) => x.name),
                 projects: retention.projects.filter((x) => x.selected).map((x) => x.name),
                 landingPages: retention.landingPages.filter((x) => x.selected).map((x) => x.name),
+                templates: retention.templates?.filter((x) => x.selected).map((x) => x.name),
               }}
             />
           ) : null}
         </Banner>
       ) : (
         <Banner tone="green" icon="check" title={`Everything fits on ${target.name}`}>
-          Your users, projects and landing pages are all within {target.name}&apos;s limits.
+          Your users, projects, landing pages and templates are all within {target.name}&apos;s limits.
         </Banner>
       )}
 

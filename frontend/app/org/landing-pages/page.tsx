@@ -359,6 +359,8 @@ export default function OrgLandingPagesPage() {
   }
 
   function openTemplateUse(id: string, name: string) {
+    // Billing v2: a paused template can't be used for new pages (the API refuses too).
+    if (assignedTemplates.find((t) => t.id === id)?.paused) return;
     setUseTemplate({ id, name });
     setUseName(name);
     setUseBind({ kind: "none" });
@@ -817,13 +819,19 @@ export default function OrgLandingPagesPage() {
                           )}
                         </TemplateCover>
                         <div style={{ padding: 12, display: "flex", flexDirection: "column", gap: 10 }}>
-                          <div style={{ fontWeight: 700, fontSize: 14, color: "var(--ink)" }}>{template.name}</div>
+                          <div style={{ fontWeight: 700, fontSize: 14, color: "var(--ink)" }}>
+                            {template.name}
+                            {/* Billing v2: a paused template can't be used for new pages. */}
+                            {template.paused ? <PlanLockBadge kind="template_paused" style={{ marginLeft: 6 }} /> : null}
+                          </div>
                           <div style={{ display: "flex", gap: 8 }}>
                             <button
                               type="button"
                               className="btn btn-primary btn-sm"
                               onClick={() => openTemplateUse(template.id, template.name)}
-                              style={{ flex: 1, justifyContent: "center", fontWeight: 700 }}
+                              disabled={template.paused}
+                              title={template.paused ? PLAN_LOCK_COPY.template_paused.tooltip : undefined}
+                              style={{ flex: 1, justifyContent: "center", fontWeight: 700, ...(template.paused ? { opacity: 0.5, cursor: "not-allowed" } : {}) }}
                             >
                               <Sparkles size={13} /> Use
                             </button>
@@ -1759,7 +1767,9 @@ export default function OrgLandingPagesPage() {
                     openTemplateUse(template.id, template.name);
                   }
                 }}
-                style={{ fontWeight: 700 }}
+                disabled={!!assignedTemplates.find((item) => item.id === templatePreviewId)?.paused}
+                title={assignedTemplates.find((item) => item.id === templatePreviewId)?.paused ? PLAN_LOCK_COPY.template_paused.tooltip : undefined}
+                style={{ fontWeight: 700, ...(assignedTemplates.find((item) => item.id === templatePreviewId)?.paused ? { opacity: 0.5, cursor: "not-allowed" } : {}) }}
               >
                 <Sparkles size={14} /> Use template
               </button>

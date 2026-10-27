@@ -3,6 +3,7 @@ import type { Plan, Prisma, Subscription } from '@prisma/client';
 import { PrismaService } from '../../database/prisma.service';
 import {
   applyRetention,
+  RETENTION_KINDS,
   loadRetentionCandidates,
   pickRetention,
   rankRetention,
@@ -34,8 +35,8 @@ const isoDate = (d: Date) => d.toISOString().slice(0, 10);
 type SubWithPlan = Subscription & { plan: Plan };
 
 /**
- * Billing v2 step 6 — "choose what stays". Which users, projects and landing
- * pages stay active on a smaller plan: shown, chosen and saved here; applied
+ * Billing v2 step 6 — "choose what stays". Which users, projects, landing
+ * pages and templates stay active on a smaller plan: shown, chosen and saved here; applied
  * by retention.util whenever the plan changes (and at once when the org is
  * already on that plan).
  */
@@ -99,7 +100,7 @@ export class BillingRetentionService {
       name: string,
       detail: string,
       reason: string,
-      kind: 'users' | 'projects' | 'landingPages',
+      kind: (typeof RETENTION_KINDS)[number],
       locked = false,
     ): RetentionItemV2 => ({
       id,
@@ -151,6 +152,18 @@ export class BillingRetentionService {
           'landingPages',
         ),
       ),
+      templates: ranked.templates.map((t) =>
+        item(
+          t.id,
+          t.name,
+          `Added ${shortDate(t.assignedAt)}`,
+          t.pagesMade
+            ? `${t.pagesMade} landing page${t.pagesMade === 1 ? '' : 's'} made from it` +
+                (t.lastUsedAt ? ` · last used ${shortDate(t.lastUsedAt)}` : '')
+            : 'No landing pages made from it yet',
+          'templates',
+        ),
+      ),
     };
   }
 
@@ -172,13 +185,15 @@ export class BillingRetentionService {
       users: [...new Set(dto.userIds)],
       projects: [...new Set(dto.projectIds)],
       landingPages: [...new Set(dto.landingPageIds)],
+      templates: [...new Set(dto.templateIds ?? [])],
     };
     const known = {
       users: ranked.users.map((u) => u.id),
       projects: ranked.projects.map((p) => p.id),
       landingPages: ranked.landingPages.map((p) => p.id),
+      templates: ranked.templates.map((t) => t.id),
     };
-    for (const k of ['users', 'projects', 'landingPages'] as const) {
+    for (const k of RETENTION_KINDS) {
       if (ids[k].some((id) => !known[k].includes(id))) {
         throw billingError(
           'retention_unknown',
@@ -190,8 +205,9 @@ export class BillingRetentionService {
       users: 'users',
       projects: 'projects',
       landingPages: 'landing pages',
+      templates: 'templates',
     };
-    for (const k of ['users', 'projects', 'landingPages'] as const) {
+    for (const k of RETENTION_KINDS) {
       if (ids[k].length > limits[k]) {
         throw billingError(
           'retention_over_limit',
@@ -212,6 +228,7 @@ export class BillingRetentionService {
         userIds: ids.users,
         projectIds: ids.projects,
         landingPageIds: ids.landingPages,
+        templateIds: ids.templates,
         updatedById: userId,
       },
       update: {
@@ -219,6 +236,7 @@ export class BillingRetentionService {
         userIds: ids.users,
         projectIds: ids.projects,
         landingPageIds: ids.landingPages,
+        templateIds: ids.templates,
         updatedById: userId,
       },
     });
@@ -291,12 +309,13 @@ export class BillingRetentionService {
       users: names(ranked.users, keep.users),
       projects: names(ranked.projects, keep.projects),
       landingPages: names(ranked.landingPages, keep.landingPages),
+      templates: names(ranked.templates, keep.templates),
     };
   }
 
   /** What's paused right now (locked-state UI). */
   async paused(orgId: string) {
-    const [users, projects, pages] = await Promise.all([
+    const [users, projects, pages, templates] = await Promise.all([
       this.prisma.user.findMany({
         where: { orgId, billingPausedAt: { not: null } },
         select: { id: true },
@@ -309,11 +328,16 @@ export class BillingRetentionService {
         where: { orgId, pageType: 'landing', billingOfflineAt: { not: null } },
         select: { id: true },
       }),
+      this.prisma.organisationTemplate.findMany({
+        where: { orgId, billingPausedAt: { not: null } },
+        select: { templateId: true },
+      }),
     ]);
     return {
       pausedUserIds: users.map((u) => u.id),
       viewOnlyProjectIds: projects.map((p) => p.id),
       offlineLandingPageIds: pages.map((p) => p.id),
+      pausedTemplateIds: templates.map((t) => t.templateId),
     };
   }
 }

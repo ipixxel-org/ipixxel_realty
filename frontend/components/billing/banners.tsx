@@ -190,6 +190,11 @@ export function PicksSummary({ retention }: { retention: RetentionSummary }) {
       <div>
         <b>Landing pages:</b> {list(retention.landingPages)}
       </div>
+      {retention.templates ? (
+        <div>
+          <b>Templates:</b> {list(retention.templates)}
+        </div>
+      ) : null}
     </div>
   );
 }
@@ -391,7 +396,7 @@ export function BillingBanner({ overview }: { overview: BillingOverview }) {
             </>
           }
         >
-          {o.locked.users} users paused, {o.locked.projects} projects view-only, {o.locked.landingPages} landing pages offline. Nothing was deleted and leads keep coming
+          {o.locked.users} users paused, {o.locked.projects} projects view-only, {o.locked.landingPages} landing pages offline{o.locked.templates ? `, ${o.locked.templates} template${o.locked.templates === 1 ? "" : "s"} paused` : ""}. Nothing was deleted and leads keep coming
           in. Buy again and everything comes back straight away.
         </Banner>
       );

@@ -117,6 +117,7 @@ const CONFLICT_NOUN = {
   users: ['user', 'users'],
   projects: ['project', 'projects'],
   landingPages: ['published landing page', 'published landing pages'],
+  templates: ['template', 'templates'],
 } as const;
 
 /** "Pro allows 5 users; you have 8. Choose which 5 stay active when this change is approved." */
@@ -907,7 +908,7 @@ export class BillingCheckoutService implements OnModuleInit {
 
   /**
    * Whether the org fits the plan. Manual mode: being over on users /
-   * projects / published pages is fine once they've chosen what stays — it's
+   * projects / published pages / templates is fine once they've chosen what stays — it's
    * paused when the request is approved (usageConflict). Otherwise a usageError.
    */
   private async usageFor(
@@ -920,12 +921,14 @@ export class BillingCheckoutService implements OnModuleInit {
       if (over.length && over.every((o) => o.fixable)) {
         const saved = await savedChoiceFor(this.prisma, orgId, target.id);
         const items = over.map((o) => ({
-          key: o.key as 'users' | 'projects' | 'landingPages',
+          key: o.key as 'users' | 'projects' | 'landingPages' | 'templates',
           limit: o.limit,
           used: o.used,
         }));
+        // A choice saved before templates could be paused has no template
+        // picks (null): the default picks apply to those, and they fit.
         const choicesFit =
-          !!saved && items.every((i) => saved[i.key].length <= i.limit);
+          !!saved && items.every((i) => (saved[i.key]?.length ?? 0) <= i.limit);
         return { usageError: null, usageConflict: { items, choicesFit } };
       }
     }

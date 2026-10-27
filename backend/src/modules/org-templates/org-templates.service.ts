@@ -8,7 +8,10 @@ import type { Prisma } from '@prisma/client';
 import { PrismaService } from '../../database/prisma.service';
 import { toLandingPageData } from '../admin-templates/template.mapper';
 import { ListOrgTemplatesQueryDto } from './dto/list-org-templates-query.dto';
-import { resolveTemplateQuota } from '../../common/utils/plan-quota.util';
+import {
+  countOrgTemplates,
+  resolveTemplateQuota,
+} from '../../common/utils/plan-quota.util';
 import { getOrgActivePlan, canPlanAccessTier } from '../../common/utils/subscription-lifecycle.util';
 
 export { canPlanAccessTier } from '../../common/utils/subscription-lifecycle.util';
@@ -54,10 +57,15 @@ export class OrgTemplatesService {
     const assigned = orgId
       ? await this.prisma.organisationTemplate.findMany({
           where: { orgId },
-          select: { templateId: true },
+          select: { templateId: true, billingPausedAt: true },
         })
       : [];
     where.id = { in: assigned.map((a) => a.templateId) };
+    // Billing v2 "choose what stays": paused templates can't be used for new
+    // landing pages (the picker shows them with a Paused badge).
+    const paused = new Set(
+      assigned.filter((a) => a.billingPausedAt).map((a) => a.templateId),
+    );
 
     const [templates, total] = await Promise.all([
       this.prisma.template.findMany({
@@ -89,6 +97,7 @@ export class OrgTemplatesService {
           template: mapped.template,
           updatedAt: mapped.updatedAt,
           landingPageCount: landingPageCounts.get(t.id) ?? 0,
+          paused: paused.has(t.id),
         };
       }),
       total,
@@ -134,7 +143,7 @@ export class OrgTemplatesService {
       }),
       this.prisma.organisationTemplate.findMany({
         where: { orgId },
-        select: { templateId: true },
+        select: { templateId: true, billingPausedAt: true },
       }),
     ]);
 
@@ -159,7 +168,11 @@ export class OrgTemplatesService {
     ]);
 
     const assignedSet = new Set(assignedRecords.map((a) => a.templateId));
-    const assignedCount = assignedSet.size;
+    const pausedSet = new Set(
+      assignedRecords.filter((a) => a.billingPausedAt).map((a) => a.templateId),
+    );
+    // Paused templates don't use a plan slot.
+    const assignedCount = assignedSet.size - pausedSet.size;
     const remainingQuota = Number.isFinite(maxAllowed)
       ? Math.max(0, maxAllowed - assignedCount)
       : null;
@@ -205,6 +218,7 @@ export class OrgTemplatesService {
         template: mapped.template,
         updatedAt: mapped.updatedAt,
         isAssigned: assignedSet.has(t.id),
+        paused: pausedSet.has(t.id),
         landingPageCount: landingPageCounts.get(t.id) ?? 0,
         isLocked: !access.allowed,
         lockReason: access.reason ?? null,
@@ -262,9 +276,7 @@ export class OrgTemplatesService {
     }
 
     const maxAllowed = resolveTemplateQuota(plan);
-    const currentCount = await this.prisma.organisationTemplate.count({
-      where: { orgId },
-    });
+    const currentCount = await countOrgTemplates(this.prisma, orgId);
 
     if (currentCount >= maxAllowed) {
       const planName = plan?.name ? `"${plan.name}" ` : '';

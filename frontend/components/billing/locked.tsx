@@ -49,6 +49,7 @@ export function usePlanLocks() {
       projectViewOnly: (id: string | null | undefined) => !!id && !!access?.viewOnlyProjectIds.includes(id),
       pageOffline: (id: string | null | undefined) => !!id && !!access?.offlineLandingPageIds.includes(id),
       userPaused: (id: string | null | undefined) => !!id && !!access?.pausedUserIds.includes(id),
+      templatePaused: (id: string | null | undefined) => !!id && !!access?.pausedTemplateIds?.includes(id),
     }),
     [access],
   );
@@ -65,6 +66,7 @@ const LOCK_ICON: Record<PlanLockKind, IconName> = {
   project_view_only: "eye",
   landing_page_offline: "globe",
   user_paused: "pause",
+  template_paused: "pause",
 };
 
 /**

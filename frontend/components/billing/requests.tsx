@@ -51,6 +51,7 @@ const WHAT_STAYS_GROUPS = [
   ["users", "users"],
   ["projects", "projects"],
   ["landingPages", "published pages"],
+  ["templates", "templates"],
 ] as const;
 
 /** "Keeps 2 of 3 users · 3 of 4 projects" — what they chose to keep on the requested plan. */
