@@ -207,8 +207,9 @@ period rule (`applyPlanChange`).
   their choice for that plan while it's pending, and on approval replaced with what was actually kept
   (`applied: true`). `OrgPlanRequest.whatStays` (null = everything fits): the Requests tab shows
   "Keeps 2 of 3 users" with one button: "Change what stays" while pending, "View" once decided
-  (`choose-what-stays?target=…&back=requests&request=<id>`). Super Admin's Package requests section
-  shows the summary, with the what-stays button in its Action column.
+  (`choose-what-stays?target=…&back=requests&request=<id>`), only the latest row editable (see
+  "Choose what stays rules"). Super Admin's Package requests section shows the summary, with the
+  what-stays button in its Action column.
 - **One request at a time:** checkout start (both modes), the legacy request endpoint and scheduling a
   downgrade all refuse with `request_pending` and the same message until the request is approved,
   rejected or withdrawn.
@@ -265,10 +266,27 @@ decided or takes effect; after that only Super Admin can change it. Helpers: `bi
   decided request the list is that request's own copy (history), not today's picks. Without
   `requestId` the lock is "the org is on that plan"; a new request to a plan whose last request was
   rejected starts a fresh choice.
-- **Org Requests tab:** the What stays column shows only the summary ("Keeps 3 of 5 projects" /
-  "Everything fits") and one button — **Change what stays** while the row is open, **View** once
-  decided or applied — both opening `choose-what-stays?target=…&back=requests&request=<id>`
-  (read-only when locked). No inline lists.
+- **One place — the latest row:** "choose what stays" lives on the org's **latest** package change
+  row (newest request or scheduled change, any status; `latestRequest` in
+  `common/utils/what-stays-rows.util.ts`). Every save there also overwrites that row's stored copy,
+  so the org and Super Admin always see the same thing. Older rows are history: viewable, never
+  edited (`PUT` with an older `requestId` → **`what_stays_not_latest`** "Only the latest request's
+  choice of what stays can be changed. Older requests are history.", org and Super Admin alike).
+- **What a View shows** (`GET …/retention?requestId=`, `RetentionChoices.view` / `viewDate`):
+  latest row while open → the planned choice (editable for the org); latest applied row with the org
+  on its plan → the **live** state (from the pause / view-only / offline markers); any other row →
+  its stored copy, read-only, with a header: `history` "What stayed when this change applied on
+  27 Oct 2026. This is history; your current setup may be different. See the latest request for
+  what's active now." or `not_applied` "What was requested (not applied)." (rejected / withdrawn /
+  undone / replaced). Without a request, the plan the org is on is always the live state.
+- **Org Requests tab:** each row with a record shows only the short summary ("Keeps 3 of 5 projects"
+  on the open latest row, "Kept 3 of 5 projects" otherwise) and one button from
+  `OrgPlanRequest.whatStaysAction`: **Change what stays** (latest row, pending / scheduled) or
+  **View** (everything else); nothing when everything fit. Both open
+  `choose-what-stays?target=…&back=requests&request=<id>`.
+- **Org billing page:** while anything is paused, the Usage card shows "Active now: 3 of 5 projects,
+  1 of 1 template…" with a **View** link to the live read-only list. No edit button (only our team
+  can change it).
 - **Org UI when locked:** the "You're on Basic now" banner, the overview action row (on Basic),
   locked-item notices (`PlanLockNotice`) and the paused-user menu show the note / "Contact support"
   instead of "Change what stays". Lock copy (`plan_locked` messages) says "Upgrade, or contact our
@@ -276,20 +294,23 @@ decided or takes effect; after that only Super Admin can change it. Helpers: `bi
   scheduled-change banners and the request screen.
 - **Super Admin:** `GET/PUT /admin/billing/subscriptions/:orgId/retention?targetPlanId=&requestId=`
   (admin_subscriptions view / edit). Same validation (owner always stays, limits, known ids).
-  Editable: open rows (pending / scheduled) and the row that put the org on its **current** plan (the
-  latest applied one to that plan, `currentPlanRequestId`); saving an open row updates the saved
-  choice and its copy, saving the current-plan row (or no request: the current plan) applies at once
-  — pauses and unpauses — and the copy becomes what was kept. Older applied rows: `GET` is
-  `locked` (their copy) and `PUT` → **`what_stays_old_request`** "Only an open request's choice, or
-  the one for the organisation's current plan, can be changed."; never-applied rows (rejected /
-  withdrawn / undone / replaced) → `request_closed`. Audit log `retention_choices_saved_by_admin`
-  (actor + `metadata.admin` name and email, `appliedNow`, `requestId`, the ids); the org's billing
-  admins get "Our team updated what stays active on your plan" (type `package_change_request`).
-- **Super Admin UI:** org detail → Package requests has an **Action** column (last) with Mark as
-  paid / Approve / Reject as before and the what-stays button: **Choose what stays** where
-  `whatStaysEditable` (on each row of `GET /admin/package-change-requests`), **View what stays**
-  (read-only) on every other row with a conflict, nothing without one. The org billing page keeps
-  its own "Change what stays" for the current plan.
+  Editable only on the latest row (`whatStaysEditable` on each row of
+  `GET /admin/package-change-requests`): pending / scheduled → updates the planned choice and the
+  row's copy; approved / done with the org on that row's plan → applied at once (pauses and
+  unpauses) and the copy becomes what was kept. Latest row rejected / withdrawn / undone / replaced,
+  or applied but the org has moved on → `request_closed`. Audit log
+  `retention_choices_saved_by_admin` (actor + `metadata.admin` name and email, `appliedNow`,
+  `requestId`, the ids); the org's billing admins get "Our team updated what stays active on your
+  plan" (type `package_change_request`).
+- **Super Admin UI:** org detail → Package requests, **Action** column (last): Mark as paid /
+  Approve / Reject as before, then **Choose what stays** on the editable latest row, **View what
+  stays** (read-only, same headers as the org) on every other row with a record, nothing without one.
+  The separate "Change what stays" at the top of the org page shows only when no request set the
+  current plan (`SubscriptionDetail.whatStaysOrgLevel`; `currentPlanSetByRow` — the latest applied
+  row, by `updated_at`, isn't for the current plan, e.g. assigned directly). Saving there without a
+  `requestId` while a request set the plan → **`what_stays_use_latest`**.
+- **Scheduled rows that took effect** show "Took effect 27 Oct 2026" (the real date) instead of
+  "Starts …", on both lists.
 
 ### Manual mode: every paid action is a request (Mark as paid → Approve)
 

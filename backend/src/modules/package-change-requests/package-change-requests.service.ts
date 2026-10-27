@@ -8,8 +8,9 @@ import {
 import { applyPlanChange } from '../../common/utils/plan-change.util';
 import { whatStaysFor } from '../../common/utils/retention.util';
 import {
-  adminCanEditWhatStays,
-  currentPlanRequestId,
+  adminWhatStaysEditable,
+  currentPlanId,
+  latestRequest,
 } from '../../common/utils/what-stays-rows.util';
 import { settleCoupon } from '../billing/coupon-settlement';
 import { findCouponFor } from '../billing/coupon-lookup';
@@ -446,11 +447,14 @@ export class PackageChangeRequestsService {
       }),
       this.prisma.packageChangeRequest.count({ where }),
     ]);
-    // Super Admin "Choose what stays": editable on open rows and on the one
-    // that put the org on its current plan; every other row is view-only.
-    const currentByOrg = new Map<string, string | null>();
+    // Super Admin "Choose what stays": editable only on each org's latest row
+    // (open, or applied with the org on its plan); every other row with a
+    // record gets "View what stays" (history).
+    const latestByOrg = new Map<string, string | null>();
+    const planByOrg = new Map<string, string | null>();
     for (const orgId of new Set(rows.map((r) => r.orgId))) {
-      currentByOrg.set(orgId, await currentPlanRequestId(this.prisma, orgId));
+      latestByOrg.set(orgId, (await latestRequest(this.prisma, orgId))?.id ?? null);
+      planByOrg.set(orgId, await currentPlanId(this.prisma, orgId));
     }
 
     return {
@@ -460,7 +464,11 @@ export class PackageChangeRequestsService {
           ...rest,
           whatStaysEditable:
             !!r.whatStays &&
-            adminCanEditWhatStays(r, currentByOrg.get(r.orgId) ?? null),
+            adminWhatStaysEditable(
+              r,
+              latestByOrg.get(r.orgId) ?? null,
+              planByOrg.get(r.orgId) ?? null,
+            ),
           ...requestLabel(r.billingCheckout, r.targetPlan.name),
           payment: offlinePayment ? requestPaymentView(offlinePayment) : null,
           quote: r.billingCheckout ? requestQuoteView(r.billingCheckout) : null,

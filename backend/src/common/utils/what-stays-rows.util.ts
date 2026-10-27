@@ -1,56 +1,114 @@
 import type { PrismaClient } from '@prisma/client';
 
-// Which package change rows "choose what stays" can still change. No service
-// imports here, so package-change-requests and billing can both use it.
+// "Choose what stays" lives in ONE place: the org's latest package change row
+// (newest request or scheduled change, whatever its status). Every row with a
+// what-stays record can be viewed; older rows show their stored copy as
+// history and can never be edited. No service imports here, so
+// package-change-requests and billing can both use it.
 
-/** A request / scheduled change the org can still change what stays for. */
+/** A request / scheduled change that hasn't been decided or taken effect yet. */
 export const OPEN_REQUEST_STATUSES = ['pending', 'scheduled'] as const;
 /** A request / scheduled change that was applied (the org moved to its plan). */
 export const APPLIED_REQUEST_STATUSES = ['approved', 'done'] as const;
 
-/**
- * The row that put the org on its current plan: the latest row whose change
- * actually took effect (an approved request, or a scheduled change that's
- * done), when its plan is the org's current plan — else none (the plan was
- * set some other way, e.g. by Super Admin or a payment; the org-level
- * "Change what stays" covers that). Super Admin can still change what stays
- * on it (applied at once); older applied rows are history.
- *
- * "Latest" is when the row was last written (updated_at, the database
- * clock): an applied row is only written again when it's applied or when
- * Super Admin edits this same row. reviewed_at can't be used — approvals
- * take it from billingNow(), which BILLING_CLOCK_OVERRIDE moves in testing.
- */
-export async function currentPlanRequestId(
-  db: Pick<PrismaClient, 'subscription' | 'packageChangeRequest'>,
+export const WHAT_STAYS_NOT_LATEST_MESSAGE =
+  "Only the latest request's choice of what stays can be changed. Older requests are history.";
+
+type RowsDb = Pick<PrismaClient, 'subscription' | 'packageChangeRequest'>;
+type Row = { id: string; status: string; targetPlanId: string };
+
+const isOpen = (status: string) =>
+  (OPEN_REQUEST_STATUSES as readonly string[]).includes(status);
+const isApplied = (status: string) =>
+  (APPLIED_REQUEST_STATUSES as readonly string[]).includes(status);
+const time = (d: Date | null | undefined) => (d ? new Date(d).getTime() : 0);
+
+/** The org's latest row: the newest request or scheduled change, any status. */
+export async function latestRequest(
+  db: Pick<PrismaClient, 'packageChangeRequest'>,
+  orgId: string,
+): Promise<Row | null> {
+  const rows = await db.packageChangeRequest.findMany({
+    where: { orgId },
+    select: {
+      id: true,
+      status: true,
+      targetPlanId: true,
+      createdAt: true,
+    },
+  });
+  const [latest] = rows.sort((a, b) => time(b.createdAt) - time(a.createdAt));
+  return latest
+    ? {
+        id: latest.id,
+        status: latest.status,
+        targetPlanId: latest.targetPlanId,
+      }
+    : null;
+}
+
+/** The plan the org is on now (null without a subscription). */
+export async function currentPlanId(
+  db: Pick<PrismaClient, 'subscription'>,
   orgId: string,
 ): Promise<string | null> {
   const sub = await db.subscription.findFirst({
     where: { orgId, status: { not: 'cancelled' } },
     select: { planId: true },
   });
-  if (!sub) return null;
+  return sub?.planId ?? null;
+}
+
+/**
+ * Super Admin can change what stays on this row: it's the latest, and still
+ * open (pending / scheduled — the planned choice) or applied with the org on
+ * its plan (applied at once). Rejected / withdrawn / undone / replaced: no.
+ */
+export function adminWhatStaysEditable(
+  row: Row,
+  latestId: string | null,
+  planId: string | null,
+): boolean {
+  if (row.id !== latestId) return false;
+  return (
+    isOpen(row.status) || (isApplied(row.status) && row.targetPlanId === planId)
+  );
+}
+
+/**
+ * The org's button on its Requests tab, for every row with a what-stays
+ * record: "Change what stays" on the latest row while it's open, "View"
+ * otherwise (the live state for the latest applied row, history for older
+ * rows).
+ */
+export function orgWhatStaysAction(
+  row: { id: string; status: string; whatStays: unknown },
+  latestId: string | null,
+): 'change' | 'view' | null {
+  if (!row.whatStays) return null;
+  return row.id === latestId && isOpen(row.status) ? 'change' : 'view';
+}
+
+/**
+ * Whether a row put the org on its current plan: the latest applied row (by
+ * when it was written — updated_at, the database clock; reviewed_at follows
+ * the testing clock) is for the current plan. When not (plan assigned
+ * directly), Super Admin edits the current plan from the org page instead.
+ */
+export async function currentPlanSetByRow(
+  db: RowsDb,
+  orgId: string,
+): Promise<boolean> {
+  const planId = await currentPlanId(db, orgId);
+  if (!planId) return false;
   const applied = await db.packageChangeRequest.findMany({
     where: { orgId, status: { in: [...APPLIED_REQUEST_STATUSES] } },
     select: { id: true, targetPlanId: true, updatedAt: true },
   });
-  const time = (d: Date | null | undefined) => (d ? new Date(d).getTime() : 0);
-  const latest = applied.sort(
+  const [latest] = applied.sort(
     (a, b) => time(b.updatedAt) - time(a.updatedAt),
-  )[0];
-  return latest?.targetPlanId === sub.planId ? latest.id : null;
-}
-
-/** Super Admin can change what stays on this row: open, or the current plan's. */
-export function adminCanEditWhatStays(
-  row: { id: string; status: string },
-  currentId: string | null,
-): boolean {
-  return (
-    (OPEN_REQUEST_STATUSES as readonly string[]).includes(row.status) ||
-    row.id === currentId
   );
+  return latest?.targetPlanId === planId;
 }
 
-export const WHAT_STAYS_OLD_REQUEST_MESSAGE =
-  "Only an open request's choice, or the one for the organisation's current plan, can be changed.";
+export { isApplied as isAppliedStatus, isOpen as isOpenStatus };

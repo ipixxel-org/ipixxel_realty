@@ -206,16 +206,30 @@ export function WhatStaysReadOnly({ choices, admin = false }: { choices: Retenti
   ] as const;
   return (
     <div className="bl-stack" data-testid="what-stays-read-only">
-      <Banner tone="gray" icon="lock" title={`What stays on ${t.name}`}>
-        {admin ? (
-          "View only: only an open request's choice, or the one for the organisation's current plan, can be changed."
-        ) : (
-          <>
-            {choices.isDefault ? "Our default picks. " : "Your choice. "}
-            <WhatStaysLockedNote />
-          </>
-        )}
-      </Banner>
+      {choices.view === "history" ? (
+        // An older row: its copy from that time, never edited.
+        <Banner tone="gray" icon="clock" title={`What stayed on ${t.name}`}>
+          <span data-testid="what-stays-history">
+            What stayed when this change applied{choices.viewDate ? ` on ${formatDate(choices.viewDate)}` : ""}. This is history; your current setup may be
+            different. See the latest request for what&apos;s active now.
+          </span>
+        </Banner>
+      ) : choices.view === "not_applied" ? (
+        <Banner tone="gray" icon="info" title={`Change to ${t.name}`}>
+          <span data-testid="what-stays-not-applied">What was requested (not applied).</span>
+        </Banner>
+      ) : (
+        <Banner tone="gray" icon="lock" title={`Active now on ${t.name}`}>
+          {admin ? (
+            "View only: only the latest request's choice can be changed."
+          ) : (
+            <>
+              {choices.isDefault ? "Our default picks. " : "Your choice. "}
+              <WhatStaysLockedNote />
+            </>
+          )}
+        </Banner>
+      )}
       {groups.map(([title, items]) => {
         if (!items?.length) return null;
         const kept = items.filter((i) => i.selected);

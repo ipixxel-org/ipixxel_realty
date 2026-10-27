@@ -12,6 +12,8 @@ import { CheckoutScreen } from "@/components/billing/checkout";
 import { ChooseWhatStaysScreen } from "@/components/billing/choose-what-stays";
 import { OrgPackageRequests } from "@/components/billing/admin/package-requests";
 import { RequestsTable } from "@/components/billing/requests";
+import { UsageCard } from "@/components/billing/overview";
+import { OrgLevelWhatStays } from "@/components/billing/admin/admin-pages";
 import type { BillingClient } from "@/lib/billing/client";
 import { createMockBillingClient } from "@/lib/billing/mock/client";
 import { initialMockState, type MockState } from "@/lib/billing/mock/state";
@@ -301,5 +303,96 @@ describe("scheduled changes that took effect", () => {
     const [done, scheduled] = screen.getAllByTestId("org-plan-request");
     expect(within(done).getByTestId("scheduled-date")).toHaveTextContent("Took effect 27 Oct 2026");
     expect(within(scheduled).getByTestId("scheduled-date")).toHaveTextContent("Starts 26 Nov 2026");
+  });
+});
+
+describe("one place: the latest row", () => {
+  const p = (id: string) => ({ id, name: id });
+  const ws = {
+    planId: "starter",
+    planName: "Starter",
+    choice: "default" as const,
+    applied: true,
+    projects: { limit: 3, total: 5, kept: [p("P-1"), p("P-2"), p("P-3")], paused: [p("P-4"), p("P-5")] },
+  };
+  const orgRow = (over: Partial<OrgPlanRequest>): OrgPlanRequest => ({
+    id: "r",
+    requestedAt: "2026-10-27T08:00:00.000Z",
+    requestedBy: "Vidya C",
+    fromPlan: { id: "growth", name: "Growth" },
+    toPlan: { id: "starter", name: "Starter" },
+    interval: "monthly",
+    amount: 999,
+    amountNote: null,
+    status: "approved",
+    decidedAt: "2026-10-27T09:00:00.000Z",
+    rejectionReason: null,
+    whatStays: ws,
+    ...over,
+  });
+
+  it("org Requests tab: the summary + the button the API gives each row", async () => {
+    const rows = [
+      orgRow({ id: "latest", status: "pending", decidedAt: null, whatStaysAction: "change", whatStays: { ...ws, applied: false } }),
+      orgRow({ id: "older", whatStaysAction: "view" }),
+      orgRow({ id: "fits", whatStays: null, whatStaysAction: null }),
+    ];
+    const base = createMockBillingClient({ initial: manual() });
+    await show({ ...base, listOrgRequests: async () => ({ data: rows, total: 3, page: 1, pageSize: 10 }) }, <RequestsTable />);
+    const [latest, older, fits] = screen.getAllByTestId("org-plan-request");
+    expect(within(latest).getByTestId("what-stays")).toHaveTextContent(/^Keeps 3 of 5 projectsChange what stays$/);
+    expect(within(older).getByTestId("what-stays")).toHaveTextContent(/^Kept 3 of 5 projectsView$/);
+    expect(within(older).getByRole("link", { name: "View" })).toHaveAttribute("href", "/org/settings/billing/choose-what-stays?target=starter&back=requests&request=older");
+    expect(fits).toHaveTextContent("Everything fits");
+    expect(within(fits).queryByRole("link", { name: /View|Change what stays/ })).toBeNull();
+  });
+
+  async function readOnly(view: RetentionChoices["view"], viewDate: string | null) {
+    const base = createMockBillingClient({ initial: { situation: "moved_to_basic" } });
+    const data = { ...(await base.getRetentionChoices({})), locked: true, view, viewDate };
+    await show({ ...base, getRetentionChoices: async () => data }, <ChooseWhatStaysScreen requestId="older" />);
+  }
+
+  it("an older row's View is history, with its date", async () => {
+    await readOnly("history", "2026-10-27T09:00:00.000Z");
+    expect(screen.getByTestId("what-stays-history")).toHaveTextContent(
+      "What stayed when this change applied on 27 Oct 2026. This is history; your current setup may be different. See the latest request for what's active now.",
+    );
+    expect(screen.queryByRole("button", { name: /Save/ })).toBeNull();
+  });
+
+  it("a rejected or withdrawn row's View: what was requested (not applied)", async () => {
+    await readOnly("not_applied", null);
+    expect(screen.getByTestId("what-stays-not-applied")).toHaveTextContent("What was requested (not applied).");
+  });
+
+  it("the latest applied row's View: the live state and the contact-support note", async () => {
+    await readOnly(undefined, null);
+    expect(screen.getByTestId("what-stays-read-only")).toHaveTextContent(/Active now on/);
+    expect(screen.getByTestId("what-stays-locked")).toHaveTextContent("To change what stays, contact our support team");
+  });
+
+  it("Super Admin org page: the top Change what stays only when no request set the plan", async () => {
+    const base = createMockBillingClient();
+    const detail = await base.getSubscription((await base.listSubscriptions({ page: 1, pageSize: 10 } as never)).data[0].orgId);
+    let view = await show({ ...base, getSubscription: async () => ({ ...detail, whatStaysOrgLevel: false }) }, <OrgLevelWhatStays orgId="org-1" version={0} onSaved={() => undefined} />);
+    expect(screen.queryByTestId("org-level-what-stays")).toBeNull();
+    view.unmount();
+    view = await show({ ...base, getSubscription: async () => ({ ...detail, whatStaysOrgLevel: true }) }, <OrgLevelWhatStays orgId="org-1" version={0} onSaved={() => undefined} />);
+    expect(within(screen.getByTestId("org-level-what-stays")).getByRole("button", { name: "Change what stays" })).toBeInTheDocument();
+  });
+
+  it("org billing page: Active now with a View link while anything is paused", async () => {
+    const base = createMockBillingClient({ initial: { situation: "moved_to_basic" } });
+    const o = await base.getBillingOverview();
+    const usage = o.usage.map((u) => (u.key === "projects" ? { ...u, used: 3 } : u.key === "templates" ? { ...u, used: 1 } : u));
+    await show(
+      { ...base, getBillingOverview: async () => ({ ...o, usage, locked: { users: 0, projects: 2, landingPages: 0, templates: 0 } }) },
+      <UsageCard overview={{ ...o, usage, locked: { users: 0, projects: 2, landingPages: 0, templates: 0 } }} />,
+    );
+    const line = screen.getByTestId("active-now");
+    expect(line).toHaveTextContent("3 of 5 projects");
+    expect(line).toHaveTextContent("1 of 1 template");
+    expect(within(line).getByRole("link", { name: "View" })).toHaveAttribute("href", `/org/settings/billing/choose-what-stays?target=${o.plan.id}`);
   });
 });

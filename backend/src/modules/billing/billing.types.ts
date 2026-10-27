@@ -161,11 +161,17 @@ export interface RetentionChoicesV2 {
   appliesOn: string | null;
   isDefault: boolean;
   /**
-   * The org can only look: the change was decided or took effect (or it's
-   * the plan they're on). Changing it is then Super Admin only. Always false
-   * on the admin endpoint.
+   * Read-only: for the org once the change was decided or took effect (or
+   * it's the plan they're on); for anyone on an older row (history).
    */
   locked: boolean;
+  /**
+   * What the lists are. Missing / 'live': today's state (or the planned
+   * choice). 'history': an older row's copy from when it applied (viewDate).
+   * 'not_applied': a rejected / withdrawn / undone row's request.
+   */
+  view?: 'live' | 'history' | 'not_applied';
+  viewDate?: string | null;
   users: RetentionItemV2[];
   projects: RetentionItemV2[];
   landingPages: RetentionItemV2[];
@@ -451,6 +457,12 @@ export interface OrgPlanRequestV2 {
    * null when nothing had to be chosen. `applied` once approved.
    */
   whatStays: WhatStays | null;
+  /**
+   * The row's what-stays button: 'change' on the latest row while it's open,
+   * 'view' on every other row with a record (live state on the latest applied
+   * row, history on older ones); null when everything fit.
+   */
+  whatStaysAction: 'change' | 'view' | null;
   /** "Renewal of Pro" (same plan, a renewal) or "Change to Starter". */
   label: string;
   /** Sent while the renewal was overdue (grace): full price, the missed term continues. */

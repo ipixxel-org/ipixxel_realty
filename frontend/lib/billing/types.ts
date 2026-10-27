@@ -174,6 +174,12 @@ export interface OrgPlanRequest {
   rejectionReason: string | null;
   /** What they chose to keep on the new plan; null when nothing had to be chosen. */
   whatStays: WhatStays | null;
+  /**
+   * The row's what-stays button: "change" on the latest row while open, "view"
+   * on every other row with a record; null = everything fit. Missing (older
+   * backend / mock): worked out from the status.
+   */
+  whatStaysAction?: "change" | "view" | null;
   /** "Renewal of Pro" (same plan) or "Change to Starter". */
   label?: string;
   /** Sent while the renewal was overdue (grace): full price, the missed term continues. */
@@ -559,6 +565,13 @@ export interface RetentionChoices {
    * the plan they're on). Super Admin can still change it. Missing = false.
    */
   locked?: boolean;
+  /**
+   * What the lists are. Missing / "live": today's state (or the planned choice).
+   * "history": an older row's copy from when it applied (viewDate).
+   * "not_applied": a rejected / withdrawn row's request.
+   */
+  view?: "live" | "history" | "not_applied";
+  viewDate?: string | null;
   users: RetentionItem[];
   projects: RetentionItem[];
   landingPages: RetentionItem[];
@@ -754,6 +767,8 @@ export interface AdminPaymentRow extends PaymentRecord {
 }
 
 export interface SubscriptionDetail extends SubscriptionRow {
+  /** No request set the current plan (assigned directly): "Change what stays" sits on the org page. */
+  whatStaysOrgLevel?: boolean;
   renewalAmount: number;
   graceDays: number;
   /** Manual mode hides "Mark paid offline" and "Apply coupon" (the org's request does both). */

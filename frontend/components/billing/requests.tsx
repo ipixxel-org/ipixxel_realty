@@ -75,7 +75,7 @@ export function WhatStaysCell({ whatStays: w, editable, requestId }: { whatStays
   return (
     <div className="bl-small" data-testid="what-stays">
       <div>
-        Keeps <b>{whatStaysSummary(w)}</b>
+        {editable ? "Keeps" : "Kept"} <b>{whatStaysSummary(w)}</b>
       </div>
       <BLink to="chooseWhatStays" params={{ target: w.planId, back: "requests", request: requestId }} className="btn btn-ghost btn-sm" style={{ marginTop: 6 }}>
         {editable ? "Change what stays" : "View"}
@@ -220,7 +220,11 @@ export function RequestsTable({ pageSize = 10 }: { pageSize?: number }) {
                       ) : null}
                     </td>
                     <td>
-                      <WhatStaysCell whatStays={r.whatStays} editable={r.status === "pending" || r.status === "scheduled"} requestId={r.id} />
+                      <WhatStaysCell
+                        whatStays={r.whatStays}
+                        editable={r.whatStaysAction ? r.whatStaysAction === "change" : r.status === "pending" || r.status === "scheduled"}
+                        requestId={r.id}
+                      />
                     </td>
                     <td>
                       <span className={`badge ${STATUS_BADGE[r.status]}`}>{requestStage(r)}</span>

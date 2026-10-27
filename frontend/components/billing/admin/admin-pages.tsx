@@ -5,7 +5,7 @@ import { Icon } from "@/components/icons";
 import { useAuth } from "@/lib/auth-context";
 import { BLink, PageHead } from "../ui";
 import { billingClient } from "@/lib/billing";
-import { BillingEnvProvider } from "../context";
+import { BillingEnvProvider, useBillingQuery } from "../context";
 import { AdminBillingEnv } from "./admin-env";
 import { CheckoutsNeedingReview } from "./checkouts-review";
 import { BLANK_COUPON, CouponForm, CouponsList, CouponUsage, EditCoupon } from "./coupons";
@@ -93,6 +93,21 @@ export interface SubscriptionsListOrigin {
   page?: string | null;
 }
 
+/**
+ * "Change what stays" for the org's current plan — only when no request set
+ * that plan (assigned directly). Otherwise it's on the latest request in
+ * Package requests (one place).
+ */
+export function OrgLevelWhatStays({ orgId, version, onSaved }: { orgId: string; version: number; onSaved: () => void }) {
+  const { data } = useBillingQuery((c) => c.getSubscription(orgId), [orgId, version]);
+  if (!data?.whatStaysOrgLevel) return null;
+  return (
+    <div className="bl-row" data-testid="org-level-what-stays">
+      <AdminWhatStaysButton orgId={orgId} label="Change what stays" onSaved={onSaved} />
+    </div>
+  );
+}
+
 export function AdminSubscriptionDetailPage({ orgId, origin = {} }: { orgId: string; origin?: SubscriptionsListOrigin }) {
   // Approving / rejecting a request changes the plan: reload the billing view.
   const [version, setVersion] = useState(0);
@@ -104,10 +119,7 @@ export function AdminSubscriptionDetailPage({ orgId, origin = {} }: { orgId: str
       <PageHead eyebrow="Subscriptions" icon="organisation" title="Organisation billing" back={{ to: "adminSubscriptions", params: back, label: "Subscriptions" }} sampleFns={["getSubscription"]} />
       <div className="bl-stack">
         <SubscriptionDetailView key={version} orgId={orgId} />
-        {/* Support requests after the org's choice is locked: what stays on its current plan, applied at once. */}
-        <div className="bl-row">
-          <AdminWhatStaysButton orgId={orgId} label="Change what stays" onSaved={() => setVersion((v) => v + 1)} />
-        </div>
+        <OrgLevelWhatStays orgId={orgId} version={version} onSaved={() => setVersion((v) => v + 1)} />
         <OrgPackageRequests orgId={orgId} onChanged={() => setVersion((v) => v + 1)} />
       </div>
     </Guard>

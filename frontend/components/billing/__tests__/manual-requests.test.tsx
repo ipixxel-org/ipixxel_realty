@@ -248,7 +248,7 @@ describe("Requests show what they chose to keep", () => {
       "/org/settings/billing/choose-what-stays?target=pro&back=requests&request=p",
     );
     const a = within(approved).getByTestId("what-stays");
-    expect(a).toHaveTextContent(/^Keeps 2 of 3 usersView$/);
+    expect(a).toHaveTextContent(/^Kept 2 of 3 usersView$/);
     expect(a).not.toHaveTextContent("Priya");
     expect(within(a).getAllByRole("link")).toHaveLength(1);
     // The same page, read-only for a decided request (the API says locked).

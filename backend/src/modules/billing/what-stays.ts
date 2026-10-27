@@ -114,17 +114,37 @@ export async function applyWhatStaysChoice(
 export {
   OPEN_REQUEST_STATUSES,
   APPLIED_REQUEST_STATUSES,
-  WHAT_STAYS_OLD_REQUEST_MESSAGE,
-  adminCanEditWhatStays,
-  currentPlanRequestId,
+  WHAT_STAYS_NOT_LATEST_MESSAGE,
+  adminWhatStaysEditable,
+  currentPlanId,
+  currentPlanSetByRow,
+  isAppliedStatus,
+  isOpenStatus,
+  latestRequest,
 } from '../../common/utils/what-stays-rows.util';
-import { OPEN_REQUEST_STATUSES } from '../../common/utils/what-stays-rows.util';
+import {
+  isOpenStatus,
+  latestRequest,
+  WHAT_STAYS_NOT_LATEST_MESSAGE,
+} from '../../common/utils/what-stays-rows.util';
+
+/** Refuse editing through a row that isn't the org's latest (older rows are history). */
+export async function assertLatestRequest(
+  db: Pick<PrismaClient, 'packageChangeRequest'>,
+  orgId: string,
+  requestId: string,
+): Promise<void> {
+  const latest = await latestRequest(db, orgId);
+  if (latest?.id !== requestId) {
+    throw billingError('what_stays_not_latest', WHAT_STAYS_NOT_LATEST_MESSAGE);
+  }
+}
 
 /**
- * Whether the org may no longer change what stays for `targetPlanId`:
- * - for a given request: once it's no longer pending / scheduled;
+ * Whether the org can only look at what stays for the target plan:
+ * - for a request: unless it's the latest row and still pending / scheduled;
  * - otherwise: when the org is already on that plan (the change took
- *   effect — swapping what's paused on the current plan is Super Admin only).
+ *   effect — changing what's paused on the current plan is Super Admin only).
  * Before a change is sent, while it's pending or scheduled, and in grace
  * before falling back to Basic, it's editable.
  */
@@ -142,9 +162,8 @@ export async function whatStaysLockedForOrg(
     if (!request) {
       throw billingError('request_not_found', 'That request was not found.');
     }
-    return !(OPEN_REQUEST_STATUSES as readonly string[]).includes(
-      request.status,
-    );
+    if (!isOpenStatus(request.status)) return true;
+    return (await latestRequest(db, orgId))?.id !== requestId;
   }
   const sub = await db.subscription.findFirst({
     where: { orgId, status: { not: 'cancelled' } },
