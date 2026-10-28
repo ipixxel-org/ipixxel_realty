@@ -121,6 +121,20 @@ export function resolveList(
   return undefined;
 }
 
+/**
+ * True when an element id addresses a list item (a card, a row, an FAQ entry)
+ * or one of its children, rather than a fixed part of the section.
+ *
+ * Fixed parts are always namespaced by the block type (`faq:title`, see
+ * `part()` in the renderers); list ids start with their prop key
+ * (`items:it_abc`, `items:it_abc/title`). Section-wide Type settings use this
+ * to leave cards alone, since each card has its own styling controls.
+ */
+export function isItemElementId(blockType: string, elementId: ElementId): boolean {
+  const head = elementId.split(":", 1)[0];
+  return elementId.includes(":") && head !== blockType;
+}
+
 /** The DOM/CSS key for an element inside a block. */
 export function elementKey(blockId: string, elementId: ElementId): string {
   return `${blockId}|${elementId}`;

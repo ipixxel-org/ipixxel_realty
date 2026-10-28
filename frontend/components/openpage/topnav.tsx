@@ -119,6 +119,80 @@ export const MODULE_OPTIONS: {
   },
 ];
 
+const MAX_PAGE_NAME = 120;
+
+/**
+ * The page name in the top bar. With `onRename` it is a button: click the name
+ * or its pencil to edit inline; Enter or leaving the field saves, Escape
+ * cancels, and an empty name is never saved.
+ */
+function PageTitle({ name, onRename }: { name: string; onRename?: (name: string) => void }) {
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(name);
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (editing) inputRef.current?.select();
+  }, [editing]);
+
+  if (!onRename) {
+    return (
+      <span className="ps-page-title" title={name}>
+        <span>{name}</span>
+      </span>
+    );
+  }
+
+  const commit = () => {
+    const next = draft.trim().slice(0, MAX_PAGE_NAME);
+    setEditing(false);
+    if (next && next !== name) onRename(next);
+    else setDraft(name);
+  };
+
+  if (editing) {
+    return (
+      <input
+        ref={inputRef}
+        value={draft}
+        maxLength={MAX_PAGE_NAME}
+        aria-label="Page name"
+        onChange={(e) => setDraft(e.target.value)}
+        onBlur={commit}
+        onKeyDown={(e) => {
+          if (e.key === "Enter") {
+            e.preventDefault();
+            commit();
+          } else if (e.key === "Escape") {
+            e.preventDefault();
+            setDraft(name);
+            setEditing(false);
+          }
+        }}
+        className="ps-page-title"
+        style={{ minWidth: 160, outline: "none", border: "1px solid var(--color-border-default)", borderRadius: 6, padding: "2px 6px" }}
+      />
+    );
+  }
+
+  return (
+    <button
+      type="button"
+      className="ps-page-title"
+      title={`${name} — click to rename`}
+      aria-label={`Rename page "${name}"`}
+      onClick={() => {
+        setDraft(name);
+        setEditing(true);
+      }}
+      style={{ background: "none", border: "none", cursor: "pointer", padding: 0 }}
+    >
+      <span>{name}</span>
+      <Pencil size={13} className="ps-page-title-edit" />
+    </button>
+  );
+}
+
 export function TopNav({
   module,
   setModule,
@@ -151,10 +225,13 @@ export function TopNav({
   companionPage,
   onSwitchCompanion,
   isSwitchingCompanion,
+  onRenamePage,
 }: {
   module: ModuleKey;
   setModule?: (m: ModuleKey) => void;
   pageName?: string;
+  /** When set, the page title (and its pencil) can be clicked to rename the page. */
+  onRenamePage?: (name: string) => void;
   pageStatus?: string;
   canUndo: boolean;
   canRedo: boolean;
@@ -305,12 +382,7 @@ export function TopNav({
               <ArrowLeft size={13} /> Canvas
             </button>
           ) : null}
-          {pageName ? (
-            <span className="ps-page-title" title={pageName}>
-              <span>{pageName}</span>
-              <Pencil size={13} className="ps-page-title-edit" />
-            </span>
-          ) : null}
+          {pageName ? <PageTitle name={pageName} onRename={onRenamePage} /> : null}
           {pageStatus ? (
             <span
               className={`ps-draft-pill ${published && !unsaved ? "ps-pill--published" : "ps-pill--draft"}`}

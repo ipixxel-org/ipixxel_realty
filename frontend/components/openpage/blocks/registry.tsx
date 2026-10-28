@@ -3,7 +3,7 @@
 import type { BlockConfig } from "./types";
 import { Component, type ReactNode } from "react";
 import {
-  applyBlockStyleForDevice,
+  applyBlockBoxStyleForDevice,
   blockAnimationClass,
   blockAnimationStyle,
   blockStyleTag,
@@ -11,6 +11,7 @@ import {
 } from "@/lib/openpage/block-style";
 import { useDevice } from "@/components/openpage/runtime/device";
 import { filterHiddenItems } from "./render-utils";
+import { CustomFields } from "./CustomFields";
 
 import { NavbarBlock } from "./navbar/NavbarBlock";
 import { HeroBlock } from "./hero/HeroBlock";
@@ -168,8 +169,10 @@ export function RenderBlock({ block }: { block: BlockConfig }): ReactNode {
   const Renderer = blockRenderers[block.type] || PlaceholderBlock
   const resolved = resolveBlockStyleForDevice(block.style, device)
   const scopedCss = blockStyleTag(block.id, resolved)
+  // Inline: the wrapper's box only. Backgrounds, borders, transforms and
+  // typography come from `scopedCss`, so each is applied exactly once.
   const style = {
-    ...applyBlockStyleForDevice(block.style, device),
+    ...applyBlockBoxStyleForDevice(block.style, device),
     ...blockAnimationStyle(block),
   }
   const animationClass = blockAnimationClass(block)
@@ -192,6 +195,7 @@ export function RenderBlock({ block }: { block: BlockConfig }): ReactNode {
           <style>{`[data-block-id="${block.id}"] { ${block.style.customCss} }`}</style>
         ) : null}
         <Renderer block={renderBlock} />
+        <CustomFields block={renderBlock} />
       </div>
     </BlockErrorBoundary>
   )

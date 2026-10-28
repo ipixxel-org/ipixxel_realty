@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   Type,
   Copy,
@@ -21,7 +21,64 @@ import type { BlockConfig, BlockTypography } from "@/components/openpage/blocks/
 import { useConfigStore } from "@/components/openpage/store/configStore";
 import { useEditorStore } from "@/components/openpage/store/editorStore";
 import { googleFontOptions, resolveSiteTheme } from "@/lib/openpage/theme-presets";
+import { resolveBlockStyleForDevice } from "@/lib/openpage/block-style";
+import { elementKey } from "@/lib/openpage/element-style";
 import { Section, ColorInput } from "./shared-components";
+
+type TypoTarget = "all" | "label" | "heading" | "subtitle" | "body" | "items";
+
+const TARGETS: Array<{ id: TypoTarget; label: string; hint: string }> = [
+  { id: "all", label: "All", hint: "Section text outside cards, buttons and forms" },
+  { id: "label", label: "Label", hint: "The small section label above the heading" },
+  { id: "heading", label: "Heading", hint: "The section heading" },
+  { id: "subtitle", label: "Subtitle", hint: "The section subtitle" },
+  { id: "body", label: "Body", hint: "The section body copy" },
+  { id: "items", label: "Cards", hint: "Every card / list item in this section" },
+];
+
+/** Element ids written by the Heading / Subtitle / Body targets. */
+function targetElementId(blockType: string, target: TypoTarget): string | null {
+  if (target === "label") return `${blockType}:label`;
+  if (target === "heading") return `${blockType}:title`;
+  if (target === "subtitle") return `${blockType}:subtitle`;
+  if (target === "body") return `${blockType}:body`;
+  return null;
+}
+
+/**
+ * Which targets this section actually renders, read from the canvas after it
+ * commits. A target with nothing to style is disabled instead of silently
+ * writing a style no element picks up.
+ */
+function useAvailableTargets(block: BlockConfig): Set<TypoTarget> {
+  const { id: blockId, type: blockType } = block;
+  const [available, setAvailable] = useState<Set<TypoTarget>>(() => new Set<TypoTarget>(["all"]));
+  useEffect(() => {
+    if (typeof document === "undefined") return;
+    const scope = document.querySelector(`[data-block-id="${CSS.escape(blockId)}"]`);
+    const read = () => {
+      const next = new Set<TypoTarget>(["all"]);
+      for (const target of ["label", "heading", "subtitle", "body"] as const) {
+        const id = targetElementId(blockType, target)!;
+        if (scope?.querySelector(`[data-el-id="${CSS.escape(elementKey(blockId, id))}"]`)) next.add(target);
+      }
+      if (scope?.querySelector("[data-op-item]")) next.add("items");
+      setAvailable((prev) =>
+        prev.size === next.size && [...next].every((t) => prev.has(t)) ? prev : next,
+      );
+    };
+    // The canvas is the source of truth: re-read whenever the section's markup
+    // changes (a template switch, a subtitle cleared, a card added).
+    const frame = requestAnimationFrame(read);
+    const observer = scope ? new MutationObserver(read) : null;
+    observer?.observe(scope!, { childList: true, subtree: true });
+    return () => {
+      cancelAnimationFrame(frame);
+      observer?.disconnect();
+    };
+  }, [blockId, blockType]);
+  return available;
+}
 
 const quickSizes = [
   { label: "XS", value: "12px" },
@@ -45,35 +102,33 @@ const fontWeightPills = [
 ];
 
 export function TypographyPanel({ block }: { block: BlockConfig }) {
-  const [target, setTarget] = useState<'all' | 'heading' | 'subtitle' | 'body'>('all');
+  const [chosenTarget, setTarget] = useState<TypoTarget>("all");
+  const available = useAvailableTargets(block);
+  const target: TypoTarget = available.has(chosenTarget) ? chosenTarget : "all";
   const site = useConfigStore((s) => s.config);
   const siteTheme = useMemo(() => resolveSiteTheme(site), [site]);
   const themeFontFamilies = [siteTheme.fontSans, siteTheme.fontDisplay].filter(
     (f, i, arr) => arr.indexOf(f) === i,
   );
-  const updateBlockStyle = useConfigStore((s) => s.updateBlockStyle);
+  const setBlockStyleForDevice = useConfigStore((s) => s.setBlockStyleForDevice);
   const setElementStyle = useConfigStore((s) => s.setElementStyle);
   const device = useEditorStore((s) => s.viewport);
 
-  const targetElementId =
-    target === 'heading' ? `${block.type}:title` :
-    target === 'subtitle' ? `${block.type}:subtitle` :
-    target === 'body' ? `${block.type}:body` : null;
+  const elementId = targetElementId(block.type, target);
+  const blockKey = target === "items" ? "itemTypography" : "typography";
 
-  const currentElementStyle = targetElementId ? block.elementStyles?.[targetElementId]?.typography : undefined;
-  const typography = (target !== 'all' && currentElementStyle) ? currentElementStyle : (block.style?.typography || {});
+  // Read the value effective on the device being previewed, so tablet/mobile
+  // edits merge with what is actually shown rather than with desktop.
+  const typography: BlockTypography =
+    (elementId
+      ? resolveBlockStyleForDevice(block.elementStyles?.[elementId], device)?.typography
+      : resolveBlockStyleForDevice(block.style, device)?.[blockKey]) || {};
 
-  const setTypo = (partial: Partial<BlockTypography>) => {
-    if (target === 'all') {
-      updateBlockStyle(block.id, {
-        typography: { ...typography, ...partial },
-      });
-    } else if (targetElementId) {
-      setElementStyle(block.id, targetElementId, {
-        typography: { ...(currentElementStyle || {}), ...partial },
-      }, device);
-    }
+  const writeTypo = (next: BlockTypography | undefined) => {
+    if (elementId) setElementStyle(block.id, elementId, { typography: next }, device);
+    else setBlockStyleForDevice(block.id, { [blockKey]: next }, device);
   };
+  const setTypo = (partial: Partial<BlockTypography>) => writeTypo({ ...typography, ...partial });
 
   const rawSize = typography.fontSize ? Number.parseInt(typography.fontSize, 10) : 16;
   const sliderSize = Number.isNaN(rawSize) ? 16 : Math.min(Math.max(rawSize, 8), 72);
@@ -124,11 +179,7 @@ export function TypographyPanel({ block }: { block: BlockConfig }) {
             <button
               type="button"
               onClick={() => {
-                if (target === 'all') {
-                  updateBlockStyle(block.id, { typography: undefined });
-                } else if (targetElementId) {
-                  setElementStyle(block.id, targetElementId, { typography: undefined }, device);
-                }
+                writeTypo(undefined);
                 toast.success("Typography reset");
               }}
               className="p-1.5 rounded-md border border-border-default bg-bg-2 text-text-3 hover:text-status-red hover:border-status-red/40 transition-colors"
@@ -140,27 +191,31 @@ export function TypographyPanel({ block }: { block: BlockConfig }) {
         </div>
 
         {/* Target Selector */}
-        <div className="grid grid-cols-4 gap-1 p-0.5 rounded-lg border border-border-default bg-bg-2 text-center">
-          {[
-            { id: "all", label: "All" },
-            { id: "heading", label: "Heading" },
-            { id: "subtitle", label: "Subtitle" },
-            { id: "body", label: "Body" },
-          ].map((t) => (
-            <button
-              key={t.id}
-              type="button"
-              onClick={() => setTarget(t.id as 'all' | 'heading' | 'subtitle' | 'body')}
-              className={`py-1 rounded text-[10px] font-medium transition-colors ${
-                target === t.id
-                  ? "bg-green/15 text-green font-semibold shadow-sm"
-                  : "text-text-3 hover:text-text-1 hover:bg-bg-3"
-              }`}
-            >
-              {t.label}
-            </button>
-          ))}
+        <div className="grid grid-cols-6 gap-1 p-0.5 rounded-lg border border-border-default bg-bg-2 text-center">
+          {TARGETS.map((t) => {
+            const enabled = available.has(t.id);
+            return (
+              <button
+                key={t.id}
+                type="button"
+                disabled={!enabled}
+                onClick={() => setTarget(t.id)}
+                title={enabled ? t.hint : `This section has no ${t.label.toLowerCase()} to style`}
+                className={`py-1 rounded text-[10px] font-medium transition-colors disabled:opacity-35 disabled:cursor-not-allowed ${
+                  target === t.id
+                    ? "bg-green/15 text-green font-semibold shadow-sm"
+                    : "text-text-3 hover:text-text-1 hover:bg-bg-3"
+                }`}
+              >
+                {t.label}
+              </button>
+            );
+          })}
         </div>
+        <p className="mt-1.5 text-[10px] leading-snug text-text-3">
+          {TARGETS.find((t) => t.id === target)?.hint}
+          {device !== "desktop" ? ` · editing ${device} only` : ""}
+        </p>
       </div>
 
 

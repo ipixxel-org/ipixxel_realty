@@ -78,9 +78,11 @@ function ImageCard({
 export function GalleryBlock({ block }: { block: BlockConfig }) {
   const { variant, props } = block;
   const title = props.title as string | undefined;
+  const subtitle = typeof props.subtitle === "string" ? props.subtitle : "";
   const images = ((): GalleryImage[] => {
     const src = Array.isArray(props.images) ? props.images as GalleryImage[] : [];
-    return src.map((it, i) => ({ ...it, _id: it._id || `img_${i}` }));
+    // Same fallback id the list editor uses, so "Style this item" always matches.
+    return src.map((it, i) => ({ ...it, _id: it._id || `idx_${i}` }));
   })();
   const categories = useMemo(() => {
     const cats = Array.from(new Set(images.map((i) => i.category).filter(Boolean))) as string[];
@@ -99,14 +101,19 @@ export function GalleryBlock({ block }: { block: BlockConfig }) {
   return (
     <section id={(typeof props.anchor === "string" && props.anchor) || "gallery"} className="px-6 py-16 @lg:px-16 @lg:py-20">
       {typeof props.label === "string" && props.label ? (
-        <p className="text-[11px] uppercase tracking-[0.28em] text-text-2 font-medium mb-3 text-center @lg:text-left max-w-6xl mx-auto">
+        <El block={block} id="gallery:label" as="p" className="text-[11px] uppercase tracking-[0.28em] text-text-2 font-medium mb-3 text-center @lg:text-left max-w-6xl mx-auto">
           {props.label}
-        </p>
+        </El>
       ) : null}
       {title ? (
-        <h2 className={`font-display text-3xl @md:text-4xl font-semibold mb-6 ${variant === "lifestyle" ? "text-left max-w-xl" : "text-center"}`}>
+        <El block={block} id="gallery:title" as="h2" className={`font-display text-3xl @md:text-4xl font-semibold ${subtitle ? "mb-2" : "mb-6"} ${variant === "lifestyle" ? "text-left max-w-xl" : "text-center"}`}>
           {title}
-        </h2>
+        </El>
+      ) : null}
+      {subtitle ? (
+        <El block={block} id="gallery:subtitle" as="p" className={`text-text-2 text-sm mb-6 ${variant === "lifestyle" ? "text-left max-w-xl" : "text-center max-w-xl mx-auto"}`}>
+          {subtitle}
+        </El>
       ) : null}
       {categories.length ? (
         <div className="flex flex-wrap justify-center gap-2 mb-8">
@@ -126,9 +133,14 @@ export function GalleryBlock({ block }: { block: BlockConfig }) {
       ) : null}
       {variant === "lifestyle" ? (
         <div className="grid grid-cols-1 @md:grid-cols-2 gap-6 @md:gap-8 max-w-6xl mx-auto">
-          {visible.map((img, i) => (
-            <button
-              key={img._id || `${img.src}-${i}`}
+          {visible.map((img, i) => {
+            const id = listElementId({ path: ["images"] }, img._id || "");
+            return (
+            <El
+              key={id}
+              block={block}
+              id={id}
+              as="button"
               type="button"
               onClick={() => setOpen(i)}
               className="text-left group"
@@ -147,13 +159,14 @@ export function GalleryBlock({ block }: { block: BlockConfig }) {
                 )}
               </div>
               <div className="flex items-baseline justify-between gap-3 mt-3 px-1">
-                <span className="font-display text-lg text-text-0">{img.caption || img.alt || "Space"}</span>
+                <El block={block} id={subElementId(id, "caption")} as="span" className="font-display text-lg text-text-0">{img.caption || img.alt || "Space"}</El>
                 {img.meta ? (
-                  <span className="text-[10px] uppercase tracking-[0.2em] text-text-3 shrink-0">{img.meta}</span>
+                  <El block={block} id={subElementId(id, "meta")} as="span" className="text-[10px] uppercase tracking-[0.2em] text-text-3 shrink-0">{img.meta}</El>
                 ) : null}
               </div>
-            </button>
-          ))}
+            </El>
+            );
+          })}
         </div>
       ) : (
       <div
@@ -168,8 +181,11 @@ export function GalleryBlock({ block }: { block: BlockConfig }) {
       >
         {visible.map((img, i) =>
           variant === "strip" ? (
-            <button
-              key={`${img.src}-${i}`}
+            <El
+              key={img._id || `${img.src}-${i}`}
+              block={block}
+              id={listElementId({ path: ["images"] }, img._id || "")}
+              as="button"
               type="button"
               onClick={() => setOpen(i)}
               className="snap-start shrink-0 w-[72%] @sm:w-[42%] @lg:w-[28%] rounded-xl overflow-hidden border border-border-default group text-left"
@@ -190,8 +206,12 @@ export function GalleryBlock({ block }: { block: BlockConfig }) {
                   <ImageIcon size={24} className="text-text-3" />
                 </div>
               )}
-              {img.caption ? <div className="px-3 py-2 bg-bg-2 text-[11px] text-text-2">{img.caption}</div> : null}
-            </button>
+              {img.caption ? (
+                <El block={block} id={subElementId(listElementId({ path: ["images"] }, img._id || ""), "caption")} className="px-3 py-2 bg-bg-2 text-[11px] text-text-2">
+                  {img.caption}
+                </El>
+              ) : null}
+            </El>
           ) : (
             <ImageCard
               key={img._id || `${img.src}-${i}`}

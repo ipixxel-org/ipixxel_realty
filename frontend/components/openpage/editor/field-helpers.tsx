@@ -122,6 +122,28 @@ export const PRICING_TIER_FIELDS: ItemFieldDef[] = [
   { key: "featured", label: "Featured", kind: "toggle" },
 ];
 
+export const FOOTER_LINK_FIELDS: ItemFieldDef[] = [
+  { key: "label", label: "Label", kind: "text", placeholder: "e.g. Privacy Policy" },
+  { key: "url", label: "URL", kind: "text", placeholder: "https://… or #section-id" },
+];
+
+export const FOOTER_SOCIAL_FIELDS: ItemFieldDef[] = [
+  { key: "label", label: "Name", kind: "text", placeholder: "e.g. Instagram" },
+  { key: "url", label: "Profile URL", kind: "text", placeholder: "https://instagram.com/…" },
+  { key: "icon", label: "Logo (optional — the name shows without one)", kind: "icon" },
+];
+
+export const FOOTER_COLUMN_FIELDS: ItemFieldDef[] = [
+  { key: "title", label: "Column title", kind: "text", placeholder: "e.g. Explore" },
+  {
+    key: "links",
+    label: "Links — one per line, as Label | URL",
+    kind: "textarea",
+    rows: 5,
+    placeholder: "Overview | #overview\nAmenities | #amenities\nPrivacy | https://…",
+  },
+];
+
 /**
  * Infer editable fields from an existing item so legacy lists keep working
  * without an explicit schema, while the reserved `_id` stays hidden.

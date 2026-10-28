@@ -15,6 +15,7 @@ import {
   elementKey,
   getElementStyle,
   isElementHidden,
+  isItemElementId,
 } from "@/lib/openpage/element-style";
 import { useEditorStore } from "@/components/openpage/store/editorStore";
 
@@ -87,9 +88,14 @@ export function El({
   if (hidden && !editing) return null;
 
   const handleClick = (event: React.MouseEvent<HTMLElement>) => {
-    if (!editing) return;
-    event.stopPropagation();
-    selectElement(block.id, id);
+    if (editing) {
+      event.stopPropagation();
+      selectElement(block.id, id);
+      // Clicking a link in the builder selects it; it must not navigate away.
+      if ((event.target as Element | null)?.closest?.("a[href]")) event.preventDefault();
+    }
+    // The caller's own handler (a CTA opening a popup, an FAQ toggle) must run
+    // on the live site too, not only inside the builder.
     rest.onClick?.(event);
   };
 
@@ -113,6 +119,7 @@ export function El({
         style={style}
         data-el-id={key}
         data-el-name={id}
+        {...(isItemElementId(block.type, id) ? { "data-op-item": "" } : {})}
         {...(editing && hidden ? { "data-el-hidden": "true" } : {})}
         {...(editing && isSelected ? { "data-el-selected": "true" } : {})}
       >

@@ -24,6 +24,19 @@ interface BackgroundControlsProps {
   }) => void;
 }
 
+/** Read `linear-gradient(<angle>deg, <from>, <to>)` back into its parts. */
+export function parseLinearGradient(
+  value: string | undefined,
+): { angle: number; from: string; to: string } | null {
+  const color = String.raw`([a-z-]+\([^)]*\)|[^,()\s]+)`;
+  const match = new RegExp(
+    String.raw`^linear-gradient\(\s*(-?\d+(?:\.\d+)?)deg\s*,\s*${color}\s*,\s*${color}\s*\)$`,
+    "i",
+  ).exec((value ?? "").trim());
+  if (!match) return null;
+  return { angle: Math.round(Number(match[1])), from: match[2], to: match[3] };
+}
+
 export function BackgroundControls({
   backgroundColor,
   backgroundImage,
@@ -40,14 +53,21 @@ export function BackgroundControls({
     return "color";
   });
 
-  const [gradientAngle, setGradientAngle] = useState(135);
-  const [gradientColor1, setGradientColor1] = useState("#1e1b4b");
-  const [gradientColor2, setGradientColor2] = useState("#0f172a");
+  // Seed the gradient editor from the saved gradient so reopening a section
+  // shows (and keeps editing) its real colours instead of placeholder ones.
+  const saved = parseLinearGradient(backgroundImage);
+  const [gradientAngle, setGradientAngle] = useState(saved?.angle ?? 135);
+  const [gradientColor1, setGradientColor1] = useState(saved?.from ?? "#1e1b4b");
+  const [gradientColor2, setGradientColor2] = useState(saved?.to ?? "#0f172a");
 
+  // Switching tabs only changes which editor is shown; nothing is removed until
+  // the user picks a value. A gradient keeps the background colour underneath
+  // it as a fallback.
   const applyGradient = (angle: number, c1: string, c2: string) => {
-    const css = `linear-gradient(${angle}deg, ${c1}, ${c2})`;
-    onChange({ backgroundImage: css, backgroundColor: undefined });
+    onChange({ backgroundImage: `linear-gradient(${angle}deg, ${c1}, ${c2})` });
   };
+  const hasGradient = Boolean(backgroundImage?.includes("gradient"));
+  const hasImage = Boolean(backgroundImage) && !hasGradient;
 
   const rawImageUrl =
     backgroundImage && !backgroundImage.includes("gradient")
@@ -60,10 +80,7 @@ export function BackgroundControls({
       <div className="flex rounded-lg border border-border-default bg-bg-2 p-0.5">
         <button
           type="button"
-          onClick={() => {
-            setBgType("color");
-            onChange({ backgroundImage: undefined });
-          }}
+          onClick={() => setBgType("color")}
           className={`flex-1 py-1 text-[11px] rounded flex items-center justify-center gap-1.5 transition-all ${
             bgType === "color"
               ? "bg-green/15 text-green font-semibold shadow-xs"
@@ -75,10 +92,7 @@ export function BackgroundControls({
 
         <button
           type="button"
-          onClick={() => {
-            setBgType("gradient");
-            applyGradient(gradientAngle, gradientColor1, gradientColor2);
-          }}
+          onClick={() => setBgType("gradient")}
           className={`flex-1 py-1 text-[11px] rounded flex items-center justify-center gap-1.5 transition-all ${
             bgType === "gradient"
               ? "bg-green/15 text-green font-semibold shadow-xs"
@@ -109,8 +123,22 @@ export function BackgroundControls({
           </label>
           <ColorInput
             value={backgroundColor || ""}
-            onChange={(val) => onChange({ backgroundColor: val, backgroundImage: undefined })}
+            onChange={(val) => onChange({ backgroundColor: val })}
           />
+          {backgroundImage ? (
+            <div className="flex items-center justify-between gap-2 rounded-md border border-border-subtle bg-bg-2/60 px-2 py-1.5">
+              <span className="text-[10px] text-text-3">
+                {hasGradient ? "A gradient" : "An image"} is drawn above this colour.
+              </span>
+              <button
+                type="button"
+                onClick={() => onChange({ backgroundImage: undefined })}
+                className="text-[10px] font-medium text-text-2 hover:text-status-red shrink-0"
+              >
+                Remove {hasGradient ? "gradient" : "image"}
+              </button>
+            </div>
+          ) : null}
         </div>
       )}
 
@@ -158,6 +186,24 @@ export function BackgroundControls({
               className="w-full accent-green cursor-pointer"
             />
           </div>
+
+          {!hasGradient ? (
+            <button
+              type="button"
+              onClick={() => applyGradient(gradientAngle, gradientColor1, gradientColor2)}
+              className="w-full py-1.5 rounded-md border border-green/40 bg-green/10 text-green text-[11px] font-semibold hover:bg-green/15 transition-colors"
+            >
+              {hasImage ? "Replace image with this gradient" : "Apply gradient"}
+            </button>
+          ) : (
+            <button
+              type="button"
+              onClick={() => onChange({ backgroundImage: undefined })}
+              className="w-full text-[10px] text-text-3 hover:text-status-red transition-colors"
+            >
+              Remove gradient
+            </button>
+          )}
         </div>
       )}
 
