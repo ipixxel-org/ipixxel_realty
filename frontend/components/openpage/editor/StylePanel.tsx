@@ -229,22 +229,16 @@ function SpacingControl({
 }
 
 export function StylePanel({ block }: { block: BlockConfig }) {
-  const updateBlockStyle = useConfigStore((s) => s.updateBlockStyle);
-  const [device, setDevice] = useState<"desktop" | "tablet" | "mobile">("desktop");
+  const setBlockStyleForDevice = useConfigStore((s) => s.setBlockStyleForDevice);
+  const resetBlockStyle = useConfigStore((s) => s.resetBlockStyle);
+  // The panel edits whatever device the canvas is previewing, so a value set
+  // while looking at mobile lands in the mobile overrides and never on desktop.
+  const device = useEditorStore((s) => s.viewport);
+  const setDevice = useEditorStore((s) => s.setViewport);
   const style = block.style || {};
   const effectiveStyle = resolveBlockStyleForDevice(style, device) || {};
 
-  const set = (partial: Partial<BlockStyle>) => {
-    if (device === "desktop") {
-      updateBlockStyle(block.id, partial);
-      return;
-    }
-    const responsive = { ...(style.responsive || {}) };
-    const overrides = { ...(responsive[device] || {}) };
-    Object.assign(overrides, partial);
-    responsive[device] = overrides;
-    updateBlockStyle(block.id, { responsive });
-  };
+  const set = (partial: Partial<BlockStyle>) => setBlockStyleForDevice(block.id, partial, device);
 
   const devices = [
     { value: "desktop" as const, icon: <Monitor size={12} />, label: "Desktop" },
@@ -311,8 +305,9 @@ export function StylePanel({ block }: { block: BlockConfig }) {
             <button
               type="button"
               onClick={() => {
-                updateBlockStyle(block.id, {});
-                toast.success("Styles reset");
+                // Typography belongs to the Type tab, so a Style reset keeps it.
+                resetBlockStyle(block.id, device, ["typography", "itemTypography"]);
+                toast.success(device === "desktop" ? "Styles reset" : `${device} style overrides reset`);
               }}
               className="p-1.5 rounded-md border border-border-default bg-bg-2 text-text-3 hover:text-status-red hover:border-status-red/40 transition-colors"
               title="Reset all styles"
@@ -414,6 +409,7 @@ export function StylePanel({ block }: { block: BlockConfig }) {
         {/* Background System */}
         <Section title="Background" icon={<Palette size={12} />}>
           <BackgroundControls
+            key={`${block.id}:${device}`}
             backgroundColor={effectiveStyle.backgroundColor}
             backgroundImage={effectiveStyle.backgroundImage}
             backgroundSize={effectiveStyle.backgroundSize}
@@ -508,7 +504,7 @@ export function StylePanel({ block }: { block: BlockConfig }) {
                 <input
                   type="checkbox"
                   checked={Boolean(style[key])}
-                  onChange={(e) => set({ [key]: e.target.checked })}
+                  onChange={(e) => setBlockStyleForDevice(block.id, { [key]: e.target.checked }, "desktop")}
                   className="w-4 h-4 rounded border-border-default bg-bg-2 accent-green cursor-pointer"
                 />
               </label>
@@ -523,8 +519,8 @@ export function StylePanel({ block }: { block: BlockConfig }) {
               Applies directly to this block. Example: <code className="text-green font-mono">h2 &#123; letter-spacing: 2px; &#125;</code>
             </p>
             <textarea
-              value={effectiveStyle.customCss || ""}
-              onChange={(e) => set({ customCss: e.target.value })}
+              value={style.customCss || ""}
+              onChange={(e) => setBlockStyleForDevice(block.id, { customCss: e.target.value }, "desktop")}
               rows={4}
               placeholder="& { filter: drop-shadow(0 20px 13px rgba(0,0,0,0.03)); }"
               className="w-full px-2.5 py-2 rounded-lg border border-border-default bg-bg-2 text-text-0 text-[11px] font-mono outline-none focus:border-green resize-y"

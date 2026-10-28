@@ -1,7 +1,9 @@
 "use client";
 
-import { useState } from "react";
-import { Code, Plus, Check, AlertCircle } from "lucide-react";
+import { useEffect, useState } from "react";
+import { Code, Plus, Check, AlertCircle, Palette } from "lucide-react";
+import { useEditorStore } from "@/components/openpage/store/editorStore";
+import { elementKey } from "@/lib/openpage/element-style";
 import { toast } from "sonner";
 import type { BlockConfig, BlockType } from "@/components/openpage/blocks/types";
 import { useConfigStore } from "@/components/openpage/store/configStore";
@@ -11,13 +13,97 @@ import { MediaPicker } from "@/components/media-picker";
 import { type FormDefinition } from "@/lib/openpage/forms-store";
 import { useBuilderLeadForms } from "@/components/openpage/builder/forms-context";
 import { DynamicDataPicker } from "./DynamicDataPicker";
-import { FLOOR_PLAN_FIELDS, AMENITY_FIELDS, ICON_BOX_FIELDS, PRICING_TIER_FIELDS } from "./field-helpers";
+import { CUSTOM_FIELDS_KEY, customFieldKeys } from "@/components/openpage/blocks/CustomFields";
+import {
+  FLOOR_PLAN_FIELDS,
+  AMENITY_FIELDS,
+  ICON_BOX_FIELDS,
+  PRICING_TIER_FIELDS,
+  FOOTER_LINK_FIELDS,
+  FOOTER_SOCIAL_FIELDS,
+  FOOTER_COLUMN_FIELDS,
+  type ItemFieldDef,
+} from "./field-helpers";
+
+/** Explicit item fields for a block's list, keyed `${blockType}.${propKey}`. */
+const ITEM_FIELDS: Record<string, ItemFieldDef[]> = {
+  'floor-plans.items': FLOOR_PLAN_FIELDS,
+  'amenities.items': AMENITY_FIELDS,
+  'icon-box.items': ICON_BOX_FIELDS,
+  'pricing.tiers': PRICING_TIER_FIELDS,
+  'footer.menuLinks': FOOTER_LINK_FIELDS,
+  'footer.socialLinks': FOOTER_SOCIAL_FIELDS,
+  'footer.linkColumns': FOOTER_COLUMN_FIELDS,
+}
 
 interface FieldDef {
   key: string
   label: string
   type: 'text' | 'textarea' | 'select' | 'array-strings' | 'array-items' | 'image' | 'icon' | 'form-select' | 'toggle' | 'nav-menu' | 'number' | 'color'
   options?: string[]
+}
+
+/**
+ * Named parts inside each list item, offered as "Style …" buttons next to
+ * "Style this item". Keys must match the `subElementId(itemId, key)` the
+ * block's renderer uses for that part.
+ */
+const ITEM_SUB_ELEMENTS: Partial<Record<string, Record<string, Array<{ key: string; label: string }>>>> = {
+  features: { items: [{ key: 'icon', label: 'Icon' }, { key: 'title', label: 'Title' }, { key: 'description', label: 'Description' }] },
+  faq: { items: [{ key: 'question', label: 'Question' }, { key: 'answer', label: 'Answer' }] },
+  amenities: { items: [{ key: 'icon', label: 'Icon' }, { key: 'title', label: 'Title' }, { key: 'description', label: 'Description' }] },
+  'project-banner': { stats: [{ key: 'value', label: 'Value' }, { key: 'label', label: 'Label' }] },
+  'project-overview': {
+    highlights: [{ key: 'title', label: 'Title' }, { key: 'description', label: 'Description' }],
+    stats: [{ key: 'value', label: 'Value' }, { key: 'label', label: 'Label' }],
+  },
+  'property-details': { items: [{ key: 'label', label: 'Label' }, { key: 'value', label: 'Value' }] },
+  'floor-plans': { items: [{ key: 'name', label: 'Name' }, { key: 'meta', label: 'Size' }, { key: 'price', label: 'Price' }] },
+  'unit-config': {
+    items: [
+      { key: 'type', label: 'Type' },
+      { key: 'title', label: 'Title' },
+      { key: 'area', label: 'Area' },
+      { key: 'price', label: 'Price' },
+      { key: 'cta', label: 'Button' },
+    ],
+  },
+  're-pricing': { items: [{ key: 'name', label: 'Name' }, { key: 'price', label: 'Price' }, { key: 'meta', label: 'Note' }, { key: 'cta', label: 'Button' }] },
+  location: { items: [{ key: 'title', label: 'Title' }, { key: 'meta', label: 'Meta' }] },
+  'lead-form': { benefits: [{ key: 'title', label: 'Title' }, { key: 'description', label: 'Description' }] },
+  gallery: { images: [{ key: 'image', label: 'Image' }, { key: 'caption', label: 'Caption' }, { key: 'meta', label: 'Meta' }] },
+  'icon-box': { items: [{ key: 'icon', label: 'Icon' }, { key: 'title', label: 'Title' }, { key: 'description', label: 'Description' }] },
+}
+
+/** Item template keys whose default carries over to every newly added item. */
+const ITEM_DEFAULT_KEYS = new Set(['cta', 'target'])
+
+/**
+ * Content-tab fields for one button whose colours live under `prefix` — the
+ * naming `CtaButton` reads (`${prefix}Color`, `${prefix}TextColor`, …).
+ */
+function ctaFields(
+  prefix: string,
+  label: string,
+  opts: { textKey?: string; url?: boolean } = {},
+): FieldDef[] {
+  const fields: FieldDef[] = []
+  if (opts.textKey) fields.push({ key: opts.textKey, label: `${label} text`, type: 'text' })
+  if (opts.url) {
+    fields.push(
+      { key: `${prefix}Url`, label: `${label} URL`, type: 'text' },
+      { key: `${prefix}Target`, label: `${label} link target`, type: 'select', options: ['_self', '_blank'] },
+    )
+  }
+  fields.push(
+    { key: `${prefix}Color`, label: `${label} background`, type: 'color' },
+    { key: `${prefix}TextColor`, label: `${label} text color`, type: 'color' },
+    { key: `${prefix}HoverColor`, label: `${label} hover background`, type: 'color' },
+    { key: `${prefix}HoverTextColor`, label: `${label} hover text`, type: 'color' },
+    { key: `${prefix}BorderColor`, label: `${label} border`, type: 'color' },
+    { key: `${prefix}Radius`, label: `${label} radius (px)`, type: 'number' },
+  )
+  return fields
 }
 
 const blockFields: Partial<Record<BlockType, { sections: { title: string; fields: FieldDef[] }[] }>> = {
@@ -142,28 +228,25 @@ const blockFields: Partial<Record<BlockType, { sections: { title: string; fields
           { key: 'headline', label: 'Headline', type: 'text' },
           { key: 'subheadline', label: 'Subheadline', type: 'text' },
           { key: 'badge', label: 'Badge (optional)', type: 'text' },
-          { key: 'buttonText', label: 'Button Text', type: 'text' },
-          { key: 'buttonUrl', label: 'Button URL', type: 'text' },
-          { key: 'buttonTarget', label: 'Button link target', type: 'select', options: ['_self', '_blank'] },
-          { key: 'popupId', label: 'Popup ID', type: 'text' },
-          { key: 'secondaryButtonText', label: 'Secondary Button Text', type: 'text' },
-          { key: 'secondaryButtonUrl', label: 'Secondary Button URL', type: 'text' },
+          { key: 'image', label: 'Featured Image', type: 'image' },
           { key: 'bgImage', label: 'Background Image', type: 'image' },
-          { key: 'image', label: 'Featured Image (Booking variant)', type: 'image' },
         ],
       },
       {
         title: 'Style & Colors',
         fields: [
           { key: 'variant', label: 'Variant', type: 'select', options: ['simple', 'split', 'booking', 'banner', 'strip', 'card'] },
-          { key: 'buttonColor', label: 'Button Color', type: 'color' },
-          { key: 'buttonTextColor', label: 'Button Text Color', type: 'color' },
-          { key: 'buttonHoverColor', label: 'Button Hover Color', type: 'color' },
-          { key: 'buttonHoverTextColor', label: 'Button Hover Text Color', type: 'color' },
-          { key: 'buttonRadius', label: 'Button Radius (px)', type: 'number' },
           { key: 'bgColor', label: 'Background Color', type: 'color' },
         ],
       },
+      {
+        title: 'Primary Button',
+        fields: [
+          ...ctaFields('button', 'Button', { textKey: 'buttonText', url: true }),
+          { key: 'popupId', label: 'Popup ID (opens a popup instead of the URL)', type: 'text' },
+        ],
+      },
+      { title: 'Secondary Button', fields: ctaFields('secondaryButton', 'Secondary button', { textKey: 'secondaryButtonText', url: true }) },
     ],
   },
   footer: {
@@ -174,12 +257,18 @@ const blockFields: Partial<Record<BlockType, { sections: { title: string; fields
           { key: 'logo', label: 'Logo Text', type: 'text' },
           { key: 'logoImage', label: 'Logo', type: 'image' },
           { key: 'copyright', label: 'Copyright', type: 'text' },
-          { key: 'tagline', label: 'Tagline', type: 'textarea' },
+          { key: 'tagline', label: 'Tagline (clear to hide)', type: 'textarea' },
           { key: 'address', label: 'Address', type: 'text' },
           { key: 'phone', label: 'Phone', type: 'text' },
           { key: 'email', label: 'Email', type: 'text' },
-          { key: 'links', label: 'Links', type: 'array-strings' },
-          { key: 'socials', label: 'Social links', type: 'array-strings' },
+        ],
+      },
+      {
+        title: 'Menu & Social Links',
+        fields: [
+          { key: 'menuLinks', label: 'Menu links', type: 'array-items' },
+          { key: 'linkColumns', label: 'Link columns (multi-column, premium, contact)', type: 'array-items' },
+          { key: 'socialLinks', label: 'Social links', type: 'array-items' },
         ],
       },
       {
@@ -259,6 +348,8 @@ const blockFields: Partial<Record<BlockType, { sections: { title: string; fields
   },
   newsletter: {
     sections: [{ title: 'Form', fields: [
+      { key: 'showIcon', label: 'Show icon', type: 'toggle' },
+      { key: 'icon', label: 'Icon / logo (default: envelope)', type: 'icon' },
       { key: 'title', label: 'Title', type: 'text' },
       { key: 'subtitle', label: 'Subtitle', type: 'text' },
       { key: 'formId', label: 'Form (Form Builder)', type: 'form-select' },
@@ -325,6 +416,7 @@ const blockFields: Partial<Record<BlockType, { sections: { title: string; fields
         fields: [
           { key: 'url', label: 'Video URL', type: 'text' },
           { key: 'title', label: 'Title', type: 'text' },
+          { key: 'borderColor', label: 'Frame border color', type: 'color' },
         ],
       },
       {
@@ -340,7 +432,9 @@ const blockFields: Partial<Record<BlockType, { sections: { title: string; fields
       {
         title: 'Content',
         fields: [
+          { key: 'label', label: 'Section label', type: 'text' },
           { key: 'title', label: 'Title', type: 'text' },
+          { key: 'subtitle', label: 'Subtitle', type: 'text' },
           { key: 'images', label: 'Images', type: 'array-items' },
           { key: 'anchor', label: 'Section ID (menu scroll)', type: 'text' },
         ],
@@ -362,6 +456,9 @@ const blockFields: Partial<Record<BlockType, { sections: { title: string; fields
           { key: 'variant', label: 'Variant', type: 'select', options: ['line', 'space', 'dots'] },
           { key: 'width', label: 'Width', type: 'select', options: ['full', 'centered', 'narrow'] },
           { key: 'height', label: 'Height (px)', type: 'text' },
+          { key: 'color', label: 'Line color', type: 'color' },
+          { key: 'thickness', label: 'Line thickness (px)', type: 'number' },
+          { key: 'lineStyle', label: 'Line style', type: 'select', options: ['solid', 'dashed', 'dotted'] },
         ],
       },
     ],
@@ -387,7 +484,7 @@ const blockFields: Partial<Record<BlockType, { sections: { title: string; fields
   'project-banner': {
     sections: [
       { title: 'Layout', fields: [
-        { key: 'variant', label: 'Template', type: 'select', options: ['split-form', 'overlay', 'centered', 'stats'] },
+        { key: 'variant', label: 'Template', type: 'select', options: ['split-form', 'overlay', 'centered', 'stats', 'editorial', 'framed', 'asymmetric', 'info-bar', 'framed-center', 'split-curve'] },
       ]},
       { title: 'Content', fields: [
         { key: 'badge', label: 'Badge', type: 'text' },
@@ -398,13 +495,17 @@ const blockFields: Partial<Record<BlockType, { sections: { title: string; fields
         { key: 'price', label: 'Price', type: 'text' },
           { key: 'description', label: 'Description', type: 'textarea' },
           { key: 'image', label: 'Cover image', type: 'image' },
-          { key: 'primaryCta', label: 'Primary CTA', type: 'text' },
-          { key: 'secondaryCta', label: 'Secondary CTA', type: 'text' },
-          { key: 'stats', label: 'Stats (stats layout)', type: 'array-items' },
+          { key: 'stats', label: 'Stats', type: 'array-items' },
           { key: 'formId', label: 'Form (Form Builder)', type: 'form-select' },
-          { key: 'popupId', label: 'Brochure popup ID', type: 'text' },
-          { key: 'pdfUrl', label: 'Brochure PDF URL', type: 'text' },
+          { key: 'formTitle', label: 'Form card title', type: 'text' },
+          { key: 'formSubtitle', label: 'Form card subtitle', type: 'text' },
           { key: 'anchor', label: 'Section ID (menu scroll)', type: 'text' },
+      ]},
+      { title: 'Primary CTA', fields: ctaFields('primaryCta', 'Primary CTA', { textKey: 'primaryCta', url: true }) },
+      { title: 'Secondary CTA', fields: [
+        ...ctaFields('secondaryCta', 'Secondary CTA', { textKey: 'secondaryCta', url: true }),
+        { key: 'popupId', label: 'Brochure popup ID (overrides URL)', type: 'text' },
+        { key: 'pdfUrl', label: 'Brochure PDF URL', type: 'text' },
       ]},
     ],
   },
@@ -418,9 +519,11 @@ const blockFields: Partial<Record<BlockType, { sections: { title: string; fields
       { key: 'image', label: 'Image', type: 'image' },
       { key: 'highlights', label: 'Highlights', type: 'array-items' },
       { key: 'stats', label: 'Stats', type: 'array-items' },
-      { key: 'ctaText', label: 'CTA text', type: 'text' },
       { key: 'imagePosition', label: 'Image side', type: 'select', options: ['left', 'right'] },
       { key: 'anchor', label: 'Section ID (menu scroll)', type: 'text' },
+    ]}, { title: 'CTA Button', fields: [
+      ...ctaFields('cta', 'CTA', { textKey: 'ctaText', url: true }),
+      { key: 'ctaAnchor', label: 'CTA section ID (when no URL)', type: 'text' },
     ]}],
   },
   'property-details': {
@@ -445,10 +548,10 @@ const blockFields: Partial<Record<BlockType, { sections: { title: string; fields
       { key: 'title', label: 'Title', type: 'text' },
       { key: 'subtitle', label: 'Subtitle', type: 'text' },
       { key: 'items', label: 'Amenities', type: 'array-items' },
-      { key: 'ctaText', label: 'CTA text', type: 'text' },
-      { key: 'ctaUrl', label: 'CTA URL', type: 'text' },
-      { key: 'ctaAnchor', label: 'CTA anchor', type: 'text' },
       { key: 'anchor', label: 'Section ID (menu scroll)', type: 'text' },
+    ]}, { title: 'CTA Button', fields: [
+      ...ctaFields('cta', 'CTA', { textKey: 'ctaText', url: true }),
+      { key: 'ctaAnchor', label: 'CTA section ID (when no URL)', type: 'text' },
     ]}],
   },
   'floor-plans': {
@@ -471,8 +574,18 @@ const blockFields: Partial<Record<BlockType, { sections: { title: string; fields
   },
   'unit-config': {
     sections: [{ title: 'Units', fields: [
-      { key: 'variant', label: 'Template', type: 'select', options: ['cards', 'table'] },
+      { key: 'variant', label: 'Template', type: 'select', options: ['cards', 'listings', 'table'] },
+      { key: 'title', label: 'Title', type: 'text' },
+      { key: 'subtitle', label: 'Subtitle', type: 'text' },
       { key: 'items', label: 'Configurations', type: 'array-items' },
+      { key: 'anchor', label: 'Section ID (menu scroll)', type: 'text' },
+    ] }, { title: 'Card Button', fields: [
+      { key: 'ctaText', label: 'Default button text (cards without their own)', type: 'text' },
+      { key: 'ctaAlign', label: 'Button alignment', type: 'select', options: ['full', 'left', 'center', 'right'] },
+      { key: 'ctaUrl', label: 'Button URL', type: 'text' },
+      { key: 'ctaTarget', label: 'Button link target', type: 'select', options: ['_self', '_blank'] },
+      { key: 'ctaAnchor', label: 'Section ID to scroll to (when no URL)', type: 'text' },
+      ...ctaFields('cta', 'Button'),
     ] }],
   },
   're-pricing': {
@@ -480,13 +593,18 @@ const blockFields: Partial<Record<BlockType, { sections: { title: string; fields
       { key: 'variant', label: 'Template', type: 'select', options: ['cards', 'simple', 'comparison', 'banner'] },
     ]}, { title: 'Content', fields: [
       { key: 'title', label: 'Title', type: 'text' },
-      { key: 'startingPrice', label: 'Starting price', type: 'text' },
-      { key: 'priceColor', label: 'Price color', type: 'color' },
       { key: 'subtitle', label: 'Subtitle', type: 'text' },
+      { key: 'startingLabel', label: 'Starting price label (e.g. "Starting from")', type: 'text' },
+      { key: 'startingPrice', label: 'Starting price', type: 'text' },
+      { key: 'priceColor', label: 'Starting price color', type: 'color' },
       { key: 'items', label: 'Price cards', type: 'array-items' },
+      { key: 'cardPriceColor', label: 'Card price color (all cards)', type: 'color' },
       { key: 'disclaimer', label: 'Disclaimer', type: 'text' },
-      { key: 'ctaText', label: 'CTA text', type: 'text' },
       { key: 'anchor', label: 'Section ID (menu scroll)', type: 'text' },
+    ]}, { title: 'Section CTA Button', fields: [
+      ...ctaFields('cta', 'CTA', { textKey: 'ctaText', url: true }),
+    ]}, { title: 'Card Buttons', fields: [
+      ...ctaFields('cardCta', 'Card button'),
     ]}],
   },
   offers: {
@@ -503,12 +621,10 @@ const blockFields: Partial<Record<BlockType, { sections: { title: string; fields
         { key: 'subtitle', label: 'Subheading', type: 'text' },
         { key: 'address', label: 'Address', type: 'text' },
         { key: 'image', label: 'Image', type: 'image' },
-        { key: 'embedUrl', label: 'Google Maps link', type: 'text' },
+        { key: 'embedUrl', label: 'Google Maps link (place link, embed code, address or lat,lng)', type: 'text' },
         { key: 'items', label: 'Nearby', type: 'array-items' },
-        { key: 'ctaText', label: 'CTA text', type: 'text' },
-        { key: 'ctaUrl', label: 'CTA URL', type: 'text' },
         { key: 'anchor', label: 'Section ID (menu scroll)', type: 'text' },
-      ]}],
+      ]}, { title: 'CTA Button', fields: ctaFields('cta', 'CTA', { textKey: 'ctaText', url: true }) }],
     },
   'google-maps': {
     sections: [{ title: 'Layout', fields: [
@@ -551,13 +667,16 @@ const blockFields: Partial<Record<BlockType, { sections: { title: string; fields
       { key: 'variant', label: 'Template', type: 'select', options: ['split', 'card', 'banner', 'minimal'] },
     ]}, { title: 'Brochure', fields: [
       { key: 'title', label: 'Title', type: 'text' },
-      { key: 'buttonText', label: 'Button text', type: 'text' },
       { key: 'subtitle', label: 'Subtitle', type: 'text' },
       { key: 'image', label: 'Preview image', type: 'image' },
       { key: 'pdfUrl', label: 'PDF URL', type: 'text' },
       { key: 'formId', label: 'Unlock form (Form Builder)', type: 'form-select' },
       { key: 'popupId', label: 'Popup ID (optional)', type: 'text' },
       { key: 'anchor', label: 'Section ID (menu scroll)', type: 'text' },
+    ]}, { title: 'Button', fields: [
+      { key: 'buttonText', label: 'Button text (clear to hide the button)', type: 'text' },
+      { key: 'unlockedButtonText', label: 'Button text after unlock', type: 'text' },
+      ...ctaFields('button', 'Button'),
     ]}],
   },
   'site-visit': {
@@ -690,13 +809,16 @@ const blockFields: Partial<Record<BlockType, { sections: { title: string; fields
   heading: {
     sections: [{ title: 'Content', fields: [
       { key: 'text', label: 'Heading', type: 'text' },
-      { key: 'tag', label: 'HTML Tag', type: 'select', options: ['h1', 'h2', 'h3', 'h4'] },
+      { key: 'tag', label: 'HTML Tag', type: 'select', options: ['h1', 'h2', 'h3', 'h4', 'h5', 'h6'] },
       { key: 'url', label: 'Link', type: 'text' },
     ]}],
   },
   text: {
     sections: [{ title: 'Content', fields: [
       { key: 'body', label: 'Text', type: 'textarea' },
+      { key: 'image', label: 'Image', type: 'image' },
+      { key: 'imageAlt', label: 'Image alt text', type: 'text' },
+      { key: 'imagePosition', label: 'Image position', type: 'select', options: ['top', 'bottom', 'left', 'right'] },
     ]}],
   },
   'image-box': {
@@ -819,9 +941,9 @@ const KNOWN_VARIANTS: Record<string, string[]> = {
   'project-highlights': ['grid', 'table', 'two-column', 'checklist'],
   'amenities': ['grid', 'chips', 'icon-grid', 'featured', 'mosaic'],
   'floor-plans': ['cards', 'list', 'showcase'],
-  'unit-config': ['cards', 'table'],
+  'unit-config': ['cards', 'listings', 'table'],
   're-pricing': ['cards', 'simple', 'comparison', 'banner'],
-  'location': ['split-map', 'list', 'map-only', 'cards'],
+  'location': ['split-map', 'list', 'map-only', 'cards', 'editorial'],
   'developer': ['default', 'split', 'stats', 'band'],
   'lead-form': ['card', 'split', 'inline', 'default'],
   'download-brochure': ['split', 'card', 'banner', 'minimal'],
@@ -834,6 +956,58 @@ const KNOWN_VARIANTS: Record<string, string[]> = {
   'button': ['solid', 'outline', 'pill', 'glass'],
   'footer': ['simple', 'multi-column', 'minimal', 'premium', 'contact'],
 };
+
+/** Content fields whose element id differs from `${blockType}:${fieldKey}`. */
+const FIELD_ELEMENT_ALIASES: Record<string, string> = {
+  headline: 'title',
+  subheadline: 'subtitle',
+  text: 'title',
+}
+
+/**
+ * "Style" shortcut beside a text field: opens the Element tab (typography,
+ * colour, hover…) for the element that shows this field. Rendered only when
+ * the section actually draws the field as its own element.
+ */
+function StyleFieldButton({ block, fieldKey }: { block: BlockConfig; fieldKey: string }) {
+  const selectElement = useEditorStore((s) => s.selectElement)
+  const [elementId, setElementId] = useState<string | null>(null)
+
+  useEffect(() => {
+    if (typeof document === 'undefined') return
+    const candidates = [`${block.type}:${fieldKey}`]
+    const alias = FIELD_ELEMENT_ALIASES[fieldKey]
+    if (alias) candidates.push(`${block.type}:${alias}`)
+    // Hero-style blocks render their "description" as the subtitle.
+    if (fieldKey === 'description') candidates.push(`${block.type}:subtitle`)
+    const read = () => {
+      const found = candidates.find((id) =>
+        document.querySelector(`[data-el-id="${CSS.escape(elementKey(block.id, id))}"]`),
+      ) ?? null
+      setElementId((prev) => (prev === found ? prev : found))
+    }
+    const scope = document.querySelector(`[data-block-id="${CSS.escape(block.id)}"]`)
+    const frame = requestAnimationFrame(read)
+    const observer = scope ? new MutationObserver(read) : null
+    observer?.observe(scope!, { childList: true, subtree: true })
+    return () => {
+      cancelAnimationFrame(frame)
+      observer?.disconnect()
+    }
+  }, [block.id, block.type, fieldKey])
+
+  if (!elementId) return null
+  return (
+    <button
+      type="button"
+      onClick={() => selectElement(block.id, elementId)}
+      className="flex items-center gap-1 px-1.5 py-0.5 rounded border border-border-default text-[10px] text-text-3 hover:text-sky-500 hover:border-sky-500/50 transition-colors"
+      title="Style this text: font, size, colour, hover"
+    >
+      <Palette size={10} /> Style
+    </button>
+  )
+}
 
 function PropertyField({ field, block }: { field: FieldDef; block: BlockConfig }) {
   const updateBlockProps = useConfigStore((s) => s.updateBlockProps)
@@ -1112,7 +1286,10 @@ function PropertyField({ field, block }: { field: FieldDef; block: BlockConfig }
         <div className="mb-2.5">
           <div className="flex items-center justify-between mb-1">
             <label className="block text-[11.5px] text-text-2 font-medium">{field.label}</label>
-            <DynamicDataPicker onSelectTag={(tag) => onChange(tag)} />
+            <div className="flex items-center gap-1">
+              <StyleFieldButton block={block} fieldKey={field.key} />
+              <DynamicDataPicker onSelectTag={(tag) => onChange(tag)} />
+            </div>
           </div>
           <input
             type="text"
@@ -1128,7 +1305,10 @@ function PropertyField({ field, block }: { field: FieldDef; block: BlockConfig }
         <div className="mb-2.5">
           <div className="flex items-center justify-between mb-1">
             <label className="block text-[11.5px] text-text-2 font-medium">{field.label}</label>
-            <DynamicDataPicker onSelectTag={(tag) => onChange(tag)} />
+            <div className="flex items-center gap-1">
+              <StyleFieldButton block={block} fieldKey={field.key} />
+              <DynamicDataPicker onSelectTag={(tag) => onChange(tag)} />
+            </div>
           </div>
           <textarea
             value={String(value || '')}
@@ -1139,21 +1319,27 @@ function PropertyField({ field, block }: { field: FieldDef; block: BlockConfig }
         </div>
       )
 
-    case 'select':
+    case 'select': {
+      const current = String(value || '')
+      // An unset/unknown value must not masquerade as the first option: the
+      // browser would show it selected, so choosing it would fire no change.
+      const known = field.options?.includes(current) ?? false
       return (
         <div className="mb-2.5">
           <label className="block text-[11.5px] text-text-2 mb-1 font-medium">{field.label}</label>
           <select
-            value={String(value || '')}
+            value={current}
             onChange={(e) => onChange(e.target.value)}
             className="w-full px-2 py-1.5 rounded border border-border-default bg-bg-2 text-text-0 text-xs outline-none focus:border-green cursor-pointer"
           >
+            {!known ? <option value={current}>{current ? `${current} (current)` : 'Default'}</option> : null}
             {field.options?.map((opt) => (
               <option key={opt} value={opt}>{opt}</option>
             ))}
           </select>
         </div>
       )
+    }
 
     case 'image':
     case 'icon':
@@ -1209,15 +1395,7 @@ function PropertyField({ field, block }: { field: FieldDef; block: BlockConfig }
 
       // Infer new item shape from existing items, or use sensible defaults per field key
       function createEmptyItem(): Record<string, unknown> {
-        if (items.length > 0) {
-          const template: Record<string, unknown> = Object.fromEntries(
-            Object.entries(items[0])
-              .filter(([key]) => key !== '_id')
-              .map(([key, current]) => [key, Array.isArray(current) ? [] : typeof current === 'boolean' ? false : '']),
-          )
-          return template
-        }
-        // Fallback templates by block type + field key
+        // Templates by block type + field key
         const blockTemplates: Partial<Record<string, Record<string, Record<string, unknown>>>> = {
           testimonials: { items: { name: '', role: '', quote: '' } },
           stats: { items: { value: '', label: '' } },
@@ -1231,7 +1409,7 @@ function PropertyField({ field, block }: { field: FieldDef; block: BlockConfig }
           team: { members: { name: '', role: '', avatar: '' } },
           features: { items: { icon: '', title: '', description: '' } },
           'unit-config': { items: { type: '', config: '', area: '', price: '', image: '' } },
-          're-pricing': { items: { name: '', price: '', meta: '', cta: '' } },
+          're-pricing': { items: { name: '', price: '', meta: '', cta: 'Enquire', url: '' } },
           pricing: { tiers: { name: '', price: '', period: '', description: '', features: [], cta: '', featured: false } },
           'icon-box': { items: {
             title: String(block.props.title ?? ''),
@@ -1247,20 +1425,29 @@ function PropertyField({ field, block }: { field: FieldDef; block: BlockConfig }
           image: { images: { src: '', alt: '' } },
           gallery: { images: { src: '', alt: '', caption: '', meta: '', category: '' } },
           'floor-plans': { items: { name: '', beds: '', area: '', price: '', image: '', downloadUrl: '' } },
+          footer: {
+            menuLinks: { label: '', url: '' },
+            socialLinks: { label: '', url: '', icon: '' },
+            linkColumns: { title: '', links: '' },
+          },
         }
-        return blockTemplates[block.type]?.[field.key] || { title: '', description: '' }
+        const defaults = blockTemplates[block.type]?.[field.key]
+        if (items.length > 0) {
+          // Mirror the existing items' shape, blanked, but keep per-item
+          // defaults such as a price card's "Enquire" button text — a blank
+          // button text means "no button".
+          const inferred: Record<string, unknown> = Object.fromEntries(
+            Object.entries(items[0])
+              .filter(([key]) => key !== '_id' && key !== 'hidden')
+              .map(([key, current]) => [key, Array.isArray(current) ? [] : typeof current === 'boolean' ? false : '']),
+          )
+          const kept = Object.entries(defaults ?? {}).filter(([k, v]) => ITEM_DEFAULT_KEYS.has(k) && v !== '')
+          return { ...inferred, ...Object.fromEntries(kept) }
+        }
+        return defaults || { title: '', description: '' }
       }
 
-      const customItemFields =
-        block.type === 'floor-plans' && field.key === 'items'
-          ? FLOOR_PLAN_FIELDS
-          : block.type === 'amenities' && field.key === 'items'
-            ? AMENITY_FIELDS
-            : block.type === 'icon-box' && field.key === 'items'
-              ? ICON_BOX_FIELDS
-              : block.type === 'pricing' && field.key === 'tiers'
-                ? PRICING_TIER_FIELDS
-                : undefined;
+      const customItemFields = ITEM_FIELDS[`${block.type}.${field.key}`];
 
       // Delegated to the shared list editor so every dynamic list in the
       // builder gets add / duplicate / delete / hide / drag-reorder plus a
@@ -1273,6 +1460,7 @@ function PropertyField({ field, block }: { field: FieldDef; block: BlockConfig }
             label={field.label}
             template={createEmptyItem()}
             fields={customItemFields}
+            subElements={ITEM_SUB_ELEMENTS[block.type]?.[field.key]}
           />
         </div>
       )
@@ -1322,6 +1510,9 @@ export function PropertiesPanel({ block }: { block: BlockConfig }) {
 
   for (const key of propKeys) {
     if (predefinedKeys.has(key)) continue
+    if (key === CUSTOM_FIELDS_KEY) continue
+    // Legacy footer string lists, superseded by the Menu & Social Links editors.
+    if (block.type === "footer" && (key === "links" || key === "socials" || key === "columns")) continue
     if (key === "columns" && block.type === "columns") continue
 
     const val = propsObj[key]
@@ -1374,7 +1565,13 @@ export function PropertiesPanel({ block }: { block: BlockConfig }) {
     }
     let initialVal: unknown = ""
     if (newPropType === "toggle") initialVal = false
-    updateBlockProps(block.id, { [cleanKey]: initialVal })
+    // Remember which props the user created so the page renders them; other
+    // unknown props are internal to the block and must stay invisible.
+    const custom = customFieldKeys(block)
+    updateBlockProps(block.id, {
+      [cleanKey]: initialVal,
+      [CUSTOM_FIELDS_KEY]: custom.includes(cleanKey) ? custom : [...custom, cleanKey],
+    })
     setNewPropKey("")
     setShowAddProp(false)
     toast.success(`Property "${cleanKey}" added to block`)

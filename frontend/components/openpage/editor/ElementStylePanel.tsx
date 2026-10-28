@@ -24,6 +24,7 @@ import { resolveBlockStyleForDevice } from "@/lib/openpage/block-style";
 import { isElementHidden } from "@/lib/openpage/element-style";
 import type { Device } from "@/lib/openpage/types";
 import { ColorInput, Section } from "./shared-components";
+import { MediaPicker } from "@/components/media-picker";
 import {
   AlignButtons,
   DimensionField,
@@ -49,6 +50,40 @@ const SHADOW_PRESETS = [
   { label: "Medium", value: "0 8px 24px rgba(0,0,0,0.15)" },
   { label: "Glow", value: "0 10px 30px rgba(0,0,0,0.5)" },
 ];
+
+/**
+ * Where an image element's picture comes from, so the Element tab can replace
+ * it in place: a block prop for fixed images (`text:image`, `cta:media`) or a
+ * field of the list item for card images (`items:it_1/image`).
+ */
+function useImageSource(block: BlockConfig, elementId: string): { value: string; set: (url: string) => void } | null {
+  const updateBlockProps = useConfigStore((s) => s.updateBlockProps);
+  const updateListItem = useConfigStore((s) => s.updateListItem);
+
+  if (elementId === `${block.type}:image` || elementId === `${block.type}:media`) {
+    const key = typeof block.props.image === "string" || !("src" in block.props) ? "image" : "src";
+    return {
+      value: typeof block.props[key] === "string" ? (block.props[key] as string) : "",
+      set: (url) => updateBlockProps(block.id, { [key]: url }),
+    };
+  }
+
+  const item = /^([^:/]+):([^/]+)\/(image|media)$/.exec(elementId);
+  if (item) {
+    const [, listKey, itemId] = item;
+    const list = block.props[listKey];
+    const entry = Array.isArray(list)
+      ? (list as Array<Record<string, unknown>>).find((it) => it && it._id === itemId)
+      : undefined;
+    if (!entry) return null;
+    const key = typeof entry.image === "string" || typeof entry.src !== "string" ? "image" : "src";
+    return {
+      value: typeof entry[key] === "string" ? (entry[key] as string) : "",
+      set: (url) => updateListItem(block.id, { path: [listKey] }, itemId, { [key]: url }),
+    };
+  }
+  return null;
+}
 
 const JUSTIFY_OPTIONS = [
   { value: "", label: "Default" },
@@ -108,6 +143,7 @@ export function ElementStylePanel({
 
   const typography = effective.typography || {};
   const isHidden = isElementHidden(raw, device);
+  const imageSource = useImageSource(block, elementId);
 
   return (
     <div className="flex flex-col h-full select-none">
@@ -482,8 +518,16 @@ export function ElementStylePanel({
           </div>
         </Section>
 
-        <Section title="Image" defaultOpen={false} icon={<MousePointerClick size={12} />}>
+        <Section title="Image" defaultOpen={Boolean(imageSource)} icon={<MousePointerClick size={12} />}>
           <div className="space-y-3">
+            {imageSource ? (
+              <MediaPicker kind="image" label="Image" value={imageSource.value} compact onChange={imageSource.set} />
+            ) : (
+              <p className="text-[10px] text-text-3 leading-snug">
+                Fit, position and ratio apply to the image inside this element. Change the picture itself in the
+                Content tab.
+              </p>
+            )}
             <SelectField
               label="Object Fit"
               value={effective.objectFit ?? ""}

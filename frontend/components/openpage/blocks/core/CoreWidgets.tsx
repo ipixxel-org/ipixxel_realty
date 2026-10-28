@@ -11,16 +11,30 @@ function str(v: unknown, fallback = "") {
   return typeof v === "string" ? v : fallback;
 }
 
+/**
+ * Default size for each heading level, so choosing a different HTML tag is
+ * visible — not only semantic. A size set in Type / Element still wins.
+ */
+const HEADING_SIZES: Record<string, string> = {
+  h1: "text-4xl @md:text-5xl",
+  h2: "text-3xl @md:text-4xl",
+  h3: "text-2xl @md:text-3xl",
+  h4: "text-xl @md:text-2xl",
+  h5: "text-lg @md:text-xl",
+  h6: "text-base @md:text-lg",
+};
+
 export function HeadingBlock({ block }: { block: BlockConfig }) {
   const p = block.props;
-  const Tag = (str(p.tag, "h2") || "h2") as "h1" | "h2" | "h3" | "h4";
+  const requested = str(p.tag, "h2");
+  const Tag = (requested in HEADING_SIZES ? requested : "h2") as "h1" | "h2" | "h3" | "h4" | "h5" | "h6";
   const href = str(p.url);
   const heading = (
     <El
       block={block}
       id="heading:title"
       as={Tag}
-      className="font-display font-semibold tracking-tight text-3xl @md:text-4xl text-center"
+      className={`font-display font-semibold tracking-tight ${HEADING_SIZES[Tag]} text-center`}
     >
       {str(p.text, "Heading")}
     </El>
@@ -39,16 +53,48 @@ export function HeadingBlock({ block }: { block: BlockConfig }) {
 }
 
 export function TextBlock({ block }: { block: BlockConfig }) {
+  const p = block.props;
+  const image = str(p.image);
+  const position = str(p.imagePosition, "top");
+  const sideBySide = image && (position === "left" || position === "right");
+  const body = (
+    <El
+      block={block}
+      id="text:body"
+      as="p"
+      className={`text-text-1 leading-relaxed whitespace-pre-wrap ${sideBySide ? "text-left" : "max-w-3xl mx-auto text-center"}`}
+    >
+      {str(p.body, "Write your copy here.")}
+    </El>
+  );
+  // A selectable image element: its source is picked in Content or in the
+  // Element tab's Image section, and fit / position / ratio apply to it.
+  const picture = image ? (
+    <El
+      block={block}
+      id="text:image"
+      className={`rounded-xl overflow-hidden ${sideBySide ? "w-full @md:w-2/5 shrink-0" : "max-w-3xl mx-auto"}`}
+    >
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img src={image} alt={str(p.imageAlt)} className="w-full h-auto object-cover" />
+    </El>
+  ) : null;
+
+  if (sideBySide) {
+    return (
+      <section className="px-6 @md:px-10 py-4">
+        <div className={`max-w-5xl mx-auto flex flex-col gap-6 @md:items-center ${position === "right" ? "@md:flex-row-reverse" : "@md:flex-row"}`}>
+          {picture}
+          <div className="flex-1 min-w-0">{body}</div>
+        </div>
+      </section>
+    );
+  }
   return (
-    <section className="px-6 @md:px-10 py-4">
-      <El
-        block={block}
-        id="text:body"
-        as="p"
-        className="max-w-3xl mx-auto text-text-1 leading-relaxed text-center whitespace-pre-wrap"
-      >
-        {str(block.props.body, "Write your copy here.")}
-      </El>
+    <section className="px-6 @md:px-10 py-4 space-y-5">
+      {position === "bottom" ? null : picture}
+      {body}
+      {position === "bottom" ? picture : null}
     </section>
   );
 }
@@ -61,14 +107,19 @@ export function ButtonBlock({ block }: { block: BlockConfig }) {
 
   const btnBg = str(p.buttonColor) || str(p.bgColor) || undefined;
   const textColor = str(p.textColor) || undefined;
-  const borderColor = str(p.borderColor) || btnBg;
+  const explicitBorder = str(p.borderColor);
   const hoverColor = str(p.hoverColor);
   const hoverTextColor = str(p.hoverTextColor);
   const radius = Number(p.radius);
+  // A chosen border colour applies to every variant. Solid and pill have no
+  // border of their own, so one is added; outline falls back to the fill.
+  const borderColor = explicitBorder || (variant === "outline" ? btnBg : undefined);
   const style = {
     backgroundColor: btnBg,
     color: textColor,
-    borderColor: variant === "outline" ? borderColor || undefined : undefined,
+    borderColor: borderColor || undefined,
+    borderStyle: explicitBorder && variant !== "outline" && variant !== "glass" ? "solid" : undefined,
+    borderWidth: explicitBorder && variant !== "outline" && variant !== "glass" ? 2 : undefined,
     borderRadius: Number.isFinite(radius) && radius >= 0 ? `${radius}px` : undefined,
   } as React.CSSProperties;
 

@@ -615,6 +615,17 @@ export function OpenPageStudio({ resource = "template" }: { resource?: Resource 
         module={module}
         setModule={setModule}
         pageName={activePage?.name}
+        onRenamePage={
+          activePage
+            ? (name) => {
+                // Saves rebuild the record from the site config, so the name
+                // must change there too or the next save would revert it.
+                useConfigStore.getState().patchSite({ name });
+                patchPage(activePage.id, { name });
+                toast("Page renamed");
+              }
+            : undefined
+        }
         pageStatus={module === "builder" ? activePage?.status : undefined}
         canUndo={canUndo}
         canRedo={canRedo}

@@ -54,6 +54,13 @@ interface ConfigState {
   updateBlock: (id: string, updates: Partial<BlockConfig>) => void
   updateBlockProps: (id: string, props: Record<string, unknown>) => void
   updateBlockStyle: (id: string, style: Partial<BlockStyle>) => void
+  /** Desktop writes the style root; tablet/mobile write `responsive[device]` only. */
+  setBlockStyleForDevice: (id: string, style: Partial<BlockStyle>, device: Device) => void
+  /**
+   * Desktop clears the block's style (keeping `keep` keys, e.g. typography owned
+   * by another tab); tablet/mobile clear only that device's overrides.
+   */
+  resetBlockStyle: (id: string, device: Device, keep?: Array<keyof BlockStyle>) => void
   /* ---- Per-element styling (ElementStyleMap) ---- */
   setElementStyle: (blockId: string, elementId: string, style: Partial<BlockStyle>, device: Device) => void
   resetElementStyle: (blockId: string, elementId: string, device?: Device) => void
@@ -276,6 +283,11 @@ function mutateActivePageBlocks(
   return { ...config, pages: newPages, blocks: activeBlocks }
 }
 
+/** Defaults + stable list ids, as applied to every block of a loaded document. */
+function prepareBlock(block: BlockConfig): BlockConfig {
+  return migrateBlocksListIds(applyBlocksDefaults([block]))[0] ?? block
+}
+
 export const useConfigStore = create<ConfigState>()((set, get) => ({
       config: defaultConfig,
       activePageId: 'page-home',
@@ -342,6 +354,67 @@ export const useConfigStore = create<ConfigState>()((set, get) => ({
           }),
         })),
 
+      setBlockStyleForDevice: (id, style, device) =>
+        set((state) => ({
+          ...pushUndo(state, 'Update style'),
+          config: produce(withPages(state.config), (draft) => {
+            const page = draft.pages!.find((p) => p.id === state.activePageId)
+            if (!page) return
+            const located = findBlockLocation(page.blocks, id)
+            const block = located ? located.parentList[located.index] : undefined
+            if (!block) return
+            if (!block.style) block.style = {}
+            const { responsive: _ignored, ...values } = style
+            void _ignored
+            if (device === "desktop") {
+              Object.assign(block.style, values)
+            } else {
+              const responsive = { ...(block.style.responsive || {}) }
+              const overrides: Partial<BlockStyle> = { ...(responsive[device] || {}) }
+              for (const [key, value] of Object.entries(values)) {
+                if (value === undefined) delete (overrides as Record<string, unknown>)[key]
+                else (overrides as Record<string, unknown>)[key] = value
+              }
+              responsive[device] = overrides
+              block.style.responsive = responsive
+            }
+            draft.blocks = page.blocks
+          }),
+        })),
+
+      resetBlockStyle: (id, device, keep = []) =>
+        set((state) => ({
+          ...pushUndo(state, 'Reset style'),
+          config: produce(withPages(state.config), (draft) => {
+            const page = draft.pages!.find((p) => p.id === state.activePageId)
+            if (!page) return
+            const located = findBlockLocation(page.blocks, id)
+            const block = located ? located.parentList[located.index] : undefined
+            if (!block?.style) return
+            const pick = (source: Partial<BlockStyle> | undefined) => {
+              const kept: Record<string, unknown> = {}
+              for (const key of keep) {
+                const value = source?.[key]
+                if (value !== undefined) kept[key] = value
+              }
+              return kept
+            }
+            // Desktop resets every device; a device resets only its overrides.
+            const devices = device === "desktop" ? (["tablet", "mobile"] as const) : [device]
+            const responsive = { ...(block.style.responsive || {}) }
+            for (const d of devices) {
+              const kept = pick(responsive[d])
+              if (Object.keys(kept).length) responsive[d] = kept
+              else delete responsive[d]
+            }
+            const next: Record<string, unknown> = device === "desktop" ? pick(block.style) : { ...block.style }
+            if (Object.keys(responsive).length) next.responsive = responsive
+            else delete next.responsive
+            block.style = Object.keys(next).length ? (next as BlockStyle) : undefined
+            draft.blocks = page.blocks
+          }),
+        })),
+
       /* ------------------------------------------------------------------ */
       /*                Per-element styling (ElementStyleMap)                */
       /* ------------------------------------------------------------------ */
@@ -364,8 +437,11 @@ export const useConfigStore = create<ConfigState>()((set, get) => ({
                 : { ...(block.elementStyles?.[elementId] ?? ({} as BlockStyle)) };
 
             if (device === "desktop") {
-              Object.assign(container, style)
-              delete container.responsive
+              // Never touch `responsive` here: wiping it would silently drop
+              // every tablet/mobile override whenever a desktop value changes.
+              const { responsive: _ignored, ...desktopValues } = style
+              void _ignored
+              Object.assign(container, desktopValues)
             } else {
               const responsive = { ...(container.responsive || {}) }
               const overrides: Partial<BlockStyle> = { ...(responsive[device] || {}) }
@@ -597,10 +673,13 @@ export const useConfigStore = create<ConfigState>()((set, get) => ({
         set((state) => ({
           ...pushUndo(state, 'Add block'),
           config: mutateActivePageBlocks(withPages(state.config), state.activePageId, (blocks) => {
+            // Same normalisation a loaded document gets, so a freshly added
+            // block (e.g. a preset footer) is editable exactly like a saved one.
+            const prepared = prepareBlock(block)
             if (index !== undefined) {
-              blocks.splice(index, 0, block)
+              blocks.splice(index, 0, prepared)
             } else {
-              blocks.push(block)
+              blocks.push(prepared)
             }
             return blocks
           }),
@@ -723,7 +802,7 @@ export const useConfigStore = create<ConfigState>()((set, get) => ({
             ensureColumn(section, colIndex)
             const cols = section.props.columns as Array<{ width: number; blocks: BlockConfig[] }>
             const clean = cols[colIndex].blocks.filter((b) => !b.id.includes('placeholder'))
-            clean.splice(clampIndex(index, clean.length), 0, block)
+            clean.splice(clampIndex(index, clean.length), 0, prepareBlock(block))
             cols[colIndex].blocks = clean
             draft.blocks = page.blocks
           }),

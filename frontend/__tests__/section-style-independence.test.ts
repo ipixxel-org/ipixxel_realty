@@ -92,10 +92,16 @@ describe("per-section style independence", () => {
 
   it("does not apply block typography to navbar CTA controls", () => {
     const css = blockStyleTag("navbar-a", { typography: { color: "#18181b" } });
-    expect(css).toContain('[data-block-id="navbar-a"] a:not(.op-navbar-cta)');
-    expect(css).toContain('[data-block-id="navbar-a"] button:not(.op-navbar-cta)');
-    expect(css).not.toContain('[data-block-id="navbar-a"] a,');
-    expect(css).not.toContain('[data-block-id="navbar-a"] button,');
+    const selector = css.slice(0, css.indexOf("{")).trim();
+    document.body.innerHTML = `
+      <div data-block-id="navbar-a"><nav>
+        <a id="link" href="#a">Amenities</a>
+        <a id="cta" class="op-navbar-cta" href="#b">Enquire</a>
+        <button id="btn" class="op-navbar-cta">Call</button>
+      </nav></div>`;
+    expect(document.getElementById("link")!.matches(selector)).toBe(true);
+    expect(document.getElementById("cta")!.matches(selector)).toBe(false);
+    expect(document.getElementById("btn")!.matches(selector)).toBe(false);
   });
 
   it("gives element typography precedence over block typography", () => {

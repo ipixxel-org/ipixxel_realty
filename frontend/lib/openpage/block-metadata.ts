@@ -211,7 +211,8 @@ export const blockMetadata: BlockMeta[] = [
     description: 'Map embed, address and nearby',
     category: 'Real Estate',
     variants: ['split-map', 'list', 'map-only', 'cards', 'editorial'],
-    defaultProps: { title: 'Location & Connectivity', address: '', embedUrl: '', items: [{ title: 'Metro', meta: '12 min' }], anchor: 'location' },
+    // No sample "nearby" card: it read as a card the builder created on its own.
+    defaultProps: { title: 'Location & Connectivity', subtitle: '', address: '', embedUrl: '', items: [], anchor: 'location' },
   },
   {
     type: 'project-highlights',

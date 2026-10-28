@@ -1,13 +1,14 @@
 import { Play } from 'lucide-react'
 import type { BlockConfig } from '../types'
+import { El } from '../El'
 
 function extractYouTubeId(url: string): string | null {
-  const match = url.match(/(?:youtu\.be\/|youtube\.com\/(?:watch\?v=|embed\/|v\/))([a-zA-Z0-9_-]{11})/)
+  const match = url.match(/(?:youtu\.be\/|youtube\.com\/(?:watch\?v=|embed\/|v\/|shorts\/))([a-zA-Z0-9_-]{11})/)
   return match?.[1] || null
 }
 
 function extractVimeoId(url: string): string | null {
-  const match = url.match(/vimeo\.com\/(\d+)/)
+  const match = url.match(/vimeo\.com\/(?:video\/)?(\d+)/)
   return match?.[1] || null
 }
 
@@ -25,6 +26,9 @@ export function VideoBlock({ block }: { block: BlockConfig }) {
   const { variant, props } = block
   const url = (props.url as string) || ''
   const title = props.title as string | undefined
+  // The frame's border has its own colour so it never follows the text
+  // colour (an unset border colour is `currentColor`).
+  const frameBorder = typeof props.borderColor === 'string' && props.borderColor ? props.borderColor : 'var(--color-border-default)'
 
   let embedUrl: string | null = null
 
@@ -39,9 +43,18 @@ export function VideoBlock({ block }: { block: BlockConfig }) {
 
   return (
     <div className="px-6 py-12 @lg:px-16 @lg:py-16">
-      {title && <h2 className="reveal-fade-up reveal-d1 text-xl font-display font-semibold mb-4 text-center">{title}</h2>}
+      {title && (
+        <El block={block} id="video:title" as="h2" className="reveal-fade-up reveal-d1 text-xl font-display font-semibold mb-4 text-center">
+          {title}
+        </El>
+      )}
       {embedUrl ? (
-        <div className="reveal-scale reveal-d2 w-full aspect-video rounded-lg overflow-hidden border border-border-default">
+        <El
+          block={block}
+          id="video:frame"
+          className="reveal-scale reveal-d2 w-full aspect-video rounded-lg overflow-hidden border"
+          style={{ borderColor: frameBorder }}
+        >
           <iframe
             src={embedUrl}
             title={title || 'Video'}
@@ -49,7 +62,7 @@ export function VideoBlock({ block }: { block: BlockConfig }) {
             allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
             allowFullScreen
           />
-        </div>
+        </El>
       ) : (
         <Placeholder />
       )}

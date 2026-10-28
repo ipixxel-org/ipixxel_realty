@@ -31,6 +31,31 @@ export function formatUnit(val: string | undefined): string | undefined {
   return trimmed;
 }
 
+/**
+ * A `background-image` value from whatever the inspector stored: a bare URL, an
+ * already-formed `url(...)`, or a gradient. Gradients must pass through as-is —
+ * wrapping them in `url()` produces invalid CSS and the background vanishes.
+ */
+export function cssBackgroundImage(value: string): string {
+  const v = value.trim();
+  if (v === "none" || /^(url|(repeating-)?(linear|radial|conic)-gradient|image-set|var)\(/i.test(v)) return v;
+  return `url("${v.replace(/"/g, '\\"')}")`;
+}
+
+/**
+ * The background overlay as a flat gradient layer. Stacked above the background
+ * image (and the background colour beneath it), it tints the section's
+ * background without covering its content. Opacity defaults to 50%, matching
+ * the inspector slider's initial position.
+ */
+export function overlayLayer(color?: string, opacity?: string): string | undefined {
+  if (!color || !color.trim()) return undefined;
+  const parsed = opacity === undefined || opacity === "" ? 0.5 : Number.parseFloat(opacity);
+  const pct = Number.isFinite(parsed) ? Math.round(Math.min(Math.max(parsed, 0), 1) * 100) : 50;
+  const tint = `color-mix(in srgb, ${color.trim()} ${pct}%, transparent)`;
+  return `linear-gradient(${tint}, ${tint})`;
+}
+
 /** Convert persisted BlockStyle into CSS for editor canvas and live pages. */
 export function applyBlockStyle(style?: BlockStyle): CSSProperties {
   if (!style) return {};
@@ -49,11 +74,7 @@ export function applyBlockStyle(style?: BlockStyle): CSSProperties {
   if (style.minHeight) s.minHeight = formatUnit(style.minHeight);
   if (style.alignment) s.textAlign = style.alignment as CSSProperties["textAlign"];
   if (style.backgroundColor) s.backgroundColor = style.backgroundColor;
-  if (style.backgroundImage) {
-    s.backgroundImage = style.backgroundImage.startsWith("url(")
-      ? style.backgroundImage
-      : `url(${style.backgroundImage})`;
-  }
+  if (style.backgroundImage) s.backgroundImage = cssBackgroundImage(style.backgroundImage);
   if (style.backgroundSize) s.backgroundSize = style.backgroundSize;
   if (style.backgroundPosition) s.backgroundPosition = style.backgroundPosition;
   if (style.backgroundRepeat) s.backgroundRepeat = style.backgroundRepeat as CSSProperties["backgroundRepeat"];
@@ -177,134 +198,151 @@ export function applyBlockStyleForDevice(
 }
 
 /**
+ * Inline style for a block's wrapper: only its box (spacing, size, position,
+ * stacking, visibility). Everything visual is emitted once by
+ * {@link blockStyleTag}, so nothing is painted or transformed twice.
+ */
+export function applyBlockBoxStyleForDevice(
+  style: BlockStyle | undefined,
+  device: Device,
+): CSSProperties {
+  const resolved = resolveBlockStyleForDevice(style, device);
+  if (!resolved) return {};
+  const s: CSSProperties = {};
+  if (resolved.marginTop) s.marginTop = formatUnit(resolved.marginTop);
+  if (resolved.marginBottom) s.marginBottom = formatUnit(resolved.marginBottom);
+  if (resolved.marginLeft) s.marginLeft = formatUnit(resolved.marginLeft);
+  if (resolved.marginRight) s.marginRight = formatUnit(resolved.marginRight);
+  if (resolved.paddingTop) s.paddingTop = formatUnit(resolved.paddingTop);
+  if (resolved.paddingBottom) s.paddingBottom = formatUnit(resolved.paddingBottom);
+  if (resolved.paddingLeft) s.paddingLeft = formatUnit(resolved.paddingLeft);
+  if (resolved.paddingRight) s.paddingRight = formatUnit(resolved.paddingRight);
+  if (resolved.width) s.width = formatUnit(resolved.width);
+  if (resolved.maxWidth) s.maxWidth = formatUnit(resolved.maxWidth);
+  if (resolved.minWidth) s.minWidth = formatUnit(resolved.minWidth);
+  if (resolved.minHeight) s.minHeight = formatUnit(resolved.minHeight);
+  if (resolved.height) s.height = formatUnit(resolved.height);
+  if (resolved.maxHeight) s.maxHeight = formatUnit(resolved.maxHeight);
+  if (resolved.position) s.position = resolved.position as CSSProperties["position"];
+  if (resolved.top) s.top = formatUnit(resolved.top);
+  if (resolved.right) s.right = formatUnit(resolved.right);
+  if (resolved.bottom) s.bottom = formatUnit(resolved.bottom);
+  if (resolved.left) s.left = formatUnit(resolved.left);
+  if (resolved.zIndex) s.zIndex = Number.parseInt(resolved.zIndex, 10);
+  if (resolved.overflow) s.overflow = resolved.overflow as CSSProperties["overflow"];
+  if (resolved.alignment) s.textAlign = resolved.alignment as CSSProperties["textAlign"];
+  if (resolved.sectionPadding) s.padding = resolved.sectionPadding;
+  if (resolved.sectionMaxWidth) s.maxWidth = resolved.sectionMaxWidth;
+  if (resolved.sectionAlignment) s.textAlign = resolved.sectionAlignment as CSSProperties["textAlign"];
+  // Legacy section-level props, kept inline exactly as older documents expect.
+  if (resolved.sectionBackground) s.background = resolved.sectionBackground;
+  if (resolved.sectionBorderWidth) s.borderWidth = resolved.sectionBorderWidth;
+  if (resolved.sectionBorderColor) s.borderColor = resolved.sectionBorderColor;
+  if (resolved.sectionBorderRadius) s.borderRadius = resolved.sectionBorderRadius;
+  if (resolved.hidden || isHiddenOnViewport(resolved, device)) s.display = "none";
+  return s;
+}
+
+/** Text-bearing tags the section-wide Type settings apply to. */
+const SECTION_TEXT_TAGS = "h1,h2,h3,h4,h5,h6,p,span,li,a,strong,em,small,blockquote,figcaption,dt,dd,td,th";
+
+/**
+ * What section-wide Type settings must never reach. List items (cards, rows,
+ * FAQ entries), self-contained panels marked `data-op-panel` (an enquiry card
+ * beside a hero), buttons and forms each have their own styling controls, so a
+ * section colour or font change must not repaint them — nor any wrapper that
+ * contains one, since its colour would be inherited. Wrapped in `:where()` so
+ * the exclusion adds no specificity and element styles keep winning.
+ */
+const SECTION_TYPE_EXCLUDE =
+  ":not(:where([data-op-item], [data-op-item] *, [data-op-panel], [data-op-panel] *, button, button *, " +
+  ".op-btn, .op-btn *, .op-navbar-cta, .op-navbar-cta *, form, form *, :has([data-op-item], [data-op-panel], form)))";
+
+/** Buttons and forms inside a card keep their own styling too. */
+const ITEM_TYPE_EXCLUDE = ":not(:where(button, button *, .op-btn, .op-btn *, form, form *))";
+
+/**
  * Scoped `!important` stylesheet so user styles actually beat the block's own
- * utility classes. Without this, `font-size`/`color` on the section wrapper are
- * only inherited and get overridden by inner classes (e.g. `text-3xl`), and a
- * `background-color` is hidden whenever the block root paints its own surface.
- * Rules:
- *   - `> *`  = the block's root element receives the user background.
- *   - text element selector receives the user typography.
+ * utility classes. Each kind of property lands on exactly one target:
+ *   - the wrapper (`[data-block-id]`) paints the background, overlay, border,
+ *     shadow and transform once, so they are never doubled (a rotated section
+ *     used to render as two overlapping rotated cards);
+ *   - the block's root element is made transparent so its own default surface
+ *     does not cover that background, and receives the flex layout;
+ *   - section typography lands on text tags outside cards, buttons and forms;
+ *   - card typography (`itemTypography`) lands on every card at once, below
+ *     any card's own element style.
  */
 export function blockStyleTag(blockId: string, style?: BlockStyle): string {
   if (!style) return "";
-  const rootRules: string[] = [];
-  const textRules: string[] = [];
+  const root = `[data-block-id="${blockId}"]`;
+  const child = `${root} > :not(style)`;
+  const wrapperRules: string[] = [];
+  const childRules: string[] = [];
 
-  if (style.backgroundColor) {
-    rootRules.push(`background-color:${style.backgroundColor} !important`);
-    rootRules.push(`background:${style.backgroundColor} !important`);
+  const layers: string[] = [];
+  const overlay = overlayLayer(style.overlayColor, style.overlayOpacity);
+  if (overlay) layers.push(overlay);
+  if (style.backgroundImage) layers.push(cssBackgroundImage(style.backgroundImage));
+  if (style.backgroundColor || layers.length) {
+    if (style.backgroundColor) wrapperRules.push(`background-color:${style.backgroundColor} !important`);
+    if (layers.length) wrapperRules.push(`background-image:${layers.join(", ")} !important`);
+    wrapperRules.push(`background-size:${style.backgroundSize || "cover"} !important`);
+    wrapperRules.push(`background-position:${style.backgroundPosition || "center"} !important`);
+    wrapperRules.push(`background-repeat:${style.backgroundRepeat || "no-repeat"} !important`);
+    childRules.push("background:transparent !important");
   }
-  if (style.backgroundImage) {
-    rootRules.push(
-      `background-image:${style.backgroundImage.startsWith("url(") ? style.backgroundImage : `url(${style.backgroundImage})`} !important`,
-    );
+  if (style.borderColor) wrapperRules.push(`border-color:${style.borderColor} !important`);
+  if (style.borderWidth) wrapperRules.push(`border-width:${formatUnit(style.borderWidth)} !important`);
+  if (style.borderStyle) wrapperRules.push(`border-style:${style.borderStyle} !important`);
+  if (style.borderWidth && !style.borderStyle) wrapperRules.push("border-style:solid !important");
+  if (style.borderRadius) {
+    wrapperRules.push(`border-radius:${formatUnit(style.borderRadius)} !important`);
+    childRules.push(`border-radius:${formatUnit(style.borderRadius)} !important`);
   }
-  if (style.backgroundSize) rootRules.push(`background-size:${style.backgroundSize} !important`);
-  if (style.backgroundPosition) rootRules.push(`background-position:${style.backgroundPosition} !important`);
-  if (style.backgroundRepeat) rootRules.push(`background-repeat:${style.backgroundRepeat} !important`);
-  if (style.borderColor) rootRules.push(`border-color:${style.borderColor} !important`);
-  if (style.borderWidth) rootRules.push(`border-width:${formatUnit(style.borderWidth)} !important`);
-  if (style.borderStyle) rootRules.push(`border-style:${style.borderStyle} !important`);
-  if (style.borderRadius) rootRules.push(`border-radius:${formatUnit(style.borderRadius)} !important`);
-  if (style.boxShadow) rootRules.push(`box-shadow:${style.boxShadow} !important`);
-  if (style.opacity) rootRules.push(`opacity:${style.opacity} !important`);
+  if (style.boxShadow) wrapperRules.push(`box-shadow:${style.boxShadow} !important`);
+  if (style.opacity) wrapperRules.push(`opacity:${style.opacity} !important`);
+  if (style.transform) wrapperRules.push(`transform:${style.transform} !important`);
+  if (style.filter) wrapperRules.push(`filter:${style.filter} !important`);
+  if (style.transition) wrapperRules.push(`transition:${style.transition} !important`);
+  if (style.cursor) wrapperRules.push(`cursor:${style.cursor} !important`);
 
-  if (style.display) rootRules.push(`display:${style.display} !important`);
-  if (style.flexDirection) rootRules.push(`flex-direction:${style.flexDirection} !important`);
-  if (style.flexWrap) rootRules.push(`flex-wrap:${style.flexWrap} !important`);
-  if (style.flex) rootRules.push(`flex:${style.flex} !important`);
-  if (style.justifyContent) rootRules.push(`justify-content:${style.justifyContent} !important`);
-  if (style.alignItems) rootRules.push(`align-items:${style.alignItems} !important`);
-  if (style.alignSelf) rootRules.push(`align-self:${style.alignSelf} !important`);
-  if (style.alignContent) rootRules.push(`align-content:${style.alignContent} !important`);
-  if (style.gap) rootRules.push(`gap:${formatUnit(style.gap)} !important`);
-  if (style.rowGap) rootRules.push(`row-gap:${formatUnit(style.rowGap)} !important`);
-  if (style.columnGap) rootRules.push(`column-gap:${formatUnit(style.columnGap)} !important`);
-  if (style.height) rootRules.push(`height:${formatUnit(style.height)} !important`);
-  if (style.minWidth) rootRules.push(`min-width:${formatUnit(style.minWidth)} !important`);
-  if (style.maxHeight) rootRules.push(`max-height:${formatUnit(style.maxHeight)} !important`);
-  if (style.position) rootRules.push(`position:${style.position} !important`);
-  if (style.top) rootRules.push(`top:${formatUnit(style.top)} !important`);
-  if (style.right) rootRules.push(`right:${formatUnit(style.right)} !important`);
-  if (style.bottom) rootRules.push(`bottom:${formatUnit(style.bottom)} !important`);
-  if (style.left) rootRules.push(`left:${formatUnit(style.left)} !important`);
-  if (style.objectFit) rootRules.push(`object-fit:${style.objectFit} !important`);
-  if (style.objectPosition) rootRules.push(`object-position:${style.objectPosition} !important`);
-  if (style.aspectRatio) rootRules.push(`aspect-ratio:${style.aspectRatio} !important`);
-  if (style.transform) rootRules.push(`transform:${style.transform} !important`);
-  if (style.filter) rootRules.push(`filter:${style.filter} !important`);
-  if (style.transition) rootRules.push(`transition:${style.transition} !important`);
-  if (style.cursor) rootRules.push(`cursor:${style.cursor} !important`);
-
-  const t = style.typography;
-  if (t?.color) {
-    textRules.push(`color:${t.color} !important`);
-    rootRules.push(`color:${t.color} !important`);
-  }
-  if (t?.fontSize && t.fontSize.trim()) {
-    const fs = formatUnit(t.fontSize);
-    textRules.push(`font-size:${fs} !important`);
-  }
-  if (t?.fontFamily) {
-    const ff = `"${t.fontFamily}", -apple-system, system-ui, sans-serif`;
-    textRules.push(`font-family:${ff} !important`);
-    rootRules.push(`font-family:${ff} !important`);
-  }
-  if (t?.fontWeight) {
-    textRules.push(`font-weight:${t.fontWeight} !important`);
-    rootRules.push(`font-weight:${t.fontWeight} !important`);
-  }
-  if (t?.fontStyle) {
-    textRules.push(`font-style:${t.fontStyle} !important`);
-    rootRules.push(`font-style:${t.fontStyle} !important`);
-  }
-  if (t?.lineHeight) textRules.push(`line-height:${t.lineHeight} !important`);
-  if (t?.letterSpacing) textRules.push(`letter-spacing:${formatUnit(t.letterSpacing)} !important`);
-  if (t?.wordSpacing) textRules.push(`word-spacing:${formatUnit(t.wordSpacing)} !important`);
-  if (t?.textTransform) textRules.push(`text-transform:${t.textTransform} !important`);
-  if (t?.textDecoration) textRules.push(`text-decoration:${t.textDecoration} !important`);
-  if (t?.textAlign) {
-    textRules.push(`text-align:${t.textAlign} !important`);
-    rootRules.push(`text-align:${t.textAlign} !important`);
-  }
+  if (style.display) childRules.push(`display:${style.display} !important`);
+  if (style.flexDirection) childRules.push(`flex-direction:${style.flexDirection} !important`);
+  if (style.flexWrap) childRules.push(`flex-wrap:${style.flexWrap} !important`);
+  if (style.flex) childRules.push(`flex:${style.flex} !important`);
+  if (style.justifyContent) childRules.push(`justify-content:${style.justifyContent} !important`);
+  if (style.alignItems) childRules.push(`align-items:${style.alignItems} !important`);
+  if (style.alignSelf) childRules.push(`align-self:${style.alignSelf} !important`);
+  if (style.alignContent) childRules.push(`align-content:${style.alignContent} !important`);
+  if (style.gap) childRules.push(`gap:${formatUnit(style.gap)} !important`);
+  if (style.rowGap) childRules.push(`row-gap:${formatUnit(style.rowGap)} !important`);
+  if (style.columnGap) childRules.push(`column-gap:${formatUnit(style.columnGap)} !important`);
+  if (style.objectFit) childRules.push(`object-fit:${style.objectFit} !important`);
+  if (style.objectPosition) childRules.push(`object-position:${style.objectPosition} !important`);
+  if (style.aspectRatio) childRules.push(`aspect-ratio:${style.aspectRatio} !important`);
 
   const parts: string[] = [];
-  if (rootRules.length) {
-    parts.push(
-      `[data-block-id="${blockId}"], [data-block-id="${blockId}"] > *, [data-block-id="${blockId}"] section { ${rootRules.join("; ")}; }`
-    );
-  }
+  if (wrapperRules.length) parts.push(`${root} { ${wrapperRules.join("; ")}; }`);
+  if (childRules.length) parts.push(`${child} { ${childRules.join("; ")}; }`);
+  // A sticky/fixed root (a sticky header) leaves the wrapper while scrolling,
+  // so it must carry the section background itself.
+  const travelling = wrapperRules.filter((d) => d.startsWith("background"));
+  if (travelling.length) parts.push(`${root} > :is(.sticky, .fixed) { ${travelling.join("; ")}; }`);
+
+  const textRules = typographyDecls(style.typography);
   if (textRules.length) {
-    const textSelectors = [
-      `[data-block-id="${blockId}"]`,
-      `[data-block-id="${blockId}"] h1`,
-      `[data-block-id="${blockId}"] h2`,
-      `[data-block-id="${blockId}"] h3`,
-      `[data-block-id="${blockId}"] h4`,
-      `[data-block-id="${blockId}"] h5`,
-      `[data-block-id="${blockId}"] h6`,
-      `[data-block-id="${blockId}"] p`,
-      `[data-block-id="${blockId}"] span`,
-      `[data-block-id="${blockId}"] li`,
-      `[data-block-id="${blockId}"] label`,
-      `[data-block-id="${blockId}"] a:not(.op-navbar-cta)`,
-      `[data-block-id="${blockId}"] button:not(.op-navbar-cta)`,
-      `[data-block-id="${blockId}"] strong`,
-      `[data-block-id="${blockId}"] em`,
-      `[data-block-id="${blockId}"] small`,
-    ].join(", ");
-    parts.push(`${textSelectors} { ${textRules.join("; ")}; }`);
+    parts.push(`${root} :is(${SECTION_TEXT_TAGS})${SECTION_TYPE_EXCLUDE} { ${textRules.join("; ")}; }`);
+  }
+  const itemRules = typographyDecls(style.itemTypography);
+  if (itemRules.length) {
+    parts.push(
+      `:where(${root}) :is([data-op-item], [data-op-item] :is(${SECTION_TEXT_TAGS}))${ITEM_TYPE_EXCLUDE} { ${itemRules.join("; ")}; }`,
+    );
   }
   if (style.hover) {
     const hv = stateDecls(style.hover);
-    if (hv.length) {
-      const hoverSel = [
-        `[data-block-id="${blockId}"]`,
-        `[data-block-id="${blockId}"] > *`,
-        `[data-block-id="${blockId}"] section`,
-      ].join(", ");
-      parts.push(`${hoverSel}:hover { ${hv.join("; ")}; }`);
-    }
+    if (hv.length) parts.push(`${root}:hover { ${hv.join("; ")}; }`);
   }
   return parts.join("\n");
 }
@@ -422,7 +460,7 @@ function allDecls(style: BlockStyle): string[] {
   for (const [key, prop] of PLAIN_PROPS) {
     const value = style[key];
     if (typeof value === "string" && value) {
-      const v = prop === "background-image" && !value.startsWith("url(") ? `url(${value})` : value;
+      const v = prop === "background-image" ? cssBackgroundImage(value) : value;
       out.push(`${prop}:${v} !important`);
     }
   }
@@ -460,15 +498,61 @@ export function elementStyleTag(
   if (style.hidden) decls.push("display:none !important");
   if (decls.length) parts.push(`${sel} { ${decls.join("; ")}; }`);
 
-  if (style.hover) {
-    const hv = stateDecls(style.hover);
-    if (hv.length) parts.push(`${sel}:hover { ${hv.join("; ")}; }`);
+  // A card's text lives in children that carry their own colour and size
+  // classes, so typography set on the card ("Style this item") must reach them
+  // directly rather than rely on inheritance. `:where()` keeps this below any
+  // styled child element, which is one attribute selector more specific.
+  // Image elements wrap their <img>, so fit/position must reach the media
+  // itself; with an aspect ratio the media fills the ratio box.
+  const media: string[] = [];
+  if (style.objectFit) media.push(`object-fit:${style.objectFit} !important`);
+  if (style.objectPosition) media.push(`object-position:${style.objectPosition} !important`);
+  if (style.aspectRatio) media.push("width:100% !important", "height:100% !important");
+  if (media.length) parts.push(`${sel} > :where(img, video, iframe) { ${media.join("; ")}; }`);
+
+  // Buttons and forms *inside* the element keep their own styling; the
+  // element itself may be a button (a clickable card) and still styles its text.
+  const inner = typographyDecls(style.typography);
+  if (inner.length) {
+    const own = `${base} :is(button, .op-btn, form)`;
+    parts.push(
+      `${sel} :where(${SECTION_TEXT_TAGS}, div, label):not(:where(${own}, ${own} *)) { ${inner.join("; ")}; }`,
+    );
   }
-  if (style.active) {
-    const ac = stateDecls(style.active);
-    if (ac.length) parts.push(`${sel}:active, ${sel}[data-active="true"] { ${ac.join("; ")}; }`);
+
+  // Hover / active. Text colour must also reach the element's own text
+  // children (a card's title and description carry their own colour classes
+  // and may have a static colour pushed onto them above), so the state rule
+  // gets one extra attribute selector to outrank those static colours —
+  // including a child element's own colour.
+  const own = `${base} :is(button, .op-btn, form)`;
+  const states: Array<[BlockInteractionState | undefined, string[]]> = [
+    [style.hover, [":hover"]],
+    [style.active, [":active", '[data-active="true"]']],
+  ];
+  for (const [state, pseudos] of states) {
+    const decls = stateDecls(state);
+    if (!decls.length) continue;
+    parts.push(`${pseudos.map((ps) => `${sel}${ps}`).join(", ")} { ${decls.join("; ")}; }`);
+    const text = stateTextDecls(state);
+    if (text.length) {
+      const strong = `${base}${sel}`;
+      const targets = pseudos
+        .map((ps) => `${strong}${ps} :where(${SECTION_TEXT_TAGS}, div, label):not(:where(${own}, ${own} *))`)
+        .join(", ");
+      parts.push(`${targets} { ${text.join("; ")}; }`);
+    }
   }
   return parts.join("\n");
+}
+
+/** The part of an interaction state that is about text, for descendants. */
+function stateTextDecls(state?: BlockInteractionState): string[] {
+  if (!state) return [];
+  const out: string[] = [];
+  if (state.color) out.push(`color:${state.color} !important`);
+  if (state.textDecoration) out.push(`text-decoration:${state.textDecoration} !important`);
+  return out;
 }
 
 /** Deep-replace {{var}} tokens in any JSON-like value. */

@@ -640,11 +640,41 @@ function renderCta(block: BlockConfig): string {
 // Footer
 // ---------------------------------------------------------------------------
 
+/**
+ * Footer link labels: the editable `menuLinks` list when present, otherwise the
+ * legacy string list. Mirrors FooterBlock so an export matches the builder.
+ */
+function footerLinkLabels(props: Record<string, unknown>): string[] {
+  if (Array.isArray(props.menuLinks)) {
+    return (props.menuLinks as Array<{ label?: unknown }>)
+      .map((l) => (typeof l?.label === "string" ? l.label : ""))
+      .filter(Boolean)
+  }
+  return prop<string[]>(props, "links", [])
+}
+
+/** Footer link columns: `linkColumns` (one "Label | URL" per line) or legacy `columns`. */
+function footerColumns(
+  props: Record<string, unknown>,
+  fallback: { title: string; links: string[] }[],
+): { title: string; links: string[] }[] {
+  if (Array.isArray(props.linkColumns)) {
+    return (props.linkColumns as Array<{ title?: unknown; links?: unknown }>).map((c) => ({
+      title: typeof c?.title === "string" ? c.title : "",
+      links: (typeof c?.links === "string" ? c.links : "")
+        .split("\n")
+        .map((line) => line.split("|")[0].trim())
+        .filter(Boolean),
+    }))
+  }
+  return prop<{ title: string; links: string[] }[]>(props, "columns", fallback)
+}
+
 function renderFooterSimple(block: BlockConfig): string {
   const logo = escapeHtml(prop(block.props, 'logo', 'Brand'))
   const logoImage = prop<string>(block.props, 'logoImage', '')
   const copyright = escapeHtml(prop(block.props, 'copyright', ''))
-  const links = prop<string[]>(block.props, 'links', [])
+  const links = footerLinkLabels(block.props)
 
   const linksHtml = links
     .map(
@@ -675,10 +705,9 @@ function renderFooterMultiColumn(block: BlockConfig): string {
   const logo = escapeHtml(prop(block.props, 'logo', 'Brand'))
   const logoImage = prop<string>(block.props, 'logoImage', '')
   const copyright = escapeHtml(prop(block.props, 'copyright', ''))
-  const links = prop<string[]>(block.props, 'links', [])
-  const columns = prop<{ title: string; links: string[] }[]>(
+  const links = footerLinkLabels(block.props)
+  const columns = footerColumns(
     block.props,
-    'columns',
     [
       { title: 'Product', links: ['Features', 'Pricing', 'Changelog', 'Roadmap'] },
       { title: 'Company', links: ['About', 'Blog', 'Careers', 'Press'] },
@@ -740,7 +769,7 @@ ${bottomLinks}
 
 function renderFooterMinimal(block: BlockConfig): string {
   const copyright = escapeHtml(prop(block.props, 'copyright', ''))
-  const links = prop<string[]>(block.props, 'links', [])
+  const links = footerLinkLabels(block.props)
 
   const linksHtml = links
     .map((l, i) => {

@@ -192,7 +192,10 @@ export interface BlockStyle {
   hover?: BlockInteractionState;
   active?: BlockInteractionState;
 
+  /** Section text outside cards, buttons and forms (Type tab → All). */
   typography?: BlockTypography;
+  /** Every card / list item in the section at once (Type tab → Cards). */
+  itemTypography?: BlockTypography;
   /**
    * Per-device value overrides. `desktop` values live on the style root;
    * tablet/mobile overrides are merged over them at render time, so changing
