@@ -62,6 +62,9 @@ export function CheckoutPage({ plan, interval, renew, coupon, pick }: { plan?: s
         sampleFns={["listPlans", "getBillingOverview"]}
       />
       <CheckoutScreen
+        // A different plan / interval / return from Choose what stays starts fresh
+        // (no option carried over from the plan looked at before).
+        key={`${plan}-${interval}-${renew}-${pick}`}
         planId={plan ?? "growth"}
         interval={toInterval(interval)}
         renewal={renewal}
@@ -117,6 +120,7 @@ export function DowngradePage({ plan, interval, pick }: { plan?: string; interva
     <Guard>
       <PageHead eyebrow={EYEBROW} icon="arrow-down" title="Change plan" sub="See when it starts and what doesn't fit, before you confirm." back={{ to: "plans", label: "Plans" }} sampleFns={["getRetentionChoices", "scheduleDowngrade"]} />
       <DowngradeScreen
+          key={`${plan}-${interval}-${pick}`}
           planId={plan ?? "growth"}
           interval={interval === "monthly" || interval === "yearly" ? interval : undefined}
           initialPick={pick === "saved" ? "saved" : null}

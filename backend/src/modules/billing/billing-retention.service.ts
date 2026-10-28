@@ -318,10 +318,22 @@ export class BillingRetentionService {
       selected: selected[kind].includes(id),
       locked,
     });
+    // The saved choice as stored, against today's limits (the lists above are
+    // trimmed to fit, so they can't show it). Same rule as the preview's
+    // choicesFit: only limits the org is over count.
+    const savedFits =
+      !!saved &&
+      RETENTION_KINDS.every(
+        (k) =>
+          !Number.isFinite(limits[k]) ||
+          ranked[k].length <= limits[k] ||
+          (saved[k]?.length ?? 0) <= limits[k],
+      );
     return {
       targetPlan: toBillingPlan(target, rank),
       appliesOn: this.appliesOn(sub, target),
       isDefault: !saved,
+      savedFits,
       locked,
       users: ranked.users.map((u) => {
         const login = u.lastLoginAt

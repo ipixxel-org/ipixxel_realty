@@ -560,6 +560,8 @@ export interface RetentionChoices {
   /** When the choice takes effect; null when already on the target plan. */
   appliesOn: string | null;
   isDefault: boolean;
+  /** A saved choice exists and fits the plan's limits today. Missing (older API) = trust isDefault. */
+  savedFits?: boolean;
   /**
    * The org can only look: the change was decided or took effect (or it's
    * the plan they're on). Super Admin can still change it. Missing = false.

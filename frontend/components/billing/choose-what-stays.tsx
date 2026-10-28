@@ -341,7 +341,11 @@ export function WhatStaysOptions({
   const { data, error } = useBillingQuery((c) => c.getRetentionChoices({ targetPlanId }), [targetPlanId]);
   const [choice, setChoice] = useState<WhatStaysChoice | null>(initialChoice);
   const saved = !!data && !data.isDefault;
-  const ready = choice === "default" || (choice === "saved" && saved);
+  // A saved choice counts only while it fits the plan's limits today (they can be
+  // lowered after it was saved). Older responses without savedFits: trust it.
+  const savedFits = saved && data.savedFits !== false;
+  // Nothing goes ahead until the lists are loaded and an option is picked.
+  const ready = !!data && (choice === "default" || (choice === "saved" && savedFits));
   useEffect(() => {
     onChange({ choice, ready });
     // onChange is the parent's state setter wrapper; re-run only when the pick changes.
@@ -387,7 +391,16 @@ export function WhatStaysOptions({
         </label>
         {choice === "saved" ? (
           <div style={{ marginLeft: 24, marginTop: 4 }} data-testid="what-stays-own">
-            {saved ? (
+            {saved && !savedFits ? (
+              <>
+                <div className="bl-small" style={{ color: "var(--rose)" }} data-testid="what-stays-no-fit">
+                  Your earlier choice doesn&apos;t fit {data.targetPlan.name}&apos;s limits any more. Edit it, or keep the default picks.
+                </div>
+                <BLink to="chooseWhatStays" params={choose} className="btn btn-primary btn-sm" style={{ marginTop: 4 }}>
+                  Edit
+                </BLink>
+              </>
+            ) : saved ? (
               <>
                 <div className="bl-muted bl-small">Your earlier choice</div>
                 {list((i) => i.selected)}

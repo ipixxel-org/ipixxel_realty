@@ -612,7 +612,8 @@ export function CheckoutScreen({
                     className="btn btn-primary"
                     style={{ width: "100%", justifyContent: "center", padding: 12, ...(waiting ? { opacity: 0.65, cursor: "not-allowed" } : null) }}
                     disabled={disabled}
-                    onClick={() => void pay()}
+                    // Never send without an option picked (the button is disabled then too).
+                    onClick={() => (disabled ? undefined : void pay())}
                   >
                     {pendingUpgrade && !waiting ? (
                       <>

@@ -14,7 +14,7 @@ import { OrgPackageRequests } from "@/components/billing/admin/package-requests"
 import { RequestsTable } from "@/components/billing/requests";
 import { UsageCard } from "@/components/billing/overview";
 import { AdminSubscriptionDetailBody } from "@/components/billing/admin/admin-pages";
-import { ChooseWhatStaysPage } from "@/components/billing/org-pages";
+import { CheckoutPage, ChooseWhatStaysPage } from "@/components/billing/org-pages";
 import type { BillingClient } from "@/lib/billing/client";
 import { createMockBillingClient } from "@/lib/billing/mock/client";
 import { initialMockState, type MockState } from "@/lib/billing/mock/state";
@@ -551,5 +551,72 @@ describe("Send change request waits for an option", () => {
     );
     fireEvent.click(screen.getByRole("radio", { name: DEFAULT }));
     expect(send).toBeEnabled();
+  });
+});
+
+describe("Send change request from Basic to a plan with fewer users", () => {
+  // On Basic (moved there) with 5 users; Growth here allows 3 — an upgrade by price, over its user limit.
+  function fromBasic(over: Partial<BillingClient> = {}, retention?: Partial<RetentionChoices>) {
+    const base = createMockBillingClient({ initial: manual({ situation: "moved_to_basic" }) });
+    const client: BillingClient = {
+      ...base,
+      getBillingOverview: async () => {
+        const o = await base.getBillingOverview();
+        return { ...o, usage: o.usage.map((u) => (u.key === "users" ? { ...u, used: 5, limit: 5 } : u)) };
+      },
+      listPlans: async () => (await base.listPlans()).map((p) => (p.id === "growth" || p.id === "pro" ? { ...p, limits: { ...p.limits, users: 3 } } : p)),
+      previewCheckout: async (req) =>
+        ({ ...(await base.previewCheckout(req)), usageConflict: { items: [{ key: "users", limit: 3, used: 5 }], choicesFit: retention?.savedFits ?? false }, usageError: null }) as CheckoutPreview,
+      getRetentionChoices: async (req) => ({ ...(await base.getRetentionChoices(req)), ...retention }),
+      ...over,
+    };
+    return client;
+  }
+  const page = (client: BillingClient, props: { plan: string; pick?: string }) => (
+    <ToastProvider>
+      <BillingEnvProvider client={client} canEdit>
+        <OrgBillingProvider>
+          <CheckoutPage interval="monthly" {...props} />
+        </OrgBillingProvider>
+      </BillingEnvProvider>
+    </ToastProvider>
+  );
+  const send = () => screen.getByRole("button", { name: /Send change request/ });
+
+  it("the options show and Send stays disabled until one is picked; clicking it sends nothing", async () => {
+    const client = fromBasic();
+    const start = vi.spyOn(client, "startCheckout");
+    render(page(client, { plan: "growth" }));
+    await settle();
+    expect(screen.getByRole("radio", { name: DEFAULT })).not.toBeChecked();
+    expect(screen.getByRole("radio", { name: OWN })).not.toBeChecked();
+    expect(send()).toBeDisabled();
+    fireEvent.click(send());
+    await settle();
+    expect(start).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("radio", { name: DEFAULT }));
+    expect(send()).toBeEnabled();
+  });
+
+  it("an earlier choice that no longer fits the plan doesn't count: \"I'll choose\" says so and Send stays disabled", async () => {
+    render(page(fromBasic({}, { isDefault: false, savedFits: false }), { plan: "growth", pick: "saved" }));
+    await settle();
+    expect(screen.getByRole("radio", { name: OWN })).toBeChecked();
+    expect(screen.getByTestId("what-stays-no-fit")).toHaveTextContent("Your earlier choice doesn't fit Growth's limits any more. Edit it, or keep the default picks.");
+    expect(send()).toBeDisabled();
+    fireEvent.click(screen.getByRole("radio", { name: DEFAULT }));
+    expect(send()).toBeEnabled();
+  });
+
+  it("a pick doesn't carry over to another plan opened from the same page", async () => {
+    const client = fromBasic();
+    const view = render(page(client, { plan: "growth" }));
+    await settle();
+    fireEvent.click(screen.getByRole("radio", { name: DEFAULT }));
+    expect(send()).toBeEnabled();
+    view.rerender(page(client, { plan: "pro" }));
+    await settle();
+    expect(screen.getByRole("radio", { name: DEFAULT })).not.toBeChecked();
+    expect(send()).toBeDisabled();
   });
 });

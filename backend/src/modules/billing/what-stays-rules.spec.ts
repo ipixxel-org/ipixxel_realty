@@ -548,3 +548,25 @@ describe('one place: the latest row', () => {
     ).rejects.toMatchObject({ response: { code: 'what_stays_use_latest' } });
   });
 });
+
+describe('a saved choice must still fit', () => {
+  it('savedFits: true while the saved choice fits; false once the plan allows fewer', async () => {
+    const { retention, db } = setup();
+    expect((await retention.getChoices('org-1', 'starter')).savedFits).toBe(
+      false,
+    );
+    await retention.saveChoices('org-1', 'u-admin', keep(['u-admin', 'u-2']));
+    const fits = await retention.getChoices('org-1', 'starter');
+    expect(fits).toMatchObject({ isDefault: false, savedFits: true });
+    // The Super Admin lowers Starter to 1 user after the choice was saved.
+    const starter = db.plan.rows.find((p: any) => p.id === 'starter');
+    const before = starter.limits;
+    starter.limits = { ...before, users: 1 };
+    try {
+      const stale = await retention.getChoices('org-1', 'starter');
+      expect(stale).toMatchObject({ isDefault: false, savedFits: false });
+    } finally {
+      starter.limits = before;
+    }
+  });
+});
