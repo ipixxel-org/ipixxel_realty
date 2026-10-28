@@ -24,6 +24,7 @@ import {
   resolveMapEmbed,
 } from "@/components/openpage/blocks/realestate/RealEstateBlocks";
 import { applyBlockDefaults, upgradeFooterProps } from "@/lib/openpage/block-factory";
+import { ItemFields, RE_PRICING_CARD_FIELDS } from "@/components/openpage/editor/field-helpers";
 
 function block(type: BlockConfig["type"], props: Record<string, unknown>, variant = "default"): BlockConfig {
   return { id: `${type}-test`, type, variant, props };
@@ -358,5 +359,22 @@ describe("Footer (#25)", () => {
     expect(upgraded.socialLinks).toEqual([{ label: "X", url: "", icon: "" }]);
     expect(upgraded.linkColumns).toEqual([{ title: "Explore", links: "Overview" }]);
     expect(upgradeFooterProps({ links: ["A"], menuLinks: [] }).menuLinks).toEqual([]);
+  });
+});
+
+describe("Price card inspector", () => {
+  it("offers button text and URL, showing the default text for cards saved without one", () => {
+    const onChange = vi.fn();
+    render(<ItemFields item={{ name: "2 BHK", price: "₹ 1.42 Cr*", meta: "" }} fields={RE_PRICING_CARD_FIELDS} onChange={onChange} />);
+    const text = screen.getByDisplayValue("Enquire");
+    fireEvent.change(text, { target: { value: "Book now" } });
+    expect(onChange).toHaveBeenCalledWith("cta", "Book now");
+    expect(screen.getByText("Button URL")).toBeTruthy();
+  });
+
+  it("keeps a cleared button text empty so the button stays hidden", () => {
+    render(<ItemFields item={{ name: "2 BHK", price: "1", cta: "" }} fields={RE_PRICING_CARD_FIELDS} onChange={() => {}} />);
+    expect(screen.queryByDisplayValue("Enquire")).toBeNull();
+    expect(screen.getByPlaceholderText("Button hidden")).toBeTruthy();
   });
 });
