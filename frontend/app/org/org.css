@@ -685,6 +685,20 @@
   transform: translateY(0);
 }
 
+/* Disabled buttons look disabled everywhere in the org app (the title tooltip still shows why). */
+.org .btn:disabled,
+.org .btn:disabled:hover {
+  opacity: 0.5;
+  cursor: not-allowed;
+  transform: none;
+}
+
+.org .btn-ghost:disabled:hover {
+  background: var(--surface);
+  border-color: var(--line-2);
+  color: var(--ink-2);
+}
+
 .org .btn-primary {
   background: var(--brand);
   color: #fff;
