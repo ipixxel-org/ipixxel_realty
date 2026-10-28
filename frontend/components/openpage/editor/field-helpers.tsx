@@ -122,6 +122,32 @@ export const PRICING_TIER_FIELDS: ItemFieldDef[] = [
   { key: "featured", label: "Featured", kind: "toggle" },
 ];
 
+/** Default card button text — keep in sync with RePricingBlock's fallback. */
+export const RE_PRICING_CARD_CTA_DEFAULT = "Enquire";
+
+export const RE_PRICING_CARD_FIELDS: ItemFieldDef[] = [
+  { key: "name", label: "Plan Name", kind: "text", placeholder: "e.g. 2 BHK" },
+  { key: "price", label: "Price", kind: "text", placeholder: "e.g. ₹ 1.42 Cr*" },
+  { key: "meta", label: "Note", kind: "text", placeholder: "e.g. 1,250 sq.ft." },
+  {
+    key: "cta",
+    label: "Button text (clear to hide the button)",
+    // Older cards have no `cta` key and still render the default text, so
+    // show that here instead of an empty box that doesn't match the canvas.
+    render: (value, update) => (
+      <input
+        type="text"
+        value={typeof value === "string" ? value : RE_PRICING_CARD_CTA_DEFAULT}
+        placeholder="Button hidden"
+        onChange={(e) => update(e.target.value)}
+        className={FIELD_CLS}
+      />
+    ),
+  },
+  { key: "url", label: "Button URL", kind: "text", placeholder: "https://… or #enquire" },
+  { key: "priceColor", label: "Price color (this card)", kind: "color" },
+];
+
 export const FOOTER_LINK_FIELDS: ItemFieldDef[] = [
   { key: "label", label: "Label", kind: "text", placeholder: "e.g. Privacy Policy" },
   { key: "url", label: "URL", kind: "text", placeholder: "https://… or #section-id" },
