@@ -161,6 +161,12 @@ export interface RetentionChoicesV2 {
   appliesOn: string | null;
   isDefault: boolean;
   /**
+   * A saved choice exists and fits the plan's limits today (a plan's limits
+   * can be lowered after it was saved). False without one. Missing on stored
+   * copies (history views).
+   */
+  savedFits?: boolean;
+  /**
    * Read-only: for the org once the change was decided or took effect (or
    * it's the plan they're on); for anyone on an older row (history).
    */

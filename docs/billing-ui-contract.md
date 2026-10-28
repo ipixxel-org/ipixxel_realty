@@ -247,8 +247,13 @@ decided or takes effect; after that only Super Admin can change it. Helpers: `bi
     earlier choice" and its picks with **Edit**.
   Neither is selected when the page opens, even with an earlier choice. The main button (Send change
   request / schedule) is disabled until "Keep the default picks", or "I'll choose" with a saved
-  choice. No conflict: no options. On the checkout, if the preview has no `usageConflict`, the
-  overview's usage against the plan's limits decides (same check as the downgrade page).
+  choice **that still fits** (`RetentionChoices.savedFits`: the stored choice against the plan's
+  limits today — they can be lowered after it was saved; the lists themselves are trimmed to fit, so
+  they can't show it). A saved choice that doesn't fit shows "Your earlier choice doesn't fit
+  Growth's limits any more. Edit it, or keep the default picks." No conflict: no options. On the
+  checkout, if the preview has no `usageConflict`, the overview's usage against the plan's limits
+  decides (same check as the downgrade page). The checkout and downgrade screens start fresh when
+  the plan, interval or `pick` in the URL changes (no option carried over).
 - **Choose what stays screen:** Save sends exactly what's ticked, reloads the overview, then goes back
   to the `back=` page (checkout / downgrade with `pick=saved`, so "I'll choose" is selected; or the
   Requests tab), which loads the preview and retention again on arrival. The button next to Save
