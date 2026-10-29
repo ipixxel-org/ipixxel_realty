@@ -762,3 +762,107 @@ describe("Super Admin: choose what stays from the latest Package requests row", 
     expect(within(screen.getByTestId("org-package-request")).getByRole("button", { name: "View what stays" })).toBeInTheDocument();
   });
 });
+
+describe("online checkout: choose what stays before paying (online step 2)", () => {
+  const conflict: UsageConflict = { items: [{ key: "users", limit: 5, used: 8 }], choicesFit: false };
+  function online(c: UsageConflict | null, retention?: (r: RetentionChoices) => RetentionChoices) {
+    const base = createMockBillingClient({ initial: { situation: "basic" } });
+    const client: BillingClient = {
+      ...base,
+      previewCheckout: async (req) => ({ ...(await base.previewCheckout(req)), usageConflict: c, usageError: null }) as CheckoutPreview,
+      getRetentionChoices: async (req) => {
+        const r = await base.getRetentionChoices(req);
+        return retention ? retention(r) : r;
+      },
+    };
+    return client;
+  }
+  const pay = () => screen.getByRole("button", { name: /^Pay / });
+
+  it("over the limits: the two options show, Pay is disabled until one is picked, then pays with it", async () => {
+    const client = online(conflict);
+    const start = vi.spyOn(client, "startCheckout");
+    await show(client, <CheckoutScreen planId="pro" interval="monthly" />);
+    expect(screen.getByTestId("usage-conflict")).toHaveTextContent("Choose which 5 stay active when this change takes effect.");
+    expect(screen.getByTestId("usage-conflict")).not.toHaveTextContent(/approved/);
+    expect(screen.getByRole("radio", { name: DEFAULT })).not.toBeChecked();
+    expect(screen.getByRole("radio", { name: OWN })).not.toBeChecked();
+    expect(pay()).toBeDisabled();
+    fireEvent.click(screen.getByRole("radio", { name: DEFAULT }));
+    expect(pay()).toBeEnabled();
+    fireEvent.click(pay());
+    await settle();
+    expect(start).toHaveBeenCalledWith(expect.objectContaining({ planId: "pro", whatStaysChoice: "default" }));
+  });
+
+  it("\"I'll choose\" links to Choose what stays and back to the checkout; Pay waits for a saved choice", async () => {
+    await show(online(conflict), <CheckoutScreen planId="pro" interval="monthly" />);
+    fireEvent.click(screen.getByRole("radio", { name: OWN }));
+    expect(within(screen.getByTestId("what-stays-own")).getByRole("link", { name: "Choose what stays" })).toHaveAttribute(
+      "href",
+      "/org/settings/billing/choose-what-stays?target=pro&back=checkout&interval=monthly",
+    );
+    expect(pay()).toBeDisabled();
+  });
+
+  it("back from Choose what stays (pick=saved): \"I'll choose\" is selected with the fresh saved choice; Pay is enabled and sends 'saved'", async () => {
+    const saved = (r: RetentionChoices): RetentionChoices => ({ ...r, isDefault: false, users: r.users.map((u, i) => ({ ...u, selected: i === 0 })) });
+    const client = online({ ...conflict, choicesFit: true }, saved);
+    const start = vi.spyOn(client, "startCheckout");
+    await show(client, <CheckoutScreen planId="pro" interval="monthly" initialPick="saved" />);
+    expect(screen.getByRole("radio", { name: OWN })).toBeChecked();
+    expect(screen.getByTestId("what-stays-own")).toHaveTextContent("Your earlier choice");
+    expect(pay()).toBeEnabled();
+    fireEvent.click(pay());
+    await settle();
+    expect(start).toHaveBeenCalledWith(expect.objectContaining({ whatStaysChoice: "saved" }));
+  });
+
+  it("the preview doesn't report it but usage is over the plan: the options still show (the !online gate is gone)", async () => {
+    const base = createMockBillingClient({ initial: { situation: "basic" } });
+    const o = await base.getBillingOverview();
+    const usage = o.usage.map((u) => (u.key === "users" ? { ...u, used: 8 } : u));
+    const client: BillingClient = {
+      ...base,
+      getBillingOverview: async () => ({ ...o, usage }),
+      previewCheckout: async (req) => ({ ...(await base.previewCheckout(req)), usageConflict: null, usageError: null }) as CheckoutPreview,
+    };
+    await show(client, <CheckoutScreen planId="growth" interval="monthly" />);
+    expect(screen.getByRole("radio", { name: DEFAULT })).toBeInTheDocument();
+    expect(pay()).toBeDisabled();
+  });
+
+  it("Save on Choose what stays goes back to the online checkout with \"I'll choose\" selected, after reloading", async () => {
+    const base = createMockBillingClient({ initial: { situation: "basic" } });
+    const growth = (await base.listPlans()).find((p) => p.id === "growth")!;
+    const item = (id: string, picked: boolean) => ({ id, name: `User ${id}`, detail: "", reason: "", defaultPicked: picked, selected: picked, locked: false });
+    const choices: RetentionChoices = {
+      targetPlan: { ...growth, limits: { ...growth.limits, users: 1 } },
+      appliesOn: null,
+      isDefault: true,
+      locked: false,
+      users: [item("u1", true), item("u2", false)],
+      projects: [],
+      landingPages: [],
+    };
+    const get = vi.fn(async () => choices);
+    const overview = vi.spyOn(base, "getBillingOverview");
+    const go = vi.fn(() => true);
+    render(
+      <ToastProvider>
+        <BillingEnvProvider client={{ ...base, getRetentionChoices: get, saveRetentionChoices: async () => ({ ...choices, isDefault: false }) }} canEdit onNavigate={go}>
+          <OrgBillingProvider>
+            <ChooseWhatStaysPage target="growth" back="checkout" interval="monthly" />
+          </OrgBillingProvider>
+        </BillingEnvProvider>
+      </ToastProvider>,
+    );
+    await settle();
+    expect((await base.getBillingOverview()).paymentMode).toBe("online");
+    const loadsBefore = overview.mock.calls.length;
+    fireEvent.click(screen.getByRole("button", { name: /Save/ }));
+    await settle();
+    expect(overview.mock.calls.length).toBeGreaterThan(loadsBefore);
+    expect(go).toHaveBeenLastCalledWith("checkout", { plan: "growth", interval: "monthly", pick: "saved" });
+  });
+});

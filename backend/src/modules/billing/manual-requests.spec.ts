@@ -152,7 +152,7 @@ describe("manual mode: a request over the target plan's limits", () => {
       response: {
         code: 'choose_what_stays',
         message:
-          'Starter allows 2 users; you have 3. Choose which 2 stay active when this change is approved.',
+          'Starter allows 2 users; you have 3. Choose which 2 stay active when this change takes effect.',
       },
     });
   });
@@ -182,13 +182,13 @@ describe("manual mode: a request over the target plan's limits", () => {
     expect(preview.usageError).toBeNull();
   });
 
-  it('online mode is unchanged: being over the limits is still an error', async () => {
+  it('online mode too (step 2): being over the limits is a choice, not an error', async () => {
     const { service } = setup('online');
     const preview = await service.preview('org-1', toStarter);
-    expect(preview.usageConflict).toBeNull();
-    expect(preview.usageError).toMatch(
-      /allows 2 user\(s\), but your organisation has 3/,
-    );
+    expect(preview.usageError).toBeNull();
+    expect(preview.usageConflict).toMatchObject({
+      items: [{ key: 'users', limit: 2, used: 3 }],
+    });
   });
 
   it('after choosing what stays the request is sent, and approval applies those choices', async () => {

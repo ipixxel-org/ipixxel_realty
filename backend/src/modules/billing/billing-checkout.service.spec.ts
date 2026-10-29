@@ -204,19 +204,20 @@ describe('startCheckout (online)', () => {
     expect(p.gst.kind).toBe('inter');
   });
 
-  it('refuses before any payment when the org has more than the plan allows', async () => {
+  it('over the plan\'s limits: no payment until "choose what stays" is picked (online step 2)', async () => {
     const { service, db, usage, payments } = setup();
     usage.users = 9; // Growth allows 5
     const preview = await service.preview('org-1', {
       planId: 'growth',
       interval: 'monthly',
     });
-    expect(preview.usageError).toContain(
-      '"Growth" plan allows 5 user(s), but your organisation has 9',
-    );
+    expect(preview.usageError).toBeNull();
+    expect(preview.usageConflict).toMatchObject({
+      items: [{ key: 'users', limit: 5, used: 9 }],
+    });
     await expect(
       service.start('org-1', 'u1', { planId: 'growth', interval: 'monthly' }),
-    ).rejects.toMatchObject({ response: { code: 'plan_too_small' } });
+    ).rejects.toMatchObject({ response: { code: 'choose_what_stays' } });
     expect(payments.createOrder).not.toHaveBeenCalled();
     expect(db.billingCheckout.rows).toHaveLength(0);
     // Within the limits it goes ahead.

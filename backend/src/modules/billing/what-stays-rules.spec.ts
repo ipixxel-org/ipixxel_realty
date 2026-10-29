@@ -129,7 +129,7 @@ describe('confirm what stays before the plan change', () => {
       response: {
         code: 'choose_what_stays',
         message:
-          'Starter allows 2 users; you have 4. Choose which 2 stay active when this change is approved.',
+          'Starter allows 2 users; you have 4. Choose which 2 stay active when this change takes effect.',
       },
     });
     expect(db.subscription.rows[0].scheduledPlanId).toBeNull();

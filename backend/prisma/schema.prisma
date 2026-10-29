@@ -1356,6 +1356,9 @@ model BillingCheckout {
   couponDiscountPaise    Int                   @default(0) @map("coupon_discount_paise")
   // Quoted while the renewal was overdue (grace): full price, the missed term continues.
   overdue                Boolean               @default(false)
+  // "Choose what stays" option picked at the checkout ('default' | 'saved'),
+  // used when it's paid (online) — null when nothing was over the limits.
+  whatStaysChoice        String?               @map("what_stays_choice")
   // Manual mode: the amounts before the Super Admin added a coupon to the
   // request (restored by Remove); null = no coupon added on the request.
   quoteBeforeCoupon      Json?                 @map("quote_before_coupon")

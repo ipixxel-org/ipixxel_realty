@@ -363,6 +363,17 @@ Package Requests → Open → the org's "Package requests" section: **Mark as pa
   plan in grace online returns **`pay_at_checkout`** (the payment happens at the checkout; the UI
   never calls it) — never `downgrade_not_now`, nothing scheduled. Active-period rules (proration,
   scheduled downgrade, Basic at the term end) are unchanged.
+- **Online checkout over the target's limits (online step 2, 2026-10-29):** the preview returns
+  `usageConflict` in both modes (only what can't be paused — created pages — is a `usageError`), so
+  the online checkout shows the same two options and **Pay** stays disabled until one is picked; start
+  refuses `choose_what_stays` before any Razorpay order. The option is stored on the checkout
+  (`billing_checkouts.what_stays_choice`, migration `20261029090000_checkout_what_stays_choice`;
+  null when nothing was over). **Fulfil = Approve:** `assertPlanFitsAfterRetention`, and when the org
+  is over what can be paused it needs the stored option — none (usage went up after the quote), or
+  "saved" whose saved choice no longer fits → `needs_review` with that reason (Super Admins notified,
+  plan not applied); otherwise `applyWhatStaysChoice` ("default" drops an earlier saved choice) and
+  `applyPlanChange` → `applyRetention` pauses what doesn't stay. A closed or failed payment changes
+  nothing. The conflict wording is now "… stay active when this change takes effect." (both modes).
 - **Option A — no hold:** when grace ends with a request still pending the org still falls back to
   Basic; the request stays pending and gets `package_change_requests.moved_to_basic_at`
   (`OrgPlanRequest.movedToBasicAt`, shown as "Org moved to Basic while waiting"). Approved later, the
