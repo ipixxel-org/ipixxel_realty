@@ -24,7 +24,8 @@ export function buildJsonLd(page: LandingPageData, cfg: SiteConfig): Record<stri
     "@context": "https://schema.org",
     "@type": "RealEstateListing",
     name: cfg.seo.ogTitle || cfg.brand.name || page.name,
-    url: cfg.seo.canonical || suggestedCanonical(page),
+    // Canonical URL field is hidden; always use the page's own address.
+    url: suggestedCanonical(page),
     description: cfg.seo.ogDescription || cfg.seo.metaDescription,
     image: cfg.seo.ogImage || undefined,
     telephone: cfg.brand.phone || undefined,
@@ -101,19 +102,18 @@ export function applyDocumentSeo(page: LandingPageData) {
   document.documentElement.lang = cfg.page.language || "en";
   upsertMeta("name", "description", cfg.seo.metaDescription);
   upsertMeta("name", "keywords", cfg.seo.keywords);
-  const robots =
-    cfg.seo.robots?.trim() ||
-    (cfg.seo.index ? "index,follow" : "noindex,nofollow");
+  // Robots field is hidden; saved values are ignored (see server-pages.ts).
+  const robots = cfg.seo.index ? "index,follow" : "noindex,nofollow";
   upsertMeta("name", "robots", robots);
   upsertMeta("property", "og:title", cfg.seo.ogTitle || cfg.seo.metaTitle);
   upsertMeta("property", "og:description", cfg.seo.ogDescription || cfg.seo.metaDescription);
   upsertMeta("property", "og:image", cfg.seo.ogImage);
-  upsertMeta("property", "og:url", cfg.seo.canonical);
+  // og:url and the canonical link come from the server-rendered metadata
+  // (server-pages.ts); the Canonical URL field is hidden, so nothing to set here.
   upsertMeta("name", "twitter:card", cfg.seo.twitterCard ?? (cfg.seo.ogImage ? "summary_large_image" : "summary"));
   upsertMeta("name", "twitter:title", cfg.seo.twitterTitle || cfg.seo.ogTitle || cfg.seo.metaTitle);
   upsertMeta("name", "twitter:description", cfg.seo.twitterDescription || cfg.seo.ogDescription || cfg.seo.metaDescription);
   upsertMeta("name", "twitter:image", cfg.seo.twitterImage || cfg.seo.ogImage);
-  upsertLink("canonical", cfg.seo.canonical);
   upsertLink("icon", cfg.page.favicon);
 
   const schema =

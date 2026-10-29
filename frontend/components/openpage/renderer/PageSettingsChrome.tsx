@@ -47,7 +47,8 @@ export function PageSettingsChrome({ settings }: { settings: PageSettings }) {
     <>
       {chrome ? <style id="op-page-settings-css">{chrome}</style> : null}
       {page?.favicon ? <link rel="icon" href={page.favicon} /> : null}
-      {page?.customJs ? <script id="op-page-custom-js" dangerouslySetInnerHTML={{ __html: page.customJs }} /> : null}
+      {/* Custom JavaScript is no longer offered; previously saved scripts
+          are not run, so no hidden code executes on the live page. */}
       {theme?.containerWidth ? (
         <style>{`.op-site .op-container{max-width:var(--op-container,1200px);margin-left:auto;margin-right:auto}`}</style>
       ) : null}

@@ -31,12 +31,13 @@ const EMPTY_SETTINGS: PageSettings = {
 
 const PLATFORMS = ["Instagram", "Facebook", "LinkedIn", "Twitter / X", "YouTube", "Telegram", "WhatsApp", "Other"];
 
-const ROBOT_OPTIONS = [
-  { value: "", label: "Follow index flag" },
-  { value: "index,follow", label: "Index · follow links" },
-  { value: "noindex,nofollow", label: "Hide · do not follow" },
-  { value: "noindex,follow", label: "Hide · follow links" },
-];
+// Robots field hidden for now (see SeoSection) — kept for when it returns.
+// const ROBOT_OPTIONS = [
+//   { value: "", label: "Follow index flag" },
+//   { value: "index,follow", label: "Index · follow links" },
+//   { value: "noindex,nofollow", label: "Hide · do not follow" },
+//   { value: "noindex,follow", label: "Hide · follow links" },
+// ];
 
 const SECTIONS: {
   key: SectionKey;
@@ -49,7 +50,7 @@ const SECTIONS: {
     { key: "branding", label: "Branding", desc: "Colours, radius & container width", icon: Palette },
     { key: "typography", label: "Typography", desc: "Fonts, heading scale & body text", icon: Type },
     { key: "business", label: "Business Info", desc: "Name, contacts & location", icon: Building2 },
-    { key: "page", label: "Page Settings", desc: "Slug, status, favicon, custom code", icon: Settings2 },
+    { key: "page", label: "Page Settings", desc: "Slug, status, custom CSS", icon: Settings2 },
     { key: "conversions", label: "Conversion & Forms", desc: "Success behaviour & lead routing", icon: Megaphone },
     { key: "social", label: "Social & Sharing", desc: "Social profiles & share links", icon: Share2 },
   ];
@@ -369,17 +370,22 @@ function SeoSection({
         <Row label="Keywords" hint="Comma separated. Search engines mostly ignore this, so keep it short.">
           <Input value={seo.keywords ?? ""} on={(v) => patchSeo({ keywords: v })} />
         </Row>
+        {/* Robots and Canonical URL are hidden for now — not required yet.
+            Saved values are ignored on the live page (seo.ts /
+            server-pages.ts), so indexing follows "Allow indexing" below and
+            the canonical URL is auto-derived. Uncomment to bring them back.
         <Row label="Robots" hint="Controls whether search engines may index this page and follow links.">
           <Select value={seo.robots ?? ""} options={ROBOT_OPTIONS} on={(v) => patchSeo({ robots: v })} />
         </Row>
         <Row label="Canonical URL" hint="Preferred URL for this page. Leave empty to auto-derive it.">
           <Input value={seo.canonical ?? ""} on={(v) => patchSeo({ canonical: v })} placeholder="https://example.com/property/villa-aurora" />
         </Row>
+        */}
         <Toggle
           checked={seo.index !== false}
           on={(v) => patchSeo({ index: v })}
           label="Allow indexing"
-          hint="Unchecked sends noindex to search engines. Overridden by the Robots field above."
+          hint="Unchecked sends noindex to search engines."
         />
       </Card>
 
@@ -436,11 +442,11 @@ function PreviewGrid({ children }: { children: React.ReactNode }) {
 }
 
 function GoogleSerpCard({ seo, site, page }: { seo: SiteSeo | undefined; site: SiteConfig; page: LandingPageData }) {
-  const rawDomain = (seo?.canonical || page.domain || "ipixxel.ae").replace(/^https?:\/\//, "").split("/")[0];
+  const rawDomain = (page.domain || "ipixxel.ae").replace(/^https?:\/\//, "").split("/")[0];
   const domain = rawDomain.includes(".") ? rawDomain : "ipixxel.ae";
   const slug = (page.slug || "").replace(/^\//, "");
   const badge =
-    seo?.robots?.includes("noindex") || seo?.index === false ? (
+    seo?.index === false ? (
       <span style={{ color: "#c5221f", fontSize: 10, fontWeight: 600 }}>Excluded by noindex</span>
     ) : (
       <span style={{ color: "#006500", fontSize: 10, fontWeight: 600 }}>Indexable</span>
@@ -466,7 +472,7 @@ function GoogleSerpCard({ seo, site, page }: { seo: SiteSeo | undefined; site: S
 }
 
 function OgCard({ seo, site, page }: { seo: SiteSeo | undefined; site: SiteConfig; page: LandingPageData }) {
-  const domain = (seo?.canonical || page.domain || site.name || "your-site").replace(/^https?:\/\//, "").split("/")[0];
+  const domain = (page.domain || site.name || "your-site").replace(/^https?:\/\//, "").split("/")[0];
   return (
     <div className="ps-card" style={{ padding: 16, display: "flex", flexDirection: "column" }}>
       <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase", color: "var(--ps-muted)", marginBottom: 10 }}>
@@ -851,18 +857,9 @@ function PageScopeSection({
         </Row>
       </Card>
 
-      <Card title="Favicon">
-        <Row label="Site icon" hint="Shown in browser tabs. Applies to the live page only.">
-          <MediaPicker kind="image" label="favicon" value={settings.page.favicon ?? ""} onChange={(v) => patchPageBag({ favicon: v })} compact />
-        </Row>
-      </Card>
-
       <Card title="Custom code">
         <Row label="Custom CSS" hint={'Injected as a <style> tag on the live page. Scoped selectors with .op-site if you need to target the site.'}>
           <Area value={settings.page.customCss ?? ""} on={(v) => patchPageBag({ customCss: v })} rows={6} placeholder={'.op-site .hero-cta {\n  background: #0f1424;\n}'} />
-        </Row>
-        <Row label="Custom JavaScript" hint={'Injected as a <script> tag on the live page.'}>
-          <Area value={settings.page.customJs ?? ""} on={(v) => patchPageBag({ customJs: v })} rows={6} placeholder={'document.addEventListener("start", () => {…});'} />
         </Row>
       </Card>
     </>
@@ -874,14 +871,14 @@ function PageScopeSection({
 function ConversionsSection({
   site,
   patchFirstForm,
-  patchTracking,
+  // patchTracking, — only used by the hidden "Conversion goals" card below.
 }: {
   site: SiteConfig;
   patchFirstForm: (fn: FormPatch) => void;
   patchTracking: (p: Partial<SiteTracking>) => void;
 }) {
   const form = site.forms?.[0];
-  const t = site.tracking ?? {};
+  // const t = site.tracking ?? {}; — only used by the hidden "Conversion goals" card below.
   if (!form) {
     return (
       <div className="ps-card" style={{ padding: 26, textAlign: "center" }}>
@@ -936,6 +933,9 @@ function ConversionsSection({
           </Row>
         ) : null}
 
+        {/* Hidden for now — not required yet. Nothing reads `sendWhatsapp` /
+            `whatsapp` from here, so hiding it changes no behaviour; uncomment
+            to bring it back.
         <Toggle
           checked={form.sendWhatsapp ?? false}
           on={(v) => patchFirstForm((f) => ({ ...f, sendWhatsapp: v }))}
@@ -946,6 +946,7 @@ function ConversionsSection({
             <Input value={form.whatsapp ?? ""} on={(v) => patchFirstForm((f) => ({ ...f, whatsapp: v }))} placeholder="+919876543210" />
           </Row>
         ) : null}
+        */}
 
         <Toggle
           checked={form.saveToCrm !== false}
@@ -955,6 +956,9 @@ function ConversionsSection({
         />
       </Card>
 
+      {/* Hidden for now — not required yet. The goal flags are only stored
+          (site.tracking.goal*); uncomment this card, `t` and `patchTracking`
+          above to bring it back.
       <Card title="Conversion goals">
         <p style={{ margin: "0 0 10px", fontSize: 11.5, color: "var(--ps-muted)", lineHeight: 1.5 }}>
           These flags feed analytics conversions and the dashboard&apos;s conversion count.
@@ -964,6 +968,7 @@ function ConversionsSection({
         <Toggle checked={t.goalCall ?? false} on={(v) => patchTracking({ goalCall: v })} label="Call click" />
         <Toggle checked={t.goalBrochure ?? false} on={(v) => patchTracking({ goalBrochure: v })} label="Brochure download" />
       </Card>
+      */}
     </>
   );
 }
