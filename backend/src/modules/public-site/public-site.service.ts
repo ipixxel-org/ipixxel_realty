@@ -1,4 +1,5 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
+import { liveContent, withLiveContent } from '../../common/utils/published-content.util';
 import type { Prisma } from '@prisma/client';
 import { PrismaService } from '../../database/prisma.service';
 import { FieldDef, roleField } from '../../common/utils/field-template.util';
@@ -113,7 +114,7 @@ export class PublicSiteService {
             slug: landingPage.slug,
             name: landingPage.name,
             status: landingPage.status,
-            content: landingPage.content,
+            content: liveContent(landingPage),
             publishedAt: landingPage.publishedAt,
           }
         : null,
@@ -154,7 +155,7 @@ export class PublicSiteService {
             slug: landingPage.slug,
             name: landingPage.name,
             status: landingPage.status,
-            content: landingPage.content,
+            content: liveContent(landingPage),
             publishedAt: landingPage.publishedAt,
           }
         : null,
@@ -233,7 +234,7 @@ export class PublicSiteService {
         page = await this.prisma.landingPage.findFirst({ where: { orgId: domainReq.orgId, status: 'published' }, orderBy: { updatedAt: 'desc' } });
       }
       if (!page) throw new NotFoundException('Site not published');
-      return { domain: domainReq.customDomain, landingPage: page, organisation: domainReq.organisation };
+      return { domain: domainReq.customDomain, landingPage: withLiveContent(page), organisation: domainReq.organisation };
     }
 
     const org = await this.prisma.organisation.findFirst({ where: { customDomain: normalized, customDomainStatus: 'connected', status: 'active' } });
@@ -244,7 +245,7 @@ export class PublicSiteService {
       : null;
     const page = landingPage ?? (await this.prisma.landingPage.findFirst({ where: { orgId: org.id, status: 'published' }, orderBy: { updatedAt: 'desc' } }));
     if (!page) throw new NotFoundException('Site not published');
-    return { domain: org.customDomain, landingPage: page, organisation: org };
+    return { domain: org.customDomain, landingPage: withLiveContent(page), organisation: org };
   }
 
   async sitemapForDomain(domain: string): Promise<string> {
@@ -454,7 +455,8 @@ export class PublicSiteService {
       }).catch(() => {});
     }
 
-    return page;
+    // Visitors see the published snapshot, not unpublished edits.
+    return withLiveContent(page);
   }
 
   async resolveById(id: string) {
@@ -488,7 +490,7 @@ export class PublicSiteService {
       },
     }).catch(() => {});
 
-    return page;
+    return withLiveContent(page);
   }
 
   async recordPublicTrack(dto: TrackEventDto) {

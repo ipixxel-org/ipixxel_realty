@@ -6,7 +6,6 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { useAuth } from "@/lib/auth-context";
 import { apiFetch } from "@/lib/api";
 import {
-  Bell,
   CheckCircle2,
   Clock,
   Keyboard,
@@ -72,13 +71,6 @@ const HOME_PATH: Record<Resource, string> = {
   "landing-page": "/org/landing-pages",
 };
 
-// Real destination for the TopNav profile menu's "Settings" item — differs
-// by session, same split as HOME_PATH.
-const SETTINGS_PATH: Record<Resource, string> = {
-  template: "/admin-console/settings",
-  "landing-page": "/org/settings",
-};
-
 function initialsFor(firstName: string | null | undefined, lastName: string | null | undefined): string {
   const parts = [firstName, lastName].filter(Boolean) as string[];
   if (parts.length === 0) return "—";
@@ -89,7 +81,7 @@ export function OpenPageStudio({ resource = "template" }: { resource?: Resource 
   const searchParams = useSearchParams();
   const returnUrl = searchParams.get("returnUrl") || searchParams.get("returnTo") || null;
   const router = useRouter();
-  const { user: authUser, logout, hasPermission } = useAuth();
+  const { user: authUser, hasPermission } = useAuth();
   // Org landing pages follow the Landing Pages pills; Super Admin templates
   // are gated by the admin console, so every action stays available there.
   const isOrgPage = resource === "landing-page";
@@ -106,7 +98,6 @@ export function OpenPageStudio({ resource = "template" }: { resource?: Resource 
   const [canUndo, setCanUndo] = useState(false);
   const [canRedo, setCanRedo] = useState(false);
   const [toasts, setToasts] = useState<Toast[]>([]);
-  const [notifOpen, setNotifOpen] = useState(false);
   const [activityOpen, setActivityOpen] = useState(false);
   const [orgActivity, setOrgActivity] = useState<OrgActivityEntry[] | null>(null);
   const [orgActivityLoading, setOrgActivityLoading] = useState(false);
@@ -235,7 +226,7 @@ export function OpenPageStudio({ resource = "template" }: { resource?: Resource 
       void saveTemplate(next, resource)
         .then((saved) => {
           setActivePage((cur) =>
-            cur && cur.id === saved.id ? { ...cur, status: saved.status, updated: saved.updated, updatedAt: saved.updatedAt } : cur,
+            cur && cur.id === saved.id ? { ...cur, status: saved.status, hasUnpublishedChanges: saved.hasUnpublishedChanges, updated: saved.updated, updatedAt: saved.updatedAt } : cur,
           );
           if (saveRevision.current === revision) {
             setHasUnsaved(false);
@@ -311,7 +302,7 @@ export function OpenPageStudio({ resource = "template" }: { resource?: Resource 
       .then((updated) => {
         setActivePage((cur) =>
           cur && cur.id === updated.id
-            ? { ...next, status: updated.status, updated: updated.updated, updatedAt: updated.updatedAt, slug: updated.slug || cur.slug }
+            ? { ...next, status: updated.status, hasUnpublishedChanges: updated.hasUnpublishedChanges, updated: updated.updated, updatedAt: updated.updatedAt, slug: updated.slug || cur.slug }
             : cur,
         );
         toast("Published");
@@ -327,7 +318,7 @@ export function OpenPageStudio({ resource = "template" }: { resource?: Resource 
     if (!activePage) return;
     unpublishLandingPage(activePage.id)
       .then((updated) => {
-        setActivePage((cur) => (cur && cur.id === updated.id ? { ...cur, status: updated.status } : cur));
+        setActivePage((cur) => (cur && cur.id === updated.id ? { ...cur, status: updated.status, hasUnpublishedChanges: updated.hasUnpublishedChanges } : cur));
         toast("Unpublished — page is no longer live");
       })
       .catch((err) => toast(err instanceof Error ? err.message : "Couldn't unpublish — try again"));
@@ -352,13 +343,6 @@ export function OpenPageStudio({ resource = "template" }: { resource?: Resource 
         initials: initialsFor(authUser.first_name, authUser.last_name),
       }
     : null;
-
-  const handleSignOut = useCallback(() => {
-    void logout().then(() => {
-      router.push("/login");
-      router.refresh();
-    });
-  }, [logout, router]);
 
   const [isSwitchingCompanion, setIsSwitchingCompanion] = useState(false);
 
@@ -445,7 +429,7 @@ export function OpenPageStudio({ resource = "template" }: { resource?: Resource 
         try {
           const saved = await saveTemplateNow(next, resource);
           setActivePage((cur) =>
-            cur && cur.id === saved.id ? { ...cur, status: saved.status, updated: saved.updated, updatedAt: saved.updatedAt } : cur,
+            cur && cur.id === saved.id ? { ...cur, status: saved.status, hasUnpublishedChanges: saved.hasUnpublishedChanges, updated: saved.updated, updatedAt: saved.updatedAt } : cur,
           );
           if (saveRevision.current === revision) setHasUnsaved(false);
           if (saveRevision.current === revision) {
@@ -639,17 +623,19 @@ export function OpenPageStudio({ resource = "template" }: { resource?: Resource 
         unpublishLabel={topNavUnpublish.label}
         canPublish={canPublishPage}
         canUnpublish={canUnpublishPage}
-        onNotify={() => setNotifOpen(true)}
         onActivity={() => {
           setOrgActivityLoading(true);
           setActivityOpen(true);
         }}
         onHelp={() => setHelpOpen(true)}
         user={topNavUser}
-        onSignOut={handleSignOut}
-        settingsHref={SETTINGS_PATH[resource]}
         homeHref={returnUrl || HOME_PATH[resource]}
         unsaved={hasUnsaved}
+        upToDate={
+          // Org pages: a live page with nothing new to publish. Templates keep
+          // their own flow (the flag is undefined there).
+          resource === "landing-page" && activePage?.status === "published" && activePage.hasUnpublishedChanges === false
+        }
         saving={isSaving}
         pageType={activePage?.pageType === "thank-you" ? "thank-you" : "landing"}
         companionPage={
@@ -681,13 +667,6 @@ export function OpenPageStudio({ resource = "template" }: { resource?: Resource 
           </div>
         ))}
       </div>
-
-      {/* Notifications panel */}
-      <SlidePanel open={notifOpen} onClose={() => setNotifOpen(false)} title="Notifications" icon={<Bell size={16} />}>
-        <div style={{ padding: "24px 0", textAlign: "center", color: "var(--ps-muted)", fontSize: 12.5 }}>
-          No notifications yet.
-        </div>
-      </SlidePanel>
 
       {/* Activity panel */}
       <SlidePanel open={activityOpen} onClose={() => setActivityOpen(false)} title="Activity feed" icon={<Clock size={16} />}>

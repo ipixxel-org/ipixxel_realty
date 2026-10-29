@@ -2,6 +2,7 @@ import { Injectable, Logger, NotFoundException } from '@nestjs/common';
 import type { Prisma } from '@prisma/client';
 import { PrismaService } from '../../database/prisma.service';
 import { deepEqual } from '../../common/utils/deep-equal.util';
+import { snapshotBeforeEdit, toOwnerView } from '../../common/utils/published-content.util';
 
 // Snapshots kept per page — one per content-changing save, pruned
 // oldest-first whenever a new one lands, so a heavily edited page can never
@@ -71,7 +72,7 @@ export class PageRevisionsService {
   }
 
   /** Server-side restore: writes the snapshot's content back onto the page
-   * with the same normalisation and published-to-draft revert rule as a
+   * with the same normalisation and live-snapshot rule as a
    * regular content save (OrgLandingPagesService.update), then captures the
    * restored state so the restore itself shows up in — and can be undone
    * from — the same history list. */
@@ -92,9 +93,8 @@ export class PageRevisionsService {
       where: { id: landingPageId },
       data: {
         content: content as Prisma.InputJsonValue,
-        ...(contentChanged && page.status === 'published'
-          ? { status: 'draft' as const }
-          : {}),
+        // A live page stays live; the restore waits for the next Publish.
+        ...(contentChanged ? snapshotBeforeEdit(page) : {}),
       },
     });
 
@@ -105,7 +105,7 @@ export class PageRevisionsService {
         content as Prisma.InputJsonValue,
       );
     }
-    return updated;
+    return toOwnerView(updated);
   }
 
   /** Ownership check shared by every route — orgId always comes from the
@@ -113,7 +113,7 @@ export class PageRevisionsService {
   private async assertOwned(orgId: string, landingPageId: string) {
     const page = await this.prisma.landingPage.findFirst({
       where: { id: landingPageId, orgId },
-      select: { id: true, status: true, content: true },
+      select: { id: true, status: true, content: true, publishedContent: true },
     });
     if (!page) throw new NotFoundException('Landing page not found');
     return page;

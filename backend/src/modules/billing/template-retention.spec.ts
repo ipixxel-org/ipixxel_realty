@@ -378,12 +378,14 @@ describe('a paused template can not be used for a new landing page', () => {
         findFirst: jest.fn(async () => page),
         update: jest.fn(async ({ data }: any) => ({ ...page, ...data })),
         updateMany: jest.fn(async () => ({ count: 1 })),
+        findMany: jest.fn(async () => []),
       },
       organisation: {
         findUnique: jest.fn(async () => null),
         update: jest.fn(),
       },
       auditLog: { create: jest.fn(async () => ({})) },
+      $transaction: jest.fn(async (ops: Promise<unknown>[]) => Promise.all(ops)),
     };
     const service = new OrgLandingPagesService(
       prisma,

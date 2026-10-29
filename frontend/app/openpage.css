@@ -435,7 +435,7 @@
   cursor: wait;
 }
 /* Compact levels, set by TopNav only when the bar's contents don't fit.
-   1: drop the wordmark  2: icon-only Preview/Save/Publish
+   1: drop the wordmark  2: icon-only Preview/Save (Publish keeps its label)
    3: icon-only Landing/Thank You switch — last resort, small screens only.
    Hidden labels stay available as each button's tooltip. */
 .ps-topnav:is([data-compact="1"], [data-compact="2"], [data-compact="3"]) .ps-topnav-brand-text {
