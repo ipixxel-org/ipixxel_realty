@@ -4,7 +4,7 @@ import { useState, type ReactNode } from "react";
 import { Icon } from "@/components/icons";
 import { Seg } from "@/components/superadmin/seg";
 import { formatINR, packagePriceText, yearlySaving } from "@/lib/billing/pricing";
-import { isOverdueManual, planChangeRoute } from "@/lib/billing/direction";
+import { isOverdue, planChangeRoute } from "@/lib/billing/direction";
 import { planChangeBlock } from "@/lib/billing/requests";
 import type { BillingInterval, BillingPlan } from "@/lib/billing/types";
 import { useBillingQuery, useOrgBilling } from "./context";
@@ -59,9 +59,10 @@ export function PlansScreen({
   // A request waiting for approval, or a scheduled change to Basic / a smaller
   // plan, blocks every other plan change until it's decided / undone.
   const block = planChangeBlock(overview);
-  // Manual mode with the renewal overdue: every paid plan is a request at its
-  // full price (the missed term continues); Basic moves the org straight away.
-  const overdueManual = isOverdueManual(overview, live);
+  // Renewal overdue (either mode): every paid plan is its full price at the
+  // checkout (the missed term continues; manual: a request); Basic moves the
+  // org straight away.
+  const overdue = isOverdue(overview);
   /** A plan action link — disabled, with the reason, while plan changes are blocked. */
   const go = (to: "checkout" | "downgrade", params: Record<string, string | undefined>, className: string, children: ReactNode) =>
     block ? (
@@ -84,7 +85,7 @@ export function PlansScreen({
       );
     }
     // One rule (lib/billing/direction.ts) picks the page; the arrow follows it.
-    const route = planChangeRoute(overview!, p, interval, live);
+    const route = planChangeRoute(overview!, p, interval);
     if (!route) {
       return (
         <button type="button" className="btn" disabled style={{ width: "100%", justifyContent: "center", background: "var(--surface-2)", color: "var(--muted)", border: "1px solid var(--line)" }}>
@@ -95,9 +96,9 @@ export function PlansScreen({
     const up = route === "checkout";
     const arrow = <Icon name={up ? "arrow-up" : "arrow-down"} size={15} data-icon={up ? "arrow-up" : "arrow-down"} />;
     const samePlan = p.id === current.id;
-    if (overdueManual) {
+    if (overdue) {
       if (samePlan && interval === overview!.interval) {
-        return go("checkout", { plan: p.id, interval, renew: "1" }, "btn btn-primary", <>{arrow} Request renewal</>);
+        return go("checkout", { plan: p.id, interval, renew: "1" }, "btn btn-primary", <>{arrow} {live ? "Pay now" : "Request renewal"}</>);
       }
       return go(route, p.isFree ? { plan: p.id } : { plan: p.id, interval }, p.rank > current.rank ? "btn btn-primary" : "btn btn-ghost", <>{arrow} Change plan</>);
     }

@@ -479,7 +479,7 @@ export function CheckoutScreen({
   // any paid plan is bought here (manual mode: a request at its full price).
   const overduePurchase = inGrace && !target.isFree;
   // Same rule as the plan cards: a smaller plan (or yearly → monthly) belongs on the downgrade page.
-  const route = planChangeRoute(overview, target, interval, online);
+  const route = planChangeRoute(overview, target, interval);
   if (!renewal && !overduePurchase && route === "downgrade") {
     return <BillingRedirect to="downgrade" params={target.isFree ? { plan: target.id } : { plan: target.id, interval }} />;
   }
@@ -507,8 +507,9 @@ export function CheckoutScreen({
   const pendingUpgrade = renewal && online ? null : overview.pendingUpgrade;
   // Manual mode: the renewal is a request our team approves once it's paid.
   const manualRenewal = renewal && !online;
-  // Manual mode, renewal overdue: any plan is a request at its full price.
-  const overdueChange = !online && !renewal && preview?.kind === "renewal";
+  // Renewal overdue (either mode): any paid plan is its full price (a renewal
+  // quote that continues the missed term; manual: a request).
+  const overdueChange = !renewal && preview?.kind === "renewal";
   const showCoupon = parts.includes("coupon") && preview?.couponsEnabled !== false;
   const left = parts.includes("details") || showCoupon;
   const right = parts.includes("summary");
@@ -596,8 +597,8 @@ export function CheckoutScreen({
                     <span className="badge b-amber" style={{ marginRight: 6 }}>
                       overdue renewal
                     </span>
-                    Your renewal is overdue, so this is {target.name}&apos;s full price (nothing was paid for the overdue days). Once it&apos;s paid and approved the new period
-                    continues from {overview.dueDate ? formatDate(overview.dueDate) : "your renewal date"}.
+                    Your renewal is overdue, so this is {target.name}&apos;s full price (nothing was paid for the overdue days). Once it&apos;s paid
+                    {online ? "" : " and approved"} the new period continues from {overview.dueDate ? formatDate(overview.dueDate) : "your renewal date"}.
                   </div>
                 ) : !online ? (
                   <div className="bl-muted" style={{ marginTop: 10, padding: "10px 12px", background: "var(--bg)", borderRadius: 10, lineHeight: 1.55 }}>

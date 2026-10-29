@@ -4,7 +4,7 @@
  * Admin plans editor warns when a plan allows less than a cheaper one.
  * Mock plans: Basic (rank 0, free) → Growth (1, the "Starter") → Pro (2).
  */
-import { act, cleanup, render, screen, within } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import type { ReactNode } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ToastProvider } from "@/components/ui/toast";
@@ -83,10 +83,20 @@ describe("planChangeDirection", () => {
     expect(planChangeDirection({ rank: 1, interval: "yearly" }, { rank: 1, interval: "monthly" })).toBe("downgrade");
     expect(planChangeDirection({ rank: 1, interval: "yearly" }, { rank: 1, interval: "yearly" })).toBe("same");
   });
-  it("manual mode, overdue: a paid plan is a request (checkout), Basic is the downgrade page", () => {
-    const o = { plan: plan({ id: "growth", rank: 1 }), interval: "monthly", status: "past_due", paymentMode: "manual" } as BillingOverview;
-    expect(planChangeRoute(o, plan({ id: "basic", rank: 0, isFree: true }), "monthly", false)).toBe("downgrade");
-    expect(planChangeRoute(o, plan({ id: "basic-ish", rank: 0.5 }), "monthly", false)).toBe("checkout");
+  it("overdue, either mode: every paid plan (bigger or smaller) is the checkout, Basic is the downgrade page", () => {
+    for (const paymentMode of ["manual", "online"] as const) {
+      for (const status of ["past_due", "grace_ending"] as const) {
+        const o = { plan: plan({ id: "growth", rank: 1 }), interval: "monthly", status, paymentMode } as BillingOverview;
+        expect(planChangeRoute(o, plan({ id: "basic", rank: 0, isFree: true }), "monthly")).toBe("downgrade");
+        expect(planChangeRoute(o, plan({ id: "basic-ish", rank: 0.5 }), "monthly")).toBe("checkout");
+        expect(planChangeRoute(o, plan({ id: "pro", rank: 2 }), "monthly")).toBe("checkout");
+      }
+    }
+  });
+  it("active, online: a smaller plan is still the (scheduled) downgrade page", () => {
+    const o = { plan: plan({ id: "growth", rank: 1 }), interval: "monthly", status: "active", paymentMode: "online" } as BillingOverview;
+    expect(planChangeRoute(o, plan({ id: "basic-ish", rank: 0.5 }), "monthly")).toBe("downgrade");
+    expect(planChangeRoute(o, plan({ id: "pro", rank: 2 }), "monthly")).toBe("checkout");
   });
 });
 
@@ -138,6 +148,64 @@ describe("wrong URLs redirect", () => {
     await show(onGrowth(), <DowngradeScreen planId="basic" />);
     await show(onGrowth(), <CheckoutScreen planId="pro" interval="monthly" />);
     expect(router.replace).not.toHaveBeenCalled();
+  });
+});
+
+describe("online mode, renewal overdue (grace)", () => {
+  const inGrace = (paidPlanId = "pro") => createMockBillingClient({ initial: { situation: "payment_due", paidPlanId } });
+
+  it("plan cards: the same plan is Pay now (renewal), every other paid plan goes to the checkout, Basic to the move-now page", async () => {
+    await show(inGrace(), <PlansScreen />);
+    const same = within(card("Pro")).getByRole("link", { name: /Pay now/ });
+    expect(same.getAttribute("href")).toMatch(/\/checkout\?.*plan=pro.*renew=1/);
+    const smaller = within(card("Growth")).getByRole("link", { name: /Change plan/ });
+    expect(smaller.getAttribute("href")).toMatch(/\/checkout\?.*plan=growth/);
+    const basic = within(card("Basic")).getByRole("link", { name: /Change plan/ });
+    expect(basic.getAttribute("href")).toMatch(/\/downgrade\?.*plan=basic/);
+    expect(screen.queryByRole("link", { name: /Request renewal/ })).toBeNull();
+  });
+
+  it("/downgrade for a smaller paid plan goes to the checkout", async () => {
+    await show(inGrace(), <DowngradeScreen planId="growth" />);
+    expect(router.replace).toHaveBeenCalledWith(expect.stringMatching(/\/checkout\?.*plan=growth/));
+  });
+
+  it("the checkout for a smaller paid plan stays on the checkout", async () => {
+    await show(inGrace(), <CheckoutScreen planId="growth" interval="monthly" />);
+    expect(router.replace).not.toHaveBeenCalled();
+  });
+
+  it("Basic: Move to Basic now? — straight away, not at the end of grace", async () => {
+    const client = inGrace();
+    const cancelPlan = vi.spyOn(client, "cancelPlan");
+    await show(client, <DowngradeScreen planId="basic" />);
+    expect(screen.getByText("Straight away")).toBeInTheDocument();
+    // Not the end of grace: the Takes effect row says Straight away, no date.
+    expect(screen.getByText("Takes effect").parentElement).toHaveTextContent(/Straight away/);
+    const radio = screen.queryByRole("radio", { name: "Keep the default picks" });
+    if (radio) fireEvent.click(radio);
+    fireEvent.click(screen.getByRole("button", { name: /Move to Basic/ }));
+    expect(screen.getByText("Move to Basic now?")).toBeInTheDocument();
+    expect(screen.getByText(/renewal is overdue, so the move happens straight away/)).toBeInTheDocument();
+    const buttons = screen.getAllByRole("button", { name: /Move to Basic/ });
+    fireEvent.click(buttons[buttons.length - 1]);
+    await settle();
+    expect(cancelPlan).toHaveBeenCalled();
+  });
+
+  it("the checkout for an overdue change: full-price note (no approval wording), no coupon box, Pay", async () => {
+    const base = inGrace();
+    const client: BillingClient = {
+      ...base,
+      previewCheckout: async (req) => ({ ...(await base.previewCheckout(req)), kind: "renewal", proration: null, couponsEnabled: false }),
+    };
+    await show(client, <CheckoutScreen planId="growth" interval="monthly" />);
+    const note = screen.getByTestId("overdue-note");
+    expect(note).toHaveTextContent("overdue renewal");
+    expect(note).toHaveTextContent(/full price/);
+    expect(note).not.toHaveTextContent(/approved/);
+    expect(screen.queryByPlaceholderText(/coupon/i)).toBeNull();
+    expect(screen.getByRole("button", { name: /^Pay / })).toBeInTheDocument();
   });
 });
 

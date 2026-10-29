@@ -17,24 +17,26 @@ export function planChangeDirection(
   return to.interval === "yearly" ? "upgrade" : "downgrade";
 }
 
-/** Manual mode with the renewal overdue: a paid plan is a request at full price, Basic is immediate. */
-export function isOverdueManual(o: BillingOverview, live: boolean): boolean {
-  return !live && o.paymentMode === "manual" && (o.status === "past_due" || o.status === "grace_ending");
+/**
+ * The renewal is overdue (grace), in either mode: every paid plan is paid at
+ * its full price at the checkout (manual mode: a request), Basic is immediate.
+ */
+export function isOverdue(o: BillingOverview): boolean {
+  return o.status === "past_due" || o.status === "grace_ending";
 }
 
 /**
  * Where a plan change goes: "checkout" (upgrade — pay the difference, or send
- * a change request in manual mode), "downgrade" (scheduled for the end of the
- * term; Basic straight away when overdue in manual mode), or null when it's
- * the plan they're on.
+ * a change request in manual mode; any paid plan while overdue), "downgrade"
+ * (scheduled for the end of the term; Basic straight away when overdue), or
+ * null when it's the plan they're on.
  */
 export function planChangeRoute(
   o: BillingOverview,
   target: BillingPlan,
   interval: BillingInterval,
-  live: boolean,
 ): "checkout" | "downgrade" | null {
-  if (isOverdueManual(o, live)) return target.isFree ? "downgrade" : "checkout";
+  if (isOverdue(o)) return target.isFree ? "downgrade" : "checkout";
   // Basic has no yearly billing to switch to.
   if (target.isFree) return o.plan.isFree ? null : "downgrade";
   if (o.plan.isFree) return "checkout";

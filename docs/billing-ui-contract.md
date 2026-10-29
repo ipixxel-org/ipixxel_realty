@@ -352,7 +352,17 @@ Package Requests → Open → the org's "Package requests" section: **Mark as pa
   screen. **Basic** moves the org at once (fall back to Basic: extras paused, `movedToBasicAt`) after
   "Move to Basic now?" — no request. `POST /org/billing/cancel` does this in grace in manual mode;
   `POST /org/billing/downgrade` to a paid plan sends the change request — **`downgrade_not_now` is no
-  longer returned in manual mode** (online keeps it).
+  longer returned in manual mode**.
+- **Online mode, renewal overdue (grace) — the same rules (online step 1, 2026-10-29):** every paid
+  plan (same, bigger or smaller, either interval) is paid at the checkout at its **full price + GST**
+  (`quoteOverdueChange` in both modes: kind `renewal`, `overdue: true`, renewal coupon only,
+  `couponsEnabled: false`); once paid the period continues from the missed `renewsAt`. The plan cards
+  link every paid plan to the checkout ("Pay now" on the current plan, "Change plan" on the others;
+  frontend `isOverdue` in `lib/billing/direction.ts`, both modes). **Basic** moves at once in both
+  modes (`POST /org/billing/cancel`, "Move to Basic now?"). `POST /org/billing/downgrade` to a paid
+  plan in grace online returns **`pay_at_checkout`** (the payment happens at the checkout; the UI
+  never calls it) — never `downgrade_not_now`, nothing scheduled. Active-period rules (proration,
+  scheduled downgrade, Basic at the term end) are unchanged.
 - **Option A — no hold:** when grace ends with a request still pending the org still falls back to
   Basic; the request stays pending and gets `package_change_requests.moved_to_basic_at`
   (`OrgPlanRequest.movedToBasicAt`, shown as "Org moved to Basic while waiting"). Approved later, the
@@ -547,14 +557,15 @@ Package Requests → Open → the org's "Package requests" section: **Mark as pa
   lazily on every billing read) applies it when the term ends.
 - **Cancel** (`POST /org/billing/cancel` `{ reason? }`, undo `DELETE`): at `renewsAt` the org
   moves to the free plan (no grace — they chose to stop; `renewsAt` null, amount 0). Made during
-  grace, it applies when grace ends; on an expired plan, at once. Overview: status
+  grace (either mode) or on an expired plan, it applies at once. Overview: status
   `cancellation_scheduled`, `cancelAt`, `renewalAmount: null`; a renewal is refused
   (`cancellation_scheduled`). Admins get "Plan ended". Codes: `nothing_to_cancel`,
   `nothing_scheduled`.
 - **Downgrade** (`POST /org/billing/downgrade` `{ planId, interval? }`, undo `DELETE`): a
   smaller plan, or the same plan yearly → monthly; a free target is a cancellation. Only while
-  active (not in grace: `downgrade_not_now` — online mode only; in manual mode a paid target in grace
-  is sent as a change request and Basic moves at once) and not with a pending upgrade request
+  active. In grace Basic moves at once in both modes; a paid target is a change request in manual
+  mode and `pay_at_checkout` online (pay at the checkout). `downgrade_not_now` is left only for a
+  term that isn't active or in grace and not with a pending upgrade request
   (`request_pending`). Being over the smaller plan's limits is fine since step 6 — the extras
   are paused when it starts — once "choose what stays" is confirmed (`choose_what_stays`). Other codes: `same_plan`, `not_a_downgrade`, `plan_not_found`.
 - **When the term ends:** the renewal paid before then is charged at the smaller plan's price

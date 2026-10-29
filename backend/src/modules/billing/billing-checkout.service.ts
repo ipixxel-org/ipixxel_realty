@@ -855,10 +855,11 @@ export class BillingCheckoutService implements OnModuleInit {
           'That plan is not available. Pick another one.',
         );
       }
-      // Manual mode with the renewal overdue (grace): any paid plan is a
-      // request at its full price, continuing the missed term; a renewal
-      // coupon on the subscription applies as it would to the renewal.
-      if (mode.mode === 'manual' && current && isOverdue(current.status)) {
+      // Renewal overdue (grace), either mode: any paid plan — the same, a
+      // bigger or a smaller one — is its full price, continuing the missed
+      // term (kind renewal); only a renewal coupon on the subscription
+      // applies, as it would to the renewal (no typed code).
+      if (current && isOverdue(current.status)) {
         const quote = await this.withRenewalCoupon(
           quoteOverdueChange({
             now,
@@ -1024,7 +1025,7 @@ export class BillingCheckoutService implements OnModuleInit {
       renewal ? 'renewal' : 'purchase',
       renewal ? null : dto.couponCode,
     );
-    // An overdue change (manual mode, grace) is priced like a renewal: its
+    // An overdue change (grace, either mode) is priced like a renewal: its
     // coupon comes from the subscription, not a code.
     return toPreview(ctx, renewal || ctx.quote.kind === 'renewal');
   }

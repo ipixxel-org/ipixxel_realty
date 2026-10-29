@@ -183,7 +183,7 @@ describe('downgrade at the end of the term', () => {
       await code(
         grace.service.scheduleDowngrade('org-1', 'u1', { planId: 'growth' }),
       ),
-    ).toBe('downgrade_not_now');
+    ).toBe('pay_at_checkout');
 
     // Over the smaller plan's limits is allowed since step 6: the extras are
     // paused when it starts (retention.spec.ts).
