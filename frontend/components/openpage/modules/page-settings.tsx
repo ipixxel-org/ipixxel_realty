@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import type * as React from "react";
 import {
   BarChart3,
@@ -16,6 +16,8 @@ import {
 } from "lucide-react";
 import type { SiteConfig, SiteSeo, SiteTracking } from "@/components/openpage/blocks/types";
 import type { FormDefinition } from "@/lib/openpage/forms-store";
+import { getProfile } from "@/lib/api";
+import { businessSyncPatch, businessValuesFromOrg, type OrgBusinessValues } from "@/lib/openpage/business-defaults";
 import type { BusinessSettings, HeadingStyle, LandingPageData, PageSettings, TypographySettings } from "@/lib/openpage/types";
 import { useConfigStore } from "@/components/openpage/store/configStore";
 import { googleFontOptions } from "@/lib/openpage/theme-presets";
@@ -75,6 +77,37 @@ export function PageSettingsModule({ page, onPage }: { page: LandingPageData; on
   const patchType = (patch: Partial<TypographySettings>) => patchSettings({ typography: { ...settings.typography, ...patch } });
   const patchPageBag = (patch: Partial<PageSettings["page"]>) => patchSettings({ page: { ...settings.page, ...patch } });
   const patchBusiness = (patch: Partial<BusinessSettings>) => patchSettings({ business: { ...settings.business, ...patch } });
+
+  // Business name, address, city, email and phone belong to the organisation
+  // (Settings → General). On the Business Info tab they are loaded from
+  // /auth/me (open to every signed-in user), shown read-only, and copied onto
+  // the page whenever they differ so the live page matches the organisation
+  // after the next Publish. Super Admin templates have no organisation and
+  // keep every field editable.
+  const [orgBusiness, setOrgBusiness] = useState<OrgBusinessValues | null>(null);
+  useEffect(() => {
+    if (tab !== "business") return;
+    let cancelled = false;
+    getProfile()
+      .then((profile) => {
+        if (cancelled) return;
+        const values = businessValuesFromOrg(profile.organisation);
+        setOrgBusiness(values);
+        if (!values) return;
+        const patch = businessSyncPatch(useConfigStore.getState().config.settings?.business, values);
+        if (!patch) return;
+        commit((c) => ({
+          ...c,
+          settings: { ...EMPTY_SETTINGS, ...(c.settings ?? {}), business: { ...(c.settings?.business ?? {}), ...patch } },
+        }));
+      })
+      .catch(() => {
+        // Without the profile every field stays editable, as before.
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [tab]);
   const patchSeo = (patch: Partial<SiteSeo>) => commit((c) => ({ ...c, seo: { ...(c.seo ?? {}), ...patch } }));
   const patchTracking = (patch: Partial<SiteTracking>) =>
     commit((c) => ({ ...c, tracking: { ...(c.tracking ?? {}), ...patch } }));
@@ -151,7 +184,7 @@ export function PageSettingsModule({ page, onPage }: { page: LandingPageData; on
             <BrandingSection settings={settings} patchTheme={patchTheme} patchPageBag={patchPageBag} />
           )}
           {tab === "typography" && <TypographySection settings={settings} site={site} patchType={patchType} />}
-          {tab === "business" && <BusinessSection settings={settings} patchBusiness={patchBusiness} />}
+          {tab === "business" && <BusinessSection settings={settings} patchBusiness={patchBusiness} orgBusiness={orgBusiness} />}
           {tab === "page" && (
             <PageScopeSection
               page={page}
@@ -757,29 +790,78 @@ function TypographySection({
 
 /* ------------------------------- Business Info ----------------------------- */
 
-function BusinessSection({ settings, patchBusiness }: { settings: PageSettings; patchBusiness: (p: Partial<BusinessSettings>) => void }) {
+function BusinessSection({
+  settings,
+  patchBusiness,
+  orgBusiness,
+}: {
+  settings: PageSettings;
+  patchBusiness: (p: Partial<BusinessSettings>) => void;
+  /** Organisation values; when set, those fields are read-only here. */
+  orgBusiness: OrgBusinessValues | null;
+}) {
   const b = settings.business;
+  // Read-only fields show the organisation's value directly, so they are
+  // right even before the copy onto the page has saved.
+  const orgField = (key: keyof OrgBusinessValues, label: string, type?: string) =>
+    orgBusiness ? (
+      <Row label={label}>
+        <input
+          className="ps-input"
+          type={type ?? "text"}
+          value={orgBusiness[key]}
+          readOnly
+          aria-readonly="true"
+          placeholder="Not set in Settings → General"
+          title="Managed in Settings → General"
+          style={{ padding: 9, background: "var(--ps-surface-muted)", color: "var(--ps-slate)", cursor: "not-allowed" }}
+        />
+      </Row>
+    ) : (
+      <Row label={label}>
+        <Input type={type} value={b[key] ?? ""} on={(v) => patchBusiness({ [key]: v })} />
+      </Row>
+    );
+  const shown = orgBusiness ? { ...b, ...orgBusiness } : b;
   return (
     <Card title="Business details">
+      {orgBusiness ? (
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            gap: 12,
+            flexWrap: "wrap",
+            padding: "10px 12px",
+            marginBottom: 14,
+            borderRadius: 10,
+            background: "var(--ps-primary-soft)",
+            fontSize: 12,
+            color: "var(--ps-slate)",
+            lineHeight: 1.5,
+          }}
+        >
+          <span>Business name, address, city, email and phone come from your organisation profile.</span>
+          <a
+            href="/org/settings?section=general"
+            target="_blank"
+            rel="noopener noreferrer"
+            style={{ color: "var(--ps-primary)", fontWeight: 700, textDecoration: "none", whiteSpace: "nowrap" }}
+          >
+            Update in Settings → General ↗
+          </a>
+        </div>
+      ) : null}
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
-        <Row label="Business name">
-          <Input value={b.name ?? ""} on={(v) => patchBusiness({ name: v })} />
-        </Row>
+        {orgField("name", "Business name")}
         <Row label="Tagline">
           <Input value={b.tagline ?? ""} on={(v) => patchBusiness({ tagline: v })} />
         </Row>
-        <Row label="Street address">
-          <Input value={b.address ?? ""} on={(v) => patchBusiness({ address: v })} />
-        </Row>
-        <Row label="City / locality">
-          <Input value={b.city ?? ""} on={(v) => patchBusiness({ city: v })} />
-        </Row>
-        <Row label="Email">
-          <Input type="email" value={b.email ?? ""} on={(v) => patchBusiness({ email: v })} />
-        </Row>
-        <Row label="Phone">
-          <Input type="tel" value={b.phone ?? ""} on={(v) => patchBusiness({ phone: v })} />
-        </Row>
+        {orgField("address", "Street address")}
+        {orgField("city", "City / locality")}
+        {orgField("email", "Email", "email")}
+        {orgField("phone", "Phone", "tel")}
         <Row label="WhatsApp" hint="With country code, e.g. +919876543210">
           <Input value={b.whatsapp ?? ""} on={(v) => patchBusiness({ whatsapp: v })} />
         </Row>
@@ -789,7 +871,7 @@ function BusinessSection({ settings, patchBusiness }: { settings: PageSettings; 
       </div>
       <Card title="Local business preview">
         <div style={{ fontSize: 12.5, color: "var(--ps-slate)", lineHeight: 1.7 }}>
-          {b.name || "Your business"} · {b.city || "City"} · {b.email || "email@example.com"} · {b.phone || "+00 000 000 000"}
+          {shown.name || "Your business"} · {shown.city || "City"} · {shown.email || "email@example.com"} · {shown.phone || "+00 000 000 000"}
         </div>
       </Card>
     </Card>
