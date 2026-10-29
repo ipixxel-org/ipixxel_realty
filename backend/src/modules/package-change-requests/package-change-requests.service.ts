@@ -12,6 +12,12 @@ import {
   whatStaysPlace,
   type WhatStaysPlace,
 } from '../../common/utils/what-stays-rows.util';
+import {
+  expireStaleCheckouts,
+  invoicesByCheckout,
+  ONLINE_CHECKOUT_SELECT,
+  onlinePaymentView,
+} from '../billing/online-rows';
 import { settleCoupon } from '../billing/coupon-settlement';
 import { findCouponFor } from '../billing/coupon-lookup';
 import { normaliseCouponCode } from '../billing/coupon-rules';
@@ -364,6 +370,8 @@ export class PackageChangeRequestsService {
   async adminListRequests(query: ListPackageChangeRequestsDto) {
     const page = query.page ?? 1;
     const limit = query.limit ?? 20;
+    // Unpaid online orders past their 30 minutes read as expired.
+    await expireStaleCheckouts(this.prisma, query.orgId);
 
     const where: Prisma.PackageChangeRequestWhereInput = {};
     if (query.status) {
@@ -441,12 +449,19 @@ export class PackageChangeRequestsService {
               couponDiscountPaise: true,
               quoteBeforeCoupon: true,
               coupon: { select: { code: true } },
+              ...ONLINE_CHECKOUT_SELECT,
             },
           },
         },
       }),
       this.prisma.packageChangeRequest.count({ where }),
     ]);
+    const invoices = await invoicesByCheckout(
+      this.prisma,
+      rows
+        .filter((r) => r.kind === 'online_payment')
+        .map((r) => r.billingCheckout?.id),
+    );
     // Super Admin "Choose what stays": editable only on each org's latest row
     // (open, or applied with the org on its plan) — the same decision as the
     // org page's button (whatStaysPlace), so only one of them shows. Every
@@ -471,6 +486,14 @@ export class PackageChangeRequestsService {
         return {
           ...rest,
           whatStaysEditable: editable(r),
+          // Online payments: paid / waiting / failed …, order id, invoice and
+          // (Super Admin only) why it needs review.
+          online: onlinePaymentView(
+            r,
+            r.billingCheckout,
+            r.billingCheckout ? invoices.get(r.billingCheckout.id) : undefined,
+            true,
+          ),
           ...requestLabel(r.billingCheckout, r.targetPlan.name),
           payment: offlinePayment ? requestPaymentView(offlinePayment) : null,
           quote: r.billingCheckout ? requestQuoteView(r.billingCheckout) : null,

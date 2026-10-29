@@ -855,7 +855,10 @@ export type PackageChangeRequestStatus =
   | "scheduled"
   | "done"
   | "undone"
-  | "replaced";
+  | "replaced"
+  // Online payments (kind online_payment): approved = paid; cancelled = failed / expired / replaced.
+  | "awaiting_payment"
+  | "needs_review";
 
 export interface PackageChangeRequestRow {
   id: string;
@@ -916,7 +919,9 @@ export interface PackageChangeRequestRow {
   /** How the total is made up, with any coupon (requests with a checkout). */
   quote?: import("./billing/types").RequestQuote | null;
   /** scheduled_change = a recorded downgrade / move to Basic (read-only, no approval). Missing = request. */
-  kind?: "request" | "scheduled_change";
+  kind?: "request" | "scheduled_change" | "online_payment";
+  /** Online payments: paid / waiting / failed …, Razorpay order ID, invoice, review reason. */
+  online?: import("./billing/types").OnlinePaymentView | null;
   /** Scheduled changes: the reason they gave, when it applies, and the smaller plan's price (rupees, before GST; null = Basic). */
   reason?: string | null;
   startsAt?: string | null;

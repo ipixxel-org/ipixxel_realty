@@ -6,8 +6,15 @@ import type { PrismaClient } from '@prisma/client';
 // history and can never be edited. No service imports here, so
 // package-change-requests and billing can both use it.
 
-/** A request / scheduled change that hasn't been decided or taken effect yet. */
-export const OPEN_REQUEST_STATUSES = ['pending', 'scheduled'] as const;
+/**
+ * A request / scheduled change that hasn't been decided or taken effect yet,
+ * or an online payment still waiting to be paid (awaiting_payment).
+ */
+export const OPEN_REQUEST_STATUSES = [
+  'pending',
+  'scheduled',
+  'awaiting_payment',
+] as const;
 /** A request / scheduled change that was applied (the org moved to its plan). */
 export const APPLIED_REQUEST_STATUSES = ['approved', 'done'] as const;
 

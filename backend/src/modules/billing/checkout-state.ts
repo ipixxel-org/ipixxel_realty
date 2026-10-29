@@ -4,33 +4,11 @@
  * module) can call them without a Nest dependency.
  */
 import type { PrismaClient } from '@prisma/client';
+export { expireStaleCheckouts } from './online-rows';
 import type { PendingUpgradeV2, RejectedUpgradeV2 } from './billing.types';
 import { requestLabel } from '../package-change-requests/package-change-requests.service';
 
 type Db = Pick<PrismaClient, 'billingCheckout' | 'packageChangeRequest'>;
-
-/**
- * Online checkouts left unpaid past expiresAt become `expired`. Called lazily
- * (overview, start checkout) and by the hourly lifecycle sweep. A payment that
- * still arrives later is handled: fulfilment accepts an expired checkout as
- * long as the quote still matches the org's plan.
- */
-export async function expireStaleCheckouts(
-  db: Db,
-  orgId?: string,
-  now = new Date(),
-): Promise<number> {
-  const { count } = await db.billingCheckout.updateMany({
-    where: {
-      ...(orgId ? { organisationId: orgId } : {}),
-      status: 'pending',
-      mode: 'online',
-      expiresAt: { lt: now },
-    },
-    data: { status: 'expired' },
-  });
-  return count;
-}
 
 /**
  * What the org is waiting on: a pending upgrade request (billing v2 or an

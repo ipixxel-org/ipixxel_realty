@@ -394,6 +394,7 @@ describe("the org's requests list", () => {
     const findMany = jest.fn(async () => rows);
     const ledger = new BillingLedgerService({
       packageChangeRequest: { findMany },
+      billingCheckout: { findMany: async () => [] },
     } as never);
     const res = await ledger.listRequests('org-1', 1, 10);
     expect(findMany).toHaveBeenCalledWith(

@@ -7,7 +7,8 @@ import {
   Optional,
   type OnModuleInit,
 } from '@nestjs/common';
-import type { BillingCheckoutStatus, Prisma } from '@prisma/client';
+import { Prisma } from '@prisma/client';
+import type { BillingCheckoutStatus } from '@prisma/client';
 import { PrismaService } from '../../database/prisma.service';
 import { applyPlanChange } from '../../common/utils/plan-change.util';
 import {
@@ -47,6 +48,7 @@ import {
   type QuotePlan,
 } from './checkout-quote';
 import { expireStaleCheckouts } from './checkout-state';
+import { setOnlineRows } from './online-rows';
 import { scheduledChangeBlock } from '../../common/utils/scheduled-change.util';
 import { findCouponFor } from './coupon-lookup';
 import {
@@ -416,20 +418,53 @@ export class BillingCheckoutService implements OnModuleInit {
     if (waiting) throw billingError('request_pending', waiting.message);
 
     // One open checkout per org: under a per-org lock, cancel older pending
-    // online checkouts, then record this quote.
+    // online checkouts (and their rows), then record this quote with its row
+    // on the Requests list (kind online_payment, awaiting_payment).
     const checkout = await this.prisma.$transaction(async (tx) => {
       await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`billing_checkout:${orgId}`}))`;
-      await tx.billingCheckout.updateMany({
+      const older = await tx.billingCheckout.findMany({
         where: { organisationId: orgId, status: 'pending', mode: 'online' },
-        data: { status: 'cancelled' },
+        select: { id: true, packageChangeRequestId: true },
+      });
+      if (older.length) {
+        await tx.billingCheckout.updateMany({
+          where: { id: { in: older.map((o) => o.id) } },
+          data: { status: 'cancelled' },
+        });
+        await setOnlineRows(
+          tx,
+          older.map((o) => o.packageChangeRequestId),
+          'cancelled',
+        );
+      }
+      const row = await tx.packageChangeRequest.create({
+        data: {
+          orgId,
+          requestedById: userId,
+          currentPlanId: q.fromPlan?.id ?? q.toPlan.id,
+          targetPlanId: q.toPlan.id,
+          billingCycle: q.toInterval,
+          kind: 'online_payment',
+          status: 'awaiting_payment',
+        },
       });
       return tx.billingCheckout.create({
         data: {
           ...this.checkoutData(orgId, userId, ctx, 'online', choice),
+          packageChangeRequestId: row.id,
           expiresAt: new Date(Date.now() + ONLINE_CHECKOUT_TTL_MS),
         },
       });
     });
+    // Over the target's limits: keep a copy of what stays on the row (like a
+    // manual request), so the Requests tab shows it while it waits.
+    if (ctx.usageConflict && checkout.packageChangeRequestId) {
+      await this.saveWhatStays(
+        orgId,
+        checkout.packageChangeRequestId,
+        q.toPlan.id,
+      );
+    }
 
     try {
       const order = await this.payments.createOrder({
@@ -475,6 +510,11 @@ export class BillingCheckoutService implements OnModuleInit {
           reviewReason: 'Could not create the payment order',
         },
       });
+      await setOnlineRows(
+        this.prisma,
+        [checkout.packageChangeRequestId],
+        'cancelled',
+      );
       throw e;
     }
   }
@@ -567,10 +607,21 @@ export class BillingCheckoutService implements OnModuleInit {
 
   private async onFailed(e: PaymentEvent) {
     if (e.purpose !== 'plan_purchase' || !e.referenceId) return;
-    await this.prisma.billingCheckout.updateMany({
+    const { count } = await this.prisma.billingCheckout.updateMany({
       where: { id: e.referenceId, status: { in: ['pending', 'expired'] } },
       data: { status: 'failed' },
     });
+    if (count > 0) {
+      const c = await this.prisma.billingCheckout.findUnique({
+        where: { id: e.referenceId },
+        select: { packageChangeRequestId: true },
+      });
+      await setOnlineRows(
+        this.prisma,
+        [c?.packageChangeRequestId],
+        'cancelled',
+      );
+    }
   }
 
   /**
@@ -618,6 +669,7 @@ export class BillingCheckoutService implements OnModuleInit {
             where: { id: c.id },
             data: { status: 'needs_review', reviewReason: reason },
           });
+          await setOnlineRows(tx, [c.packageChangeRequestId], 'needs_review');
           await notifyNeedsReview(
             tx,
             c.organisationId,
@@ -671,6 +723,16 @@ export class BillingCheckoutService implements OnModuleInit {
           );
         }
 
+        // The online row: approved, with what was actually kept (worked out
+        // before pausing, with the same picks applyRetention uses).
+        if (c.packageChangeRequestId) {
+          const kept = await whatStaysFor(tx, c.organisationId, c.toPlan, true);
+          await setOnlineRows(tx, [c.packageChangeRequestId], 'approved', {
+            whatStays: kept
+              ? (kept as unknown as Prisma.InputJsonValue)
+              : Prisma.DbNull,
+          });
+        }
         await applyPlanChange(tx, {
           organisationId: c.organisationId,
           toPlanId: c.toPlanId,
@@ -707,6 +769,11 @@ export class BillingCheckoutService implements OnModuleInit {
             where: { id: checkoutId },
             include: { toPlan: { select: { name: true } } },
           });
+          await setOnlineRows(
+            this.prisma,
+            [c?.packageChangeRequestId],
+            'needs_review',
+          );
           if (c)
             await notifyNeedsReview(
               this.prisma,

@@ -74,10 +74,40 @@ function table(
       where,
       distinct,
       include,
-    }: { where?: Where; distinct?: string[]; include?: Row } = {}) => {
-      const hit = rows
+      orderBy,
+      skip,
+      take,
+    }: {
+      where?: Where;
+      distinct?: string[];
+      include?: Row;
+      orderBy?: Row | Row[];
+      skip?: number;
+      take?: number;
+    } = {}) => {
+      let hit = rows
         .filter((r) => matches(r, where))
         .map((r) => (include ? includes({ ...r }, include) : { ...r }));
+      // orderBy: { field: 'asc' | 'desc' } (or a list of them), dates or values.
+      const order = (
+        Array.isArray(orderBy) ? orderBy : orderBy ? [orderBy] : []
+      )
+        .flatMap((o) => Object.entries(o))
+        .filter(([, dir]) => dir === 'asc' || dir === 'desc');
+      if (order.length) {
+        const val = (v: unknown) => (v instanceof Date ? v.getTime() : v);
+        hit = [...hit].sort((a, b) => {
+          for (const [k, dir] of order) {
+            const x = val(a[k]) as number;
+            const y = val(b[k]) as number;
+            if (x === y) continue;
+            return (x < y ? -1 : 1) * (dir === 'desc' ? -1 : 1);
+          }
+          return 0;
+        });
+      }
+      if (skip) hit = hit.slice(skip);
+      if (take !== undefined) hit = hit.slice(0, take);
       if (!distinct) return hit;
       const seen = new Set<string>();
       return hit.filter((r) => {
@@ -257,6 +287,8 @@ export function createFakeBillingDb(seed: Seed) {
       ? {
           ...c,
           coupon: db.coupon.rows.find((x: Row) => x.id === c.couponId) ?? null,
+          payment:
+            db.payment.rows.find((p: Row) => p.id === c.paymentId) ?? null,
         }
       : null;
   db.billingCheckout = table([], 'chk', (r, inc) =>

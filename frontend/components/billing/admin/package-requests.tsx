@@ -17,6 +17,8 @@ import { formatDate, formatINR, packagePriceText } from "@/lib/billing/pricing";
 import {
   isScheduledChange,
   MOVED_TO_BASIC_WHILE_WAITING,
+  ONLINE_PAYMENT_BADGE,
+  onlinePaymentTag,
   REQUEST_STATUS_LABEL,
   requestPaymentText,
   requestPriceText,
@@ -31,7 +33,7 @@ import type { PackageChangeRequestRow } from "@/lib/types";
 import { Empty, ErrorNote, Loading, Section } from "../ui";
 import { MarkPaidDialog, type MarkPaidValues } from "./mark-paid-dialog";
 import { RejectRequestDialog } from "./reject-request-dialog";
-import { NoApprovalTag, whatStaysSummary } from "../requests";
+import { NoApprovalTag, OnlinePaymentDetails, whatStaysSummary } from "../requests";
 import { ChooseWhatStaysScreen } from "../choose-what-stays";
 import { BillingDialog } from "../dialog";
 
@@ -47,7 +49,12 @@ const STATUS_BADGE: Record<string, string> = {
   done: "b-green",
   undone: "b-gray",
   replaced: "b-gray",
+  awaiting_payment: "b-amber",
+  needs_review: "b-amber",
 };
+
+/** Subscriptions → Package Requests, where "Paid — needs review" is listed. */
+export const NEEDS_REVIEW_HREF = "/admin-console/subscriptions?tab=package-requests&status=all";
 
 const person = (u: PackageChangeRequestRow["requestedBy"] | PackageChangeRequestRow["reviewedBy"]) =>
   u ? `${u.firstName ?? ""} ${u.lastName ?? ""}`.trim() || u.email : null;
@@ -284,7 +291,11 @@ export function OrgPackageRequests({ orgId, onChanged }: { orgId: string; onChan
 
   return (
     <div id={PACKAGE_REQUESTS_ANCHOR} style={{ scrollMarginTop: 16 }}>
-      <Section title="Package requests" sub="Plan change and renewal requests from this organisation, newest first: Mark as paid, then Approve. Scheduled changes need no approval." flush>
+      <Section
+        title="Package requests"
+        sub="Plan change and renewal requests from this organisation, newest first: Mark as paid, then Approve. Online payments apply when paid and scheduled changes need no approval."
+        flush
+      >
         {error ? (
           <div style={{ padding: 16 }}>
             <ErrorNote message={error} />
@@ -364,7 +375,15 @@ export function OrgPackageRequests({ orgId, onChanged }: { orgId: string; onChan
                         ) : null}
                       </td>
                       <td>
-                        {scheduled ? (
+                        {r.online ? (
+                          // An online payment: applies when paid, nothing to approve.
+                          <>
+                            <span className={`badge ${ONLINE_PAYMENT_BADGE[r.online.state]}`} data-testid="online-payment-status">
+                              {onlinePaymentTag(r.online)}
+                            </span>
+                            <OnlinePaymentDetails online={r.online} reviewHref={NEEDS_REVIEW_HREF} />
+                          </>
+                        ) : scheduled ? (
                           <>
                             <span className={`badge ${STATUS_BADGE[r.status] ?? "b-gray"}`} data-testid="scheduled-change-status">
                               {requestStage({ status: scheduledStatus, payment: null, startsAt: r.startsAt })}
@@ -381,7 +400,7 @@ export function OrgPackageRequests({ orgId, onChanged }: { orgId: string; onChan
                             {r.status === "cancelled" ? "withdrawn" : r.status}
                           </span>
                         )}
-                        {!scheduled && r.status !== "pending" && (r.reviewedAt || r.reviewedBy) ? (
+                        {!scheduled && !r.online && r.status !== "pending" && (r.reviewedAt || r.reviewedBy) ? (
                           <div className="bl-muted bl-small" style={{ marginTop: 4 }}>
                             {r.status === "cancelled" ? "Withdrawn" : r.status === "approved" ? "Approved" : "Rejected"}
                             {person(r.reviewedBy) ? ` by ${person(r.reviewedBy)}` : ""}

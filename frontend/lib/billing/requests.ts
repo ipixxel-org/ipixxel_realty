@@ -1,5 +1,5 @@
 import { formatDate, formatINR } from "./pricing";
-import type { BillingOverview, OrgPlanRequest, PendingUpgrade, PlanChangeBlockedReason, RequestPayment, RequestQuote } from "./types";
+import type { BillingOverview, OnlinePaymentView, OrgPlanRequest, PendingUpgrade, PlanChangeBlockedReason, RequestPayment, RequestQuote } from "./types";
 
 /** "22 Oct" (UTC calendar day, like the API). */
 function shortDay(iso: string): string {
@@ -64,8 +64,44 @@ export function requestPaymentText(p: Pick<RequestPayment, "amount" | "method" |
   return `Paid · ${formatINR(p.amount)} · ${p.method}${ref} · ${shortDay(p.receivedOn)}`;
 }
 
+/** An online payment's row on the Requests lists (no approval: it applies when paid). */
+export const isOnlinePayment = (r: { kind?: string }) => r.kind === "online_payment";
+
+/**
+ * The status tag on an online payment row: "Waiting for payment", "Paid online
+ * · 27 Oct", "Payment failed", "Expired (not paid)", "Replaced by a newer
+ * payment" or "Needs review".
+ */
+export function onlinePaymentTag(o: Pick<OnlinePaymentView, "state" | "paidAt">): string {
+  switch (o.state) {
+    case "waiting":
+      return "Waiting for payment";
+    case "paid":
+      return o.paidAt ? `Paid online · ${shortDay(o.paidAt)}` : "Paid online";
+    case "failed":
+      return "Payment failed";
+    case "expired":
+      return "Expired (not paid)";
+    case "replaced":
+      return "Replaced by a newer payment";
+    case "needs_review":
+      return "Needs review";
+  }
+}
+
+/** Badge colour for an online payment's state. */
+export const ONLINE_PAYMENT_BADGE: Record<OnlinePaymentView["state"], string> = {
+  waiting: "b-amber",
+  paid: "b-green",
+  failed: "b-rose",
+  expired: "b-gray",
+  replaced: "b-gray",
+  needs_review: "b-amber",
+};
+
 /** Where a request is: "Waiting for payment", "Payment received – waiting for approval", or the decision. */
-export function requestStage(r: Pick<OrgPlanRequest, "status" | "payment" | "startsAt">): string {
+export function requestStage(r: Pick<OrgPlanRequest, "status" | "payment" | "startsAt"> & { online?: OnlinePaymentView | null }): string {
+  if (r.online) return onlinePaymentTag(r.online);
   if (r.status === "scheduled") return r.startsAt ? `Scheduled (applies on ${shortDay(r.startsAt)})` : "Scheduled";
   if (r.status !== "pending") return REQUEST_STATUS_LABEL[r.status];
   return r.payment ? "Payment received – waiting for approval" : "Waiting for payment";
@@ -100,6 +136,9 @@ export const REQUEST_STATUS_LABEL: Record<OrgPlanRequest["status"], string> = {
   done: "Done",
   undone: "Undone",
   replaced: "Replaced",
+  awaiting_payment: "Waiting for payment",
+  needs_review: "Needs review",
+  closed: "Closed",
 };
 
 /** A scheduled change (to Basic / a smaller plan) recorded on the list — no approval. */

@@ -7,6 +7,7 @@ import { formatDate, formatINR, packagePriceText } from "@/lib/billing/pricing";
 import {
   isScheduledChange,
   MOVED_TO_BASIC_WHILE_WAITING,
+  ONLINE_PAYMENT_BADGE,
   NO_APPROVAL_NEEDED,
   requestPaymentText,
   requestPriceText,
@@ -16,7 +17,7 @@ import {
   scheduledDateText,
   scheduledEffectiveDate,
 } from "@/lib/billing/requests";
-import type { OrgPlanRequest, WhatStays } from "@/lib/billing/types";
+import type { OnlinePaymentView, OrgPlanRequest, WhatStays } from "@/lib/billing/types";
 import { UndoButton } from "./banners";
 import { useBillingEnv, useBillingQuery, useOrgBilling } from "./context";
 import { BillingDialog, DialogActions } from "./dialog";
@@ -31,7 +32,42 @@ const STATUS_BADGE: Record<OrgPlanRequest["status"], string> = {
   done: "b-green",
   undone: "b-gray",
   replaced: "b-gray",
+  awaiting_payment: "b-amber",
+  needs_review: "b-amber",
+  closed: "b-gray",
 };
+
+/**
+ * Under an online payment's status tag: the Razorpay order ID and, once paid,
+ * the invoice. `reviewHref`: Super Admin — the reason and a link to the
+ * "Paid — needs review" list.
+ */
+export function OnlinePaymentDetails({ online, reviewHref }: { online: OnlinePaymentView; reviewHref?: string }) {
+  return (
+    <div className="bl-small bl-muted" style={{ marginTop: 4 }} data-testid="online-payment-details">
+      {online.orderId ? (
+        <div>
+          Order <span className="bl-mono">{online.orderId}</span>
+        </div>
+      ) : null}
+      {online.invoice ? (
+        <div>
+          <a href={online.invoice.url} target="_blank" rel="noopener noreferrer" data-testid="online-invoice-link">
+            Invoice {online.invoice.number}
+          </a>
+        </div>
+      ) : null}
+      {reviewHref && online.state === "needs_review" ? (
+        <div style={{ color: "var(--amber-700, #b45309)" }}>
+          {online.reviewReason ? <div style={{ maxWidth: 320 }}>{online.reviewReason}</div> : null}
+          <a href={reviewHref} data-testid="needs-review-link">
+            Needs review →
+          </a>
+        </div>
+      ) : null}
+    </div>
+  );
+}
 
 /** "No approval needed" — on scheduled-change rows. */
 export function NoApprovalTag() {
@@ -156,7 +192,11 @@ export function RequestsTable({ pageSize = 10 }: { pageSize?: number }) {
   const { data, error } = useBillingQuery((c) => c.listOrgRequests({ page, pageSize }), [page, pageSize, version]);
   return (
     <>
-      <Section title="Plan change requests" sub="Requests sent to our team while online payment is off, and plan changes scheduled for the end of your term, newest first" flush>
+      <Section
+        title="Plan change requests"
+        sub="Online payments, requests sent to our team while online payment is off, and plan changes scheduled for the end of your term, newest first"
+        flush
+      >
         {error ? (
           <div style={{ padding: 16 }}>
             <ErrorNote message={error} />
@@ -227,8 +267,11 @@ export function RequestsTable({ pageSize = 10 }: { pageSize?: number }) {
                       />
                     </td>
                     <td>
-                      <span className={`badge ${STATUS_BADGE[r.status]}`}>{requestStage(r)}</span>
+                      <span className={`badge ${r.online ? ONLINE_PAYMENT_BADGE[r.online.state] : STATUS_BADGE[r.status]}`} data-testid="request-status">
+                        {requestStage(r)}
+                      </span>
                       {scheduled ? <NoApprovalTag /> : null}
+                      {r.online ? <OnlinePaymentDetails online={r.online} /> : null}
                       {r.payment && r.payment.status !== "refund_due" ? (
                         <div className="bl-small bl-muted" style={{ marginTop: 4 }}>
                           {requestPaymentText(r.payment)}

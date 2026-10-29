@@ -374,6 +374,23 @@ Package Requests → Open → the org's "Package requests" section: **Mark as pa
   plan not applied); otherwise `applyWhatStaysChoice` ("default" drops an earlier saved choice) and
   `applyPlanChange` → `applyRetention` pauses what doesn't stay. A closed or failed payment changes
   nothing. The conflict wording is now "… stay active when this change takes effect." (both modes).
+- **Online payments are rows (online step 3, 2026-10-29):** every online checkout gets a
+  `package_change_requests` row, kind `online_payment`, linked through
+  `billing_checkouts.package_change_request_id` (migration `20261029100000_online_payment_rows`:
+  kind `online_payment`, statuses `awaiting_payment` and `needs_review`). Lifecycle (`billing/online-rows.ts`):
+  created `awaiting_payment` at start (with a what-stays copy when over the limits); paid →
+  `approved` + the applied what-stays copy; failed / expired / replaced by a newer checkout →
+  `cancelled`; review → `needs_review`. Never `pending`, so `request_pending` and manual mode are
+  untouched. `awaiting_payment` is an open status (`OPEN_REQUEST_STATUSES`): the latest waiting row has
+  "Change what stays" (saving there makes the payment use the saved choice); `approved` is applied, so
+  `latestRequest` / `currentPlanSetByRow` / `whatStaysPlace()` now cover online payments and the
+  standalone Super Admin button hides after an online purchase. Lists: `OrgPlanRequest.kind`
+  `online_payment`, `status` `awaiting_payment` / `approved` / `needs_review` / `closed` (stored
+  `cancelled`), and `online: { state: waiting|paid|failed|expired|replaced|needs_review, paidAt, orderId,
+  invoice }` (+ `reviewReason` on the Super Admin rows). Tags: "Waiting for payment", "Paid online · 27
+  Oct", "Payment failed", "Expired (not paid)", "Replaced by a newer payment", "Needs review" (Super
+  Admin: links to Subscriptions → Package Requests). Rows are read-only (no Approve / Reject / Mark as
+  paid). Both lists expire stale checkouts first. ₹0 activations (100% coupon) make no row.
 - **Option A — no hold:** when grace ends with a request still pending the org still falls back to
   Basic; the request stays pending and gets `package_change_requests.moved_to_basic_at`
   (`OrgPlanRequest.movedToBasicAt`, shown as "Org moved to Basic while waiting"). Approved later, the

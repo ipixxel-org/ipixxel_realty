@@ -317,7 +317,10 @@ describe('online mode, renewal overdue (grace): the same rules, paid online', ()
     expect(isoDay(t.row().renewsAt)).toBe(
       isoDay(new Date(missed.getTime() + 30 * DAY)),
     );
-    expect(t.db.packageChangeRequest.rows).toHaveLength(0);
+    // Online step 3: the payment is an online row, paid = approved.
+    expect(t.db.packageChangeRequest.rows).toEqual([
+      expect.objectContaining({ kind: 'online_payment', status: 'approved' }),
+    ]);
   });
 
   it('a smaller paid plan: the checkout at its full price, period from the missed date; the downgrade endpoint points there instead of downgrade_not_now', async () => {
