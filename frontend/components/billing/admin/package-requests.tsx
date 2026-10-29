@@ -439,7 +439,7 @@ export function OrgPackageRequests({ orgId, onChanged }: { orgId: string; onChan
                                 Reject
                               </button>
                             ) : null}
-                            {r.whatStays ? (
+                            {r.whatStays || r.whatStaysEditable ? (
                               <AdminWhatStaysButton
                                 orgId={orgId}
                                 orgName={r.organisation?.name}
@@ -453,8 +453,8 @@ export function OrgPackageRequests({ orgId, onChanged }: { orgId: string; onChan
                               />
                             ) : null}
                           </div>
-                        ) : r.whatStays ? (
-                          // Editable while open, or for the row that put the org on its current plan; view-only otherwise.
+                        ) : r.whatStays || r.whatStaysEditable ? (
+                          // Editable on the latest row (open, or the one that put the org on its current plan); view-only otherwise.
                           <div className="bl-row" style={{ justifyContent: "flex-end" }}>
                             <AdminWhatStaysButton
                               orgId={orgId}

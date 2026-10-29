@@ -620,3 +620,145 @@ describe("Send change request from Basic to a plan with fewer users", () => {
     expect(send()).toBeDisabled();
   });
 });
+
+describe("Super Admin: choose what stays from the latest Package requests row", () => {
+  const item = (id: string, selected: boolean) => ({ id, name: id, detail: "", reason: "", defaultPicked: selected, selected, locked: false });
+  async function adminChoices(): Promise<RetentionChoices> {
+    const base = createMockBillingClient({ initial: { situation: "moved_to_basic" } });
+    const data = await base.getRetentionChoices({});
+    return {
+      ...data,
+      locked: false,
+      isDefault: true,
+      targetPlan: { ...data.targetPlan, limits: { users: 2, projects: 1, landingPages: 1, templates: 1 } },
+      users: [{ ...item("u1", true), locked: true }, item("u2", true), item("u3", false)],
+      projects: [item("p1", true), item("p2", false)],
+      landingPages: [item("l1", true), item("l2", false)],
+      templates: [item("t1", true), item("t2", false)],
+    };
+  }
+  const row = (over: Record<string, unknown>) =>
+    ({
+      id: "latest",
+      orgId: "org-1",
+      currentPlanId: "pro",
+      targetPlanId: "starter",
+      billingCycle: "monthly",
+      status: "approved",
+      kind: "request",
+      createdAt: "2026-10-20T10:00:00.000Z",
+      updatedAt: "2026-10-20T10:00:00.000Z",
+      organisation: { id: "org-1", name: "Acme", slug: "acme", city: "Pune" },
+      requestedBy: null,
+      reviewedBy: null,
+      reviewedAt: null,
+      currentPlan: { id: "pro", name: "Pro", priceMonthly: 1499, priceYearly: 14990 },
+      targetPlan: { id: "starter", name: "Starter", priceMonthly: 999, priceYearly: 9990 },
+      label: "Change to Starter",
+      payment: null,
+      billingCheckout: null,
+      whatStays: { planId: "starter", planName: "Starter", choice: "default", applied: true, users: { limit: 2, total: 3, kept: [], paused: [] } },
+      ...over,
+    }) as unknown as PackageChangeRequestRow;
+
+  it("sends all four lists with the request, then refetches and shows what the server saved", async () => {
+    const before = await adminChoices();
+    const after: RetentionChoices = {
+      ...before,
+      isDefault: false,
+      users: [{ ...item("u1", true), locked: true }, item("u2", false), item("u3", true)],
+      projects: [item("p1", false), item("p2", true)],
+      landingPages: [item("l1", false), item("l2", true)],
+      templates: [item("t1", false), item("t2", true)],
+    };
+    let saved = false;
+    const get = vi.fn(async () => (saved ? { ...after } : { ...before }));
+    const save = vi.fn(async () => {
+      saved = true;
+      return { ...after };
+    });
+    const base = createMockBillingClient();
+    await show(
+      { ...base, getAdminRetentionChoices: get, saveAdminRetentionChoices: save as never },
+      <ChooseWhatStaysScreen admin={{ orgId: "org-1", orgName: "Acme" }} requestId="latest" targetPlanId={before.targetPlan.id} />,
+    );
+    for (const name of ["u2", "u3", "p1", "p2", "l1", "l2", "t1", "t2"]) fireEvent.click(screen.getByRole("checkbox", { name }));
+    fireEvent.click(screen.getByRole("button", { name: /Save/ }));
+    await settle();
+    expect(save).toHaveBeenCalledWith({
+      orgId: "org-1",
+      requestId: "latest",
+      targetPlanId: before.targetPlan.id,
+      userIds: ["u1", "u3"],
+      projectIds: ["p2"],
+      landingPageIds: ["l2"],
+      templateIds: ["t2"],
+    });
+    // Fetched again after the save.
+    expect(get).toHaveBeenCalledTimes(2);
+    for (const name of ["u3", "p2", "l2", "t2"]) expect(screen.getByRole("checkbox", { name })).toBeChecked();
+    for (const name of ["u2", "p1", "l1", "t1"]) expect(screen.getByRole("checkbox", { name })).not.toBeChecked();
+    expect(screen.getByText("Showing their saved choice")).toBeInTheDocument();
+  });
+
+  it("a refused save shows its message in the dialog", async () => {
+    const before = await adminChoices();
+    const message = "Change what stays on the latest request for this organisation.";
+    const base = createMockBillingClient();
+    await show(
+      {
+        ...base,
+        getAdminRetentionChoices: async () => before,
+        saveAdminRetentionChoices: async () => {
+          throw new Error(message);
+        },
+      },
+      <ChooseWhatStaysScreen admin={{ orgId: "org-1" }} requestId="latest" />,
+    );
+    fireEvent.click(screen.getByRole("button", { name: /Save/ }));
+    await settle();
+    expect(screen.getByTestId("what-stays-save-error")).toHaveTextContent(message);
+  });
+
+  it("a list that fits the plan has nothing to untick: all of it stays and is sent", async () => {
+    const before = await adminChoices();
+    const fits = { ...before, targetPlan: { ...before.targetPlan, limits: { ...before.targetPlan.limits, projects: 5 } } };
+    const save = vi.fn(async () => fits);
+    const base = createMockBillingClient();
+    await show({ ...base, getAdminRetentionChoices: async () => fits, saveAdminRetentionChoices: save as never }, <ChooseWhatStaysScreen admin={{ orgId: "org-1" }} requestId="latest" />);
+    for (const name of ["p1", "p2"]) {
+      expect(screen.getByRole("checkbox", { name })).toBeChecked();
+      expect(screen.getByRole("checkbox", { name })).toBeDisabled();
+    }
+    fireEvent.click(screen.getByRole("button", { name: /Save/ }));
+    await settle();
+    expect(save).toHaveBeenCalledWith(expect.objectContaining({ projectIds: ["p1", "p2"] }));
+  });
+
+  async function page(orgLevel: boolean, rows: PackageChangeRequestRow[]) {
+    api.list.mockReset().mockResolvedValue({ data: rows, total: rows.length, page: 1, limit: 100 });
+    const base = createMockBillingClient();
+    const detail = await base.getSubscription((await base.listSubscriptions({ page: 1, pageSize: 10 } as never)).data[0].orgId);
+    return show({ ...base, getSubscription: async () => ({ ...detail, whatStaysOrgLevel: orgLevel }) }, <AdminSubscriptionDetailBody orgId={detail.orgId} />);
+  }
+
+  it("only one Choose what stays button: the latest row's when it's the place", async () => {
+    await page(false, [row({ whatStaysEditable: true })]);
+    expect(screen.getAllByRole("button", { name: "Choose what stays" })).toHaveLength(1);
+    expect(screen.queryByTestId("org-level-what-stays")).toBeNull();
+    expect(within(screen.getByTestId("org-package-request")).getByRole("button", { name: "Choose what stays" })).toBeInTheDocument();
+  });
+
+  it("the latest applied row is the place even before it has a copy", async () => {
+    await page(false, [row({ whatStays: null, whatStaysEditable: true })]);
+    expect(screen.getAllByRole("button", { name: "Choose what stays" })).toHaveLength(1);
+    expect(within(screen.getByTestId("org-package-request")).getByRole("button", { name: "Choose what stays" })).toBeInTheDocument();
+  });
+
+  it("only one Choose what stays button: the org page's when no row set the plan", async () => {
+    await page(true, [row({ whatStaysEditable: false })]);
+    expect(screen.getAllByRole("button", { name: "Choose what stays" })).toHaveLength(1);
+    expect(screen.getByTestId("org-level-what-stays")).toBeInTheDocument();
+    expect(within(screen.getByTestId("org-package-request")).getByRole("button", { name: "View what stays" })).toBeInTheDocument();
+  });
+});

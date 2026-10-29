@@ -26,7 +26,7 @@ import {
 import { GST_STATES } from './gst';
 import { issueCreditNote, issueOfflineInvoice } from './invoice.util';
 import { OrgBillingV2Service } from './org-billing-v2.service';
-import { currentPlanSetByRow } from '../../common/utils/what-stays-rows.util';
+import { whatStaysPlace } from '../../common/utils/what-stays-rows.util';
 import {
   isFreePlan,
   planRanker,
@@ -326,9 +326,10 @@ export class AdminSubscriptionsService {
       graceDays: ov.graceDays,
       // Manual mode hides "Mark paid offline" and "Apply coupon" (requests do both).
       paymentMode: ov.paymentMode,
-      // "Change what stays" on the org page only when no request set the
-      // current plan (assigned directly); otherwise it's on the latest request.
-      whatStaysOrgLevel: !(await currentPlanSetByRow(this.prisma, orgId)),
+      // "Choose what stays" on the org page only when no request set the
+      // current plan (assigned directly) and the latest row isn't the place;
+      // otherwise it's on the latest request (never both).
+      whatStaysOrgLevel: (await whatStaysPlace(this.prisma, orgId)).orgLevel,
       timeline,
       payments,
       coupon: coupon

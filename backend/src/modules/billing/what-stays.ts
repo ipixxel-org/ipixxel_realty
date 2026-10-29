@@ -121,6 +121,7 @@ export {
   isAppliedStatus,
   isOpenStatus,
   latestRequest,
+  whatStaysPlace,
 } from '../../common/utils/what-stays-rows.util';
 import {
   isOpenStatus,
