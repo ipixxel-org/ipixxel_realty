@@ -20,6 +20,7 @@ import {
   ICON_BOX_FIELDS,
   PRICING_TIER_FIELDS,
   RE_PRICING_CARD_FIELDS,
+  TESTIMONIAL_FIELDS,
   FOOTER_LINK_FIELDS,
   FOOTER_SOCIAL_FIELDS,
   FOOTER_COLUMN_FIELDS,
@@ -33,6 +34,7 @@ const ITEM_FIELDS: Record<string, ItemFieldDef[]> = {
   'icon-box.items': ICON_BOX_FIELDS,
   'pricing.tiers': PRICING_TIER_FIELDS,
   're-pricing.items': RE_PRICING_CARD_FIELDS,
+  'testimonials.items': TESTIMONIAL_FIELDS,
   'footer.menuLinks': FOOTER_LINK_FIELDS,
   'footer.socialLinks': FOOTER_SOCIAL_FIELDS,
   'footer.linkColumns': FOOTER_COLUMN_FIELDS,
@@ -71,6 +73,8 @@ const ITEM_SUB_ELEMENTS: Partial<Record<string, Record<string, Array<{ key: stri
     ],
   },
   're-pricing': { items: [{ key: 'name', label: 'Name' }, { key: 'price', label: 'Price' }, { key: 'meta', label: 'Note' }, { key: 'cta', label: 'Button' }] },
+  testimonials: { items: [{ key: 'quote', label: 'Quote' }, { key: 'name', label: 'Name' }, { key: 'role', label: 'Role' }, { key: 'avatar', label: 'Photo' }] },
+  developer: { stats: [{ key: 'value', label: 'Value' }, { key: 'label', label: 'Label' }] },
   location: { items: [{ key: 'title', label: 'Title' }, { key: 'meta', label: 'Meta' }] },
   'lead-form': { benefits: [{ key: 'title', label: 'Title' }, { key: 'description', label: 'Description' }] },
   gallery: { images: [{ key: 'image', label: 'Image' }, { key: 'caption', label: 'Caption' }, { key: 'meta', label: 'Meta' }] },
@@ -283,18 +287,16 @@ const blockFields: Partial<Record<BlockType, { sections: { title: string; fields
   },
   testimonials: {
     sections: [
+      { title: 'Layout', fields: [
+        { key: 'variant', label: 'Template', type: 'select', options: ['cards', 'carousel', 'spotlight', 'band'] },
+      ]},
       {
         title: 'Content',
         fields: [
           { key: 'title', label: 'Title', type: 'text' },
           { key: 'subtitle', label: 'Subtitle', type: 'text' },
           { key: 'items', label: 'Testimonials', type: 'array-items' },
-        ],
-      },
-      {
-        title: 'Style',
-        fields: [
-          { key: 'variant', label: 'Variant', type: 'select', options: ['cards', 'carousel', 'spotlight', 'band'] },
+          { key: 'anchor', label: 'Section ID (menu scroll)', type: 'text' },
         ],
       },
     ],
@@ -1399,7 +1401,7 @@ function PropertyField({ field, block }: { field: FieldDef; block: BlockConfig }
       function createEmptyItem(): Record<string, unknown> {
         // Templates by block type + field key
         const blockTemplates: Partial<Record<string, Record<string, Record<string, unknown>>>> = {
-          testimonials: { items: { name: '', role: '', quote: '' } },
+          testimonials: { items: { name: '', role: '', quote: '', avatar: '', rating: '' } },
           stats: { items: { value: '', label: '' } },
           developer: { stats: { value: '', label: '' } },
           'project-banner': { stats: { value: '', label: '' } },
