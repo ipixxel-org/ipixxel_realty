@@ -22,13 +22,13 @@ import {
 import {
   adminWhatStaysEditable,
   assertLatestRequest,
-  currentPlanSetByRow,
   isAppliedStatus,
   isOpenStatus,
   latestRequest,
   OPEN_REQUEST_STATUSES,
   WHAT_STAYS_LOCKED_MESSAGE,
   whatStaysLockedForOrg,
+  whatStaysPlace,
 } from './what-stays';
 import { billingError } from './billing-checkout.service';
 import { planRanker, toBillingPlan } from './plan-modules';
@@ -458,11 +458,12 @@ export class BillingRetentionService {
             : "This change wasn't applied, so there's nothing to change.",
         );
       }
-    } else if (await currentPlanSetByRow(this.prisma, orgId)) {
-      // The current plan came from a request: change it there (one place).
+    } else if (!(await whatStaysPlace(this.prisma, orgId)).orgLevel) {
+      // The current plan came from a request, or a change is in progress:
+      // change it on the latest request (one place, one saved choice).
       throw billingError(
         'what_stays_use_latest',
-        "The organisation's plan came from a request. Change what stays on the latest request.",
+        'Change what stays on the latest request for this organisation.',
       );
     }
     const ids = await this.validate(orgId, target, dto);

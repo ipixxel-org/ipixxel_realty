@@ -111,4 +111,38 @@ export async function currentPlanSetByRow(
   return latest?.targetPlanId === planId;
 }
 
+/**
+ * Where Super Admin changes what stays for this org — ONE place, so the
+ * org-page button and the latest row's button never both show:
+ * - `latestEditable`: the latest row (open, or applied with the org on its
+ *   plan) — its button is the only one;
+ * - `orgLevel`: otherwise, and only when no row set the current plan (plan
+ *   assigned directly, moved to Basic with no row) — the org-page button.
+ */
+export interface WhatStaysPlace {
+  latestId: string | null;
+  planId: string | null;
+  latestEditable: boolean;
+  orgLevel: boolean;
+}
+
+export async function whatStaysPlace(
+  db: RowsDb,
+  orgId: string,
+): Promise<WhatStaysPlace> {
+  const [latest, planId] = await Promise.all([
+    latestRequest(db, orgId),
+    currentPlanId(db, orgId),
+  ]);
+  const latestEditable =
+    !!latest && adminWhatStaysEditable(latest, latest.id, planId);
+  return {
+    latestId: latest?.id ?? null,
+    planId,
+    latestEditable,
+    orgLevel:
+      !latestEditable && !!planId && !(await currentPlanSetByRow(db, orgId)),
+  };
+}
+
 export { isApplied as isAppliedStatus, isOpen as isOpenStatus };

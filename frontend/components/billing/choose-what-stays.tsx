@@ -16,6 +16,13 @@ export interface WhatStaysAdmin {
 
 type Kind = "users" | "projects" | "landingPages" | "templates";
 
+/**
+ * Everything in this list fits the plan (unlimited, or no more than the
+ * limit): all of it stays and there's nothing to untick — the plan only
+ * pauses what's over its limits.
+ */
+const allFit = (items: RetentionItem[], limit: number | null) => limit === null || items.length <= limit;
+
 /** Where the page was opened from (`back=`): Save and Cancel return there. */
 export interface WhatStaysBack {
   to: BillingRoute;
@@ -41,22 +48,31 @@ function TickList({
 }) {
   const max = limit ?? Infinity;
   const full = selected.length >= max;
+  const fits = allFit(items, limit);
   return (
     <Section
       title={title}
-      sub={limit === null ? `All ${noun} stay active` : `${limit} ${noun} can stay active`}
+      sub={fits ? `All ${noun} stay active` : `${limit} ${noun} can stay active`}
       action={<span className={`bl-counter${selected.length > max ? " over" : ""}`}>{limit === null ? `${selected.length} selected` : `${selected.length} of ${limit} selected`}</span>}
       flush
     >
       {items.map((it) => {
-        const on = selected.includes(it.id);
-        const blocked = !on && full;
+        const on = fits || selected.includes(it.id);
+        const blocked = fits || (!on && full);
         return (
           <label
             key={it.id}
             className={`bl-tick-row${it.locked ? " locked" : ""}`}
-            title={it.locked ? "The owner always stays active and can't be unticked." : blocked ? `Untick another one first — only ${limit} can stay.` : undefined}
-            style={blocked ? { opacity: 0.6, cursor: "not-allowed" } : undefined}
+            title={
+              it.locked
+                ? "The owner always stays active and can't be unticked."
+                : fits
+                  ? `All of these fit the plan, so they all stay active.`
+                  : blocked
+                    ? `Untick another one first — only ${limit} can stay.`
+                    : undefined
+            }
+            style={blocked && !fits ? { opacity: 0.6, cursor: "not-allowed" } : undefined}
           >
             <input type="checkbox" checked={on} disabled={it.locked || blocked} onChange={() => onToggle(it.id)} aria-label={it.name} />
             <span className="bl-tick-main">
@@ -92,18 +108,22 @@ function Editor({
   const { client, canEdit } = useBillingEnv();
   const billing = useOptionalOrgBilling();
   const { toast } = useToast();
-  const pick = (list: RetentionItem[]) => list.filter((x) => x.selected).map((x) => x.id);
+  const t = choices.targetPlan;
+  // A list that fits the plan keeps everything (see allFit), so all of it is sent.
+  const pick = (list: RetentionItem[], kind: Kind) =>
+    allFit(list, t.limits[kind] ?? null) ? list.map((x) => x.id) : list.filter((x) => x.selected).map((x) => x.id);
   // Templates are missing from older responses (and the walkthrough mock): then there's no Templates section.
   const templates = choices.templates;
   const [sel, setSel] = useState<Record<Kind, string[]>>({
-    users: pick(choices.users),
-    projects: pick(choices.projects),
-    landingPages: pick(choices.landingPages),
-    templates: pick(templates ?? []),
+    users: pick(choices.users, "users"),
+    projects: pick(choices.projects, "projects"),
+    landingPages: pick(choices.landingPages, "landingPages"),
+    templates: pick(templates ?? [], "templates"),
   });
   const [dirty, setDirty] = useState(false);
   const [busy, setBusy] = useState(false);
-  const t = choices.targetPlan;
+  // A refused save, shown here (a toast can sit behind the dialog).
+  const [saveError, setSaveError] = useState<string | null>(null);
 
   function toggle(kind: Kind, id: string) {
     setDirty(true);
@@ -118,6 +138,7 @@ function Editor({
 
   async function save() {
     setBusy(true);
+    setSaveError(null);
     try {
       const req = {
         targetPlanId: t.id,
@@ -137,7 +158,7 @@ function Editor({
         : `${sel.users.length} users, ${sel.projects.length} projects and ${sel.landingPages.length} landing pages`;
       toast({ variant: "success", title: "Saved", description: `${kept} stay active on ${t.name}.` });
     } catch (e) {
-      toast({ variant: "error", title: "Couldn't save", description: e instanceof Error ? e.message : undefined });
+      setSaveError(e instanceof Error && e.message ? e.message : "Couldn't save. Try again.");
     } finally {
       setBusy(false);
     }
@@ -186,6 +207,11 @@ function Editor({
           limit={t.limits.templates}
           onToggle={(id) => toggle("templates", id)}
         />
+      ) : null}
+      {saveError ? (
+        <div data-testid="what-stays-save-error">
+          <ErrorNote message={saveError} />
+        </div>
       ) : null}
       <div className="bl-row">
         <button type="button" className="btn btn-primary" disabled={!canEdit || busy} onClick={() => void save()}>
@@ -283,28 +309,32 @@ export function ChooseWhatStaysScreen({
   back?: WhatStaysBack;
   onSaved?: (c: RetentionChoices) => void;
 }) {
-  const { data, error } = useBillingQuery(
+  const { data, error, reload } = useBillingQuery(
     (c) => (admin ? c.getAdminRetentionChoices({ orgId: admin.orgId, targetPlanId, requestId }) : c.getRetentionChoices({ targetPlanId, requestId })),
     [targetPlanId, requestId, admin?.orgId],
   );
-  // After a save, show what the save returned. (Remounting on a refetch used
-  // to start the editor from the old, pre-save data: the default picks.)
-  const [fresh, setFresh] = useState<RetentionChoices | null>(null);
+  // After a save, show what the save returned, then refetch and show what the
+  // server has. (Remounting on the old, pre-save data used to start the editor
+  // from the default picks.)
+  const [fresh, setFresh] = useState<{ choices: RetentionChoices; before: RetentionChoices | null } | null>(null);
   const [saves, setSaves] = useState(0);
-  const shown = fresh ?? data;
+  // The save's answer until the refetch lands (data changes), then the refetch.
+  const showFresh = !!fresh && data === fresh.before;
+  const shown = showFresh ? fresh.choices : data;
   if (error && !shown) return <ErrorNote message={error} />;
   if (!shown) return <Loading what={admin ? "their users, projects, pages and templates" : "your users, projects, pages and templates"} />;
   if (shown.locked) return <WhatStaysReadOnly choices={shown} admin={!!admin} />;
   return (
     <Editor
-      key={`${shown.targetPlan.id}-${saves}`}
+      key={`${shown.targetPlan.id}-${saves}-${showFresh ? "saved" : "fetched"}`}
       choices={shown}
       requestId={requestId}
       admin={admin}
       back={back}
       onSaved={(c) => {
-        setFresh(c);
+        setFresh({ choices: c, before: data });
         setSaves((n) => n + 1);
+        reload();
         onSaved?.(c);
       }}
     />
