@@ -142,6 +142,8 @@ export interface BillingClient {
   refundPayment(req: RefundPaymentRequest): Promise<RefundPaymentResponse>;
   /** GET /admin/billing/checkouts?status= — "needs review" by default (paid but not applied). */
   listAdminCheckouts(status?: CheckoutStatus): Promise<AdminCheckoutRow[]>;
+  /** POST /admin/billing/checkouts/:id/resolve — close a payment under review by hand (nothing is applied). */
+  resolveAdminCheckout(req: { checkoutId: string; note?: string }): Promise<{ id: string; status: "rejected" }>;
   /** GET /admin/billing/lifecycle */
   getLifecycleSettings(): Promise<LifecycleSettings>;
   /** PUT /admin/billing/lifecycle */

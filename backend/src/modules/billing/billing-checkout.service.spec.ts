@@ -469,7 +469,8 @@ describe('renewal (pay each time)', () => {
     await expect(service.fulfil(first.id, first.totalPaise)).resolves.toBe(
       'needs_review',
     );
-    expect(db.billingCheckout.rows[0].reviewReason).toMatch(/already renewed/);
+    // Online step 4: a superseded checkout is never applied (reviewed, refunded).
+    expect(db.billingCheckout.rows[0].reviewReason).toMatch(/superseded/);
     expect(db.subscription.rows[0].renewsAt).toEqual(
       new Date(renewsAt.getTime() + 30 * DAY),
     );

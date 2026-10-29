@@ -41,11 +41,19 @@ export async function setOnlineRows(
 export interface OnlinePaymentViewV2 {
   /**
    * waiting: the Razorpay order is open; paid; failed; expired (not paid in
-   * 30 minutes); replaced (a newer checkout was started); needs_review (paid
-   * but not applied — a Super Admin is looking at it).
+   * 30 minutes); superseded (a newer checkout or a scheduled change closed
+   * it); needs_review (paid but not applied — a Super Admin is looking at
+   * it); refunded; resolved (a Super Admin closed the review by hand).
    */
   state:
-    'waiting' | 'paid' | 'failed' | 'expired' | 'replaced' | 'needs_review';
+    | 'waiting'
+    | 'paid'
+    | 'failed'
+    | 'expired'
+    | 'superseded'
+    | 'needs_review'
+    | 'refunded'
+    | 'resolved';
   /** When the payment was captured (paid / needs_review). */
   paidAt: string | null;
   /** Razorpay order id (order_…). */
@@ -61,7 +69,9 @@ export const ONLINE_CHECKOUT_SELECT = {
   status: true,
   fulfilledAt: true,
   reviewReason: true,
-  payment: { select: { razorpayOrderId: true, capturedAt: true } },
+  payment: {
+    select: { razorpayOrderId: true, capturedAt: true, status: true },
+  },
 } as const;
 
 type OnlineCheckout = {
@@ -69,7 +79,11 @@ type OnlineCheckout = {
   status: string;
   fulfilledAt: Date | null;
   reviewReason?: string | null;
-  payment?: { razorpayOrderId: string; capturedAt: Date | null } | null;
+  payment?: {
+    razorpayOrderId: string;
+    capturedAt: Date | null;
+    status?: string;
+  } | null;
 };
 
 export function onlinePaymentView(
@@ -80,19 +94,26 @@ export function onlinePaymentView(
 ): OnlinePaymentViewV2 | null {
   if (row.kind !== 'online_payment') return null;
   const state: OnlinePaymentViewV2['state'] =
-    row.status === 'approved'
-      ? 'paid'
-      : row.status === 'needs_review'
-        ? 'needs_review'
-        : row.status === 'awaiting_payment'
-          ? 'waiting'
-          : c?.status === 'failed'
-            ? 'failed'
-            : c?.status === 'expired'
-              ? 'expired'
-              : 'replaced';
+    c?.payment?.status === 'refunded'
+      ? 'refunded'
+      : c?.status === 'rejected'
+        ? 'resolved'
+        : row.status === 'approved'
+          ? 'paid'
+          : row.status === 'needs_review'
+            ? 'needs_review'
+            : row.status === 'awaiting_payment'
+              ? 'waiting'
+              : c?.status === 'failed'
+                ? 'failed'
+                : c?.status === 'expired'
+                  ? 'expired'
+                  : 'superseded';
   const paidAt =
-    state === 'paid' || state === 'needs_review'
+    state === 'paid' ||
+    state === 'needs_review' ||
+    state === 'refunded' ||
+    state === 'resolved'
       ? (c?.payment?.capturedAt ?? c?.fulfilledAt ?? null)
       : null;
   return {
@@ -144,6 +165,48 @@ export async function expireStaleCheckouts(
     now,
   );
   return count;
+}
+
+/**
+ * One change at a time: close the org's open online checkouts (a newer
+ * checkout, or a downgrade / move to Basic was scheduled). Their rows show
+ * "Superseded"; a payment that still arrives for one goes to needs_review
+ * and is never applied (BillingCheckoutService.applyPaid).
+ */
+export async function supersedeOpenCheckouts(
+  db: Pick<PrismaClient, 'billingCheckout' | 'packageChangeRequest'>,
+  orgId: string,
+): Promise<number> {
+  const open = await db.billingCheckout.findMany({
+    where: { organisationId: orgId, status: 'pending', mode: 'online' },
+    select: { id: true, packageChangeRequestId: true },
+  });
+  if (!open.length) return 0;
+  await db.billingCheckout.updateMany({
+    where: { id: { in: open.map((o) => o.id) }, status: 'pending' },
+    data: { status: 'cancelled' },
+  });
+  await setOnlineRows(
+    db,
+    open.map((o) => o.packageChangeRequestId),
+    'cancelled',
+  );
+  return open.length;
+}
+
+/** The one "a payment is being checked" message (API and UI say the same). */
+export const PAYMENT_REVIEW_MESSAGE =
+  "A payment is being checked by our team. You can change plans once it's resolved.";
+
+/** Whether a paid checkout for this org is waiting for a Super Admin (needs_review). */
+export async function paymentUnderReview(
+  db: Pick<PrismaClient, 'billingCheckout'>,
+  orgId: string,
+): Promise<boolean> {
+  return !!(await db.billingCheckout.findFirst({
+    where: { organisationId: orgId, status: 'needs_review' },
+    select: { id: true },
+  }));
 }
 
 /** The tax invoice issued for each of these checkouts (by checkout id). */

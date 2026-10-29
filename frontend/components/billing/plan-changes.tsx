@@ -91,6 +91,16 @@ export function DowngradeScreen({
   // A change is already scheduled: the message and "Keep <plan>" instead of the form.
   const block = planChangeBlock(o);
   if (block?.reason === "change_scheduled") return <ScheduledChangeNote overview={o} />;
+  // A paid online checkout is being checked by our team: nothing else changes until it's resolved.
+  if (block?.reason === "payment_review") {
+    return (
+      <div data-testid="payment-review-note">
+        <Banner tone="amber" icon="clock" title="Plan changes are on hold">
+          {block.message}
+        </Banner>
+      </div>
+    );
+  }
   // Renewal overdue (either mode): Basic happens now; a paid plan is paid at the checkout.
   const overdue = isOverdue(o);
   // Same rule as the plan cards: a bigger plan (or any paid plan while

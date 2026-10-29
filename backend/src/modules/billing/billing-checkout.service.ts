@@ -48,7 +48,12 @@ import {
   type QuotePlan,
 } from './checkout-quote';
 import { expireStaleCheckouts } from './checkout-state';
-import { setOnlineRows } from './online-rows';
+import {
+  PAYMENT_REVIEW_MESSAGE,
+  paymentUnderReview,
+  setOnlineRows,
+  supersedeOpenCheckouts,
+} from './online-rows';
 import { scheduledChangeBlock } from '../../common/utils/scheduled-change.util';
 import { findCouponFor } from './coupon-lookup';
 import {
@@ -219,6 +224,10 @@ export class BillingCheckoutService implements OnModuleInit {
       });
       const scheduled = await scheduledChangeBlock(this.prisma, sub);
       if (scheduled) throw billingError('change_scheduled', scheduled);
+      // A paid checkout waiting for our team blocks other plan changes.
+      if (await paymentUnderReview(this.prisma, orgId)) {
+        throw billingError('payment_review', PAYMENT_REVIEW_MESSAGE);
+      }
     }
     const ctx = await this.quote(
       orgId,
@@ -422,21 +431,7 @@ export class BillingCheckoutService implements OnModuleInit {
     // on the Requests list (kind online_payment, awaiting_payment).
     const checkout = await this.prisma.$transaction(async (tx) => {
       await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`billing_checkout:${orgId}`}))`;
-      const older = await tx.billingCheckout.findMany({
-        where: { organisationId: orgId, status: 'pending', mode: 'online' },
-        select: { id: true, packageChangeRequestId: true },
-      });
-      if (older.length) {
-        await tx.billingCheckout.updateMany({
-          where: { id: { in: older.map((o) => o.id) } },
-          data: { status: 'cancelled' },
-        });
-        await setOnlineRows(
-          tx,
-          older.map((o) => o.packageChangeRequestId),
-          'cancelled',
-        );
-      }
+      await supersedeOpenCheckouts(tx, orgId);
       const row = await tx.packageChangeRequest.create({
         data: {
           orgId,
@@ -659,7 +654,7 @@ export class BillingCheckoutService implements OnModuleInit {
         if (!c) return 'not_found';
         if (
           c.fulfilledAt ||
-          ['paid', 'approved', 'needs_review'].includes(c.status)
+          ['paid', 'approved', 'needs_review', 'rejected'].includes(c.status)
         ) {
           return 'already_done';
         }
@@ -680,6 +675,13 @@ export class BillingCheckoutService implements OnModuleInit {
           return 'needs_review';
         };
 
+        // Closed before it was paid (a newer checkout, or a downgrade / move
+        // to Basic was scheduled): never apply an old quote. Our team refunds it.
+        if (c.status === 'cancelled') {
+          return review(
+            'Paid after a newer change: this checkout was superseded (a newer checkout, or a downgrade or move to Basic was scheduled), so nothing was applied. Refund the payment.',
+          );
+        }
         if (paidPaise !== c.totalPaise) {
           return review(
             `Amount mismatch: paid ${toRupees(paidPaise)}, quoted ${toRupees(c.totalPaise)}.`,
@@ -791,6 +793,48 @@ export class BillingCheckoutService implements OnModuleInit {
   }
 
   /* -------------------------------------------------------------- admin */
+
+  /**
+   * Super Admin: close a paid checkout under review by hand (the plan was
+   * sorted out another way, or it's being kept as a credit). Nothing is
+   * applied; the org can change plans again. A refund closes it too.
+   */
+  async adminResolve(checkoutId: string, actorId: string, note?: string) {
+    const c = await this.prisma.billingCheckout.findUnique({
+      where: { id: checkoutId },
+    });
+    if (!c) throw billingError('not_found', 'That checkout was not found.');
+    if (c.status !== 'needs_review') {
+      throw billingError(
+        'not_in_review',
+        'This payment is not waiting for review.',
+      );
+    }
+    const reason = [
+      c.reviewReason,
+      `Resolved by our team${note?.trim() ? `: ${note.trim()}` : '.'}`,
+    ]
+      .filter(Boolean)
+      .join(' ');
+    await this.prisma.billingCheckout.update({
+      where: { id: c.id },
+      data: { status: 'rejected', reviewReason: reason.slice(0, 1000) },
+    });
+    await setOnlineRows(this.prisma, [c.packageChangeRequestId], 'cancelled');
+    await this.prisma.auditLog
+      .create({
+        data: {
+          orgId: c.organisationId,
+          actorId,
+          action: 'payment_review_resolved',
+          entity: 'BillingCheckout',
+          entityId: c.id,
+          metadata: { note: note ?? null },
+        },
+      })
+      .catch(() => undefined);
+    return { id: c.id, status: 'rejected' as const };
+  }
 
   /** Super Admin: checkouts in a status (default needs_review), newest first. */
   async adminList(status: BillingCheckoutStatus = 'needs_review') {

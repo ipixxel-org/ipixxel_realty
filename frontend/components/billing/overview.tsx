@@ -130,15 +130,10 @@ export function BillingOverviewPanel({ showInvoices = true }: { showInvoices?: b
         {o.paymentMode === "manual" && !o.plan.isFree && (RENEWAL_OPEN as readonly string[]).includes(o.status) ? (
           <RequestRenewalButton overview={o} className="btn btn-ghost" />
         ) : null}
-        {/* Manual mode: chosen per request (the request screen) or from the grace / Basic banners. */}
-        {/* On Basic already, what stays is view-only for the org (only our team can change it). */}
-        {o.paymentMode !== "manual" && !o.plan.isFree ? (
-          <BLink to="chooseWhatStays" className="btn btn-ghost">
-            Choose what stays
-          </BLink>
-        ) : o.status === "moved_to_basic" ? (
-          <WhatStaysLockedNote />
-        ) : null}
+        {/* One place, both modes: what stays is chosen with each change (checkout, downgrade, the
+            grace / Basic banners) or on the latest request — no standalone button here. On Basic
+            already, what stays is view-only for the org (only our team can change it). */}
+        {o.status === "moved_to_basic" ? <WhatStaysLockedNote /> : null}
         <BLink to="coupons" className="btn btn-ghost">
           Coupons
         </BLink>

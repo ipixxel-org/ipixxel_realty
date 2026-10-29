@@ -12,6 +12,11 @@ import {
   scheduledChangeBlock,
 } from '../../common/utils/scheduled-change.util';
 import { pendingRequestMessage } from '../package-change-requests/package-change-requests.service';
+import {
+  PAYMENT_REVIEW_MESSAGE,
+  paymentUnderReview,
+  supersedeOpenCheckouts,
+} from './online-rows';
 import { whatStaysFor } from '../../common/utils/retention.util';
 import {
   applyWhatStaysChoice,
@@ -96,10 +101,15 @@ export class BillingPlanChangeService {
    * refused until the scheduled one is undone ("Keep <plan>") or takes effect.
    */
   private async refuseWhileScheduled(
+    orgId: string,
     sub: Parameters<typeof scheduledChangeBlock>[1],
   ) {
     const scheduled = await scheduledChangeBlock(this.prisma, sub);
     if (scheduled) throw billingError('change_scheduled', scheduled);
+    // A paid checkout waiting for our team blocks other plan changes too.
+    if (await paymentUnderReview(this.prisma, orgId)) {
+      throw billingError('payment_review', PAYMENT_REVIEW_MESSAGE);
+    }
   }
 
   async cancel(
@@ -111,7 +121,7 @@ export class BillingPlanChangeService {
     if (!sub || isFreePlan(sub.plan)) {
       throw billingError('nothing_to_cancel', "You're already on Basic.");
     }
-    await this.refuseWhileScheduled(sub);
+    await this.refuseWhileScheduled(orgId, sub);
     const reason = dto.reason?.trim() || null;
     // Over Basic's limits: the org picks "Keep the default picks" or "I'll
     // choose what stays" (a saved choice that fits) first.
@@ -121,6 +131,8 @@ export class BillingPlanChangeService {
       await assertWhatStaysConfirmed(this.prisma, orgId, free, choice);
       await applyWhatStaysChoice(this.prisma, orgId, free.id, choice);
     }
+    // One change at a time: an open online payment can't apply over this.
+    await supersedeOpenCheckouts(this.prisma, orgId);
     if (
       sub.status === 'expired' ||
       sub.status === 'paused' ||
@@ -206,7 +218,7 @@ export class BillingPlanChangeService {
         "You're on the free plan — there's nothing to downgrade.",
       );
     }
-    await this.refuseWhileScheduled(sub);
+    await this.refuseWhileScheduled(orgId, sub);
     const overdue = this.overdue(sub);
     if (sub.status !== 'active' && sub.status !== 'trial' && !overdue) {
       throw billingError(
@@ -294,6 +306,8 @@ export class BillingPlanChangeService {
     const choice = pickedWhatStays(dto);
     await assertWhatStaysConfirmed(this.prisma, orgId, target, choice);
     await applyWhatStaysChoice(this.prisma, orgId, target.id, choice);
+    // One change at a time: an open online payment can't apply over this.
+    await supersedeOpenCheckouts(this.prisma, orgId);
 
     await this.prisma.subscription.update({
       where: { id: sub.id },

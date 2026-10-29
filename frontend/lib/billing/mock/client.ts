@@ -329,6 +329,7 @@ export function createMockBillingClient(opts: { initial?: Partial<MockState>; pe
     listPlans: () => ok([...get().plans].sort((a, b) => a.rank - b.rank)),
 
     listAdminCheckouts: () => ok([]),
+    resolveAdminCheckout: ({ checkoutId }) => ok({ id: checkoutId, status: "rejected" as const }),
 
     previewCheckout: (req) => ok(preview(req.planId, req.interval, req.couponCode, req.purpose ?? "purchase")),
 

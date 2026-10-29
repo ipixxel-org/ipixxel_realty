@@ -157,8 +157,12 @@ export type OnlineRowStatus = "awaiting_payment" | "needs_review" | "closed";
 
 /** What an online payment row shows about its payment. */
 export interface OnlinePaymentView {
-  /** waiting (order open) · paid · failed · expired (not paid in 30 min) · replaced (a newer checkout) · needs_review (paid, not applied). */
-  state: "waiting" | "paid" | "failed" | "expired" | "replaced" | "needs_review";
+  /**
+   * waiting (order open) · paid · failed · expired (not paid in 30 min) · superseded (a newer checkout,
+   * or a downgrade / move to Basic, closed it) · needs_review (paid, not applied) · refunded ·
+   * resolved (our team closed the review by hand).
+   */
+  state: "waiting" | "paid" | "failed" | "expired" | "superseded" | "needs_review" | "refunded" | "resolved";
   paidAt: string | null;
   /** Razorpay order ID (order_…). */
   orderId: string | null;
@@ -303,7 +307,8 @@ export interface RenewalBreakdown {
   total: number;
 }
 
-export type PlanChangeBlockedReason = "request_pending" | "change_scheduled";
+/** payment_review: a paid online checkout is being checked by our team (renewals still go through). */
+export type PlanChangeBlockedReason = "request_pending" | "change_scheduled" | "payment_review";
 
 export interface BillingOverview {
   orgName: string;

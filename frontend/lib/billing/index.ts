@@ -24,6 +24,7 @@ export const REAL_FUNCTIONS: Record<BillingFunction, boolean> = {
   startCheckout: true,
   confirmCheckout: true,
   listAdminCheckouts: true,
+  resolveAdminCheckout: true,
   // Step 3 (renewals) reuses previewCheckout / startCheckout with purpose "renewal".
   // Step 4 — cancel / downgrade at the end of the term
   cancelPlan: true,

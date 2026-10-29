@@ -2,7 +2,10 @@
 import { PaymentEventsService } from '../payments/payment-events';
 import { PackageChangeRequestsService } from '../package-change-requests/package-change-requests.service';
 import { whatStaysPlace } from '../../common/utils/what-stays-rows.util';
+import { AdminSubscriptionsService } from './admin-subscriptions.service';
 import { BillingCheckoutService } from './billing-checkout.service';
+import { BillingPlanChangeService } from './billing-plan-change.service';
+import { planChangeBlock } from './billing-overview';
 import { BillingLedgerService } from './billing-ledger.service';
 import { BillingRetentionService } from './billing-retention.service';
 import {
@@ -122,6 +125,36 @@ function setup(sub: Record<string, unknown> = {}, extraUsers: string[] = []) {
   checkout.onModuleInit();
   const ledger = new BillingLedgerService(db as never);
   const retention = new BillingRetentionService(db as never);
+  const modeService = {
+    getMode: async () =>
+      mode === 'online'
+        ? { mode: 'online', reason: null }
+        : { mode: 'manual', reason: 'switched_off' },
+  };
+  const changes = new BillingPlanChangeService(
+    db as never,
+    { getOverview: async () => ({}) } as never,
+    modeService as never,
+    checkout,
+  );
+  const refundInFull = jest.fn(async (paymentId: string) => {
+    const p = db.payment.rows.find((x: any) => x.id === paymentId);
+    p.status = 'refunded';
+  });
+  const admin = new AdminSubscriptionsService(
+    db as never,
+    {} as never,
+    // Only the refund's reply reads it (the payments list).
+    {
+      payments: async () => db.payment.rows.map((p: any) => ({ id: p.id })),
+    } as never,
+    {} as never,
+    changes,
+    { refundInFull } as never,
+    { getSellerSettings: async () => SELLER } as never,
+    undefined,
+    modeService as never,
+  );
   // Each new row is the newest (rows made in the same millisecond tie).
   let tick = 0;
   const bumpNewest = () => {
@@ -152,6 +185,8 @@ function setup(sub: Record<string, unknown> = {}, extraUsers: string[] = []) {
     checkout,
     requests,
     retention,
+    changes,
+    admin,
     start,
     pay,
     rowOf,
@@ -262,7 +297,7 @@ describe('every online payment is a row', () => {
     expect(t.rowOf(first).status).toBe('cancelled');
     const [newest, older] = await t.orgList();
     expect(newest.online!.state).toBe('waiting');
-    expect(older.online!.state).toBe('replaced');
+    expect(older.online!.state).toBe('superseded');
   });
 
   it('paid but not applied: Needs review (with the reason for the Super Admin)', async () => {
@@ -397,5 +432,166 @@ describe('manual mode with online rows present', () => {
     expect(
       t.db.packageChangeRequest.rows.filter((r: any) => r.status === 'pending'),
     ).toHaveLength(1);
+  });
+});
+
+/* ----------------------------------------------- online step 4: blocking */
+
+const code = (p: Promise<unknown>) =>
+  p.then(
+    () => 'no error',
+    (e: any) => e?.response?.code ?? String(e?.message ?? e),
+  );
+const PAYMENT_REVIEW =
+  "A payment is being checked by our team. You can change plans once it's resolved.";
+
+describe('a payment under review blocks plan changes until our team resolves it', () => {
+  /** A paid checkout that went to needs_review (wrong amount). */
+  async function underReview() {
+    const t = setup({ renewsAt: new Date(Date.now() + 2 * DAY) });
+    const c = await t.start('pro');
+    expect(await t.checkout.fulfil(c.id, c.totalPaise - 100)).toBe(
+      'needs_review',
+    );
+    return { ...t, c };
+  }
+
+  it('the overview says payment_review with the message', () => {
+    expect(
+      planChangeBlock(
+        {
+          plan: { isFree: false, name: 'Starter' } as never,
+          pendingUpgrade: { status: 'needs_review' } as never,
+        },
+        null,
+      ),
+    ).toEqual({
+      planChangeBlockedReason: 'payment_review',
+      planChangeBlockedMessage: PAYMENT_REVIEW,
+    });
+  });
+
+  it('start, downgrade, Basic and Super Admin Mark paid offline are refused; a renewal still goes through', async () => {
+    const t = await underReview();
+    const attempts = [
+      () =>
+        t.checkout.start('org-1', 'u-admin', {
+          planId: 'pro',
+          interval: 'yearly',
+        }),
+      () =>
+        t.changes.scheduleDowngrade('org-1', 'u-admin', { planId: 'basic' }),
+      () => t.changes.cancel('org-1', 'u-admin', {}),
+    ];
+    for (const attempt of attempts) {
+      expect(await code(attempt())).toBe('payment_review');
+    }
+    await expect(
+      t.checkout.start('org-1', 'u-admin', {
+        planId: 'pro',
+        interval: 'yearly',
+      }),
+    ).rejects.toMatchObject({ response: { message: PAYMENT_REVIEW } });
+    expect(
+      await code(
+        t.admin.markPaidOffline('org-1', 'admin-1', {
+          amount: 1180,
+          method: 'UPI',
+          reference: 'UTR',
+          receivedOn: new Date().toISOString().slice(0, 10),
+        }),
+      ),
+    ).toBe('payment_review');
+    // The renewal keeps the org running.
+    const renewal = await t.start('starter', { purpose: 'renewal' });
+    expect(renewal.status).toBe('pending');
+    expect(t.sub().planId).toBe('starter');
+  });
+
+  it('a refund resolves it: the row says Refunded and plan changes work again', async () => {
+    const t = await underReview();
+    // Razorpay captured it (the payments module marks it).
+    t.db.payment.rows.find((p: any) => p.id === t.c.paymentId).status =
+      'captured';
+    await t.admin.refund(t.c.paymentId, 'admin-1', 'Amount mismatch');
+    expect(t.c.status).toBe('rejected');
+    const [listed] = await t.orgList();
+    expect(listed).toMatchObject({
+      status: 'closed',
+      online: { state: 'refunded' },
+    });
+    expect(await code(t.changes.cancel('org-1', 'u-admin', {}))).toBe(
+      'no error',
+    );
+  });
+
+  it('Mark resolved (sorted out by hand) lifts the block too; nothing is applied', async () => {
+    const t = await underReview();
+    await t.checkout.adminResolve(t.c.id, 'admin-1', 'Plan changed by hand');
+    expect(t.c).toMatchObject({ status: 'rejected' });
+    expect(t.c.reviewReason).toMatch(
+      /Resolved by our team: Plan changed by hand/,
+    );
+    const [listed] = await t.orgList();
+    expect(listed.online!.state).toBe('resolved');
+    expect(t.sub().planId).toBe('starter');
+    expect(await code(t.start('pro'))).toBe('no error');
+    // Only a payment under review can be resolved.
+    expect(await code(t.checkout.adminResolve(t.c.id, 'admin-1'))).toBe(
+      'not_in_review',
+    );
+  });
+});
+
+describe('one change at a time: an open order never applies over a newer change', () => {
+  it('scheduling Basic closes the open order (Superseded); paying it later goes to review, nothing applied', async () => {
+    const t = setup();
+    const c = await t.start('pro');
+    await t.changes.cancel('org-1', 'u-admin', {});
+    expect(c.status).toBe('cancelled');
+    expect(t.rowOf(c).status).toBe('cancelled');
+    const listed = (await t.orgList()).find(
+      (r) => r.id === c.packageChangeRequestId,
+    )!;
+    expect(listed.online!.state).toBe('superseded');
+
+    expect(await t.pay(c)).toBe('needs_review');
+    expect(c.reviewReason).toMatch(/Paid after a newer change/);
+    expect(t.sub()).toMatchObject({
+      planId: 'starter',
+      cancelAtPeriodEnd: true,
+    });
+    expect(t.db.notification.rows.at(-1)).toMatchObject({
+      title: 'Plan payment needs review',
+    });
+  });
+
+  it('scheduling a smaller plan does the same', async () => {
+    const t = setup({ planId: 'pro', amount: 3000 });
+    const c = await t.start('pro', { interval: 'yearly' });
+    await t.changes.scheduleDowngrade('org-1', 'u-admin', {
+      planId: 'starter',
+    });
+    expect(c.status).toBe('cancelled');
+    expect(await t.pay(c)).toBe('needs_review');
+    expect(t.sub()).toMatchObject({
+      planId: 'pro',
+      billingCycle: 'monthly',
+      scheduledPlanId: 'starter',
+    });
+  });
+
+  it('two tabs, two orders: the older one never applies, and nothing applies twice', async () => {
+    const t = setup();
+    const older = await t.start('pro');
+    const newer = await t.start('pro');
+    expect(await t.pay(older)).toBe('needs_review');
+    expect(t.sub().planId).toBe('starter');
+    expect(await t.pay(newer)).toBe('paid');
+    expect(t.sub().planId).toBe('pro');
+    const renewsAt = t.sub().renewsAt;
+    expect(await t.pay(newer)).toBe('already_done');
+    expect(await t.pay(older)).toBe('already_done');
+    expect(t.sub().renewsAt).toEqual(renewsAt);
   });
 });

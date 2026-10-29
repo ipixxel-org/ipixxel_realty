@@ -1,3 +1,4 @@
+import { PAYMENT_REVIEW_MESSAGE } from './online-rows';
 /**
  * Pure assembly of the v2 billing overview from real rows (unit-tested).
  * Nothing in here touches the database.
@@ -102,6 +103,12 @@ export function planChangeBlock(
         pending.toPlan.name,
         new Date(pending.createdAt),
       ),
+    };
+  }
+  if (pending?.status === 'needs_review') {
+    return {
+      planChangeBlockedReason: 'payment_review',
+      planChangeBlockedMessage: PAYMENT_REVIEW_MESSAGE,
     };
   }
   if (sub && !input.plan.isFree && (sub.cancelAtPeriodEnd || sub.scheduled)) {

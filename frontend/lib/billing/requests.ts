@@ -16,7 +16,10 @@ export function pendingRequestText(p: Pick<PendingUpgrade, "fromPlan" | "toPlan"
   return `You already have a pending request (${change}, sent ${shortDay(p.createdAt)}). Wait for approval or withdraw it.`;
 }
 
-/** The waiting request that blocks plan changes, or null (a paid order under review doesn't). */
+/** The one "a payment is being checked" message — the API refuses with the same words (payment_review). */
+export const PAYMENT_REVIEW_TEXT = "A payment is being checked by our team. You can change plans once it's resolved.";
+
+/** The waiting request that blocks plan changes, or null (a paid order under review is payment_review). */
 export function blockingRequest(o: Pick<BillingOverview, "pendingUpgrade"> | null | undefined): PendingUpgrade | null {
   return o?.pendingUpgrade?.status === "pending_approval" ? o.pendingUpgrade : null;
 }
@@ -46,6 +49,7 @@ export function planChangeBlock(o: BlockFields | null | undefined): { reason: Pl
   if (o.planChangeBlockedReason && o.planChangeBlockedMessage) return { reason: o.planChangeBlockedReason, message: o.planChangeBlockedMessage };
   const waiting = blockingRequest(o);
   if (waiting) return { reason: "request_pending", message: pendingRequestText(waiting) };
+  if (o.pendingUpgrade?.status === "needs_review") return { reason: "payment_review", message: PAYMENT_REVIEW_TEXT };
   if (!o.plan.isFree && (o.cancelAt || o.downgradeTo)) {
     return {
       reason: "change_scheduled",
@@ -69,8 +73,8 @@ export const isOnlinePayment = (r: { kind?: string }) => r.kind === "online_paym
 
 /**
  * The status tag on an online payment row: "Waiting for payment", "Paid online
- * · 27 Oct", "Payment failed", "Expired (not paid)", "Replaced by a newer
- * payment" or "Needs review".
+ * · 27 Oct", "Payment failed", "Expired (not paid)", "Superseded", "Needs
+ * review", "Refunded" or "Resolved by our team".
  */
 export function onlinePaymentTag(o: Pick<OnlinePaymentView, "state" | "paidAt">): string {
   switch (o.state) {
@@ -82,10 +86,14 @@ export function onlinePaymentTag(o: Pick<OnlinePaymentView, "state" | "paidAt">)
       return "Payment failed";
     case "expired":
       return "Expired (not paid)";
-    case "replaced":
-      return "Replaced by a newer payment";
+    case "superseded":
+      return "Superseded";
     case "needs_review":
       return "Needs review";
+    case "refunded":
+      return "Refunded";
+    case "resolved":
+      return "Resolved by our team";
   }
 }
 
@@ -95,8 +103,10 @@ export const ONLINE_PAYMENT_BADGE: Record<OnlinePaymentView["state"], string> = 
   paid: "b-green",
   failed: "b-rose",
   expired: "b-gray",
-  replaced: "b-gray",
+  superseded: "b-gray",
   needs_review: "b-amber",
+  refunded: "b-gray",
+  resolved: "b-gray",
 };
 
 /** Where a request is: "Waiting for payment", "Payment received – waiting for approval", or the decision. */

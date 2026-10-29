@@ -6,7 +6,7 @@ import { useToast } from "@/components/ui/toast";
 import { BILLING_FIELD_LABEL } from "@/lib/billing/details";
 import { planChangeRoute } from "@/lib/billing/direction";
 import { formatDate, formatINR, packagePriceText, stateName } from "@/lib/billing/pricing";
-import { pendingRequestText, planChangeBlock } from "@/lib/billing/requests";
+import { pendingRequestText, planChangeBlock, PAYMENT_REVIEW_TEXT } from "@/lib/billing/requests";
 import type { BillingDetailsField, BillingInterval, BillingOverview, BillingProfile, CheckoutPreview, PendingUpgrade } from "@/lib/billing/types";
 import { useBillingEnv, useBillingQuery, useOrgBilling } from "./context";
 import { ScheduledChangeNote } from "./banners";
@@ -535,7 +535,7 @@ export function CheckoutScreen({
     pendingUpgrade
       ? waiting
         ? pendingRequestText(pendingUpgrade)
-        : "Your last payment is still being checked by our team"
+        : PAYMENT_REVIEW_TEXT
       : !canEdit
         ? "Ask an admin with billing access to buy a plan"
         : missingDetails.length

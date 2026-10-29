@@ -3,17 +3,22 @@
  * Super Admin's Package requests — read-only rows with the payment's tag, the
  * Razorpay order ID, the invoice once paid, and what stays.
  */
-import { act, cleanup, render, screen, within } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import type { ReactNode } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { ToastProvider } from "@/components/ui/toast";
 import { BillingEnvProvider, OrgBillingProvider } from "@/components/billing/context";
 import { RequestsTable } from "@/components/billing/requests";
+import { PlansScreen } from "@/components/billing/plans";
+import { DowngradeScreen } from "@/components/billing/plan-changes";
+import { CheckoutScreen } from "@/components/billing/checkout";
+import { BillingOverviewPanel } from "@/components/billing/overview";
+import { CheckoutsNeedingReview } from "@/components/billing/admin/checkouts-review";
 import { NEEDS_REVIEW_HREF, OrgPackageRequests } from "@/components/billing/admin/package-requests";
 import type { BillingClient } from "@/lib/billing/client";
 import { createMockBillingClient } from "@/lib/billing/mock/client";
-import { onlinePaymentTag } from "@/lib/billing/requests";
-import type { OnlinePaymentView, OrgPlanRequest } from "@/lib/billing/types";
+import { onlinePaymentTag, PAYMENT_REVIEW_TEXT, planChangeBlock } from "@/lib/billing/requests";
+import type { AdminCheckoutRow, BillingOverview, OnlinePaymentView, OrgPlanRequest } from "@/lib/billing/types";
 import type { PackageChangeRequestRow } from "@/lib/types";
 
 vi.mock("next/navigation", () => ({
@@ -73,8 +78,10 @@ describe("the online payment tags", () => {
     expect(onlinePaymentTag(online("paid"))).toBe("Paid online · 27 Oct");
     expect(onlinePaymentTag(online("failed"))).toBe("Payment failed");
     expect(onlinePaymentTag(online("expired"))).toBe("Expired (not paid)");
-    expect(onlinePaymentTag(online("replaced"))).toBe("Replaced by a newer payment");
+    expect(onlinePaymentTag(online("superseded"))).toBe("Superseded");
     expect(onlinePaymentTag(online("needs_review"))).toBe("Needs review");
+    expect(onlinePaymentTag(online("refunded"))).toBe("Refunded");
+    expect(onlinePaymentTag(online("resolved"))).toBe("Resolved by our team");
   });
 });
 
@@ -220,5 +227,93 @@ describe("Super Admin: Package requests on the org page", () => {
     expect(within(manual).queryByTestId("online-payment-status")).toBeNull();
     expect(within(sched).getByTestId("scheduled-change-status")).toBeInTheDocument();
     expect(within(sched).queryByTestId("online-payment-status")).toBeNull();
+  });
+});
+
+describe("online step 4: a payment under review puts plan changes on hold", () => {
+  const review = { status: "needs_review", requestId: null, checkoutId: "chk", fromPlan: { id: "growth", name: "Growth" }, toPlan: { id: "pro", name: "Pro" }, interval: "monthly", createdAt: PAID_AT } as const;
+  /** Online, on Growth, with a paid checkout under review. */
+  async function underReview(withReason = true): Promise<BillingClient> {
+    const base = createMockBillingClient({ initial: { paidPlanId: "growth" } });
+    const o = await base.getBillingOverview();
+    const blocked: BillingOverview = {
+      ...o,
+      pendingUpgrade: review as never,
+      ...(withReason ? { planChangeBlockedReason: "payment_review" as const, planChangeBlockedMessage: PAYMENT_REVIEW_TEXT } : { planChangeBlockedReason: undefined, planChangeBlockedMessage: undefined }),
+    };
+    return { ...base, getBillingOverview: async () => blocked };
+  }
+
+  it("the block says payment_review with the message (also worked out for an older API)", async () => {
+    for (const withReason of [true, false]) {
+      const o = await (await underReview(withReason)).getBillingOverview();
+      expect(planChangeBlock(o)).toEqual({ reason: "payment_review", message: PAYMENT_REVIEW_TEXT });
+    }
+  });
+
+  it("plan cards are disabled with the message", async () => {
+    await show(await underReview(), <PlansScreen />);
+    const blocked = screen.getAllByTestId("plan-action-blocked");
+    expect(blocked.length).toBeGreaterThan(0);
+    for (const b of blocked) expect(b).toHaveAttribute("title", PAYMENT_REVIEW_TEXT);
+  });
+
+  it("the downgrade page says plan changes are on hold, with no form", async () => {
+    await show(await underReview(), <DowngradeScreen planId="basic" />);
+    expect(screen.getByTestId("payment-review-note")).toHaveTextContent(PAYMENT_REVIEW_TEXT);
+    expect(screen.queryByRole("button", { name: /Move to Basic/ })).toBeNull();
+  });
+
+  it("the checkout's Pay is disabled with the message; a renewal still goes through", async () => {
+    await show(await underReview(), <CheckoutScreen planId="pro" interval="monthly" />);
+    const pay = screen.getByRole("button", { name: /Pay|Request pending/ });
+    expect(pay).toBeDisabled();
+    expect(pay.parentElement).toHaveAttribute("title", PAYMENT_REVIEW_TEXT);
+    cleanup();
+    await show(await underReview(), <CheckoutScreen planId="growth" interval="monthly" renewal />);
+    expect(screen.getByRole("button", { name: /^Pay / })).toBeEnabled();
+  });
+});
+
+describe("online step 4: no standalone Choose what stays on the org's action row", () => {
+  it("online: not in the action row; on Basic after a paid plan the locked note stays", async () => {
+    await show(createMockBillingClient(), <BillingOverviewPanel showInvoices={false} />);
+    expect(within(screen.getByTestId("billing-actions")).queryByRole("link", { name: "Choose what stays" })).toBeNull();
+    cleanup();
+    await show(createMockBillingClient({ initial: { situation: "moved_to_basic" } }), <BillingOverviewPanel showInvoices={false} />);
+    expect(within(screen.getByTestId("billing-actions")).getByTestId("what-stays-locked")).toBeInTheDocument();
+  });
+});
+
+describe("online step 4: Super Admin closes a payment under review by hand", () => {
+  it("Mark resolved sends the note and reloads the list", async () => {
+    const row: AdminCheckoutRow = {
+      id: "chk-1",
+      organisation: { id: "org-1", name: "Acme" },
+      fromPlanName: "Growth",
+      toPlanName: "Pro",
+      toInterval: "monthly",
+      kind: "new",
+      mode: "online",
+      status: "needs_review",
+      total: 3540,
+      paid: 3540,
+      razorpayPaymentId: "pay_1",
+      buyerGstin: null,
+      reviewReason: "Paid after a newer change",
+      createdAt: PAID_AT,
+      updatedAt: PAID_AT,
+    } as AdminCheckoutRow;
+    const base = createMockBillingClient();
+    const list = vi.fn().mockResolvedValueOnce([row]).mockResolvedValue([]);
+    const resolve = vi.fn(async () => ({ id: "chk-1", status: "rejected" as const }));
+    const prompt = vi.spyOn(window, "prompt").mockReturnValue("Plan changed by hand");
+    await show({ ...base, listAdminCheckouts: list, resolveAdminCheckout: resolve }, <CheckoutsNeedingReview />);
+    fireEvent.click(screen.getByTestId("resolve-checkout"));
+    await settle();
+    expect(resolve).toHaveBeenCalledWith({ checkoutId: "chk-1", note: "Plan changed by hand" });
+    expect(list).toHaveBeenCalledTimes(2);
+    expect(screen.queryByTestId("resolve-checkout")).toBeNull();
+    prompt.mockRestore();
   });
 });

@@ -61,7 +61,11 @@ export interface UsageItemV2 {
   limit: number | null;
 }
 
-export type PlanChangeBlockedReasonV2 = 'request_pending' | 'change_scheduled';
+export type PlanChangeBlockedReasonV2 =
+  | 'request_pending'
+  | 'change_scheduled'
+  // A paid online checkout is being checked (needs_review). Renewals still go through.
+  | 'payment_review';
 
 export interface BillingOverviewV2 {
   orgName: string;
