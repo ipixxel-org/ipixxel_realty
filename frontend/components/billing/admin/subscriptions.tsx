@@ -411,8 +411,11 @@ export function SubscriptionDetailView({
     <div className="bl-stack">
       <div className="bl-row" data-testid="subscription-actions">
         {actionButton("grace", "btn btn-ghost", <><Icon name="clock" size={15} /> Extend grace</>)}
+        {/* Hidden for now in online mode too (manual mode never shows them: viaRequest).
+            The dialogs and endpoints are kept; uncomment to bring them back.
         {actionButton("offline", "btn btn-ghost", <><Icon name="check" size={15} /> Mark paid offline</>)}
         {actionButton("coupon", "btn btn-ghost", <><Icon name="tag" size={15} /> Apply coupon</>)}
+        */}
         {actionButton("cancel", "btn btn-danger", "Cancel")}
         {actions?.(d)}
       </div>

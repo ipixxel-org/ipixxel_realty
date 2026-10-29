@@ -262,11 +262,12 @@ describe("Subscriptions → org: actions by payment mode", () => {
     expect(screen.queryByRole("dialog")).toBeNull();
   });
 
-  it("online mode keeps the row as it was", async () => {
+  it("online mode: Mark paid offline and Apply coupon are hidden for now too; Extend grace stays", async () => {
     inEnv(detailIn("online"), <SubscriptionDetailView orgId="org-skyline" />);
     await settle();
-    for (const name of [/Extend grace/, /Mark paid offline/, /Apply coupon/]) {
-      expect(screen.getByRole("button", { name })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Extend grace/ })).toBeInTheDocument();
+    for (const name of [/Mark paid offline/, /Apply coupon/]) {
+      expect(screen.queryByRole("button", { name })).toBeNull();
     }
   });
 });
