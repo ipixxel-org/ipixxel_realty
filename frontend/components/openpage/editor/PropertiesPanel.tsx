@@ -1482,6 +1482,8 @@ export function PropertiesPanel({ block }: { block: BlockConfig }) {
   const [newPropType, setNewPropType] = useState<"text" | "textarea" | "image" | "toggle">("text")
 
   const updateColumnWidth = useConfigStore((s) => s.updateColumnWidth)
+  const updateColumnMobileWidth = useConfigStore((s) => s.updateColumnMobileWidth)
+  const viewport = useEditorStore((s) => s.viewport)
   const addColumn = useConfigStore((s) => s.addColumn)
   const removeColumn = useConfigStore((s) => s.removeColumn)
   const updateBlockProps = useConfigStore((s) => s.updateBlockProps)
@@ -1556,7 +1558,7 @@ export function PropertiesPanel({ block }: { block: BlockConfig }) {
   }
 
   const columns = block.type === "columns"
-    ? ((block.props.columns as Array<{ width: number; blocks: BlockConfig[] }>) ?? [])
+    ? ((block.props.columns as Array<{ width: number; mobileWidth?: number; blocks: BlockConfig[] }>) ?? [])
     : []
 
   const handleAddCustomProperty = () => {
@@ -1712,12 +1714,19 @@ export function PropertiesPanel({ block }: { block: BlockConfig }) {
       {block.type === "columns" && (
         <Section title="Columns">
           <div className="space-y-2">
+            {viewport === "mobile" ? (
+              <p className="text-[10px] text-text-3 leading-snug">
+                Mobile widths — these only apply on phones and never change desktop or tablet. 100% shows one column per row.
+              </p>
+            ) : null}
             {columns.map((col, i) => (
               <div key={i} className="bg-slate-50 border border-border-default rounded p-2">
                 <div className="flex items-center justify-between mb-1.5">
                   <span className="text-[10px] text-text-3 font-medium">Column {i + 1}</span>
                   <div className="flex items-center gap-1">
-                    <span className="text-[10px] text-text-3 font-mono">{col.width}%</span>
+                    <span className="text-[10px] text-text-3 font-mono">
+                      {viewport === "mobile" ? `${col.mobileWidth ?? 100}%` : `${col.width}%`}
+                    </span>
                     {columns.length > 1 && (
                       <button
                         onClick={() => removeColumn(block.id, i)}
@@ -1732,9 +1741,14 @@ export function PropertiesPanel({ block }: { block: BlockConfig }) {
                 <input
                   type="range"
                   min={10}
-                  max={90}
-                  value={col.width}
-                  onChange={(e) => updateColumnWidth(block.id, i, Number(e.target.value))}
+                  max={viewport === "mobile" ? 100 : 90}
+                  // Mobile edits the phone-only width; desktop/tablet edit the shared one.
+                  value={viewport === "mobile" ? (col.mobileWidth ?? 100) : col.width}
+                  onChange={(e) =>
+                    viewport === "mobile"
+                      ? updateColumnMobileWidth(block.id, i, Number(e.target.value))
+                      : updateColumnWidth(block.id, i, Number(e.target.value))
+                  }
                   className="w-full h-1.5 rounded-full appearance-none bg-slate-200 cursor-pointer accent-green"
                 />
                 <div className="text-[9px] text-text-3 mt-0.5">{col.blocks.length} widget(s) in this column</div>

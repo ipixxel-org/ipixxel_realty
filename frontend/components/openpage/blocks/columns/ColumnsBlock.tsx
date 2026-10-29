@@ -1,6 +1,6 @@
 "use client";
 
-import { Fragment, useCallback, useState, useRef } from "react";
+import { Fragment, useCallback, useState, useRef, type CSSProperties } from "react";
 import { useDroppable } from "@dnd-kit/core";
 import { SortableContext, verticalListSortingStrategy, useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
@@ -15,8 +15,14 @@ import { toast } from "sonner";
 import { ColumnResizer } from "./ColumnResizer";
 
 interface ColumnsProps {
-  columns?: Array<{ width: number; blocks: BlockConfig[] }>;
+  columns?: Array<{ width: number; mobileWidth?: number; blocks: BlockConfig[] }>;
   gap?: string;
+}
+
+/** Phone-width flex-basis: the column's own mobile width, else full width. */
+export function mobileColumnBasis(mobileWidth: number | undefined, gap: string): string {
+  if (typeof mobileWidth !== "number" || !Number.isFinite(mobileWidth) || mobileWidth >= 100) return "100%";
+  return `calc(${Math.max(10, mobileWidth)}% - ${gap})`;
 }
 
 type DropPayload =
@@ -202,7 +208,7 @@ function DroppableColumn({
 }: {
   sectionBlockId: string;
   colIndex: number;
-  col: { width: number; blocks: BlockConfig[] };
+  col: { width: number; mobileWidth?: number; blocks: BlockConfig[] };
   gap: string;
 }) {
   const { addBlockToColumn } = useConfigStore();
@@ -244,8 +250,16 @@ function DroppableColumn({
   return (
     <div
       ref={combinedRef}
-      className="min-w-0 relative flex flex-col justify-start"
-      style={{ flex: `0 0 calc(${col.width}% - ${gap})` }}
+      // Phone-width containers (< @md, 448px) use the column's mobile width
+      // (default 100%: one per row); wider ones use its desktop width. The
+      // two are stored separately, so neither overwrites the other.
+      className="min-w-0 relative flex flex-col justify-start grow-0 shrink-0 basis-[var(--op-col-basis-sm)] @md:basis-[var(--op-col-basis)]"
+      style={
+        {
+          "--op-col-basis": `calc(${col.width}% - ${gap})`,
+          "--op-col-basis-sm": mobileColumnBasis(col.mobileWidth, gap),
+        } as CSSProperties
+      }
       onDragOver={(e) => {
         e.preventDefault();
         e.stopPropagation();
@@ -431,13 +445,16 @@ export function ColumnsBlock({ block }: { block: BlockConfig }) {
               gap={gap}
             />
             {i < columns.length - 1 && (
-              <ColumnResizer
-                sectionBlockId={block.id}
-                leftIndex={i}
-                leftWidth={col.width}
-                rightWidth={columns[i + 1]?.width ?? 50}
-                containerRef={containerRef}
-              />
+              // No resize handles while stacked: widths apply to every device.
+              <div className="hidden @md:contents">
+                <ColumnResizer
+                  sectionBlockId={block.id}
+                  leftIndex={i}
+                  leftWidth={col.width}
+                  rightWidth={columns[i + 1]?.width ?? 50}
+                  containerRef={containerRef}
+                />
+              </div>
             )}
           </Fragment>
         ))}
