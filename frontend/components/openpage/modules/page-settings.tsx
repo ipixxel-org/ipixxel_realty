@@ -571,6 +571,8 @@ function BrandingSection({
 }) {
   const t = settings.theme;
   const primary = t.primary ?? "#6d5dfc";
+  // Filled buttons use the CTA colour (falls back to Primary), as on the page.
+  const cta = t.ctaButtonColor || primary;
   const text = t.text ?? "#0f172a";
   const bg = t.bg ?? "#ffffff";
   return (
@@ -588,7 +590,7 @@ function BrandingSection({
           <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 4, color: primary }}>Acme Realty</div>
           <div style={{ fontSize: 14, fontWeight: 700, marginBottom: 10 }}>A brand headline in your primary colour</div>
           <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-            <button type="button" style={{ background: primary, color: bg, border: "none", borderRadius: t.radius ?? 10, padding: "9px 16px", fontWeight: 700, fontSize: 13 }}>
+            <button type="button" style={{ background: cta, color: bg, border: "none", borderRadius: t.radius ?? 10, padding: "9px 16px", fontWeight: 700, fontSize: 13 }}>
               Primary action
             </button>
             <button type="button" style={{ background: "transparent", color: primary, border: `1.5px solid ${primary}`, borderRadius: t.radius ?? 10, padding: "9px 16px", fontWeight: 700, fontSize: 13 }}>

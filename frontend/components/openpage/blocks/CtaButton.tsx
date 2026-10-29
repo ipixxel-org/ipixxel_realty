@@ -46,6 +46,7 @@ export function CtaButton({
   onClick,
   className = "",
   icon = <ArrowRight size={15} />,
+  brand = /secondary/i.test(prefix) ? "secondary" : null,
 }: {
   block: BlockConfig;
   id: ElementId;
@@ -59,6 +60,13 @@ export function CtaButton({
   className?: string;
   /** Trailing icon; `null` for none. */
   icon?: ReactNode;
+  /**
+   * Which Page Settings → Branding colour this button takes by default
+   * (see `[data-op-cta]` in openpage.css). Buttons already on `bg-green`
+   * follow the CTA colour without it. `null` keeps the block's own look,
+   * e.g. a light button on a dark photo.
+   */
+  brand?: "primary" | "secondary" | null;
 }) {
   const text = (label ?? "").trim();
   if (!text) return null;
@@ -89,6 +97,7 @@ export function CtaButton({
     </>
   );
   const classes = `op-btn inline-flex items-center justify-center gap-2 transition-colors ${className}`;
+  const brandAttr = brand ? { "data-op-cta": brand } : {};
 
   const link = (href ?? "").trim();
   if (link) {
@@ -103,6 +112,7 @@ export function CtaButton({
         rel={newTab ? "noopener noreferrer" : undefined}
         className={classes}
         style={style}
+        {...brandAttr}
         {...hover}
       >
         {content}
@@ -110,7 +120,7 @@ export function CtaButton({
     );
   }
   return (
-    <El block={block} id={id} as="button" type="button" onClick={onClick} className={classes} style={style} {...hover}>
+    <El block={block} id={id} as="button" type="button" onClick={onClick} className={classes} style={style} {...brandAttr} {...hover}>
       {content}
     </El>
   );

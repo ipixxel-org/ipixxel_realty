@@ -47,11 +47,13 @@ function useCtaParts(block: BlockConfig) {
       icon={icon}
     />
   );
-  const secondary = (className: string) => (
+  // `onDark` keeps a light button readable on a photo / dark background.
+  const secondary = (className: string, onDark = false) => (
     <CtaButton
       block={block}
       id="cta:secondary"
       prefix="secondaryButton"
+      brand={onDark ? null : "secondary"}
       label={props.secondaryButtonText}
       href={props.secondaryButtonUrl || "#enquire"}
       target={props.secondaryButtonTarget}
@@ -116,6 +118,7 @@ function CtaSimple({ block }: { block: BlockConfig }) {
             `px-7 py-3 rounded-lg border text-sm font-semibold ${
               onImage ? "border-white/40 bg-white/10 text-white hover:bg-white/20" : "border-border-default bg-bg-1 text-text-0 hover:bg-bg-2"
             }`,
+            onImage,
           )}
         </div>
       </div>
@@ -188,7 +191,7 @@ function CtaBanner({ block }: { block: BlockConfig }) {
           {c.subheadline("text-white/80 text-base @md:text-lg mb-8 leading-relaxed")}
           <div className="flex flex-wrap gap-4">
             {c.primary("px-8 py-3.5 rounded-lg bg-green text-black text-sm font-semibold hover:opacity-90")}
-            {c.secondary("px-7 py-3.5 rounded-lg border border-white/35 bg-white/10 backdrop-blur text-white text-sm font-medium hover:bg-white/20")}
+            {c.secondary("px-7 py-3.5 rounded-lg border border-white/35 bg-white/10 backdrop-blur text-white text-sm font-medium hover:bg-white/20", true)}
           </div>
         </div>
         {c.image("hidden @lg:block rounded-2xl aspect-[4/3] border border-white/15 shadow-2xl")}

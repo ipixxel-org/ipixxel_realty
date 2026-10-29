@@ -3,7 +3,7 @@
 import { useMemo } from "react";
 import type { SiteConfig, BlockConfig } from "@/components/openpage/blocks/types";
 import { RenderBlock } from "@/components/openpage/blocks/registry";
-import { resolveSiteTheme, siteThemeCSS } from "@/lib/openpage/theme-presets";
+import { resolveSiteTheme, siteBrandAttrs, siteThemeCSS } from "@/lib/openpage/theme-presets";
 import { useGoogleFonts } from "@/lib/openpage/useGoogleFonts";
 import { DeviceProvider } from "@/components/openpage/runtime/device";
 import { OpenPageRuntimeProvider } from "@/components/openpage/runtime/OpenPageRuntime";
@@ -63,6 +63,7 @@ export function SiteRenderer({
 
   const resolved = useMemo(() => resolveSiteTheme(resolvedSite), [resolvedSite]);
   const cssVars = useMemo(() => siteThemeCSS(resolvedSite), [resolvedSite]);
+  const brandAttrs = useMemo(() => siteBrandAttrs(resolvedSite), [resolvedSite]);
   useGoogleFonts([resolved.fontSans, resolved.fontDisplay, resolved.fontMono]);
   const library = mergeFormLibraries(forms, resolvedSite.forms);
 
@@ -83,6 +84,7 @@ export function SiteRenderer({
       popups={resolvedSite.popups ?? []}
     >
       <div
+        {...brandAttrs}
         className="op-site @container min-h-screen w-full"
         style={{ ...cssVars, color: "var(--color-text-0)", backgroundColor: "var(--color-bg-1)" } as React.CSSProperties}
       >

@@ -576,7 +576,31 @@ export function siteThemeCSS(site: SiteThemeSource): Record<string, string> {
   if (containerWidth) {
     Object.assign(vars, { "--op-container": `${containerWidth}px` });
   }
+  const primary = site.settings?.theme?.primary?.trim();
+  if (primary) vars["--op-brand-primary"] = primary;
+  // Branding CTA colour (falls back to Primary) drives every `*-green`
+  // utility on the page; see --color-green in globals.css.
+  const cta = site.settings?.theme?.ctaButtonColor?.trim() || primary;
+  if (cta) {
+    vars["--op-brand-cta"] = cta;
+    vars["--op-brand-cta-dim"] = `color-mix(in srgb, ${cta} 85%, black)`;
+  }
   return vars;
+}
+
+/**
+ * Root attributes that switch on the Branding button defaults in
+ * openpage.css — only for colours the user actually set, so pages without
+ * Branding colours keep their template's look. Filled buttons take the CTA
+ * colour (which falls back to Primary); outline/secondary buttons take Primary.
+ * Per-block and Element-tab colours still win (inline / !important).
+ */
+export function siteBrandAttrs(site: SiteThemeSource): Record<string, string> {
+  const theme = site.settings?.theme;
+  const attrs: Record<string, string> = {};
+  if (theme?.ctaButtonColor?.trim() || theme?.primary?.trim()) attrs["data-op-brand-cta"] = "";
+  if (theme?.primary?.trim()) attrs["data-op-brand-primary"] = "";
+  return attrs;
 }
 
 export const googleFontOptions = [

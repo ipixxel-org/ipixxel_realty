@@ -1364,6 +1364,7 @@ export function AmenitiesBlock({ block }: { block: BlockConfig }) {
         href={exploreHref}
         target={str(p.ctaTarget)}
         className="px-7 py-3 rounded-lg border border-border-default text-sm font-semibold hover:border-green hover:bg-green/5"
+        brand="secondary"
       />
     </div>
   ) : null;

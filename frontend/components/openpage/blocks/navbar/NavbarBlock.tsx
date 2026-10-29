@@ -183,12 +183,15 @@ function CtaButton({
   onClick,
   styleProps,
   className,
+  brand,
 }: {
   text: string;
   href: string;
   onClick?: () => void;
   styleProps: NavbarProps;
   className?: string;
+  /** Branding default for a button not already on the CTA colour (see openpage.css). */
+  brand?: "primary";
 }) {
   const backgroundColor = styleProps.ctaButtonColor || undefined;
   const radius = Number(styleProps.ctaRadius);
@@ -214,6 +217,7 @@ function CtaButton({
       ) : null}
       <a
       href={href}
+      data-op-cta={brand}
       onClick={(e) => {
         if (styleProps.ctaTarget !== "_blank") handleNavClick(e, href, onClick);
         else onClick?.();
@@ -492,7 +496,7 @@ function NavbarMarketing({ props, sticky }: { props: NavbarProps; sticky?: boole
         </div>
         <div className="flex items-center gap-2 shrink-0">
           {ctaText ? (
-            <CtaButton text={ctaText} href={ctaHref} styleProps={props} className="px-4 @md:px-5 py-2 rounded-full bg-text-0 text-bg-1 text-[13px] font-semibold hover:opacity-90 transition-opacity" />
+            <CtaButton text={ctaText} href={ctaHref} styleProps={props} brand="primary" className="px-4 @md:px-5 py-2 rounded-full bg-text-0 text-bg-1 text-[13px] font-semibold hover:opacity-90 transition-opacity" />
           ) : null}
           <button
             type="button"

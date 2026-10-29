@@ -2118,3 +2118,16 @@
 .ps-builder-canvas {
   background: var(--ps-canvas-bg, #eef0f5);
 }
+
+/* Page Settings → Branding button defaults. The root only carries these
+   flags for colours the user set (siteBrandAttrs), so other pages keep their
+   template look. Filled buttons already on `bg-green` follow --op-brand-cta
+   by themselves (globals.css); these rules cover the rest. Per-block colours (inline styles)
+   and Element-tab styles (!important) still override. */
+[data-op-brand-cta] [data-op-cta="primary"] {
+  background-color: var(--op-brand-cta);
+}
+[data-op-brand-primary] [data-op-cta="secondary"] {
+  border-color: var(--op-brand-primary);
+  color: var(--op-brand-primary);
+}
