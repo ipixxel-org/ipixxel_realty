@@ -85,42 +85,48 @@ const blockIcons: Partial<Record<BlockType, typeof Layout>> = {
   team: Building2,
 }
 
-const PICKER_GROUPS: { id: string; title: string; defaultOpen: boolean; types: BlockType[] }[] = [
+// Each widget appears in exactly one group (see the picker-groups test).
+// Groups whose widgets aren't available (e.g. Layout's "banner") hide
+// themselves, so an empty group never shows.
+export const PICKER_GROUPS: { id: string; title: string; defaultOpen: boolean; types: BlockType[] }[] = [
   {
     id: "core",
     title: "Core",
     defaultOpen: true,
-    types: ["heading", "text", "button", "columns", "image", "video", "icon", "icon-box", "divider", "spacer", "location", "html-code"],
+    types: ["heading", "text", "button", "columns", "image", "video", "icon", "icon-box", "divider", "spacer", "html-code"],
   },
   {
     id: "layout",
     title: "Layout",
     defaultOpen: false,
-    types: ["columns", "spacer", "divider", "banner"],
+    // Container / Spacer / Divider live in Core.
+    types: ["banner"],
   },
   {
     id: "content",
     title: "Content",
-    defaultOpen: false,
-    types: ["heading", "text", "features", "faq", "cta", "custom-section"],
+    // Open by default: CTA / FAQ / Highlights live only here now.
+    defaultOpen: true,
+    types: ["features", "faq", "cta", "custom-section"],
   },
   {
     id: "media",
     title: "Media",
     defaultOpen: false,
-    types: ["image", "video", "gallery", "image-box"],
+    // Image / Video live in Core.
+    types: ["gallery", "image-box"],
   },
   {
     id: "re",
     title: "Real Estate",
     defaultOpen: true,
-    types: ["project-banner", "project-overview", "property-details", "unit-config", "amenities", "floor-plans", "gallery", "location", "re-pricing", "developer", "testimonials", "lead-form", "download-brochure", "site-visit", "newsletter", "cta"],
+    types: ["project-banner", "project-overview", "property-details", "unit-config", "amenities", "floor-plans", "location", "re-pricing", "developer", "testimonials"],
   },
   {
     id: "forms",
     title: "Lead & Forms",
     defaultOpen: true,
-    types: ["lead-form", "site-visit", "newsletter", "download-brochure", "cta", "button"],
+    types: ["lead-form", "site-visit", "newsletter", "download-brochure"],
   },
   {
     id: "chrome",
