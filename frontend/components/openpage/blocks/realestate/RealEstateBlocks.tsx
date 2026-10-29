@@ -2554,42 +2554,81 @@ export function ConstructionStatusBlock({ block }: { block: BlockConfig }) {
 
 export function DeveloperBlock({ block }: { block: BlockConfig }) {
   const p = block.props;
-  const rawStats = items<Record<string, unknown>>(p.stats || p.items);
-  const stats = rawStats
-    .map((s) => ({
-      value: str(s.value ?? s.stat ?? s.title ?? ""),
-      label: str(s.label ?? s.description ?? s.subtitle ?? ""),
+  const listKey = Array.isArray(p.stats) ? "stats" : "items";
+  // Stats keep their stable `_id` so each one (and its value / label) can be
+  // selected and styled from the Element tab, like other list widgets.
+  const stats = items<Record<string, unknown>>(p.stats || p.items)
+    .map((s, i) => ({
+      id: itemPart(listKey, { _id: str(s._id) || `idx_${i}` }),
+      value: str(s.value ?? s.stat ?? s.title ?? "").trim(),
+      label: str(s.label ?? s.description ?? s.subtitle ?? "").trim(),
     }))
     .filter((s) => s.value || s.label);
   const variant = block.variant || "default";
   const logo = str(p.logo).trim();
   const image = str(p.image).trim();
+  const name = str(p.name).trim();
+  const title = str(p.title, "About the Developer");
+  const body = str(p.body).trim();
+  const anchor = str(p.anchor, "builder");
+
+  const nameEl = (className: string, as: "h2" | "h3" = "h2") =>
+    name ? (
+      <El block={block} id={part(block, "name")} as={as} className={className}>
+        {name}
+      </El>
+    ) : null;
+  const bodyEl = (className: string) =>
+    body ? (
+      <El block={block} id={part(block, "body")} as="p" className={`whitespace-pre-line ${className}`}>
+        {body}
+      </El>
+    ) : null;
+  const logoEl = (className: string) =>
+    logo ? (
+      <El block={block} id={part(block, "logo")} className={className}>
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img src={logo} alt={`${name || "Developer"} logo`} className="max-h-full max-w-full h-12 w-auto object-contain" />
+      </El>
+    ) : null;
+  const statsGrid = (gridClass: string, cardClass: string, valueClass: string, labelClass: string) =>
+    stats.length > 0 ? (
+      <div className={gridClass}>
+        {stats.map((s) => (
+          <El key={s.id} block={block} id={s.id} className={cardClass}>
+            {s.value ? <El block={block} id={subElementId(s.id, "value")} className={valueClass}>{s.value}</El> : null}
+            {s.label ? <El block={block} id={subElementId(s.id, "label")} className={labelClass}>{s.label}</El> : null}
+          </El>
+        ))}
+      </div>
+    ) : null;
 
   if (variant === "split") {
     return (
-      <SectionShell id={str(p.anchor, "builder")} className="bg-bg-2">
-        <div className="grid @lg:grid-cols-2 gap-10 max-w-6xl mx-auto items-center">
-          <div className="rounded-2xl overflow-hidden border border-border-default aspect-[4/3] bg-bg-1">
-            {str(p.image) ? (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img src={str(p.image)} alt={str(p.name)} className="w-full h-full object-cover" />
-            ) : (
-              <div className="w-full h-full min-h-[240px] bg-bg-3" />
-            )}
-          </div>
+      <SectionShell id={anchor} className="bg-bg-2">
+        <div className={`grid ${image || logo ? "@lg:grid-cols-2" : ""} gap-10 max-w-6xl mx-auto items-center`}>
+          {image || logo ? (
+            <div>
+              {image ? (
+                <El block={block} id={part(block, "image")} className="rounded-2xl overflow-hidden border border-border-default aspect-[4/3] bg-bg-1">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img src={image} alt={name || "Developer"} className="w-full h-full object-cover" />
+                </El>
+              ) : null}
+              {logoEl(`${image ? "mt-4 " : ""}flex items-center justify-center rounded-xl border border-border-default bg-bg-1 px-6 py-4`)}
+            </div>
+          ) : null}
           <div>
-            <p className="text-[11px] uppercase tracking-[0.2em] text-green font-semibold mb-3">{str(p.title, "About the Developer")}</p>
-            <h2 className="font-display text-3xl font-semibold mb-4">{str(p.name)}</h2>
-            <p className="text-text-1 leading-relaxed">{str(p.body)}</p>
-            {stats.length > 0 && (
-              <div className="grid grid-cols-2 @md:grid-cols-3 gap-3 mt-6 pt-6 border-t border-border-default/60">
-                {stats.map((s, i) => (
-                  <div key={i} className="rounded-xl border border-border-default/80 bg-bg-1/80 p-3.5 text-center shadow-sm">
-                    <div className="font-display text-xl @md:text-2xl font-bold text-green mb-0.5">{s.value}</div>
-                    <div className="text-[10.5px] uppercase tracking-wider text-text-3 font-medium">{s.label}</div>
-                  </div>
-                ))}
-              </div>
+            <El block={block} id={part(block, "title")} as="p" className="text-[11px] uppercase tracking-[0.2em] text-green font-semibold mb-3">
+              {title}
+            </El>
+            {nameEl("font-display text-3xl font-semibold mb-4")}
+            {bodyEl("text-text-1 leading-relaxed")}
+            {statsGrid(
+              "grid grid-cols-2 @md:grid-cols-3 gap-3 mt-6 pt-6 border-t border-border-default/60",
+              "rounded-xl border border-border-default/80 bg-bg-1/80 p-3.5 text-center shadow-sm",
+              "font-display text-xl @md:text-2xl font-bold text-green mb-0.5",
+              "text-[10.5px] uppercase tracking-wider text-text-3 font-medium",
             )}
           </div>
         </div>
@@ -2598,50 +2637,45 @@ export function DeveloperBlock({ block }: { block: BlockConfig }) {
   }
 
   if (variant === "stats") {
-    const displayStats = stats.length
-      ? stats
-      : [
-          { label: "Projects", value: "50+" },
-          { label: "Years", value: "25+" },
-          { label: "Cities", value: "12" },
-          { label: "Homes", value: "10k+" },
-        ];
+    // Only the stats the user entered: never placeholder numbers on a live page.
     return (
-      <SectionShell id={str(p.anchor, "builder")}>
-        <Title block={block} title={str(p.title, "About the Developer")} subtitle={str(p.name)} />
-        <p className="max-w-2xl mx-auto text-text-1 text-center leading-relaxed mb-10">{str(p.body)}</p>
-        <div className="grid grid-cols-2 @md:grid-cols-4 gap-4 max-w-4xl mx-auto">
-          {displayStats.map((s, i) => (
-            <div key={i} className="rounded-2xl border border-border-default bg-bg-2 p-5 text-center shadow-sm">
-              <div className="font-display text-2xl font-semibold text-green mb-1">{s.value}</div>
-              <div className="text-[11px] uppercase tracking-wider text-text-3">{s.label}</div>
-            </div>
-          ))}
-        </div>
+      <SectionShell id={anchor}>
+        <Title block={block} title={title} subtitle={name} />
+        {bodyEl("max-w-2xl mx-auto text-text-1 text-center leading-relaxed mb-10")}
+        {statsGrid(
+          "grid grid-cols-2 @md:grid-cols-4 gap-4 max-w-4xl mx-auto",
+          "rounded-2xl border border-border-default bg-bg-2 p-5 text-center shadow-sm",
+          "font-display text-2xl font-semibold text-green mb-1",
+          "text-[11px] uppercase tracking-wider text-text-3",
+        )}
       </SectionShell>
     );
   }
 
   if (variant === "band") {
     return (
-      <section id={str(p.anchor, "builder")} className="px-6 @md:px-10 py-12 bg-green/10 border-y border-green/20">
+      <section id={anchor} className="px-6 @md:px-10 py-12 bg-green/10 border-y border-green/20">
         <div className="max-w-5xl mx-auto flex flex-col @md:flex-row @md:items-center gap-6 @md:gap-10">
-          {str(p.logo) || str(p.image) ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img src={logo || image} alt={str(p.name)} className="h-14 w-auto object-contain shrink-0" />
+          {logo || image ? (
+            <El block={block} id={part(block, logo ? "logo" : "image")} className="shrink-0">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src={logo || image} alt={name || "Developer"} className="h-14 w-auto object-contain" />
+            </El>
           ) : null}
           <div className="flex-1">
-            <h3 className="font-semibold text-lg">{str(p.name) || str(p.title, "Developer")}</h3>
-            <p className="text-text-2 text-sm mt-1 line-clamp-2">{str(p.body)}</p>
-            {stats.length > 0 && (
-              <div className="flex flex-wrap gap-6 mt-4 pt-3 border-t border-green/20">
-                {stats.map((s, i) => (
-                  <div key={i}>
-                    <div className="font-display text-lg font-bold text-green">{s.value}</div>
-                    <div className="text-[10px] uppercase tracking-wider text-text-3">{s.label}</div>
-                  </div>
-                ))}
-              </div>
+            {name ? (
+              nameEl("font-semibold text-lg", "h3")
+            ) : (
+              <El block={block} id={part(block, "title")} as="h3" className="font-semibold text-lg">
+                {title || "Developer"}
+              </El>
+            )}
+            {bodyEl("text-text-2 text-sm mt-1 line-clamp-2")}
+            {statsGrid(
+              "flex flex-wrap gap-6 mt-4 pt-3 border-t border-green/20",
+              "",
+              "font-display text-lg font-bold text-green",
+              "text-[10px] uppercase tracking-wider text-text-3",
             )}
           </div>
         </div>
@@ -2649,40 +2683,35 @@ export function DeveloperBlock({ block }: { block: BlockConfig }) {
     );
   }
 
+  const hasMedia = Boolean(logo || image);
   return (
-    <SectionShell id={str(p.anchor, "builder")} className="bg-bg-2">
-      <div className="grid @lg:grid-cols-2 gap-10 max-w-6xl mx-auto items-center">
+    <SectionShell id={anchor} className="bg-bg-2">
+      {/* Without an image or logo the text takes the full width instead of
+          leaving an empty column. */}
+      <div className={`grid ${hasMedia ? "@lg:grid-cols-2 max-w-6xl" : "max-w-3xl"} gap-10 mx-auto items-center`}>
+        {hasMedia ? (
+          <div>
+            {image ? (
+              <El block={block} id={part(block, "image")} className="rounded-2xl border border-border-default bg-bg-1 aspect-[4/3] overflow-hidden">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src={image} alt={name || "Developer"} className="w-full h-full object-cover" />
+              </El>
+            ) : null}
+            {logoEl(
+              image
+                ? "mt-4 flex items-center justify-center rounded-xl border border-border-default bg-bg-1 px-6 py-4"
+                : "rounded-2xl border border-border-default bg-bg-1 aspect-[4/3] flex items-center justify-center p-6",
+            )}
+          </div>
+        ) : null}
         <div>
-          {logo || image ? (
-            <div className="rounded-2xl border border-border-default bg-white aspect-[4/3] overflow-hidden flex items-center justify-center p-6">
-              {image ? (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img src={image} alt={str(p.name, "Developer")} className="w-full h-full object-cover" />
-              ) : (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img src={logo} alt={`${str(p.name, "Developer")} logo`} className="max-h-full max-w-full object-contain" />
-              )}
-            </div>
-          ) : null}
-          {logo && image ? (
-            <div className="mt-4 flex items-center justify-center rounded-xl border border-border-default bg-white px-6 py-4">
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src={logo} alt={`${str(p.name, "Developer")} logo`} className="h-12 w-auto object-contain" />
-            </div>
-          ) : null}
-        </div>
-        <div>
-          <Title block={block} title={str(p.title, "About the Developer")} subtitle={str(p.name)} />
-          <p className="text-text-1 leading-relaxed whitespace-pre-line">{str(p.body)}</p>
-          {stats.length > 0 && (
-            <div className="grid grid-cols-2 @md:grid-cols-4 gap-4 mt-8 pt-6 border-t border-border-default/60">
-              {stats.map((s, i) => (
-                <div key={i} className="rounded-xl border border-border-default bg-bg-1 p-4 text-center shadow-sm">
-                  <div className="font-display text-xl @md:text-2xl font-bold text-green mb-1">{s.value}</div>
-                  <div className="text-[11px] uppercase tracking-wider text-text-3">{s.label}</div>
-                </div>
-              ))}
-            </div>
+          <Title block={block} title={title} subtitle={name} align={hasMedia ? "left" : "center"} />
+          {bodyEl(`text-text-1 leading-relaxed ${hasMedia ? "" : "text-center"}`)}
+          {statsGrid(
+            "grid grid-cols-2 @md:grid-cols-4 gap-4 mt-8 pt-6 border-t border-border-default/60",
+            "rounded-xl border border-border-default bg-bg-1 p-4 text-center shadow-sm",
+            "font-display text-xl @md:text-2xl font-bold text-green mb-1",
+            "text-[11px] uppercase tracking-wider text-text-3",
           )}
         </div>
       </div>

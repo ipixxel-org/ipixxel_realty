@@ -260,7 +260,16 @@ export const blockMetadata: BlockMeta[] = [
     description: 'About the developer with stats or logo band',
     category: 'Real Estate',
     variants: ['default', 'split', 'stats', 'band'],
-    defaultProps: { title: 'About the Developer', name: '', body: '', image: '', logo: '', stats: [], anchor: 'builder' },
+    defaultProps: {
+      title: 'About the Developer',
+      name: 'Your developer name',
+      body: 'About the developer: track record, delivered projects and what sets them apart.',
+      image: '',
+      logo: '',
+      // No starter numbers: unedited stats would publish made-up figures.
+      stats: [],
+      anchor: 'builder',
+    },
   },
   {
     type: 'team',
@@ -276,7 +285,13 @@ export const blockMetadata: BlockMeta[] = [
     description: 'Customer quotes',
     category: 'Real Estate',
     variants: ['cards', 'carousel', 'spotlight', 'band'],
-    defaultProps: { title: 'What residents say', items: [{ name: '', role: '', quote: '', avatar: '' }] },
+    defaultProps: {
+      title: 'What residents say',
+      items: [
+        { name: 'Resident name', role: 'Homeowner', quote: 'Replace this with a real quote from a happy resident.', avatar: '', rating: '5' },
+      ],
+      anchor: 'testimonials',
+    },
   },
   {
     type: 'faq',

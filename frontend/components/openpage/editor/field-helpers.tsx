@@ -148,6 +148,14 @@ export const RE_PRICING_CARD_FIELDS: ItemFieldDef[] = [
   { key: "priceColor", label: "Price color (this card)", kind: "color" },
 ];
 
+export const TESTIMONIAL_FIELDS: ItemFieldDef[] = [
+  { key: "name", label: "Name", kind: "text", placeholder: "e.g. Priya Sharma" },
+  { key: "role", label: "Role / detail", kind: "text", placeholder: "e.g. Homeowner, Tower B" },
+  { key: "quote", label: "Quote", kind: "textarea", rows: 3 },
+  { key: "avatar", label: "Photo (optional)", kind: "image" },
+  { key: "rating", label: "Star rating (optional)", kind: "select", options: ["", "1", "2", "3", "4", "5"] },
+];
+
 export const FOOTER_LINK_FIELDS: ItemFieldDef[] = [
   { key: "label", label: "Label", kind: "text", placeholder: "e.g. Privacy Policy" },
   { key: "url", label: "URL", kind: "text", placeholder: "https://… or #section-id" },
