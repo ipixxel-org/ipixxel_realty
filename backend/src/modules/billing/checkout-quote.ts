@@ -17,7 +17,7 @@
  *                           a new yearly cycle starts now
  *  - renewal                same plan + interval, today's full price for one more
  *                           term (quoteRenewal; the term rule is renewalPeriodEnd).
- *                           Manual mode in grace: any paid plan / interval at its
+ *                           In grace (either mode): any paid plan / interval at its
  *                           full price, same term rule (quoteOverdueChange)
  */
 import { renewalPeriodEnd } from '../../common/utils/plan-change.util';
@@ -396,8 +396,8 @@ export function quoteRenewal(
 }
 
 /**
- * Manual mode, renewal overdue (in grace): any paid plan — the same, a bigger
- * or a smaller one, either interval — is requested at that plan's FULL price.
+ * Renewal overdue (in grace), either mode: any paid plan — the same, a bigger
+ * or a smaller one, either interval — costs that plan's FULL price.
  * No proration: nothing was paid for the overdue days. The new term follows
  * the late-renewal rule (renewalPeriodEnd: it continues from the missed
  * renewsAt), so it is quoted as a renewal.
@@ -438,7 +438,7 @@ export function quoteOverdueChange(
   };
 }
 
-/** Overdue (grace) — the state where manual mode quotes every plan as a renewal. */
+/** Overdue (grace) — the state where every paid plan is quoted as a renewal. */
 export const isOverdue = (status: string | null | undefined) =>
   status === 'past_due';
 

@@ -54,6 +54,11 @@ export class ConfirmCheckoutDto {
   razorpay_signature!: string;
 }
 
+/** POST /admin/billing/checkouts/:id/resolve — close a payment under review by hand. */
+export class ResolveCheckoutDto {
+  @IsOptional() @IsString() @MaxLength(500) note?: string;
+}
+
 /** GET /admin/billing/checkouts */
 export class ListCheckoutsQueryDto {
   @IsOptional()

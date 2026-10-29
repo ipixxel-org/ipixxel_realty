@@ -27,6 +27,7 @@ import { GST_STATES } from './gst';
 import { issueCreditNote, issueOfflineInvoice } from './invoice.util';
 import { OrgBillingV2Service } from './org-billing-v2.service';
 import { whatStaysPlace } from '../../common/utils/what-stays-rows.util';
+import { paymentUnderReview, setOnlineRows } from './online-rows';
 import {
   isFreePlan,
   planRanker,
@@ -439,6 +440,13 @@ export class AdminSubscriptionsService {
         'This organisation has a pending plan change request. Use Mark as paid on the pending request (Package requests) instead.',
       );
     }
+    // A paid online checkout under review: resolve it first (refund or Mark resolved).
+    if (await paymentUnderReview(this.prisma, orgId)) {
+      throw billingError(
+        'payment_review',
+        'A payment from this organisation is waiting for review (Package Requests → Paid — needs review). Refund it or mark it resolved first.',
+      );
+    }
     const amountPaise = Math.round(dto.amount * 100);
     if (!(amountPaise > 0))
       throw billingError('amount_required', 'Enter the amount received.');
@@ -615,6 +623,22 @@ export class AdminSubscriptionsService {
         reason: reason ?? '',
         by: actorId,
       });
+      // A refund resolves a payment under review: nothing was applied, and
+      // the org can change plans again (its row shows "Refunded").
+      const reviewed = await this.prisma.billingCheckout.findFirst({
+        where: { paymentId: online.id, status: 'needs_review' },
+      });
+      if (reviewed) {
+        await this.prisma.billingCheckout.update({
+          where: { id: reviewed.id },
+          data: { status: 'rejected' },
+        });
+        await setOnlineRows(
+          this.prisma,
+          [reviewed.packageChangeRequestId],
+          'cancelled',
+        );
+      }
     } else {
       if (offline!.status !== 'received') {
         throw billingError(

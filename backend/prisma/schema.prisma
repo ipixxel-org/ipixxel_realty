@@ -1133,6 +1133,11 @@ enum PackageChangeRequestStatus {
   done
   undone
   replaced
+  // kind online_payment only (online step 3): the Razorpay order is open, or
+  // paid but not applied (a Super Admin must look). Paid = approved;
+  // failed / expired / replaced by a newer checkout = cancelled.
+  awaiting_payment
+  needs_review
 
   @@schema("billing")
 }
@@ -1142,6 +1147,8 @@ enum PackageChangeRequestStatus {
 enum PackageChangeRequestKind {
   request
   scheduled_change
+  // An online payment (online step 3), linked through billing_checkouts.
+  online_payment
 
   @@schema("billing")
 }
@@ -1356,6 +1363,9 @@ model BillingCheckout {
   couponDiscountPaise    Int                   @default(0) @map("coupon_discount_paise")
   // Quoted while the renewal was overdue (grace): full price, the missed term continues.
   overdue                Boolean               @default(false)
+  // "Choose what stays" option picked at the checkout ('default' | 'saved'),
+  // used when it's paid (online) — null when nothing was over the limits.
+  whatStaysChoice        String?               @map("what_stays_choice")
   // Manual mode: the amounts before the Super Admin added a coupon to the
   // request (restored by Remove); null = no coupon added on the request.
   quoteBeforeCoupon      Json?                 @map("quote_before_coupon")

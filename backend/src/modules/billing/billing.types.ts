@@ -1,3 +1,4 @@
+import type { OnlinePaymentViewV2 } from './online-rows';
 import type { WhatStays } from '../../common/utils/retention.util';
 
 /**
@@ -60,7 +61,11 @@ export interface UsageItemV2 {
   limit: number | null;
 }
 
-export type PlanChangeBlockedReasonV2 = 'request_pending' | 'change_scheduled';
+export type PlanChangeBlockedReasonV2 =
+  | 'request_pending'
+  | 'change_scheduled'
+  // A paid online checkout is being checked (needs_review). Renewals still go through.
+  | 'payment_review';
 
 export interface BillingOverviewV2 {
   orgName: string;
@@ -433,7 +438,7 @@ export interface OrgPlanRequestV2 {
    * request = sent for approval (manual mode); scheduled_change = a downgrade /
    * move to Basic at the end of the term, recorded here (no approval, never pending).
    */
-  kind: 'request' | 'scheduled_change';
+  kind: 'request' | 'scheduled_change' | 'online_payment';
   requestedAt: string;
   requestedBy: string | null;
   fromPlan: { id: string; name: string } | null;
@@ -455,7 +460,14 @@ export interface OrgPlanRequestV2 {
     | 'scheduled'
     | 'done'
     | 'undone'
-    | 'replaced';
+    | 'replaced'
+    // Online payments (online step 3): approved = paid; closed = failed,
+    // expired or replaced (stored as cancelled; online.state says which).
+    | 'awaiting_payment'
+    | 'needs_review'
+    | 'closed';
+  /** Online payments only: the payment's state, order id and invoice. */
+  online?: OnlinePaymentViewV2 | null;
   decidedAt: string | null;
   rejectionReason: string | null;
   /**

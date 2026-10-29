@@ -68,6 +68,7 @@ export const httpBilling: Impl = {
     ),
   listAdminCheckouts: (status) =>
     call(`/admin/billing/checkouts${status ? `?status=${encodeURIComponent(status)}` : ""}`),
+  resolveAdminCheckout: ({ checkoutId, note }) => call(`/admin/billing/checkouts/${encodeURIComponent(checkoutId)}/resolve`, post({ note })),
 
   // Step 4 — cancel / downgrade at the end of the term (each returns the overview)
   cancelPlan: (req) => call("/org/billing/cancel", post(req)),

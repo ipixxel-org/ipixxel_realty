@@ -31,6 +31,7 @@ client is the reference behaviour (see `frontend/lib/billing/__tests__/mock-clie
 | Scheduled changes on the Requests list | Every scheduled change (to Basic via cancel-at-period-end, or a smaller plan / yearly → monthly via `scheduleDowngrade`) is a row in `listOrgRequests` and the Super Admin package request lists: `OrgPlanRequest.kind` `scheduled_change`, statuses `scheduled` / `done` / `undone` / `replaced`, `startsAt`, `reason`; no approval, never pending | `common/utils/scheduled-change.util.ts` (`recordScheduledChange`, `closeScheduledChange`), `billing-plan-change.service.ts`, `applyPlanChange`, `moveToFreePlan` / `applyScheduledPlan` (sweep), `billing-ledger.service.ts`; frontend `components/billing/requests.tsx` (Keep <plan>), `components/billing/admin/package-requests.tsx` (read-only); migration `20261026090000_scheduled_plan_changes` |
 | Scheduled change blocks plan changes | `change_scheduled` refusal (checkout start, legacy request, `scheduleDowngrade`, `cancelPlan`); `BillingOverview.planChangeBlockedReason` / `planChangeBlockedMessage` | `common/utils/scheduled-change.util.ts` (`scheduledChangeBlock`), `billing-checkout.service.ts`, `billing-plan-change.service.ts`, `package-change-requests.service.ts`, `billing-overview.ts` (`planChangeBlock`); frontend `lib/billing/requests.ts` (`planChangeBlock`), `components/billing/banners.tsx` (`ScheduledChangeNote`), `plans.tsx`, `checkout.tsx`, `plan-changes.tsx` |
 | Manual mode: coupon on the request | Super Admin `PUT` / `DELETE /admin/package-change-requests/:id/coupon`; Mark as paid amount = the request total; `OrgPlanRequest.quote` / admin row `quote`; `SubscriptionDetail.paymentMode`; org-level offline payment / apply coupon refused in manual mode (`use_request`) | `package-change-requests.service.ts` (`applyCoupon` / `removeCoupon`), `request-coupon.ts`, `coupon-lookup.ts` (`findCouponFor`, shared with checkout), `coupon-settlement.ts`; migration `20261025090000_request_coupon` |
+| Online steps 1–4 (2026-10-29) | Grace rules, "choose what stays" at the checkout, online payments as rows, `payment_review` block, superseded checkouts, `resolveAdminCheckout`; `OrgPlanRequest.kind` `online_payment` / `online`, `CheckoutPreview.usageConflict` in both modes | `checkout-quote.ts`, `billing-checkout.service.ts` (`whatStaysProblem`, `adminResolve`), `billing-plan-change.service.ts`, `billing/online-rows.ts`, `billing-overview.ts`; frontend `lib/billing/direction.ts` (`isOverdue`), `lib/billing/requests.ts`, `components/billing/requests.tsx`, `admin/package-requests.tsx`, `admin/checkouts-review.tsx`; migrations `20261029090000_checkout_what_stays_choice`, `20261029100000_online_payment_rows` |
 | Fixes after testing (2) | one `plan_locked` error; list filters `viewOnly` / `offline` / `paused` / `needsReassign`; invoice email; `packagePriceText` | `common/utils/plan-lock.util.ts`, `billing-invoice-mailer.service.ts`, `lead-assignee.util.ts`; frontend `lib/plan-lock.ts`, `PlanLockBadge` (`components/billing/locked.tsx`); migration `20261016093000_billing_invoice_email` |
 
 Every function is real except `updatePaymentMethod`, which stays unimplemented on purpose: renewals are
@@ -173,8 +174,8 @@ period rule (`applyPlanChange`).
 
 ### Manual mode: requests, choose what stays, withdraw
 
-- **Action row:** in manual mode Settings → Billing hides the standalone "Choose what stays"
-  button; the grace and "You're on Basic now" banners keep their links. A "Requests" link sits
+- **Action row:** Settings → Billing has no standalone "Choose what stays" button (both modes
+  since online step 4); the grace and "You're on Basic now" banners keep their links. A "Requests" link sits
   next to Coupons.
 - **Over the target's limits:** in manual mode the preview no longer returns `usageError` for
   users / projects / published landing pages / templates; it returns `usageConflict` `{ items: [{ key, limit,
@@ -185,7 +186,8 @@ period rule (`applyPlanChange`).
   org). Send — and `startCheckout` (`choose_what_stays`) — waits until one of the two
   options is picked (`whatStaysChoice`; see "Choose what stays rules").
   Created landing pages (`landingPagesCreate`) over the limit are still a `usageError` (they
-  can't be paused); templates go through choose what stays since 2026-10-27. Online mode is unchanged.
+  can't be paused); templates go through choose what stays since 2026-10-27. Online mode does the same
+  since online step 2 (see "Online mode follows the same rules").
 - **Approval** of a v2 request (one with a checkout) checks only what can't be paused
   (`assertPlanFitsAfterRetention`); `applyPlanChange` → `applyRetention` then pauses the rest
   using the saved choice for that plan, or the default picks — like a scheduled downgrade.
@@ -330,7 +332,8 @@ decided or takes effect; after that only Super Admin can change it. Helpers: `bi
 
 Online payments off: renewals and plan changes are requests the Super Admin handles in one place —
 Package Requests → Open → the org's "Package requests" section: **Mark as paid**, then **Approve**
-(or **Reject**). Online mode is unchanged.
+(or **Reject**). Online mode pays the same changes at the checkout instead (see "Online mode follows
+the same rules").
 
 - **Request kinds** (`OrgPlanRequest.label`, also on the admin rows and `PendingUpgrade.label`):
   "Renewal of Pro" (a renewal-kind checkout for the plan the org is on) or "Change to Starter";
@@ -352,7 +355,7 @@ Package Requests → Open → the org's "Package requests" section: **Mark as pa
   screen. **Basic** moves the org at once (fall back to Basic: extras paused, `movedToBasicAt`) after
   "Move to Basic now?" — no request. `POST /org/billing/cancel` does this in grace in manual mode;
   `POST /org/billing/downgrade` to a paid plan sends the change request — **`downgrade_not_now` is no
-  longer returned in manual mode** (online keeps it).
+  longer returned in manual mode**.
 - **Option A — no hold:** when grace ends with a request still pending the org still falls back to
   Basic; the request stays pending and gets `package_change_requests.moved_to_basic_at`
   (`OrgPlanRequest.movedToBasicAt`, shown as "Org moved to Basic while waiting"). Approved later, the
@@ -396,8 +399,81 @@ Package Requests → Open → the org's "Package requests" section: **Mark as pa
   due"); no invoice. Payments `awaiting_approval` / `refund_due` are not in Payments & Invoicing.
 - **Org-level "Mark paid offline" and "Apply coupon"** (Subscriptions → org): hidden in manual mode
   (`SubscriptionDetail.paymentMode`), and the endpoints refuse them (`use_request`, "… Use the pending
-  request instead …"). "Extend grace" stays. Online mode is unchanged; there "Mark paid offline" is
-  still refused while the org has a pending request (`request_pending`).
+  request instead …"). "Extend grace" stays. In online mode "Mark paid offline" is still refused
+  while the org has a pending request (`request_pending`) or a payment under review (`payment_review`).
+
+### Online mode follows the same rules (online steps 1–4, 2026-10-29)
+
+The billing flow is the same in both payment modes; manual mode only swaps "pay now" for "send a
+request" (Mark as paid → Approve). Mode-independent since these steps: overdue (grace) changes at full
+price, Basic in grace at once, every paid plan in grace through the checkout, "choose what stays"
+(`usageConflict`, the two options, the stored option), one row per change on the Requests lists, the
+latest-row rule, and the plan-change blocks (`request_pending`, `change_scheduled`, `payment_review`).
+Still manual-only on purpose: `refuseInManualMode` (Mark paid offline / Apply coupon on the org page),
+the Mark as paid / Approve / Reject UI, and "Request renewal". The audit that planned these steps is
+in `docs/archive/online-mode-audit.md`.
+
+- **Online mode, renewal overdue (grace) — the same rules (online step 1, 2026-10-29):** every paid
+  plan (same, bigger or smaller, either interval) is paid at the checkout at its **full price + GST**
+  (`quoteOverdueChange` in both modes: kind `renewal`, `overdue: true`, renewal coupon only,
+  `couponsEnabled: false`); once paid the period continues from the missed `renewsAt`. The plan cards
+  link every paid plan to the checkout ("Pay now" on the current plan, "Change plan" on the others;
+  frontend `isOverdue` in `lib/billing/direction.ts`, both modes). **Basic** moves at once in both
+  modes (`POST /org/billing/cancel`, "Move to Basic now?"). `POST /org/billing/downgrade` to a paid
+  plan in grace online returns **`pay_at_checkout`** (the payment happens at the checkout; the UI
+  never calls it) — never `downgrade_not_now`, nothing scheduled. Active-period rules (proration,
+  scheduled downgrade, Basic at the term end) are unchanged.
+- **Online checkout over the target's limits (online step 2, 2026-10-29):** the preview returns
+  `usageConflict` in both modes (only what can't be paused — created pages — is a `usageError`), so
+  the online checkout shows the same two options and **Pay** stays disabled until one is picked; start
+  refuses `choose_what_stays` before any Razorpay order. The option is stored on the checkout
+  (`billing_checkouts.what_stays_choice`, migration `20261029090000_checkout_what_stays_choice`;
+  null when nothing was over). **Fulfil = Approve:** `assertPlanFitsAfterRetention`, and when the org
+  is over what can be paused it needs the stored option — none (usage went up after the quote), or
+  "saved" whose saved choice no longer fits → `needs_review` with that reason (Super Admins notified,
+  plan not applied); otherwise `applyWhatStaysChoice` ("default" drops an earlier saved choice) and
+  `applyPlanChange` → `applyRetention` pauses what doesn't stay. A closed or failed payment changes
+  nothing. The conflict wording is now "… stay active when this change takes effect." (both modes).
+- **Online payments are rows (online step 3, 2026-10-29):** every online checkout gets a
+  `package_change_requests` row, kind `online_payment`, linked through
+  `billing_checkouts.package_change_request_id` (migration `20261029100000_online_payment_rows`:
+  kind `online_payment`, statuses `awaiting_payment` and `needs_review`). Lifecycle (`billing/online-rows.ts`):
+  created `awaiting_payment` at start (with a what-stays copy when over the limits); paid →
+  `approved` + the applied what-stays copy; failed / expired / superseded (a newer checkout, or a scheduled downgrade / move
+  to Basic) → `cancelled`; review → `needs_review`. Never `pending`, so `request_pending` and manual mode are
+  untouched. `awaiting_payment` is an open status (`OPEN_REQUEST_STATUSES`): the latest waiting row has
+  "Change what stays" (saving there makes the payment use the saved choice); `approved` is applied, so
+  `latestRequest` / `currentPlanSetByRow` / `whatStaysPlace()` now cover online payments and the
+  standalone Super Admin button hides after an online purchase. Lists: `OrgPlanRequest.kind`
+  `online_payment`, `status` `awaiting_payment` / `approved` / `needs_review` / `closed` (stored
+  `cancelled`), and `online: { state: waiting|paid|failed|expired|superseded|needs_review|refunded|resolved,
+  paidAt, orderId, invoice }` (+ `reviewReason` on the Super Admin rows). Tags: "Waiting for payment", "Paid online · 27
+  Oct", "Payment failed", "Expired (not paid)", "Superseded", "Needs review", "Refunded",
+  "Resolved by our team" (Super
+  Admin: links to Subscriptions → Package Requests). Rows are read-only (no Approve / Reject / Mark as
+  paid). Both lists expire stale checkouts first. ₹0 activations (100% coupon) make no row.
+- **A payment under review blocks plan changes (online step 4):** while the org has a checkout in
+  `needs_review`, `BillingOverview.planChangeBlockedReason` is **`payment_review`** with "A payment is
+  being checked by our team. You can change plans once it's resolved." (`PAYMENT_REVIEW_MESSAGE` /
+  `PAYMENT_REVIEW_TEXT`). The plan cards and the checkout's Pay are disabled with it, the downgrade
+  page says plan changes are on hold, and the API refuses `payment_review` at checkout start (not
+  renewals — a renewal keeps the org running), `scheduleDowngrade`, `cancelPlan` and Super Admin
+  Mark paid offline. **Resolving it:** a refund of that payment (Payments & Invoicing) or **Mark
+  resolved** on the review list (`POST /admin/billing/checkouts/:id/resolve` `{ note? }`,
+  `resolveAdminCheckout`; for a plan sorted out by hand) sets the checkout to `rejected` (nothing is
+  applied) and the row shows "Refunded" / "Resolved by our team"; the block lifts.
+- **One change at a time (online step 4, audit 7b):** scheduling a downgrade or Basic (and starting
+  a new checkout) **cancels the org's open online checkouts** — their rows show "Superseded"
+  (`supersedeOpenCheckouts` in `billing/online-rows.ts`). A payment that still arrives for a cancelled /
+  superseded checkout is never applied: it goes to `needs_review` ("Paid after a newer change: …
+  Refund the payment."), Super Admins are notified, and our team refunds it from the review list. So
+  paying in an old tab never applies an old quote, and nothing applies twice.
+- **No standalone "Choose what stays" on the org's action row, in either mode** ("one place"): what
+  stays is chosen with each change (checkout / downgrade options, the grace and Basic banners) or on
+  the latest row of the Requests tab. On Basic after a paid plan the action row keeps the
+  view-only note ("To change what stays, contact our support team"). This matches the Super Admin
+  side, where `whatStaysPlace()` puts the edit on the latest row or, only when no row set the plan,
+  the org page.
 
 ### Scheduled changes on the Requests list (both modes)
 
@@ -486,25 +562,27 @@ Package Requests → Open → the org's "Package requests" section: **Mark as pa
 - **Refusals** (400 `{ code, message }` → `BillingError.code`): `plan_not_found`, `free_plan`,
   `same_plan` (same plan + interval, even when lapsed), `lower_plan` (only while a paid plan is
   active — that's a downgrade), `yearly_to_monthly`, `billing_details_incomplete` (was `billing_profile_required`),
-  `request_pending` (a second request, or online start while a manual request waits — "You already have a pending request (…). Wait for approval or withdraw it."), `change_scheduled` (a change to Basic / a smaller plan is scheduled — "You've scheduled a change to Basic on 25 Nov 2026. Click 'Keep Starter' to undo it before choosing another plan."; renewals are not refused), `choose_what_stays` (manual mode, over the target's limits before choosing what stays), `amount_too_small` (online
+  `request_pending` (a second request, or online start while a manual request waits — "You already have a pending request (…). Wait for approval or withdraw it."), `change_scheduled` (a change to Basic / a smaller plan is scheduled — "You've scheduled a change to Basic on 25 Nov 2026. Click 'Keep Starter' to undo it before choosing another plan."; renewals are not refused), `choose_what_stays` (either mode, over the target's limits before choosing what stays), `payment_review` (a paid checkout is being checked — not for renewals), `amount_too_small` (online
   total under ₹1), renewal codes (step 3 notes), and on the old endpoints
   `paid_plan_requires_checkout` / `paid_renewal_requires_checkout`.
-- **One open order per org:** starting a new online checkout cancels the org's older pending
-  ones (advisory lock). Pending online checkouts expire after 30 minutes (sweeper). Manual mode
+- **One open order per org:** starting a new online checkout — or scheduling a downgrade / Basic
+  (online step 4) — cancels the org's older pending ones (advisory lock); a late payment for one goes
+  to `needs_review`, never applied. Pending online checkouts expire after 30 minutes (sweeper). Manual mode
   returns the existing pending request instead of creating a second one.
-- **`BillingOverview.planChangeBlockedReason`** (`"request_pending" | "change_scheduled" | null`)
+- **`BillingOverview.planChangeBlockedReason`** (`"request_pending" | "change_scheduled" | "payment_review" | null`)
   and **`planChangeBlockedMessage`** (the same words the API refuses with): the one check the UI uses
   to disable plan changes (`planChangeBlock()` in `lib/billing/requests.ts`, which works the same
   out from `pendingUpgrade` / `cancelAt` / `downgradeTo` when an older payload lacks it).
-  `request_pending` while `pendingUpgrade.status === "pending_approval"`; `change_scheduled` while
-  `cancelAt` or `downgradeTo` is set.
+  `request_pending` while `pendingUpgrade.status === "pending_approval"`; `payment_review` while it is
+  `"needs_review"`; `change_scheduled` while `cancelAt` or `downgradeTo` is set.
 - **`BillingOverview.pendingUpgrade`:** a manual request awaiting approval, or a paid checkout
   in `needs_review`; `null` otherwise. The UI shows a banner and disables a second request.
 - **Fulfilment:** the plan is applied on `payment.captured` (from `confirmCheckout`'s verify or
   the webhook, whichever is first; idempotent with a row lock and `fulfilledAt`). If the price
   changed since the quote, the amount doesn't match, or the org no longer fits the plan, the
   checkout becomes `needs_review` and Super Admins get a notification — nothing is applied
-  automatically. `GET /admin/billing/checkouts` lists them (Package Requests tab, flag on).
+  automatically. So does a payment for a cancelled (superseded) checkout. The org's plan changes are on
+  hold (`payment_review`) until a refund or Mark resolved. `GET /admin/billing/checkouts` lists them (Package Requests tab, flag on).
 - **Loophole:** `PATCH /org/billing/plan` now refuses paid targets (`paid_plan_requires_checkout`).
 
 ### Step 3 notes — renewals ("pay each time")
@@ -547,14 +625,15 @@ Package Requests → Open → the org's "Package requests" section: **Mark as pa
   lazily on every billing read) applies it when the term ends.
 - **Cancel** (`POST /org/billing/cancel` `{ reason? }`, undo `DELETE`): at `renewsAt` the org
   moves to the free plan (no grace — they chose to stop; `renewsAt` null, amount 0). Made during
-  grace, it applies when grace ends; on an expired plan, at once. Overview: status
+  grace (either mode) or on an expired plan, it applies at once. Overview: status
   `cancellation_scheduled`, `cancelAt`, `renewalAmount: null`; a renewal is refused
   (`cancellation_scheduled`). Admins get "Plan ended". Codes: `nothing_to_cancel`,
   `nothing_scheduled`.
 - **Downgrade** (`POST /org/billing/downgrade` `{ planId, interval? }`, undo `DELETE`): a
   smaller plan, or the same plan yearly → monthly; a free target is a cancellation. Only while
-  active (not in grace: `downgrade_not_now` — online mode only; in manual mode a paid target in grace
-  is sent as a change request and Basic moves at once) and not with a pending upgrade request
+  active. In grace Basic moves at once in both modes; a paid target is a change request in manual
+  mode and `pay_at_checkout` online (pay at the checkout). `downgrade_not_now` is left only for a
+  term that isn't active or in grace and not with a pending upgrade request
   (`request_pending`). Being over the smaller plan's limits is fine since step 6 — the extras
   are paused when it starts — once "choose what stays" is confirmed (`choose_what_stays`). Other codes: `same_plan`, `not_a_downgrade`, `plan_not_found`.
 - **When the term ends:** the renewal paid before then is charged at the smaller plan's price

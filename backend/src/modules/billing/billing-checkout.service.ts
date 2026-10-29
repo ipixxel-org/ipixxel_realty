@@ -7,10 +7,12 @@ import {
   Optional,
   type OnModuleInit,
 } from '@nestjs/common';
-import type { BillingCheckoutStatus, Prisma } from '@prisma/client';
+import { Prisma } from '@prisma/client';
+import type { BillingCheckoutStatus } from '@prisma/client';
 import { PrismaService } from '../../database/prisma.service';
 import { applyPlanChange } from '../../common/utils/plan-change.util';
 import {
+  assertPlanFitsAfterRetention,
   assertPlanFitsCurrentUsage,
   usageOverLimits,
 } from '../../common/utils/plan-quota.util';
@@ -46,6 +48,12 @@ import {
   type QuotePlan,
 } from './checkout-quote';
 import { expireStaleCheckouts } from './checkout-state';
+import {
+  PAYMENT_REVIEW_MESSAGE,
+  paymentUnderReview,
+  setOnlineRows,
+  supersedeOpenCheckouts,
+} from './online-rows';
 import { scheduledChangeBlock } from '../../common/utils/scheduled-change.util';
 import { findCouponFor } from './coupon-lookup';
 import {
@@ -66,6 +74,7 @@ import {
   applyWhatStaysChoice,
   pickedWhatStays,
   refuseUnlessPicked,
+  whatStaysConflict,
   type WhatStaysChoice,
 } from './what-stays';
 import { isFreePlan, isInternalPlan, planRanker } from './plan-modules';
@@ -126,7 +135,7 @@ const CONFLICT_NOUN = {
   templates: ['template', 'templates'],
 } as const;
 
-/** "Pro allows 5 users; you have 8. Choose which 5 stay active when this change is approved." */
+/** "Pro allows 5 users; you have 8. Choose which 5 stay active when this change takes effect." */
 export function usageConflictMessage(
   planName: string,
   conflict: UsageConflictV2,
@@ -134,7 +143,7 @@ export function usageConflictMessage(
   return conflict.items
     .map((i) => {
       const [one, many] = CONFLICT_NOUN[i.key];
-      return `${planName} allows ${i.limit} ${i.limit === 1 ? one : many}; you have ${i.used}. Choose which ${i.limit} stay active when this change is approved.`;
+      return `${planName} allows ${i.limit} ${i.limit === 1 ? one : many}; you have ${i.used}. Choose which ${i.limit} stay active when this change takes effect.`;
     })
     .join(' ');
 }
@@ -215,6 +224,10 @@ export class BillingCheckoutService implements OnModuleInit {
       });
       const scheduled = await scheduledChangeBlock(this.prisma, sub);
       if (scheduled) throw billingError('change_scheduled', scheduled);
+      // A paid checkout waiting for our team blocks other plan changes.
+      if (await paymentUnderReview(this.prisma, orgId)) {
+        throw billingError('payment_review', PAYMENT_REVIEW_MESSAGE);
+      }
     }
     const ctx = await this.quote(
       orgId,
@@ -236,8 +249,9 @@ export class BillingCheckoutService implements OnModuleInit {
     if (ctx.couponError) throw billingError('coupon_invalid', ctx.couponError);
     // Never take money for a plan the org doesn't fit (fulfil would hold it).
     if (ctx.usageError) throw billingError('plan_too_small', ctx.usageError);
-    // Manual mode over the target's limits: send only once they've picked an
-    // option — the default picks, or their own saved choice (which must fit).
+    // Over the target's limits (either mode): send / pay only once they've
+    // picked an option — the default picks, or their own saved choice (which
+    // must fit). It's stored on the checkout and used when the change applies.
     const choice = pickedWhatStays(dto);
     if (ctx.usageConflict) {
       refuseUnlessPicked(ctx.quote.toPlan.name, ctx.usageConflict, choice);
@@ -247,7 +261,7 @@ export class BillingCheckoutService implements OnModuleInit {
       return this.activateFree(orgId, userId, ctx, choice);
     return ctx.mode.mode === 'manual'
       ? this.startManual(orgId, userId, ctx, choice)
-      : this.startOnline(orgId, userId, ctx);
+      : this.startOnline(orgId, userId, ctx, choice);
   }
 
   /** ₹0 checkout: recorded and fulfilled like a payment of nothing. */
@@ -258,11 +272,9 @@ export class BillingCheckoutService implements OnModuleInit {
     choice?: WhatStaysChoice,
   ): Promise<StartCheckoutResultV2> {
     const q = ctx.quote;
-    if (ctx.usageConflict) {
-      await applyWhatStaysChoice(this.prisma, orgId, q.toPlan.id, choice);
-    }
+    // The picked option is applied by fulfil (like a paid checkout).
     const checkout = await this.prisma.billingCheckout.create({
-      data: this.checkoutData(orgId, userId, ctx, ctx.mode.mode),
+      data: this.checkoutData(orgId, userId, ctx, ctx.mode.mode, choice),
     });
     const outcome = await this.fulfil(checkout.id, 0);
     if (outcome !== 'paid') {
@@ -328,7 +340,7 @@ export class BillingCheckoutService implements OnModuleInit {
     }
     const checkout = await this.prisma.billingCheckout.create({
       data: {
-        ...this.checkoutData(orgId, userId, ctx, 'manual'),
+        ...this.checkoutData(orgId, userId, ctx, 'manual', choice),
         packageChangeRequestId: requestId,
       },
     });
@@ -400,6 +412,7 @@ export class BillingCheckoutService implements OnModuleInit {
     orgId: string,
     userId: string,
     ctx: QuoteContext,
+    choice?: WhatStaysChoice,
   ): Promise<StartCheckoutResultV2> {
     const q = ctx.quote;
     if (q.totalPaise < MIN_ONLINE_PAISE) {
@@ -414,20 +427,39 @@ export class BillingCheckoutService implements OnModuleInit {
     if (waiting) throw billingError('request_pending', waiting.message);
 
     // One open checkout per org: under a per-org lock, cancel older pending
-    // online checkouts, then record this quote.
+    // online checkouts (and their rows), then record this quote with its row
+    // on the Requests list (kind online_payment, awaiting_payment).
     const checkout = await this.prisma.$transaction(async (tx) => {
       await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`billing_checkout:${orgId}`}))`;
-      await tx.billingCheckout.updateMany({
-        where: { organisationId: orgId, status: 'pending', mode: 'online' },
-        data: { status: 'cancelled' },
+      await supersedeOpenCheckouts(tx, orgId);
+      const row = await tx.packageChangeRequest.create({
+        data: {
+          orgId,
+          requestedById: userId,
+          currentPlanId: q.fromPlan?.id ?? q.toPlan.id,
+          targetPlanId: q.toPlan.id,
+          billingCycle: q.toInterval,
+          kind: 'online_payment',
+          status: 'awaiting_payment',
+        },
       });
       return tx.billingCheckout.create({
         data: {
-          ...this.checkoutData(orgId, userId, ctx, 'online'),
+          ...this.checkoutData(orgId, userId, ctx, 'online', choice),
+          packageChangeRequestId: row.id,
           expiresAt: new Date(Date.now() + ONLINE_CHECKOUT_TTL_MS),
         },
       });
     });
+    // Over the target's limits: keep a copy of what stays on the row (like a
+    // manual request), so the Requests tab shows it while it waits.
+    if (ctx.usageConflict && checkout.packageChangeRequestId) {
+      await this.saveWhatStays(
+        orgId,
+        checkout.packageChangeRequestId,
+        q.toPlan.id,
+      );
+    }
 
     try {
       const order = await this.payments.createOrder({
@@ -473,6 +505,11 @@ export class BillingCheckoutService implements OnModuleInit {
           reviewReason: 'Could not create the payment order',
         },
       });
+      await setOnlineRows(
+        this.prisma,
+        [checkout.packageChangeRequestId],
+        'cancelled',
+      );
       throw e;
     }
   }
@@ -482,6 +519,7 @@ export class BillingCheckoutService implements OnModuleInit {
     userId: string,
     ctx: QuoteContext,
     mode: 'online' | 'manual',
+    choice?: WhatStaysChoice,
   ) {
     const q = ctx.quote;
     return {
@@ -493,6 +531,8 @@ export class BillingCheckoutService implements OnModuleInit {
       kind: q.kind,
       fromRenewsAt: q.fromRenewsAt,
       overdue: q.overdue ?? false,
+      // Only when over the target's limits ("choose what stays").
+      whatStaysChoice: ctx.usageConflict ? (choice ?? null) : null,
       couponId: q.coupon?.id ?? null,
       couponDiscountPaise: q.couponDiscountPaise,
       subtotalPaise: q.subtotalPaise,
@@ -562,10 +602,21 @@ export class BillingCheckoutService implements OnModuleInit {
 
   private async onFailed(e: PaymentEvent) {
     if (e.purpose !== 'plan_purchase' || !e.referenceId) return;
-    await this.prisma.billingCheckout.updateMany({
+    const { count } = await this.prisma.billingCheckout.updateMany({
       where: { id: e.referenceId, status: { in: ['pending', 'expired'] } },
       data: { status: 'failed' },
     });
+    if (count > 0) {
+      const c = await this.prisma.billingCheckout.findUnique({
+        where: { id: e.referenceId },
+        select: { packageChangeRequestId: true },
+      });
+      await setOnlineRows(
+        this.prisma,
+        [c?.packageChangeRequestId],
+        'cancelled',
+      );
+    }
   }
 
   /**
@@ -603,7 +654,7 @@ export class BillingCheckoutService implements OnModuleInit {
         if (!c) return 'not_found';
         if (
           c.fulfilledAt ||
-          ['paid', 'approved', 'needs_review'].includes(c.status)
+          ['paid', 'approved', 'needs_review', 'rejected'].includes(c.status)
         ) {
           return 'already_done';
         }
@@ -613,6 +664,7 @@ export class BillingCheckoutService implements OnModuleInit {
             where: { id: c.id },
             data: { status: 'needs_review', reviewReason: reason },
           });
+          await setOnlineRows(tx, [c.packageChangeRequestId], 'needs_review');
           await notifyNeedsReview(
             tx,
             c.organisationId,
@@ -623,6 +675,13 @@ export class BillingCheckoutService implements OnModuleInit {
           return 'needs_review';
         };
 
+        // Closed before it was paid (a newer checkout, or a downgrade / move
+        // to Basic was scheduled): never apply an old quote. Our team refunds it.
+        if (c.status === 'cancelled') {
+          return review(
+            'Paid after a newer change: this checkout was superseded (a newer checkout, or a downgrade or move to Basic was scheduled), so nothing was applied. Refund the payment.',
+          );
+        }
         if (paidPaise !== c.totalPaise) {
           return review(
             `Amount mismatch: paid ${toRupees(paidPaise)}, quoted ${toRupees(c.totalPaise)}.`,
@@ -651,15 +710,31 @@ export class BillingCheckoutService implements OnModuleInit {
           }
         }
         // A renewal on the same plan doesn't re-check usage (it's what the org
-        // already has); one that applies a scheduled downgrade does.
+        // already has); any other change does — like a Super Admin approval:
+        // what "choose what stays" can pause is fine with the picked option.
         if (c.kind !== 'renewal' || c.toPlanId !== c.fromPlanId) {
-          try {
-            await assertPlanFitsCurrentUsage(tx, c.organisationId, c.toPlan);
-          } catch (err) {
-            return review(err instanceof Error ? err.message : String(err));
-          }
+          const problem = await this.whatStaysProblem(tx, c);
+          if (problem) return review(problem);
+          // "Keep the default picks" drops an earlier saved choice; then
+          // applyPlanChange → applyRetention pauses what doesn't stay.
+          await applyWhatStaysChoice(
+            tx,
+            c.organisationId,
+            c.toPlanId,
+            (c.whatStaysChoice as WhatStaysChoice | null) ?? undefined,
+          );
         }
 
+        // The online row: approved, with what was actually kept (worked out
+        // before pausing, with the same picks applyRetention uses).
+        if (c.packageChangeRequestId) {
+          const kept = await whatStaysFor(tx, c.organisationId, c.toPlan, true);
+          await setOnlineRows(tx, [c.packageChangeRequestId], 'approved', {
+            whatStays: kept
+              ? (kept as unknown as Prisma.InputJsonValue)
+              : Prisma.DbNull,
+          });
+        }
         await applyPlanChange(tx, {
           organisationId: c.organisationId,
           toPlanId: c.toPlanId,
@@ -696,6 +771,11 @@ export class BillingCheckoutService implements OnModuleInit {
             where: { id: checkoutId },
             include: { toPlan: { select: { name: true } } },
           });
+          await setOnlineRows(
+            this.prisma,
+            [c?.packageChangeRequestId],
+            'needs_review',
+          );
           if (c)
             await notifyNeedsReview(
               this.prisma,
@@ -713,6 +793,48 @@ export class BillingCheckoutService implements OnModuleInit {
   }
 
   /* -------------------------------------------------------------- admin */
+
+  /**
+   * Super Admin: close a paid checkout under review by hand (the plan was
+   * sorted out another way, or it's being kept as a credit). Nothing is
+   * applied; the org can change plans again. A refund closes it too.
+   */
+  async adminResolve(checkoutId: string, actorId: string, note?: string) {
+    const c = await this.prisma.billingCheckout.findUnique({
+      where: { id: checkoutId },
+    });
+    if (!c) throw billingError('not_found', 'That checkout was not found.');
+    if (c.status !== 'needs_review') {
+      throw billingError(
+        'not_in_review',
+        'This payment is not waiting for review.',
+      );
+    }
+    const reason = [
+      c.reviewReason,
+      `Resolved by our team${note?.trim() ? `: ${note.trim()}` : '.'}`,
+    ]
+      .filter(Boolean)
+      .join(' ');
+    await this.prisma.billingCheckout.update({
+      where: { id: c.id },
+      data: { status: 'rejected', reviewReason: reason.slice(0, 1000) },
+    });
+    await setOnlineRows(this.prisma, [c.packageChangeRequestId], 'cancelled');
+    await this.prisma.auditLog
+      .create({
+        data: {
+          orgId: c.organisationId,
+          actorId,
+          action: 'payment_review_resolved',
+          entity: 'BillingCheckout',
+          entityId: c.id,
+          metadata: { note: note ?? null },
+        },
+      })
+      .catch(() => undefined);
+    return { id: c.id, status: 'rejected' as const };
+  }
 
   /** Super Admin: checkouts in a status (default needs_review), newest first. */
   async adminList(status: BillingCheckoutStatus = 'needs_review') {
@@ -836,7 +958,7 @@ export class BillingCheckoutService implements OnModuleInit {
             ...base,
             quote,
             couponError: null,
-            ...(await this.usageFor(orgId, next, mode)),
+            ...(await this.usageFor(orgId, next)),
           };
         }
         return {
@@ -855,10 +977,11 @@ export class BillingCheckoutService implements OnModuleInit {
           'That plan is not available. Pick another one.',
         );
       }
-      // Manual mode with the renewal overdue (grace): any paid plan is a
-      // request at its full price, continuing the missed term; a renewal
-      // coupon on the subscription applies as it would to the renewal.
-      if (mode.mode === 'manual' && current && isOverdue(current.status)) {
+      // Renewal overdue (grace), either mode: any paid plan — the same, a
+      // bigger or a smaller one — is its full price, continuing the missed
+      // term (kind renewal); only a renewal coupon on the subscription
+      // applies, as it would to the renewal (no typed code).
+      if (current && isOverdue(current.status)) {
         const quote = await this.withRenewalCoupon(
           quoteOverdueChange({
             now,
@@ -883,7 +1006,7 @@ export class BillingCheckoutService implements OnModuleInit {
           ...base,
           quote,
           couponError: null,
-          ...(await this.usageFor(orgId, target, mode)),
+          ...(await this.usageFor(orgId, target)),
         };
       }
       let quote = quoteCheckout({
@@ -910,7 +1033,7 @@ export class BillingCheckoutService implements OnModuleInit {
         ...base,
         quote,
         couponError,
-        ...(await this.usageFor(orgId, target, mode)),
+        ...(await this.usageFor(orgId, target)),
       };
     } catch (e) {
       if (e instanceof QuoteError) throw billingError(e.code, e.message);
@@ -919,30 +1042,28 @@ export class BillingCheckoutService implements OnModuleInit {
   }
 
   /**
-   * Whether the org fits the plan. Manual mode: being over on users /
-   * projects / published pages / templates is fine once they've chosen what stays — it's
-   * paused when the request is approved (usageConflict). Otherwise a usageError.
+   * Whether the org fits the plan. Either mode: being over on users /
+   * projects / published pages / templates is fine once they've chosen what
+   * stays — it's paused when the change applies (usageConflict). Anything
+   * that can't be paused is a usageError.
    */
   private async usageFor(
     orgId: string,
     target: { id: string; name?: string; limits: unknown },
-    mode: BillingMode,
   ): Promise<Pick<QuoteContext, 'usageError' | 'usageConflict'>> {
-    if (mode.mode === 'manual') {
-      const over = await usageOverLimits(this.prisma, orgId, target);
-      if (over.length && over.every((o) => o.fixable)) {
-        const saved = await savedChoiceFor(this.prisma, orgId, target.id);
-        const items = over.map((o) => ({
-          key: o.key as 'users' | 'projects' | 'landingPages' | 'templates',
-          limit: o.limit,
-          used: o.used,
-        }));
-        // A choice saved before templates could be paused has no template
-        // picks (null): the default picks apply to those, and they fit.
-        const choicesFit =
-          !!saved && items.every((i) => (saved[i.key]?.length ?? 0) <= i.limit);
-        return { usageError: null, usageConflict: { items, choicesFit } };
-      }
+    const over = await usageOverLimits(this.prisma, orgId, target);
+    if (over.length && over.every((o) => o.fixable)) {
+      const saved = await savedChoiceFor(this.prisma, orgId, target.id);
+      const items = over.map((o) => ({
+        key: o.key as 'users' | 'projects' | 'landingPages' | 'templates',
+        limit: o.limit,
+        used: o.used,
+      }));
+      // A choice saved before templates could be paused has no template
+      // picks (null): the default picks apply to those, and they fit.
+      const choicesFit =
+        !!saved && items.every((i) => (saved[i.key]?.length ?? 0) <= i.limit);
+      return { usageError: null, usageConflict: { items, choicesFit } };
     }
     return {
       usageError: await this.usageErrorFor(orgId, target),
@@ -998,6 +1119,38 @@ export class BillingCheckoutService implements OnModuleInit {
     });
   }
 
+  /**
+   * Why a paid checkout can't be applied as it stands (needs_review), or null.
+   * The same rule as a Super Admin approval (assertPlanFitsAfterRetention):
+   * only what "choose what stays" can't pause blocks. When the org is over
+   * what it can pause it needs a picked option: "Keep the default picks", or
+   * "I'll choose" with a saved choice that still fits.
+   */
+  private async whatStaysProblem(
+    tx: Prisma.TransactionClient,
+    c: {
+      organisationId: string;
+      whatStaysChoice: string | null;
+      toPlan: { id: string; name: string; limits: unknown };
+    },
+  ): Promise<string | null> {
+    try {
+      await assertPlanFitsAfterRetention(tx, c.organisationId, c.toPlan);
+    } catch (err) {
+      return err instanceof Error ? err.message : String(err);
+    }
+    const conflict = await whatStaysConflict(tx, c.organisationId, c.toPlan);
+    if (!conflict) return null;
+    const over = usageConflictMessage(c.toPlan.name, conflict);
+    if (!c.whatStaysChoice) {
+      return `Paid, but the organisation is now over ${c.toPlan.name}'s limits and didn't choose what stays (usage went up after the price was quoted). ${over}`;
+    }
+    if (c.whatStaysChoice === 'saved' && !conflict.choicesFit) {
+      return `Paid, but the organisation's saved choice of what stays no longer fits ${c.toPlan.name}'s limits. ${over}`;
+    }
+    return null;
+  }
+
   /** The "plan allows N projects, you have M" message, or null when the org fits. */
   private async usageErrorFor(
     orgId: string,
@@ -1024,7 +1177,7 @@ export class BillingCheckoutService implements OnModuleInit {
       renewal ? 'renewal' : 'purchase',
       renewal ? null : dto.couponCode,
     );
-    // An overdue change (manual mode, grace) is priced like a renewal: its
+    // An overdue change (grace, either mode) is priced like a renewal: its
     // coupon comes from the subscription, not a code.
     return toPreview(ctx, renewal || ctx.quote.kind === 'renewal');
   }

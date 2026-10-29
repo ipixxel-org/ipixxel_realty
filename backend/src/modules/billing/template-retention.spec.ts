@@ -296,7 +296,7 @@ describe('a template conflict goes through choose what stays (manual mode)', () 
       response: {
         code: 'choose_what_stays',
         message:
-          'Starter allows 1 template; you have 2. Choose which 1 stay active when this change is approved.',
+          'Starter allows 1 template; you have 2. Choose which 1 stay active when this change takes effect.',
       },
     });
 

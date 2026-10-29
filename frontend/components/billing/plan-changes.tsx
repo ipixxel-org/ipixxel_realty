@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { Icon } from "@/components/icons";
 import { useToast } from "@/components/ui/toast";
-import { isOverdueManual, planChangeRoute } from "@/lib/billing/direction";
+import { isOverdue, planChangeRoute } from "@/lib/billing/direction";
 import { formatDate, packagePriceText, planPrice } from "@/lib/billing/pricing";
 import type { BillingInterval } from "@/lib/billing/types";
 import { planChangeBlock } from "@/lib/billing/requests";
@@ -11,7 +11,7 @@ import { ScheduledChangeNote } from "./banners";
 import { useBillingEnv, useBillingQuery, useOrgBilling } from "./context";
 import { BillingDialog, DialogActions } from "./dialog";
 import { WhatStaysOptions, type WhatStaysPick } from "./choose-what-stays";
-import { Banner, BillingRedirect, BLink, countLabel, ErrorNote, Kv, Loading, Section, useCheckoutLive } from "./ui";
+import { Banner, BillingRedirect, BLink, countLabel, ErrorNote, Kv, Loading, Section } from "./ui";
 
 function ConfirmDialog({
   open,
@@ -78,7 +78,6 @@ export function DowngradeScreen({
   const [reason, setReason] = useState("");
   // Over the smaller plan's limits: "Keep the default picks" / "I'll choose what stays", picked every time.
   const [wsPick, setWsPick] = useState<WhatStaysPick>({ choice: null, ready: false });
-  const live = useCheckoutLive(overview);
   if (!overview || !plans) return <Loading />;
   const target = plans.find((p) => p.id === planId);
   if (!target) return <ErrorNote message="That plan doesn't exist." />;
@@ -92,11 +91,21 @@ export function DowngradeScreen({
   // A change is already scheduled: the message and "Keep <plan>" instead of the form.
   const block = planChangeBlock(o);
   if (block?.reason === "change_scheduled") return <ScheduledChangeNote overview={o} />;
-  // Manual mode with the renewal overdue: Basic happens now; a paid plan is a request.
-  const overdueManual = isOverdueManual(o, live);
-  // Same rule as the plan cards: a bigger plan (or a paid plan while overdue in
-  // manual mode, which is a request) belongs on the checkout, not here.
-  const route = planChangeRoute(o, target, interval, live);
+  // A paid online checkout is being checked by our team: nothing else changes until it's resolved.
+  if (block?.reason === "payment_review") {
+    return (
+      <div data-testid="payment-review-note">
+        <Banner tone="amber" icon="clock" title="Plan changes are on hold">
+          {block.message}
+        </Banner>
+      </div>
+    );
+  }
+  // Renewal overdue (either mode): Basic happens now; a paid plan is paid at the checkout.
+  const overdue = isOverdue(o);
+  // Same rule as the plan cards: a bigger plan (or any paid plan while
+  // overdue) belongs on the checkout, not here.
+  const route = planChangeRoute(o, target, interval);
   if (route === "checkout") return <BillingRedirect to="checkout" params={{ plan: target.id, interval }} />;
   if (route !== "downgrade") {
     return (
@@ -116,7 +125,7 @@ export function DowngradeScreen({
   // Basic uses the end-of-term move to the free plan underneath; the reason is saved with it.
   const toBasic = target.isFree;
   // The paid term is already over: moving to Basic happens straight away.
-  const now = toBasic && (o.status === "expired" || overdueManual);
+  const now = toBasic && (o.status === "expired" || overdue);
   const effective = now ? null : (o.graceEndsAt ?? o.periodEnd);
   const when = onDate(effective, "the end of your paid period");
   const over = o.usage.filter((u) => target.limits[u.key] !== null && u.used > target.limits[u.key]!);
@@ -248,7 +257,7 @@ export function DowngradeScreen({
         }
         message={
           now
-            ? overdueManual
+            ? overdue
               ? `Your ${o.plan.name} renewal is overdue, so the move happens straight away. Anything over ${target.name}'s limits is paused, not deleted.`
               : `Your ${o.plan.name} term has ended, so the move happens straight away.`
             : `You keep ${o.plan.name} until then.`

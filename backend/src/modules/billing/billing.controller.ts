@@ -32,6 +32,7 @@ import {
   ConfirmCheckoutDto,
   ListCheckoutsQueryDto,
   PreviewCheckoutDto,
+  ResolveCheckoutDto,
   StartCheckoutDto,
 } from './dto/checkout.dto';
 import { BillingPlanChangeService } from './billing-plan-change.service';
@@ -355,6 +356,16 @@ export class AdminBillingController {
   @Get('checkouts')
   listCheckouts(@Query() query: ListCheckoutsQueryDto) {
     return this.checkouts.adminList(query.status ?? 'needs_review');
+  }
+
+  /** Close a payment under review by hand (nothing is applied). */
+  @Post('checkouts/:id/resolve')
+  resolveCheckout(
+    @CurrentUser() user: JwtPayload,
+    @Param('id') id: string,
+    @Body() body: ResolveCheckoutDto,
+  ) {
+    return this.checkouts.adminResolve(id, user.sub, body?.note);
   }
 
   @Get('plans')

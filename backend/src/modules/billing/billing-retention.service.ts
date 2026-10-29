@@ -417,6 +417,7 @@ export class BillingRetentionService {
     }
     const ids = await this.validate(orgId, target, dto);
     await this.store(orgId, userId, target.id, ids);
+    await this.useSavedOnOpenPayment(dto.requestId);
     await this.refreshOpenCopies(orgId, target);
     await this.audit(orgId, userId, 'retention_choices_saved', {
       targetPlanId: target.id,
@@ -468,6 +469,7 @@ export class BillingRetentionService {
     }
     const ids = await this.validate(orgId, target, dto);
     await this.store(orgId, adminId, target.id, ids);
+    await this.useSavedOnOpenPayment(request?.id);
     const applyNow = sub?.planId === target.id && (!request || requestApplied);
     if (applyNow) {
       await applyRetention(this.prisma, orgId, target);
@@ -517,6 +519,23 @@ export class BillingRetentionService {
       ).catch(() => undefined);
     }
     return this.adminGetChoices(orgId, target.id, request?.id);
+  }
+
+  /**
+   * Saved on a waiting online payment's row: that payment now uses the saved
+   * choice when it's paid ("I'll choose"), whatever was picked at the checkout.
+   */
+  private async useSavedOnOpenPayment(requestId?: string) {
+    if (!requestId) return;
+    await this.prisma.billingCheckout.updateMany({
+      where: {
+        packageChangeRequestId: requestId,
+        mode: 'online',
+        status: 'pending',
+        fulfilledAt: null,
+      },
+      data: { whatStaysChoice: 'saved' },
+    });
   }
 
   /** Same rules for everyone: known ids, within the limits, owner always in. */

@@ -12,6 +12,11 @@ import {
   scheduledChangeBlock,
 } from '../../common/utils/scheduled-change.util';
 import { pendingRequestMessage } from '../package-change-requests/package-change-requests.service';
+import {
+  PAYMENT_REVIEW_MESSAGE,
+  paymentUnderReview,
+  supersedeOpenCheckouts,
+} from './online-rows';
 import { whatStaysFor } from '../../common/utils/retention.util';
 import {
   applyWhatStaysChoice,
@@ -43,19 +48,23 @@ export class BillingPlanChangeService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly overview: OrgBillingV2Service,
-    // Manual mode in grace (below). Optional so unit tests can leave them out:
-    // without them everything behaves as online mode.
+    // Grace: a paid plan is a checkout (manual: a request). Optional so unit
+    // tests can leave them out: without them everything behaves as online mode.
     @Optional() private readonly mode?: BillingModeService,
     @Optional() private readonly checkout?: BillingCheckoutService,
   ) {}
 
   /**
-   * Manual mode with the renewal overdue (grace): moving to Basic happens at
-   * once (no request), and any paid plan is a request at its full price.
+   * The renewal is overdue (grace), in either mode: moving to Basic happens
+   * at once, and any paid plan is a checkout at its full price (manual mode:
+   * a change request) — never scheduled.
    */
-  private async manualOverdue(sub: { status: string }): Promise<boolean> {
-    if (sub.status !== 'past_due' || !this.mode) return false;
-    return (await this.mode.getMode()).mode === 'manual';
+  private overdue(sub: { status: string }): boolean {
+    return sub.status === 'past_due';
+  }
+
+  private async isManual(): Promise<boolean> {
+    return !!this.mode && (await this.mode.getMode()).mode === 'manual';
   }
 
   private async current(orgId: string) {
@@ -92,10 +101,15 @@ export class BillingPlanChangeService {
    * refused until the scheduled one is undone ("Keep <plan>") or takes effect.
    */
   private async refuseWhileScheduled(
+    orgId: string,
     sub: Parameters<typeof scheduledChangeBlock>[1],
   ) {
     const scheduled = await scheduledChangeBlock(this.prisma, sub);
     if (scheduled) throw billingError('change_scheduled', scheduled);
+    // A paid checkout waiting for our team blocks other plan changes too.
+    if (await paymentUnderReview(this.prisma, orgId)) {
+      throw billingError('payment_review', PAYMENT_REVIEW_MESSAGE);
+    }
   }
 
   async cancel(
@@ -107,7 +121,7 @@ export class BillingPlanChangeService {
     if (!sub || isFreePlan(sub.plan)) {
       throw billingError('nothing_to_cancel', "You're already on Basic.");
     }
-    await this.refuseWhileScheduled(sub);
+    await this.refuseWhileScheduled(orgId, sub);
     const reason = dto.reason?.trim() || null;
     // Over Basic's limits: the org picks "Keep the default picks" or "I'll
     // choose what stays" (a saved choice that fits) first.
@@ -117,13 +131,15 @@ export class BillingPlanChangeService {
       await assertWhatStaysConfirmed(this.prisma, orgId, free, choice);
       await applyWhatStaysChoice(this.prisma, orgId, free.id, choice);
     }
+    // One change at a time: an open online payment can't apply over this.
+    await supersedeOpenCheckouts(this.prisma, orgId);
     if (
       sub.status === 'expired' ||
       sub.status === 'paused' ||
-      (await this.manualOverdue(sub))
+      this.overdue(sub)
     ) {
-      // The term is already over (or, in manual mode, overdue): move to the
-      // free plan now — extras paused, nothing deleted.
+      // The term is already over or overdue (grace, either mode): move to
+      // the free plan now — extras paused, nothing deleted.
       await this.prisma.subscription.update({
         where: { id: sub.id },
         data: { cancelReason: reason },
@@ -146,7 +162,7 @@ export class BillingPlanChangeService {
           fromPlanId: sub.planId,
           toPlanId: free.id,
           interval: 'monthly',
-          startsAt: sub.status === 'past_due' ? sub.graceEndsAt : sub.renewsAt,
+          startsAt: sub.renewsAt,
           reason,
           amount: null,
           whatStays: await whatStaysFor(this.prisma, orgId, free),
@@ -159,10 +175,7 @@ export class BillingPlanChangeService {
         sub.id,
         {
           planId: sub.planId,
-          endsAt: (sub.status === 'past_due'
-            ? sub.graceEndsAt
-            : sub.renewsAt
-          )?.toISOString(),
+          endsAt: sub.renewsAt?.toISOString(),
           reason,
         },
       );
@@ -205,9 +218,9 @@ export class BillingPlanChangeService {
         "You're on the free plan — there's nothing to downgrade.",
       );
     }
-    await this.refuseWhileScheduled(sub);
-    const overdueManual = await this.manualOverdue(sub);
-    if (sub.status !== 'active' && sub.status !== 'trial' && !overdueManual) {
+    await this.refuseWhileScheduled(orgId, sub);
+    const overdue = this.overdue(sub);
+    if (sub.status !== 'active' && sub.status !== 'trial' && !overdue) {
       throw billingError(
         'downgrade_not_now',
         'Your renewal is overdue. Renew your plan first, or move to Basic.',
@@ -229,9 +242,17 @@ export class BillingPlanChangeService {
         whatStaysChoice: pickedWhatStays(dto),
       });
     }
-    // Manual mode, renewal overdue: any paid plan is a change request at its
-    // full price (the missed term continues) — the same as Change plan sends.
-    if (overdueManual && this.checkout) {
+    // Renewal overdue (grace): any paid plan is paid at its full price (the
+    // missed term continues), never scheduled. Manual mode: the change
+    // request, the same as Change plan sends. Online the payment happens at
+    // the checkout (the plans page links there), not through this endpoint.
+    if (overdue) {
+      if (!this.checkout || !(await this.isManual())) {
+        throw billingError(
+          'pay_at_checkout',
+          `Your renewal is overdue, so ${target.name} starts when you pay for it. Continue at the checkout.`,
+        );
+      }
       await this.checkout.start(orgId, userId, {
         planId: target.id,
         interval: dto.interval ?? sub.billingCycle,
@@ -285,6 +306,8 @@ export class BillingPlanChangeService {
     const choice = pickedWhatStays(dto);
     await assertWhatStaysConfirmed(this.prisma, orgId, target, choice);
     await applyWhatStaysChoice(this.prisma, orgId, target.id, choice);
+    // One change at a time: an open online payment can't apply over this.
+    await supersedeOpenCheckouts(this.prisma, orgId);
 
     await this.prisma.subscription.update({
       where: { id: sub.id },

@@ -233,6 +233,7 @@ describe('OrgBillingV2Service.getOverview', () => {
       platformConfig: { findUnique: jest.fn().mockResolvedValue(null) },
       notification: {},
       billingCheckout: {
+        findMany: jest.fn().mockResolvedValue([]),
         updateMany: jest.fn().mockResolvedValue({ count: 0 }),
         findFirst: jest.fn().mockResolvedValue(null),
       },

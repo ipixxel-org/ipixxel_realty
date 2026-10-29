@@ -152,6 +152,26 @@ export interface WhatStays {
 /** A scheduled change (no approval): scheduled → done / undone ("Keep <plan>") / replaced. */
 export type ScheduledChangeStatus = "scheduled" | "done" | "undone" | "replaced";
 
+/** Statuses only an online payment row has (online step 3); approved = paid; closed = failed / expired / replaced. */
+export type OnlineRowStatus = "awaiting_payment" | "needs_review" | "closed";
+
+/** What an online payment row shows about its payment. */
+export interface OnlinePaymentView {
+  /**
+   * waiting (order open) · paid · failed · expired (not paid in 30 min) · superseded (a newer checkout,
+   * or a downgrade / move to Basic, closed it) · needs_review (paid, not applied) · refunded ·
+   * resolved (our team closed the review by hand).
+   */
+  state: "waiting" | "paid" | "failed" | "expired" | "superseded" | "needs_review" | "refunded" | "resolved";
+  paidAt: string | null;
+  /** Razorpay order ID (order_…). */
+  orderId: string | null;
+  /** The GST invoice once paid (signed printable document). */
+  invoice: { id: string; number: string; url: string } | null;
+  /** Super Admin only: why it needs review. */
+  reviewReason?: string | null;
+}
+
 export interface OrgPlanRequest {
   id: string;
   /**
@@ -159,7 +179,7 @@ export interface OrgPlanRequest {
    * a move to Basic / a smaller plan at the end of the term, recorded here
    * (both modes, no approval, never pending). Missing = request.
    */
-  kind?: "request" | "scheduled_change";
+  kind?: "request" | "scheduled_change" | "online_payment";
   requestedAt: string;
   requestedBy: string | null;
   fromPlan: { id: PlanId; name: string } | null;
@@ -168,7 +188,10 @@ export interface OrgPlanRequest {
   /** Before GST, in rupees. */
   amount: number | null;
   amountNote: "prorated" | "less_monthly_credit" | null;
-  status: "pending" | "approved" | "rejected" | "withdrawn" | ScheduledChangeStatus;
+  /** Online payments: awaiting_payment → approved (paid) / closed (failed, expired, replaced) / needs_review. */
+  status: "pending" | "approved" | "rejected" | "withdrawn" | ScheduledChangeStatus | OnlineRowStatus;
+  /** Online payments only: the payment's state, Razorpay order ID and invoice. */
+  online?: OnlinePaymentView | null;
   /** Requests: when it was decided. Scheduled changes: when it took effect / was undone / replaced. */
   decidedAt: string | null;
   rejectionReason: string | null;
@@ -284,7 +307,8 @@ export interface RenewalBreakdown {
   total: number;
 }
 
-export type PlanChangeBlockedReason = "request_pending" | "change_scheduled";
+/** payment_review: a paid online checkout is being checked by our team (renewals still go through). */
+export type PlanChangeBlockedReason = "request_pending" | "change_scheduled" | "payment_review";
 
 export interface BillingOverview {
   orgName: string;

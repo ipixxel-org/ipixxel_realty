@@ -58,13 +58,14 @@ const PENDING_TEXT = /^You already have a pending request \(.+ → Pro, sent 22 
 /* --------------------------------------------------------- Choose what stays */
 
 describe('"Choose what stays" on Settings → Billing', () => {
-  it("is hidden from the action row in manual mode, shown in online mode", async () => {
+  it("is not in the action row in either mode (one place: chosen with each change or on the latest request)", async () => {
     const view = await show(createMockBillingClient({ initial: manual() }), <BillingOverviewPanel showInvoices={false} />);
     expect(within(actionRow()).queryByRole("link", { name: "Choose what stays" })).toBeNull();
     expect(within(actionRow()).getByRole("link", { name: "Requests" })).toHaveAttribute("href", "/org/settings/billing/requests");
     view.unmount();
     await show(createMockBillingClient(), <BillingOverviewPanel showInvoices={false} />);
-    expect(within(actionRow()).getByRole("link", { name: "Choose what stays" })).toBeInTheDocument();
+    expect(within(actionRow()).queryByRole("link", { name: "Choose what stays" })).toBeNull();
+    expect(within(actionRow()).getByRole("link", { name: "Requests" })).toBeInTheDocument();
   });
 
   it("grace banner: Choose what stays; \"You're on Basic now\": view-only, contact support", async () => {
@@ -98,7 +99,7 @@ describe("request screen over the target plan's limits", () => {
     const conflict = { items: [{ key: "users" as const, limit: 5, used: 8 }], choicesFit: false };
     await show(withConflict(conflict), <CheckoutScreen planId="pro" interval="monthly" />);
     const note = screen.getByTestId("usage-conflict");
-    expect(note).toHaveTextContent("Pro allows 5 users; you have 8. Choose which 5 stay active when this change is approved.");
+    expect(note).toHaveTextContent("Pro allows 5 users; you have 8. Choose which 5 stay active when this change takes effect.");
     expect(screen.getByRole("button", { name: /Send change request/ })).toBeDisabled();
     fireEvent.click(within(note).getByRole("radio", { name: "I'll choose what stays" }));
     expect(within(note).getByRole("link", { name: "Choose what stays" })).toHaveAttribute(

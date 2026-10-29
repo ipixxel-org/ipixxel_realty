@@ -1,5 +1,5 @@
 import { formatDate, formatINR } from "./pricing";
-import type { BillingOverview, OrgPlanRequest, PendingUpgrade, PlanChangeBlockedReason, RequestPayment, RequestQuote } from "./types";
+import type { BillingOverview, OnlinePaymentView, OrgPlanRequest, PendingUpgrade, PlanChangeBlockedReason, RequestPayment, RequestQuote } from "./types";
 
 /** "22 Oct" (UTC calendar day, like the API). */
 function shortDay(iso: string): string {
@@ -16,7 +16,10 @@ export function pendingRequestText(p: Pick<PendingUpgrade, "fromPlan" | "toPlan"
   return `You already have a pending request (${change}, sent ${shortDay(p.createdAt)}). Wait for approval or withdraw it.`;
 }
 
-/** The waiting request that blocks plan changes, or null (a paid order under review doesn't). */
+/** The one "a payment is being checked" message — the API refuses with the same words (payment_review). */
+export const PAYMENT_REVIEW_TEXT = "A payment is being checked by our team. You can change plans once it's resolved.";
+
+/** The waiting request that blocks plan changes, or null (a paid order under review is payment_review). */
 export function blockingRequest(o: Pick<BillingOverview, "pendingUpgrade"> | null | undefined): PendingUpgrade | null {
   return o?.pendingUpgrade?.status === "pending_approval" ? o.pendingUpgrade : null;
 }
@@ -46,6 +49,7 @@ export function planChangeBlock(o: BlockFields | null | undefined): { reason: Pl
   if (o.planChangeBlockedReason && o.planChangeBlockedMessage) return { reason: o.planChangeBlockedReason, message: o.planChangeBlockedMessage };
   const waiting = blockingRequest(o);
   if (waiting) return { reason: "request_pending", message: pendingRequestText(waiting) };
+  if (o.pendingUpgrade?.status === "needs_review") return { reason: "payment_review", message: PAYMENT_REVIEW_TEXT };
   if (!o.plan.isFree && (o.cancelAt || o.downgradeTo)) {
     return {
       reason: "change_scheduled",
@@ -64,8 +68,50 @@ export function requestPaymentText(p: Pick<RequestPayment, "amount" | "method" |
   return `Paid · ${formatINR(p.amount)} · ${p.method}${ref} · ${shortDay(p.receivedOn)}`;
 }
 
+/** An online payment's row on the Requests lists (no approval: it applies when paid). */
+export const isOnlinePayment = (r: { kind?: string }) => r.kind === "online_payment";
+
+/**
+ * The status tag on an online payment row: "Waiting for payment", "Paid online
+ * · 27 Oct", "Payment failed", "Expired (not paid)", "Superseded", "Needs
+ * review", "Refunded" or "Resolved by our team".
+ */
+export function onlinePaymentTag(o: Pick<OnlinePaymentView, "state" | "paidAt">): string {
+  switch (o.state) {
+    case "waiting":
+      return "Waiting for payment";
+    case "paid":
+      return o.paidAt ? `Paid online · ${shortDay(o.paidAt)}` : "Paid online";
+    case "failed":
+      return "Payment failed";
+    case "expired":
+      return "Expired (not paid)";
+    case "superseded":
+      return "Superseded";
+    case "needs_review":
+      return "Needs review";
+    case "refunded":
+      return "Refunded";
+    case "resolved":
+      return "Resolved by our team";
+  }
+}
+
+/** Badge colour for an online payment's state. */
+export const ONLINE_PAYMENT_BADGE: Record<OnlinePaymentView["state"], string> = {
+  waiting: "b-amber",
+  paid: "b-green",
+  failed: "b-rose",
+  expired: "b-gray",
+  superseded: "b-gray",
+  needs_review: "b-amber",
+  refunded: "b-gray",
+  resolved: "b-gray",
+};
+
 /** Where a request is: "Waiting for payment", "Payment received – waiting for approval", or the decision. */
-export function requestStage(r: Pick<OrgPlanRequest, "status" | "payment" | "startsAt">): string {
+export function requestStage(r: Pick<OrgPlanRequest, "status" | "payment" | "startsAt"> & { online?: OnlinePaymentView | null }): string {
+  if (r.online) return onlinePaymentTag(r.online);
   if (r.status === "scheduled") return r.startsAt ? `Scheduled (applies on ${shortDay(r.startsAt)})` : "Scheduled";
   if (r.status !== "pending") return REQUEST_STATUS_LABEL[r.status];
   return r.payment ? "Payment received – waiting for approval" : "Waiting for payment";
@@ -100,6 +146,9 @@ export const REQUEST_STATUS_LABEL: Record<OrgPlanRequest["status"], string> = {
   done: "Done",
   undone: "Undone",
   replaced: "Replaced",
+  awaiting_payment: "Waiting for payment",
+  needs_review: "Needs review",
+  closed: "Closed",
 };
 
 /** A scheduled change (to Basic / a smaller plan) recorded on the list — no approval. */

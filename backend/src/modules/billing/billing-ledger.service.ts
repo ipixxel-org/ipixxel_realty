@@ -12,6 +12,12 @@ import {
 } from '../package-change-requests/package-change-requests.service';
 import { requestQuoteView } from './request-coupon';
 import { orgWhatStaysAction } from '../../common/utils/what-stays-rows.util';
+import { expireStaleCheckouts } from './checkout-state';
+import {
+  invoicesByCheckout,
+  ONLINE_CHECKOUT_SELECT,
+  onlinePaymentView,
+} from './online-rows';
 
 /** The contract's Invoice. */
 export interface InvoiceV2 {
@@ -140,6 +146,8 @@ export class BillingLedgerService {
     p?: number,
     size?: number,
   ): Promise<Paged<OrgPlanRequestV2>> {
+    // An unpaid online order past its 30 minutes reads as expired here too.
+    await expireStaleCheckouts(this.prisma, orgId);
     const rows = await this.prisma.packageChangeRequest.findMany({
       where: { orgId },
       orderBy: { createdAt: 'desc' },
@@ -172,6 +180,8 @@ export class BillingLedgerService {
             igstPaise: true,
             quoteBeforeCoupon: true,
             coupon: { select: { code: true } },
+            id: true,
+            ...ONLINE_CHECKOUT_SELECT,
           },
         },
         offlinePayment: true,
@@ -179,14 +189,25 @@ export class BillingLedgerService {
     });
     // "Choose what stays" lives on the latest row only (rows are newest first).
     const latestId = rows[0]?.id ?? null;
+    const invoices = await invoicesByCheckout(
+      this.prisma,
+      rows
+        .filter((r) => r.kind === 'online_payment')
+        .map((r) => r.billingCheckout?.id),
+    );
     return page(
       rows.map((r): OrgPlanRequestV2 => {
         const c = r.billingCheckout;
         const by = r.requestedBy;
         const scheduled = r.kind === 'scheduled_change';
+        const online = r.kind === 'online_payment';
         return {
           id: r.id,
-          kind: scheduled ? 'scheduled_change' : 'request',
+          kind: online
+            ? 'online_payment'
+            : scheduled
+              ? 'scheduled_change'
+              : 'request',
           requestedAt: r.createdAt.toISOString(),
           requestedBy: by
             ? [by.firstName, by.lastName].filter(Boolean).join(' ') || by.email
@@ -208,11 +229,21 @@ export class BillingLedgerService {
               : c?.kind === 'interval_change'
                 ? 'less_monthly_credit'
                 : null,
-          status: r.status === 'cancelled' ? 'withdrawn' : r.status,
+          // A cancelled request was withdrawn by the org; a cancelled online
+          // payment is closed — it failed / expired / was replaced (online.state).
+          status:
+            r.status === 'cancelled'
+              ? online
+                ? 'closed'
+                : 'withdrawn'
+              : r.status,
+          online: onlinePaymentView(r, c, c ? invoices.get(c.id) : undefined),
           // Withdrawn requests have no reviewer: their decision date is the update.
           // Scheduled changes: when it took effect / was undone / replaced.
           decidedAt:
-            r.status === 'pending' || r.status === 'scheduled'
+            r.status === 'pending' ||
+            r.status === 'scheduled' ||
+            r.status === 'awaiting_payment'
               ? null
               : (r.reviewedAt ?? r.updatedAt).toISOString(),
           rejectionReason: r.status === 'rejected' ? r.rejectionReason : null,

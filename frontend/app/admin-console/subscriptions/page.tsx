@@ -26,6 +26,7 @@ import { PACKAGE_REQUESTS_ANCHOR } from "@/components/billing/admin/package-requ
 import { ChangeSubscriptionModal } from "./change-subscription-modal";
 import { AdminCheckoutsNeedingReview, AdminLifecycleSettings, AdminPaymentsV2, AdminPlansV2, AdminSubscriptionsV2 } from "@/components/billing/admin/admin-pages";
 import { BILLING_V2 } from "@/lib/billing/flag";
+import { onlinePaymentTag } from "@/lib/billing/requests";
 import { billingHref } from "@/components/billing/context";
 import { formatPaise } from "@/lib/razorpay";
 import type {
@@ -97,6 +98,9 @@ const REQUEST_BADGE_COLORS: Record<string, { background: string; color: string }
   done: { background: "rgba(16, 185, 129, 0.1)", color: "#10b981" },
   undone: { background: "#f1f5f9", color: "#64748b" },
   replaced: { background: "#f1f5f9", color: "#64748b" },
+  // Online payments (online step 3).
+  awaiting_payment: { background: "rgba(245, 158, 11, 0.1)", color: "#d97706" },
+  needs_review: { background: "rgba(245, 158, 11, 0.1)", color: "#b45309" },
 };
 
 function priceFor(plan: Plan, cycle: "Monthly" | "Yearly") {
@@ -1360,9 +1364,13 @@ export default function SuperAdminSubscriptionsPage() {
                                 ...(REQUEST_BADGE_COLORS[r.status] ?? REQUEST_BADGE_COLORS.rejected),
                               }}
                             >
-                              {/* Cancelled by the organisation = withdrawn. */}
-                              {r.status === "cancelled" ? "withdrawn" : r.status}
+                              {/* Online payments: their tag (paid, failed, expired …). Cancelled by the organisation = withdrawn. */}
+                              {r.online ? onlinePaymentTag(r.online) : r.status === "cancelled" ? "withdrawn" : r.status}
                             </span>
+                            {r.kind === "online_payment" ? (
+                              // Paid online: applies when paid, nothing to approve.
+                              <div style={{ fontSize: 11, color: "#64748b", marginTop: 4 }}>Online payment · no approval</div>
+                            ) : null}
                             {r.kind === "scheduled_change" ? (
                               // A scheduled downgrade / move to Basic: a record, nothing to approve.
                               <div style={{ fontSize: 11, color: "#64748b", marginTop: 4 }}>No approval needed</div>

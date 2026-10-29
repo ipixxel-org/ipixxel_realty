@@ -72,11 +72,36 @@ function setup(
   const requests = new PackageChangeRequestsService(db as never);
   const invoiced: string[] = [];
   requests.invoiceIssued = async (id) => invoiced.push(id);
+  // Online mode: a Razorpay order is a payments row (paid with fulfil).
+  const createOrder = jest.fn(
+    async (input: { referenceId: string; amountPaise: number }) => {
+      const p = await db.payment.create({
+        data: {
+          organisationId: 'org-1',
+          amount: input.amountPaise,
+          purpose: 'plan_purchase',
+          referenceType: 'billing_checkout',
+          referenceId: input.referenceId,
+          razorpayOrderId: `order_${input.referenceId}`,
+        },
+      });
+      return {
+        paymentId: p.id,
+        orderId: p.razorpayOrderId,
+        amount: input.amountPaise,
+        currency: 'INR',
+        keyId: 'rzp_test_x',
+        name: 'Acme',
+        description: 'Payment',
+        prefill: {},
+      };
+    },
+  );
   const checkout = new BillingCheckoutService(
     db as never,
     modeService as never,
     { getSellerSettings: async () => SELLER } as never,
-    { createOrder: jest.fn() } as never,
+    { createOrder } as never,
     new PaymentEventsService(),
     requests,
   );
@@ -238,16 +263,177 @@ describe('manual mode, renewal overdue (grace)', () => {
     expect(t.row().movedToBasicAt).toBeInstanceOf(Date);
     expect(t.db.packageChangeRequest.rows).toHaveLength(0);
   });
+});
 
-  it('online mode is unchanged: still downgrade_not_now, and Basic waits for grace to end', async () => {
+/* ------------------------------- 1b. online mode, renewal overdue (grace) */
+
+describe('online mode, renewal overdue (grace): the same rules, paid online', () => {
+  const grace = (over: Record<string, unknown> = {}) => ({
+    status: 'past_due',
+    renewsAt: daysAgo(3),
+    graceEndsAt: new Date(Date.now() + 4 * DAY),
+    ...over,
+  });
+  /** Start the checkout online and pay the Razorpay order in full. */
+  async function payOnline(
+    t: ReturnType<typeof setup>,
+    planId: string,
+    extra: Record<string, unknown> = {},
+  ) {
+    const res: any = await t.checkout.start('org-1', 'u-1', {
+      planId,
+      interval: 'monthly',
+      ...extra,
+    } as never);
+    expect(res.status).toBe('payment_required');
+    const c = t.db.billingCheckout.rows.find(
+      (r: any) => r.id === res.checkoutId,
+    );
+    expect(await t.checkout.fulfil(c.id, c.totalPaise)).toBe('paid');
+    return c;
+  }
+
+  it('a bigger plan: full price + GST, no proration; after paying the period continues from the missed renewal date', async () => {
+    const t = setup(grace({ planId: 'starter', amount: 1000 }), 'online');
+    const missed = t.row().renewsAt as Date;
+    const preview = await t.checkout.preview('org-1', {
+      planId: 'pro',
+      interval: 'monthly',
+    });
+    expect(preview).toMatchObject({
+      kind: 'renewal',
+      proration: null,
+      planPrice: 3000,
+      total: 3540,
+      couponsEnabled: false,
+    });
+    const c = await payOnline(t, 'pro');
+    expect(c).toMatchObject({
+      kind: 'renewal',
+      overdue: true,
+      totalPaise: 354_000,
+    });
+    expect(t.row()).toMatchObject({ planId: 'pro', status: 'active' });
+    expect(isoDay(t.row().renewsAt)).toBe(
+      isoDay(new Date(missed.getTime() + 30 * DAY)),
+    );
+    // Online step 3: the payment is an online row, paid = approved.
+    expect(t.db.packageChangeRequest.rows).toEqual([
+      expect.objectContaining({ kind: 'online_payment', status: 'approved' }),
+    ]);
+  });
+
+  it('a smaller paid plan: the checkout at its full price, period from the missed date; the downgrade endpoint points there instead of downgrade_not_now', async () => {
     const t = setup(grace(), 'online');
+    const missed = t.row().renewsAt as Date;
     expect(
       await code(
         t.changes.scheduleDowngrade('org-1', 'u-1', { planId: 'starter' }),
       ),
-    ).toBe('downgrade_not_now');
-    await t.changes.cancel('org-1', 'u-1', {});
-    expect(t.row()).toMatchObject({ planId: 'pro', cancelAtPeriodEnd: true });
+    ).toBe('pay_at_checkout');
+    // Nothing scheduled, no order made.
+    expect(t.row().scheduledPlanId ?? null).toBeNull();
+    expect(t.db.billingCheckout.rows).toHaveLength(0);
+
+    const c = await payOnline(t, 'starter');
+    expect(c).toMatchObject({
+      kind: 'renewal',
+      overdue: true,
+      totalPaise: 118_000,
+    });
+    expect(t.row()).toMatchObject({ planId: 'starter', status: 'active' });
+    expect(isoDay(t.row().renewsAt)).toBe(
+      isoDay(new Date(missed.getTime() + 30 * DAY)),
+    );
+  });
+
+  it('Basic moves the org straight away (cancel or the downgrade endpoint): no payment, nothing scheduled', async () => {
+    const moves = [
+      (t: ReturnType<typeof setup>) => t.changes.cancel('org-1', 'u-1', {}),
+      (t: ReturnType<typeof setup>) =>
+        t.changes.scheduleDowngrade('org-1', 'u-1', { planId: 'basic' }),
+    ];
+    for (const move of moves) {
+      const t = setup(grace(), 'online');
+      await move(t);
+      expect(t.row()).toMatchObject({
+        planId: 'basic',
+        status: 'active',
+        renewsAt: null,
+      });
+      expect(t.row().cancelAtPeriodEnd).toBeFalsy();
+      expect(t.row().movedToBasicAt).toBeInstanceOf(Date);
+      expect(t.db.billingCheckout.rows).toHaveLength(0);
+      expect(t.db.packageChangeRequest.rows).toHaveLength(0);
+    }
+  });
+
+  it('the same plan: Pay now renews from the missed date', async () => {
+    const t = setup(grace(), 'online');
+    const missed = t.row().renewsAt as Date;
+    await payOnline(t, 'pro', { purpose: 'renewal' });
+    expect(t.row()).toMatchObject({ planId: 'pro', status: 'active' });
+    expect(isoDay(t.row().renewsAt)).toBe(
+      isoDay(new Date(missed.getTime() + 30 * DAY)),
+    );
+  });
+
+  it("a typed coupon isn't used; a renewal coupon on the subscription still applies", async () => {
+    const t = setup(grace({ planId: 'starter', amount: 1000 }), 'online');
+    t.coupon({ code: 'TYPED' });
+    const typed = await t.checkout.preview('org-1', {
+      planId: 'pro',
+      interval: 'monthly',
+      couponCode: 'TYPED',
+    });
+    expect(typed).toMatchObject({ total: 3540, couponsEnabled: false });
+    expect(typed.coupon ?? null).toBeNull();
+    const c = await payOnline(t, 'pro', { couponCode: 'TYPED' });
+    expect(c).toMatchObject({ couponId: null, totalPaise: 354_000 });
+
+    const kept = setup(
+      grace({
+        planId: 'starter',
+        amount: 1000,
+        couponId: 'cp_ALWAYS',
+        couponRenewalsLeft: null,
+      }),
+      'online',
+    );
+    kept.coupon({ code: 'ALWAYS', duration: 'forever' });
+    const renewalCoupon = await kept.checkout.preview('org-1', {
+      planId: 'pro',
+      interval: 'monthly',
+    });
+    // 20% off 3000 = 2400, + 18% GST.
+    expect(renewalCoupon).toMatchObject({ kind: 'renewal', total: 2832 });
+  });
+
+  it('while the subscription is active: upgrade proration, the scheduled downgrade and Basic at the term end are unchanged', async () => {
+    const up = setup({ planId: 'starter', amount: 1000 }, 'online');
+    const preview = await up.checkout.preview('org-1', {
+      planId: 'pro',
+      interval: 'monthly',
+    });
+    expect(preview.kind).toBe('upgrade_same_interval');
+    expect(preview.proration).not.toBeNull();
+
+    const down = setup({}, 'online');
+    await down.changes.scheduleDowngrade('org-1', 'u-1', {
+      planId: 'starter',
+      whatStaysChoice: 'default',
+    });
+    expect(down.row()).toMatchObject({
+      planId: 'pro',
+      scheduledPlanId: 'starter',
+    });
+
+    const basic = setup({}, 'online');
+    await basic.changes.cancel('org-1', 'u-1', {});
+    expect(basic.row()).toMatchObject({
+      planId: 'pro',
+      cancelAtPeriodEnd: true,
+    });
   });
 });
 

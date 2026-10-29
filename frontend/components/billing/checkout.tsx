@@ -6,7 +6,7 @@ import { useToast } from "@/components/ui/toast";
 import { BILLING_FIELD_LABEL } from "@/lib/billing/details";
 import { planChangeRoute } from "@/lib/billing/direction";
 import { formatDate, formatINR, packagePriceText, stateName } from "@/lib/billing/pricing";
-import { pendingRequestText, planChangeBlock } from "@/lib/billing/requests";
+import { pendingRequestText, planChangeBlock, PAYMENT_REVIEW_TEXT } from "@/lib/billing/requests";
 import type { BillingDetailsField, BillingInterval, BillingOverview, BillingProfile, CheckoutPreview, PendingUpgrade } from "@/lib/billing/types";
 import { useBillingEnv, useBillingQuery, useOrgBilling } from "./context";
 import { ScheduledChangeNote } from "./banners";
@@ -232,11 +232,11 @@ type Part = "details" | "coupon" | "summary";
 
 const CONFLICT_NOUN = { users: ["user", "users"], projects: ["project", "projects"], landingPages: ["published landing page", "published landing pages"], templates: ["template", "templates"] } as const;
 
-/** "Pro allows 5 users; you have 8. Choose which 5 stay active when this change is approved." (same words as the API) */
+/** "Pro allows 5 users; you have 8. Choose which 5 stay active when this change takes effect." (same words as the API) */
 export function usageConflictLines(planName: string, conflict: NonNullable<CheckoutPreview["usageConflict"]>): string[] {
   return conflict.items.map((i) => {
     const [one, many] = CONFLICT_NOUN[i.key];
-    return `${planName} allows ${i.limit} ${i.limit === 1 ? one : many}; you have ${i.used}. Choose which ${i.limit} stay active when this change is approved.`;
+    return `${planName} allows ${i.limit} ${i.limit === 1 ? one : many}; you have ${i.used}. Choose which ${i.limit} stay active when this change takes effect.`;
   });
 }
 
@@ -264,7 +264,7 @@ export function UsageConflictNote({
   return (
     <div className="bl-stack" style={{ gap: 8, marginTop: 10 }} data-testid="usage-conflict">
       <Banner tone="amber" icon="info" title={`Choose what stays on ${planName}`}>
-        {usageConflictLines(planName, conflict).join(" ")} Everything else is paused (never deleted) when the change is approved.
+        {usageConflictLines(planName, conflict).join(" ")} Everything else is paused (never deleted) when the change takes effect.
       </Banner>
       {onPick ? (
         <WhatStaysOptions
@@ -479,7 +479,7 @@ export function CheckoutScreen({
   // any paid plan is bought here (manual mode: a request at its full price).
   const overduePurchase = inGrace && !target.isFree;
   // Same rule as the plan cards: a smaller plan (or yearly → monthly) belongs on the downgrade page.
-  const route = planChangeRoute(overview, target, interval, online);
+  const route = planChangeRoute(overview, target, interval);
   if (!renewal && !overduePurchase && route === "downgrade") {
     return <BillingRedirect to="downgrade" params={target.isFree ? { plan: target.id } : { plan: target.id, interval }} />;
   }
@@ -507,8 +507,9 @@ export function CheckoutScreen({
   const pendingUpgrade = renewal && online ? null : overview.pendingUpgrade;
   // Manual mode: the renewal is a request our team approves once it's paid.
   const manualRenewal = renewal && !online;
-  // Manual mode, renewal overdue: any plan is a request at its full price.
-  const overdueChange = !online && !renewal && preview?.kind === "renewal";
+  // Renewal overdue (either mode): any paid plan is its full price (a renewal
+  // quote that continues the missed term; manual: a request).
+  const overdueChange = !renewal && preview?.kind === "renewal";
   const showCoupon = parts.includes("coupon") && preview?.couponsEnabled !== false;
   const left = parts.includes("details") || showCoupon;
   const right = parts.includes("summary");
@@ -516,8 +517,8 @@ export function CheckoutScreen({
   const tooSmall = preview?.usageError ?? null;
   // Every invoice field must be filled in (Settings → General) before paying.
   const missingDetails = overview.billingDetailsMissing;
-  // Manual mode over the target's limits: send once they've picked an option
-  // (the default picks, or their own saved choice).
+  // Over the target's limits (either mode): send / pay once they've picked an
+  // option (the default picks, or their own saved choice).
   // If the preview doesn't say (an older or cached response), the usage on
   // the overview decides, the same check as the downgrade page.
   const overByUsage = overview.usage
@@ -525,7 +526,7 @@ export function CheckoutScreen({
     .map((u) => ({ key: u.key, limit: target.limits[u.key]!, used: u.used }));
   const conflict =
     preview?.usageConflict ??
-    (!online && !renewal && preview && !tooSmall && target.id !== overview.plan.id && overByUsage.length ? { items: overByUsage, choicesFit: false } : null);
+    (!renewal && preview && !tooSmall && target.id !== overview.plan.id && overByUsage.length ? { items: overByUsage, choicesFit: false } : null);
   // Disabled until one option is picked: "Keep the default picks", or "I'll choose" with a saved choice.
   const mustChoose = !!conflict && !wsPick.ready;
   // A request waiting for approval: the button keeps its label (Send change request / Pay) but is disabled.
@@ -534,7 +535,7 @@ export function CheckoutScreen({
     pendingUpgrade
       ? waiting
         ? pendingRequestText(pendingUpgrade)
-        : "Your last payment is still being checked by our team"
+        : PAYMENT_REVIEW_TEXT
       : !canEdit
         ? "Ask an admin with billing access to buy a plan"
         : missingDetails.length
@@ -596,8 +597,8 @@ export function CheckoutScreen({
                     <span className="badge b-amber" style={{ marginRight: 6 }}>
                       overdue renewal
                     </span>
-                    Your renewal is overdue, so this is {target.name}&apos;s full price (nothing was paid for the overdue days). Once it&apos;s paid and approved the new period
-                    continues from {overview.dueDate ? formatDate(overview.dueDate) : "your renewal date"}.
+                    Your renewal is overdue, so this is {target.name}&apos;s full price (nothing was paid for the overdue days). Once it&apos;s paid
+                    {online ? "" : " and approved"} the new period continues from {overview.dueDate ? formatDate(overview.dueDate) : "your renewal date"}.
                   </div>
                 ) : !online ? (
                   <div className="bl-muted" style={{ marginTop: 10, padding: "10px 12px", background: "var(--bg)", borderRadius: 10, lineHeight: 1.55 }}>

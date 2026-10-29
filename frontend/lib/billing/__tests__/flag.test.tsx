@@ -498,6 +498,8 @@ describe("billing v2 flag", () => {
         "startCheckout",
         "confirmCheckout",
         "listAdminCheckouts",
+        // online step 4: close a payment under review by hand
+        "resolveAdminCheckout",
         // step 4
         "cancelPlan",
         "undoCancel",
