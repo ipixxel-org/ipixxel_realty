@@ -71,6 +71,7 @@ function HeroButton({ props, secondary = false }: { props: HeroProps; secondary?
           : "border border-transparent bg-green text-black font-semibold hover:bg-green-dim hover:accent-glow-xl"
       }`}
       data-hero-cta={prefix}
+      data-op-cta={secondary ? "secondary" : undefined}
     >
       {label}
       {!secondary ? <ArrowRight size={16} /> : null}

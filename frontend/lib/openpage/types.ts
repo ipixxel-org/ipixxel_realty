@@ -595,6 +595,11 @@ export interface LandingPageData {
   allowedPlanIds?: string[];
   /** ISO timestamp from the backend — `updated` is still the display string derived from this. */
   updatedAt?: string;
+  /**
+   * Org landing pages only: the page is live and has edits visitors don't
+   * see yet. Undefined for templates, which keep their own publish flow.
+   */
+  hasUnpublishedChanges?: boolean;
 }
 
 /** What happens after a successful (validated) form submission. */

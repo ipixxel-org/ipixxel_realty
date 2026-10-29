@@ -24,7 +24,7 @@ import { useEditorStore } from "@/components/openpage/store/editorStore";
 import { CanvasEmpty } from "./CanvasEmpty";
 import { SortableBlock } from "./SortableBlock";
 import { RenderBlock } from "@/components/openpage/blocks/registry";
-import { resolveSiteTheme, siteThemeCSS } from "@/lib/openpage/theme-presets";
+import { resolveSiteTheme, siteBrandAttrs, siteThemeCSS } from "@/lib/openpage/theme-presets";
 import { useGoogleFonts } from "@/lib/openpage/useGoogleFonts";
 import { createBlockFromType, createBlockFromPresetId } from "@/lib/openpage/block-factory";
 import { findBlock, allAtRoot } from "@/lib/openpage/block-tree";
@@ -260,6 +260,7 @@ export function Canvas() {
 
   const resolved = useMemo(() => resolveSiteTheme(site), [site]);
   const cssVars = useMemo(() => siteThemeCSS(site), [site]);
+  const brandAttrs = useMemo(() => siteBrandAttrs(site), [site]);
 
   const blockFonts = useMemo(() => {
     const fonts = new Set<string>();
@@ -422,6 +423,7 @@ export function Canvas() {
   const canvasContent = (
     <DeviceProvider device={viewport}>
       <div
+        {...brandAttrs}
         className="@container border rounded-xl min-h-[400px] relative z-[1] overflow-visible pt-4 pb-8 transition-all duration-300"
         style={{
           width: `${pxWidth}px`,

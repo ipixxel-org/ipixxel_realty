@@ -29,7 +29,7 @@ describe("landingMetadata", () => {
     expect(meta.robots).toEqual({ index: true, follow: true });
   });
 
-  it("honours SEO overrides, canonical and noindex", () => {
+  it("honours SEO overrides and noindex; saved canonical is ignored", () => {
     const config = {
       seo: {
         metaTitle: "Best Tower",
@@ -45,8 +45,15 @@ describe("landingMetadata", () => {
     expect(meta.title).toBe("Best Tower");
     expect(meta.description).toBe("A great place");
     expect(meta.keywords).toEqual(["tower", "dubai"]);
-    expect(meta.alternates?.canonical).toBe("https://acme.com/");
+    // The Canonical URL field is hidden, so the route canonical wins.
+    expect(meta.alternates?.canonical).toBe("https://fallback");
     expect(meta.robots).toEqual({ index: false, follow: false });
     expect(meta.twitter).toMatchObject({ card: "summary" });
+  });
+
+  it("ignores a saved Robots value (field hidden); Allow indexing decides", () => {
+    const config = { seo: { robots: "noindex,nofollow" } } as unknown as SiteConfig;
+    const meta = landingMetadata(page({ config }), { canonical: "https://ipixxel.ae/acme" });
+    expect(meta.robots).toEqual({ index: true, follow: true });
   });
 });

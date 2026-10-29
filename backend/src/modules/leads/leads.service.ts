@@ -91,6 +91,7 @@ type ResolvedPublicPage = {
   orgId: string;
   status: string;
   content?: unknown;
+  publishedContent?: unknown;
 };
 
 /** Fields needed to render an activity/call actor. */
@@ -243,7 +244,10 @@ export class LeadsService implements OnModuleInit {
         resolvedLandingPageId = page.id;
 
         // Auto-extract propertyBinding from the landing page if not explicitly supplied
-        const pageContent = page.content as {
+        // A live page's binding comes from the version visitors see.
+        const pageContent = (page.status === 'published' && page.publishedContent
+          ? page.publishedContent
+          : page.content) as {
           config?: {
             propertyBinding?: {
               kind?: string;
@@ -658,7 +662,7 @@ export class LeadsService implements OnModuleInit {
     ref: string,
     fallbackSlug?: string,
   ): Promise<ResolvedPublicPage | null> {
-    const select = { id: true, orgId: true, status: true, content: true } as const;
+    const select = { id: true, orgId: true, status: true, content: true, publishedContent: true } as const;
 
     // 1. Direct match by landing page UUID
     const byId = await this.prisma.landingPage.findUnique({

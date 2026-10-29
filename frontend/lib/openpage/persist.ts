@@ -260,6 +260,8 @@ interface ApiLandingPage {
   thankYouPage?: { id: string; name: string; slug: string; status: string } | null;
   parentLandingPage?: { id: string; name: string; slug: string; status: string } | null;
   content?: { sections: SectionInstance[]; config: SiteConfig; engine?: string; site?: LandingPageData["openPageSite"] };
+  /** Live page with edits not yet published (the live URL serves the last Publish). */
+  hasUnpublishedChanges?: boolean;
 }
 
 // Maps a LandingPage row onto the same LandingPageData shape the builder
@@ -298,6 +300,7 @@ function fromApiLandingPage(raw: ApiLandingPage): LandingPageData {
     parentPageId: raw.parentId ?? undefined,
     thankYouPage: raw.thankYouPage ?? null,
     parentLandingPage: raw.parentLandingPage ?? null,
+    hasUnpublishedChanges: raw.hasUnpublishedChanges ?? false,
     isPaid: false,
     category: null,
   };

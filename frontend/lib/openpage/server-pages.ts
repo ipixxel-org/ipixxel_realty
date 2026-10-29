@@ -158,10 +158,12 @@ export function landingMetadata(
   const seo = cfg.seo;
   const title = seo.metaTitle || page.name;
   const description = seo.metaDescription || undefined;
-  const explicitRobots = seo.robots?.trim();
-  const noindex = seo.index === false || /noindex/i.test(explicitRobots ?? "");
+  // The Robots and Canonical URL fields are hidden in Page Settings, so any
+  // previously saved values are ignored: indexing follows "Allow indexing"
+  // and the canonical URL is derived from the page's public address.
+  const noindex = seo.index === false;
   const image = seo.ogImage || seo.twitterImage || undefined;
-  const canonical = (seo.canonical?.trim() || options.canonical || "").trim() || undefined;
+  const canonical = (options.canonical || "").trim() || undefined;
 
   return {
     title,
@@ -169,9 +171,7 @@ export function landingMetadata(
     keywords: seo.keywords
       ? seo.keywords.split(",").map((k) => k.trim()).filter(Boolean)
       : undefined,
-    robots: explicitRobots
-      ? explicitRobots
-      : { index: !noindex, follow: !noindex },
+    robots: { index: !noindex, follow: !noindex },
     alternates: canonical ? { canonical } : undefined,
     openGraph: {
       title: seo.ogTitle || title,

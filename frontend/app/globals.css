@@ -32,10 +32,14 @@
   --color-text-1: #334155;
   --color-text-2: #64748b;
   --color-text-3: #94a3b8;
-  --color-green: #16a34a;
-  --color-green-dim: #15803d;
-  --color-green-glow: rgba(22, 163, 74, 0.12);
-  --color-green-glow2: rgba(22, 163, 74, 0.06);
+  /* The builder's CTA/accent colour. `inline` bakes these expressions into
+     utilities (bg-green, text-green, …), so they read --op-brand-cta at
+     runtime: set on a page root from Page Settings → Branding
+     (siteThemeCSS), and unset everywhere else, which keeps the green. */
+  --color-green: var(--op-brand-cta, #16a34a);
+  --color-green-dim: var(--op-brand-cta-dim, #15803d);
+  --color-green-glow: color-mix(in srgb, var(--op-brand-cta, #16a34a) 12%, transparent);
+  --color-green-glow2: color-mix(in srgb, var(--op-brand-cta, #16a34a) 6%, transparent);
   --color-status-red: #ef4444;
   --color-status-yellow: #eab308;
   --color-status-blue: #3b82f6;

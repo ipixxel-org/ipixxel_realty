@@ -1645,6 +1645,9 @@ model LandingPage {
   slug             String
   status           LandingPageStatus @default(draft)
   content          Json // { sections, config } — the org's own copy
+  // Snapshot taken on Publish — what the live site serves while `content`
+  // holds newer, unpublished edits. Null on pages never published.
+  publishedContent Json?             @map("published_content")
   thumbnail        String?
   pageType         TemplatePageType  @default(landing) @map("page_type")
   parentId         String?           @map("parent_id") // thank-you companion linkage, among the org's own pages

@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
-import { Plus, Undo2, Redo2, Grid, Search, Monitor, Tablet, Smartphone } from "lucide-react";
+import { Plus, Undo2, Redo2 } from "lucide-react";
 import { useConfigStore } from "@/components/openpage/store/configStore";
 import { useEditorStore } from "@/components/openpage/store/editorStore";
 import type { PageConfig } from "@/components/openpage/blocks/types";
@@ -152,10 +152,6 @@ export function CanvasToolbar() {
   const canUndo = useConfigStore((s) => s.canUndo());
   const canRedo = useConfigStore((s) => s.canRedo());
 
-  const viewport = useEditorStore((s) => s.viewport);
-  const setViewport = useEditorStore((s) => s.setViewport);
-  const showGrid = useEditorStore((s) => s.showGrid);
-  const toggleShowGrid = useEditorStore((s) => s.toggleShowGrid);
   const spotlightOpen = useEditorStore((s) => s.spotlightOpen);
   const toggleSpotlight = useEditorStore((s) => s.toggleSpotlight);
 
@@ -192,81 +188,9 @@ export function CanvasToolbar() {
         </div>
       </div>
 
-      {/* Right controls: Viewport, Grid, Spotlight & History */}
+      {/* Right controls: Undo / Redo. Device preview lives in the top
+          header; Ctrl+K still opens the command palette. */}
       <div className="flex items-center gap-1.5 shrink-0">
-        {/* Spotlight Search (Ctrl+K) */}
-        <button
-          id="op-spotlight-trigger"
-          type="button"
-          onClick={toggleSpotlight}
-          className="px-2 py-1 rounded-md bg-bg-2 hover:bg-bg-3 border border-border-default text-text-2 hover:text-text-0 flex items-center gap-1.5 text-xs transition-colors"
-          title="Spotlight Search (Ctrl+K)"
-        >
-          <Search size={12} className="text-text-3" />
-          <span className="hidden sm:inline text-[11px]">Search...</span>
-          <kbd className="hidden sm:inline text-[9px] px-1 rounded bg-bg-3 font-mono text-text-3 border border-border-subtle">
-            ⌘K
-          </kbd>
-        </button>
-
-        <div className="w-[1px] h-4 bg-border-subtle mx-0.5" />
-
-        {/* Viewport switch */}
-        <div className="flex items-center rounded-lg border border-border-default bg-bg-3 p-0.5">
-          <button
-            type="button"
-            onClick={() => setViewport("desktop")}
-            className={`p-1 rounded transition-colors ${
-              viewport === "desktop"
-                ? "bg-bg-1 text-[#6d5dfc] shadow-[0_1px_3px_rgba(15,23,42,0.12)]"
-                : "text-text-3 hover:text-text-1"
-            }`}
-            title="Desktop View"
-          >
-            <Monitor size={13} />
-          </button>
-          <button
-            type="button"
-            onClick={() => setViewport("tablet")}
-            className={`p-1 rounded transition-colors ${
-              viewport === "tablet"
-                ? "bg-bg-1 text-[#6d5dfc] shadow-[0_1px_3px_rgba(15,23,42,0.12)]"
-                : "text-text-3 hover:text-text-1"
-            }`}
-            title="Tablet View"
-          >
-            <Tablet size={13} />
-          </button>
-          <button
-            type="button"
-            onClick={() => setViewport("mobile")}
-            className={`p-1 rounded transition-colors ${
-              viewport === "mobile"
-                ? "bg-bg-1 text-[#6d5dfc] shadow-[0_1px_3px_rgba(15,23,42,0.12)]"
-                : "text-text-3 hover:text-text-1"
-            }`}
-            title="Mobile View"
-          >
-            <Smartphone size={13} />
-          </button>
-        </div>
-
-        {/* Snap Grid Toggle */}
-        <button
-          type="button"
-          onClick={toggleShowGrid}
-          className={`p-1.5 rounded-lg border transition-colors ${
-            showGrid
-              ? "bg-[#6d5dfc]/10 border-[#6d5dfc]/40 text-[#6d5dfc]"
-              : "bg-bg-2 border-border-default text-text-3 hover:text-text-1"
-          }`}
-          title={showGrid ? "Hide Alignment Grid" : "Show Alignment Grid"}
-        >
-          <Grid size={13} />
-        </button>
-
-        <div className="w-[1px] h-4 bg-border-subtle mx-0.5" />
-
         {/* Undo / Redo */}
         <button
           type="button"

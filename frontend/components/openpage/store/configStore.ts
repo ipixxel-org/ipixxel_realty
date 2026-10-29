@@ -86,6 +86,8 @@ interface ConfigState {
   moveBlockInColumn: (sectionBlockId: string, colIndex: number, fromIndex: number, toIndex: number) => void
   duplicateBlockInColumn: (sectionBlockId: string, colIndex: number, blockId: string) => void
   updateColumnWidth: (sectionBlockId: string, colIndex: number, width: number) => void
+  /** Phone-only column width (%); never touches the desktop/tablet `width`. */
+  updateColumnMobileWidth: (sectionBlockId: string, colIndex: number, width: number) => void
   addColumn: (sectionBlockId: string) => void
   removeColumn: (sectionBlockId: string, colIndex: number) => void
   addPage: (name: string, path: string) => string
@@ -867,6 +869,24 @@ export const useConfigStore = create<ConfigState>()((set, get) => ({
             const cols = section.props.columns as Array<{ width: number; blocks: BlockConfig[] }> | undefined
             if (!cols || !cols[colIndex]) return
             cols[colIndex].width = width
+            draft.blocks = page.blocks
+          }),
+        })),
+
+      updateColumnMobileWidth: (sectionBlockId, colIndex, width) =>
+        set((state) => ({
+          ...pushUndo(state, 'Update column mobile width'),
+          config: produce(withPages(state.config), (draft) => {
+            const page = draft.pages!.find((p) => p.id === state.activePageId)
+            if (!page) return
+            const section = findSectionBlock(page.blocks, sectionBlockId)
+            if (!section || section.type !== 'columns') return
+            const cols = section.props.columns as Array<{ width: number; mobileWidth?: number; blocks: BlockConfig[] }> | undefined
+            if (!cols || !cols[colIndex]) return
+            const clamped = Math.min(100, Math.max(10, Math.round(width)))
+            // 100% is the default (one per row), so store nothing for it.
+            if (clamped >= 100) delete cols[colIndex].mobileWidth
+            else cols[colIndex].mobileWidth = clamped
             draft.blocks = page.blocks
           }),
         })),

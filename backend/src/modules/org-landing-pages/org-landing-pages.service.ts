@@ -9,6 +9,7 @@ import { PrismaService } from '../../database/prisma.service';
 import { StorageService } from '../../common/storage/storage.service';
 import { generateUniqueLandingPageSlug } from '../../common/utils/slug.util';
 import { deepEqual } from '../../common/utils/deep-equal.util';
+import { snapshotBeforeEdit, toOwnerView } from '../../common/utils/published-content.util';
 import { CreateLandingPageDto } from './dto/create-landing-page.dto';
 import { UpdateLandingPageDto } from './dto/update-landing-page.dto';
 import { ListLandingPagesQueryDto } from './dto/list-landing-pages-query.dto';
@@ -606,7 +607,7 @@ export class OrgLandingPagesService {
   }
 
   async getById(orgId: string, id: string) {
-    return this.getOwned(orgId, id);
+    return toOwnerView(await this.getOwned(orgId, id));
   }
 
   async update(orgId: string, id: string, dto: UpdateLandingPageDto) {
@@ -641,17 +642,10 @@ export class OrgLandingPagesService {
       data.content = nextContent as Prisma.InputJsonValue;
       contentChanged = !deepEqual(page.content, nextContent);
 
-      // Editing a published page reverts it to draft — only when the
-      // content actually changed (deep equality against what's stored, not
-      // just "a content-carrying PATCH arrived") so merely opening a page
-      // doesn't flip it, and republishing is an explicit, visible action
-      // rather than a silent no-op. See OrgLandingPagesController comment
-      // history for why this was tried without the revert and reverted:
-      // the Publish/Unpublish button looked stuck on "Unpublish" after an
-      // edit, giving no signal the live page hadn't picked up the change.
-      if (contentChanged && page.status === 'published') {
-        data.status = 'draft';
-      }
+      // Editing a live page keeps it live: visitors keep seeing the
+      // published snapshot, and the edit waits for the next Publish. The
+      // response's `hasUnpublishedChanges` tells the builder to offer it.
+      if (contentChanged) Object.assign(data, snapshotBeforeEdit(page));
     }
 
     try {
@@ -667,7 +661,7 @@ export class OrgLandingPagesService {
           data.content as Prisma.InputJsonValue,
         );
       }
-      return updated;
+      return toOwnerView(updated);
     } catch (err: any) {
       if (err?.code === 'P2002') {
         throw new BadRequestException('You already have a page with that slug');
@@ -689,25 +683,38 @@ export class OrgLandingPagesService {
     // on an upgrade/renewal — the gate fires exactly at publish.
     await assertOrgCanPublish(this.prisma, orgId, page.id);
 
-    const updated = await this.prisma.landingPage.update({
-      where: { id },
-      data: {
-        status: 'published',
-        publishedAt: new Date(),
-        billingOfflineAt: null,
-      },
-    });
-
-    if (page.pageType === 'landing') {
-      await this.prisma.landingPage.updateMany({
-        where: { parentId: page.id, orgId, pageType: 'thank_you' },
+    // Publish copies the current content into the live snapshot — for the
+    // page and its thank-you companion, which goes live with it.
+    const companions =
+      page.pageType === 'landing'
+        ? await this.prisma.landingPage.findMany({
+            where: { parentId: page.id, orgId, pageType: 'thank_you' },
+            select: { id: true, content: true },
+          })
+        : [];
+    const publishedAt = new Date();
+    const [updated] = await this.prisma.$transaction([
+      this.prisma.landingPage.update({
+        where: { id },
         data: {
           status: 'published',
-          publishedAt: new Date(),
+          publishedAt,
           billingOfflineAt: null,
+          publishedContent: page.content as Prisma.InputJsonValue,
         },
-      });
-    }
+      }),
+      ...companions.map((c) =>
+        this.prisma.landingPage.update({
+          where: { id: c.id },
+          data: {
+            status: 'published',
+            publishedAt,
+            billingOfflineAt: null,
+            publishedContent: c.content as Prisma.InputJsonValue,
+          },
+        }),
+      ),
+    ]);
 
     await this.prisma.auditLog.create({
       data: {
@@ -718,7 +725,7 @@ export class OrgLandingPagesService {
         metadata: {},
       },
     });
-    return updated;
+    return toOwnerView(updated);
   }
 
   async unpublish(orgId: string, id: string) {
@@ -747,7 +754,7 @@ export class OrgLandingPagesService {
         metadata: {},
       },
     });
-    return updated;
+    return toOwnerView(updated);
   }
 
   async remove(orgId: string, id: string) {
@@ -852,13 +859,14 @@ export class OrgLandingPagesService {
           status: parent.status === 'published' ? 'published' : 'draft',
           publishedAt: parent.status === 'published' ? new Date() : null,
           content: thankYouContent as Prisma.InputJsonValue,
+          publishedContent: parent.status === 'published' ? (thankYouContent as Prisma.InputJsonValue) : undefined,
           thumbnail: parent.thumbnail,
           pageType: 'thank_you',
           parentId: parent.id,
         },
       });
     }
-    return this.getOwned(orgId, companion.id);
+    return toOwnerView(await this.getOwned(orgId, companion.id));
   }
 
   // Never leaks cross-tenant existence: a foreign org's page 404s exactly
@@ -899,6 +907,7 @@ export class OrgLandingPagesService {
           status: page.status === 'published' ? 'published' : 'draft',
           publishedAt: page.status === 'published' ? new Date() : null,
           content: thankYouContent as Prisma.InputJsonValue,
+          publishedContent: page.status === 'published' ? (thankYouContent as Prisma.InputJsonValue) : undefined,
           thumbnail: page.thumbnail,
           pageType: 'thank_you',
           parentId: page.id,
