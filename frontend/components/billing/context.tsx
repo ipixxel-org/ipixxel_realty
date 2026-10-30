@@ -110,6 +110,8 @@ interface BillingEnv {
   canEditOrgProfile: boolean;
   /** Draw dialogs inside the surrounding frame instead of over the page (walkthroughs). */
   inlineDialogs: boolean;
+  /** The signed-in user (per-user banner memory); null in tests / walkthroughs. */
+  viewerId: string | null;
 }
 
 const EnvContext = createContext<BillingEnv | null>(null);
@@ -131,6 +133,7 @@ export function BillingEnvProvider({
   canEdit = true,
   canEditOrgProfile = true,
   inlineDialogs = false,
+  viewerId = null,
   onNavigate,
   children,
 }: {
@@ -138,6 +141,7 @@ export function BillingEnvProvider({
   canEdit?: boolean;
   canEditOrgProfile?: boolean;
   inlineDialogs?: boolean;
+  viewerId?: string | null;
   /** Return true to swallow a navigation (presentation pages). */
   onNavigate?: (to: BillingRoute, params?: RouteParams) => boolean;
   children: ReactNode;
@@ -160,8 +164,8 @@ export function BillingEnvProvider({
     [onNavigate, routerNav],
   );
   const value = useMemo(
-    () => ({ client, nav, canEdit, canEditOrgProfile, inlineDialogs }),
-    [client, nav, canEdit, canEditOrgProfile, inlineDialogs],
+    () => ({ client, nav, canEdit, canEditOrgProfile, inlineDialogs, viewerId }),
+    [client, nav, canEdit, canEditOrgProfile, inlineDialogs, viewerId],
   );
   return <EnvContext.Provider value={value}>{children}</EnvContext.Provider>;
 }

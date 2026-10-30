@@ -474,3 +474,70 @@
   .bw-hint { display: none; }
   .bw-frame-body { padding: 12px; }
 }
+
+/* ---------- Compact billing banner (one line + strip) ---------- */
+.bl-banner--compact { position: relative; padding: 8px 40px 8px 12px; gap: 10px; }
+.bl-banner--compact .bl-banner-body { min-width: 200px; }
+.bl-banner--compact .bl-banner-body b { display: inline; margin: 0; }
+.bl-banner--compact .bl-banner-line { line-height: 1.45; }
+.bl-banner--compact .bl-banner-details .bl-picks { margin-top: 6px; }
+.bl-banner--compact .bl-banner-details > .bl-muted { margin-top: 6px; display: block; }
+.bl-banner-link {
+  border: 0;
+  background: none;
+  padding: 0;
+  font: inherit;
+  font-weight: 700;
+  color: var(--brand);
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.bl-banner-x {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  width: 26px;
+  height: 26px;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--muted);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+.bl-banner-x:hover { background: rgba(0, 0, 0, 0.05); color: var(--ink); }
+.bl-banner--compact .bl-countdown { flex-direction: row; gap: 5px; min-width: 0; padding: 4px 10px; border-radius: 999px; align-items: baseline; }
+.bl-banner--compact .bl-countdown b { font-size: 14px; }
+.bl-banner--compact .bl-countdown span { font-size: 10px; }
+/* Countdown follows the banner tone. */
+.bl-banner--amber .bl-countdown { border-color: rgba(217, 119, 6, 0.3); color: var(--amber); }
+.bl-banner--rose .bl-countdown { border-color: rgba(225, 29, 72, 0.25); color: var(--rose); }
+.bl-banner--strip { padding: 5px 12px; gap: 8px; font-size: 12.5px; color: var(--ink-2); flex-wrap: nowrap; }
+.bl-banner--strip > svg { flex-shrink: 0; }
+.bl-banner--amber.bl-banner--strip > svg { color: var(--amber); }
+.bl-banner--rose.bl-banner--strip > svg { color: var(--rose); }
+.bl-banner-strip-text { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+
+@media (max-width: 640px) {
+  .bl-banner--compact { align-items: flex-start; }
+  .bl-banner--compact .bl-banner-body { min-width: 0; flex-basis: calc(100% - 90px); }
+  .bl-banner--compact .bl-banner-actions { width: 100%; }
+  .bl-banner--compact .bl-banner-actions .btn { flex: 1 1 auto; justify-content: center; }
+}
+
+/* ---------- Solid yellow for amber banners (reminder, grace, scheduled change) ---------- */
+.bl-banner--amber { background: #fbbf24; border-color: #f59e0b; color: #422006; }
+.bl-banner--amber .bl-banner-body,
+.bl-banner--amber .bl-banner-body b,
+.bl-banner--amber .bl-muted,
+.bl-banner--amber .bl-banner-strip-text { color: #422006; }
+.bl-banner--amber .bl-banner-ic { background: rgba(255, 255, 255, 0.55); color: #92400e; }
+.bl-banner--amber .bl-countdown { background: #fff; border-color: #f59e0b; color: #92400e; }
+.bl-banner--amber .bl-banner-link { color: #422006; }
+.bl-banner--amber .bl-banner-x { color: #422006; }
+.bl-banner--amber .bl-banner-x:hover { background: rgba(255, 255, 255, 0.4); }
+.bl-banner--amber .btn-ghost { background: #fff; border-color: rgba(66, 32, 6, 0.25); color: #422006; }
+.bl-banner--amber.bl-banner--strip > svg { color: #92400e; }

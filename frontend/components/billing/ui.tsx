@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, type CSSProperties, type ReactNode } from "react";
+import { useEffect, useState, useSyncExternalStore, type CSSProperties, type ReactNode } from "react";
 import { Icon, type IconName } from "@/components/icons";
 import { formatINR, packagePriceText, renewalPriceNote, renewalPriceText } from "@/lib/billing/pricing";
 import type { BillingFunction } from "@/lib/billing/client";
@@ -196,6 +196,158 @@ export function Banner({
       </div>
       {actions ? <div className="bl-banner-actions">{actions}</div> : null}
     </div>
+  );
+}
+
+/* ------------------------------------------- Compact billing banner */
+
+const COLLAPSE_EVENT = "billing-v2:banner-collapse";
+
+/** Today on the viewer's own calendar (yyyy-mm-dd): a collapse lasts until tomorrow. */
+export function localDay(d = new Date()): string {
+  const p = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
+}
+
+export function bannerCollapseKey(viewerId: string | null, state: string): string {
+  return `billing-v2:banner-collapsed:${viewerId ?? "anon"}:${state}`;
+}
+
+function readCollapsed(key: string): boolean {
+  try {
+    return window.localStorage.getItem(key) === localDay();
+  } catch {
+    return false;
+  }
+}
+
+function writeCollapsed(key: string, on: boolean) {
+  try {
+    if (on) window.localStorage.setItem(key, localDay());
+    else window.localStorage.removeItem(key);
+  } catch {
+    // Storage blocked (private mode): the collapse just lasts for this page.
+  }
+  window.dispatchEvent(new Event(COLLAPSE_EVENT));
+}
+
+function subscribeCollapse(cb: () => void) {
+  window.addEventListener(COLLAPSE_EVENT, cb);
+  window.addEventListener("storage", cb);
+  return () => {
+    window.removeEventListener(COLLAPSE_EVENT, cb);
+    window.removeEventListener("storage", cb);
+  };
+}
+
+/**
+ * Collapsed today? Remembered per user per day in localStorage (walkthroughs:
+ * in memory only). Server render and first paint are expanded.
+ */
+function useCollapsed(key: string, persist: boolean): [boolean, (on: boolean) => void] {
+  // This page's own choice (null = follow storage); keeps working when storage is blocked.
+  const [mine, setMine] = useState<{ key: string; on: boolean } | null>(null);
+  const stored = useSyncExternalStore(
+    subscribeCollapse,
+    () => (persist ? readCollapsed(key) : false),
+    () => false,
+  );
+  const collapsed = mine?.key === key ? mine.on : stored;
+  return [
+    collapsed,
+    (on) => {
+      setMine({ key, on });
+      if (persist) writeCollapsed(key, on);
+    },
+  ];
+}
+
+/**
+ * The account billing banner: one line (key message, countdown chip, buttons).
+ * "See what stays" opens the list in place; X shrinks it to a thin strip for
+ * the rest of the day (per user), and "Show" brings it back.
+ */
+export function CompactBanner({
+  tone,
+  icon,
+  title,
+  line,
+  aside,
+  actions,
+  details,
+  detailsLabel = "See what stays",
+  strip,
+  state,
+}: {
+  tone: BannerTone;
+  icon: IconName;
+  /** Bold lead of the one-line message. */
+  title: ReactNode;
+  /** The rest of the line, after " · ". */
+  line?: ReactNode;
+  /** Countdown chip (replaces the icon). */
+  aside?: ReactNode;
+  actions?: ReactNode;
+  /** Hidden until "See what stays" is clicked. */
+  details?: ReactNode;
+  detailsLabel?: string;
+  /** Collapsed strip text, e.g. "Renewal overdue · 3 days left". */
+  strip: string;
+  /** Billing state: a new state shows in full even if today's banner was collapsed. */
+  state: string;
+}) {
+  const { viewerId, inlineDialogs } = useBillingEnv();
+  const [collapsed, setCollapsed] = useCollapsed(bannerCollapseKey(viewerId, state), !inlineDialogs);
+  const [open, setOpen] = useState(false);
+  if (collapsed) {
+    return (
+      <div className={`bl-banner bl-banner--${tone} bl-banner--strip`} role="status" data-testid="billing-banner-strip" data-tone={tone}>
+        <Icon name={icon} size={14} />
+        <span className="bl-banner-strip-text">{strip}</span>
+        <button type="button" className="bl-banner-link" onClick={() => setCollapsed(false)}>
+          Show
+        </button>
+      </div>
+    );
+  }
+  return (
+    <div className={`bl-banner bl-banner--${tone} bl-banner--compact`} role="status" data-testid="billing-banner" data-tone={tone}>
+      {aside ?? (
+        <span className="bl-banner-ic">
+          <Icon name={icon} size={17} />
+        </span>
+      )}
+      <div className="bl-banner-body">
+        <span className="bl-banner-line">
+          <b>{title}</b>
+          {line ? <> · {line}</> : null}
+          {details ? (
+            <>
+              {" "}
+              <button type="button" className="bl-banner-link" aria-expanded={open} onClick={() => setOpen((v) => !v)}>
+                {open ? "Hide what stays" : detailsLabel}
+              </button>
+            </>
+          ) : null}
+        </span>
+        {details && open ? <div className="bl-banner-details">{details}</div> : null}
+      </div>
+      {actions ? <div className="bl-banner-actions">{actions}</div> : null}
+      <button type="button" className="bl-banner-x" aria-label="Collapse banner" title="Collapse until tomorrow" onClick={() => setCollapsed(true)}>
+        <Icon name="close" size={14} />
+      </button>
+    </div>
+  );
+}
+
+/** "3 days left" chip; the banner's tone colours it. */
+export function Countdown({ days }: { days: number }) {
+  const unit = days === 1 ? "day left" : "days left";
+  return (
+    <span className="bl-countdown" aria-label={`${days} ${unit}`} data-testid="banner-countdown">
+      <b>{days}</b>
+      <span>{unit}</span>
+    </span>
   );
 }
 

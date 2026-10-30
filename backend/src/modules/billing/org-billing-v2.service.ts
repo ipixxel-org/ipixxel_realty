@@ -207,6 +207,7 @@ export class OrgBillingV2Service {
             billingCycle: subscription.billingCycle,
             renewsAt: subscription.renewsAt,
             graceEndsAt: subscription.graceEndsAt,
+            graceExtensionDays: subscription.graceExtensionDays,
             cancelAtPeriodEnd: subscription.cancelAtPeriodEnd,
             scheduled: scheduledRow
               ? {

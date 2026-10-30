@@ -2,8 +2,9 @@
 
 import { Icon } from "@/components/icons";
 import { formatDate, packagePriceText, planPrice } from "@/lib/billing/pricing";
+import { graceDayText, graceExtraDays } from "@/lib/billing/grace";
 import type { BillingOverview } from "@/lib/billing/types";
-import { BillingBanner, RENEWAL_OPEN, RenewalReminderPopup, RequestRenewalButton } from "./banners";
+import { BillingBanner, renewalOpen, RenewalReminderPopup, RequestRenewalButton } from "./banners";
 
 export { RenewalReminderPopup };
 import { BillingDetailsSection, PendingUpgradeBanner, RejectedUpgradeBanner } from "./checkout";
@@ -17,7 +18,11 @@ function planLine(o: BillingOverview): string {
       ? `Free plan since ${formatDate(o.movedToBasicAt!)} — your ${o.paidPlan.name} items are paused, not deleted.`
       : "Free forever. Upgrade any time.";
   }
-  if (o.status === "past_due" || o.status === "grace_ending") return `Renewal was due ${formatDate(o.dueDate!)} · grace until ${formatDate(o.graceEndsAt!)}`;
+  if (o.status === "past_due" || o.status === "grace_ending") {
+    // Extended by our team: say so, with the same total as the banner's countdown.
+    const day = graceExtraDays(o) > 0 ? ` · ${graceDayText(o)}` : "";
+    return `Renewal was due ${formatDate(o.dueDate!)}${day} · grace until ${formatDate(o.graceEndsAt!)}`;
+  }
   if (o.status === "expired") return `Expired${o.dueDate ? ` on ${formatDate(o.dueDate)}` : ""} — publishing is paused until you renew`;
   if (o.status === "cancellation_scheduled") return `Moves to Basic on ${formatDate(o.cancelAt!)} — full access until then`;
   return `Renews on ${formatDate(o.periodEnd!)}${o.renewalMode === "auto" && o.autoRenewAvailable ? " automatically" : ""}`;
@@ -127,7 +132,7 @@ export function BillingOverviewPanel({ showInvoices = true }: { showInvoices?: b
           <Icon name="crown" size={15} /> Change plan
         </BLink>
         {/* Manual mode: from the renewal window through grace, the renewal is a request. */}
-        {o.paymentMode === "manual" && !o.plan.isFree && (RENEWAL_OPEN as readonly string[]).includes(o.status) ? (
+        {o.paymentMode === "manual" && renewalOpen(o) ? (
           <RequestRenewalButton overview={o} className="btn btn-ghost" />
         ) : null}
         {/* One place, both modes: what stays is chosen with each change (checkout, downgrade, the

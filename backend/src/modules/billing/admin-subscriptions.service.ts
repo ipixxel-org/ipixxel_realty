@@ -208,6 +208,7 @@ export class AdminSubscriptionsService {
               billingCycle: sub.billingCycle,
               renewsAt: sub.renewsAt,
               graceEndsAt: sub.graceEndsAt,
+              graceExtensionDays: sub.graceExtensionDays,
               cancelAtPeriodEnd: sub.cancelAtPeriodEnd,
               scheduled: scheduled
                 ? {

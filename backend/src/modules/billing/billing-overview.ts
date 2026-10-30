@@ -48,6 +48,8 @@ export interface OverviewInput {
     billingCycle: BillingInterval;
     renewsAt: Date | null;
     graceEndsAt: Date | null;
+    /** Extra grace days a Super Admin added (graceEndsAt already includes them). */
+    graceExtensionDays?: number | null;
     /** Step 4: cancellation / downgrade scheduled for the end of the term. */
     cancelAtPeriodEnd?: boolean;
     scheduled?: { plan: BillingPlanV2; interval: BillingInterval } | null;
@@ -216,6 +218,7 @@ export function buildOverview(input: OverviewInput): BillingOverviewV2 {
         : null,
     graceEndsAt: inGrace && sub?.graceEndsAt ? isoDate(sub.graceEndsAt) : null,
     graceDays: input.graceDays,
+    graceExtraDays: inGrace ? Math.max(0, sub?.graceExtensionDays ?? 0) : 0,
     graceDay:
       inGrace && periodEnd
         ? Math.max(

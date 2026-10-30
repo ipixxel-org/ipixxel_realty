@@ -154,9 +154,9 @@ describe("wrong URLs redirect", () => {
 describe("online mode, renewal overdue (grace)", () => {
   const inGrace = (paidPlanId = "pro") => createMockBillingClient({ initial: { situation: "payment_due", paidPlanId } });
 
-  it("plan cards: the same plan is Pay now (renewal), every other paid plan goes to the checkout, Basic to the move-now page", async () => {
+  it("plan cards: the same plan is Renew (renewal checkout), every other paid plan goes to the checkout, Basic to the move-now page", async () => {
     await show(inGrace(), <PlansScreen />);
-    const same = within(card("Pro")).getByRole("link", { name: /Pay now/ });
+    const same = within(card("Pro")).getByRole("link", { name: "Renew" });
     expect(same.getAttribute("href")).toMatch(/\/checkout\?.*plan=pro.*renew=1/);
     const smaller = within(card("Growth")).getByRole("link", { name: /Change plan/ });
     expect(smaller.getAttribute("href")).toMatch(/\/checkout\?.*plan=growth/);

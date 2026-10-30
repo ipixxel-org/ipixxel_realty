@@ -159,7 +159,42 @@ describe('buildOverview', () => {
     expect(o.dueDate).toBe('2026-10-13');
     expect(o.graceDay).toBe(1);
     expect(o.graceDaysLeft).toBe(7);
+    expect(o.graceExtraDays).toBe(0);
     expect(o.daysLeftInPeriod).toBe(0);
+  });
+
+  it('reports extra grace days our team added (same total as graceEndsAt)', () => {
+    const o = buildOverview(
+      input({
+        subscription: {
+          status: 'past_due',
+          billingCycle: 'monthly',
+          renewsAt: at(-7.5),
+          graceEndsAt: at(2.5),
+          graceExtensionDays: 3,
+        },
+      }),
+    );
+    expect(o.status).toBe('past_due');
+    expect(o.graceDay).toBe(8);
+    expect(o.graceDays + o.graceExtraDays).toBe(10);
+    expect(o.graceDaysLeft).toBe(3);
+    expect(o.graceDay + o.graceDaysLeft - 1).toBe(o.graceDays + o.graceExtraDays);
+  });
+
+  it('has no extra grace days outside grace', () => {
+    const o = buildOverview(
+      input({
+        subscription: {
+          status: 'active',
+          billingCycle: 'monthly',
+          renewsAt: at(18),
+          graceEndsAt: null,
+          graceExtensionDays: 3,
+        },
+      }),
+    );
+    expect(o.graceExtraDays).toBe(0);
   });
 
   it('has no period or renewal on the free plan', () => {
