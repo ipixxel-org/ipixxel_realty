@@ -3,6 +3,7 @@
 import { Icon } from "@/components/icons";
 import { formatDate, packagePriceText, planPrice } from "@/lib/billing/pricing";
 import { graceDayText, graceExtraDays } from "@/lib/billing/grace";
+import { nextVersionTitle, planNameWithVersion, versionPriceText } from "@/lib/billing/versions";
 import type { BillingOverview } from "@/lib/billing/types";
 import { BillingBanner, renewalOpen, RenewalReminderPopup, RequestRenewalButton } from "./banners";
 
@@ -28,6 +29,38 @@ function planLine(o: BillingOverview): string {
   return `Renews on ${formatDate(o.periodEnd!)}${o.renewalMode === "auto" && o.autoRenewAvailable ? " automatically" : ""}`;
 }
 
+/** What the plan's newer version changes, under the current plan: price, then each limit / feature. */
+function NextVersionBlock({ overview: o }: { overview: BillingOverview }) {
+  const v = o.nextVersion!;
+  const price = versionPriceText(v);
+  return (
+    <div data-testid="next-version" style={{ marginTop: 12, padding: "12px 16px", borderRadius: 12, border: "1px solid var(--line-2)" }}>
+      <div className="bl-between" style={{ gap: 12, flexWrap: "wrap" }}>
+        <div>
+          <b style={{ fontSize: 13.5 }}>{nextVersionTitle(v)}</b>
+          <div className="bl-muted" style={{ marginTop: 2 }}>
+            {v.reason === "basic" ? `${v.planName} v${v.toVersion} applies then.` : `Renewing moves you to ${v.planName} v${v.toVersion}.`}
+          </div>
+        </div>
+        {v.lower ? (
+          <BLink to="chooseWhatStays" params={{ target: o.plan.id }} className="btn btn-ghost btn-sm">
+            Choose what stays
+          </BLink>
+        ) : null}
+      </div>
+      <ul style={{ margin: "8px 0 0", paddingLeft: 18, fontSize: 13 }}>
+        {price ? <li>Price: {price}</li> : null}
+        {v.changes.map((c) => (
+          <li key={c.key} style={c.lower ? { color: "var(--amber)" } : undefined}>
+            {c.text[0].toUpperCase() + c.text.slice(1)}
+          </li>
+        ))}
+      </ul>
+      {v.lower ? <div className="bl-muted bl-small" style={{ marginTop: 6 }}>What doesn&apos;t fit is paused then — your choice, or the default picks. Nothing is deleted.</div> : null}
+    </div>
+  );
+}
+
 /** Current plan card — also used on its own in the walkthrough. */
 export function CurrentPlanCard({ overview: o }: { overview: BillingOverview }) {
   return (
@@ -39,7 +72,9 @@ export function CurrentPlanCard({ overview: o }: { overview: BillingOverview }) 
           </span>
           <div>
             <div className="bl-row" style={{ gap: 8 }}>
-              <h3 style={{ margin: 0, fontSize: 17, fontWeight: 700 }}>{o.plan.name}</h3>
+              <h3 style={{ margin: 0, fontSize: 17, fontWeight: 700 }} data-testid="current-plan-name">
+                {planNameWithVersion(o)}
+              </h3>
               <StatusBadge status={o.status} />
             </div>
             <div className="bl-muted" style={{ marginTop: 4 }}>
@@ -56,6 +91,7 @@ export function CurrentPlanCard({ overview: o }: { overview: BillingOverview }) 
           {o.downgradeTo ? <Kv label="From">{`${o.downgradeTo.name} on ${formatDate(o.downgradeAt!)}`}</Kv> : null}
         </div>
       </div>
+      {o.nextVersion ? <NextVersionBlock overview={o} /> : null}
     </Section>
   );
 }
