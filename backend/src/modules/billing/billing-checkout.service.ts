@@ -343,7 +343,13 @@ export class BillingCheckoutService implements OnModuleInit {
         userId,
         { targetPlanId: q.toPlan.id, billingCycle: q.toInterval },
         {
-          usage: ctx.usageConflict ? 'after_retention' : 'strict',
+          // A renewal of the same plan may move to a newer version with lower
+          // limits: what doesn't fit is paused when it's approved.
+          usage:
+            ctx.usageConflict ||
+            (q.kind === 'renewal' && q.fromPlan?.id === q.toPlan.id)
+              ? 'after_retention'
+              : 'strict',
           // A renewal (or an overdue change) may be for the plan the org is on.
           renewal: q.kind === 'renewal',
         },

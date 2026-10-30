@@ -8,8 +8,16 @@ import { applyPlanChange } from '../../common/utils/plan-change.util';
 import { ensureLatestPlanVersion } from '../../common/utils/plan-version.util';
 import {
   applyOrgSubscriptionLifecycle,
+  applyPlanVersionChanges,
   getOrgActivePlan,
+  renewOrgSubscription,
 } from '../../common/utils/subscription-lifecycle.util';
+import {
+  describeChange,
+  priceChange,
+  versionChanges,
+} from '../../common/utils/plan-version-change.util';
+import { BillingRetentionService } from './billing-retention.service';
 import { resolveLimit } from '../../common/utils/plan-quota.util';
 import { OrgBillingV2Service } from './org-billing-v2.service';
 import { PaymentEventsService } from '../payments/payment-events';
@@ -52,8 +60,12 @@ const PRO = {
   limits: { users: 10 },
 };
 
-function setup(sub: Record<string, unknown> = {}) {
+function setup(
+  sub: Record<string, unknown> = {},
+  seed: { users?: Record<string, unknown>[] } = {},
+) {
   const fake = createFakeBillingDb({
+    ...seed,
     plans: [BASIC, GROWTH, PRO],
     subscription: {
       id: 'sub-1',
@@ -324,5 +336,270 @@ describe('an org on an older version keeps its price, limits and features', () =
     t.row().planVersionId = null;
     const active = await getOrgActivePlan(t.db as never, 'org-1');
     expect(resolveLimit(active!.plan, 'users')).toBe(3);
+  });
+});
+
+/* ------------------------------------- What changes, and when (commit 4) */
+
+const member = (id: string, days: number) => ({
+  id,
+  orgId: 'org-1',
+  status: 'active',
+  firstName: id,
+  lastName: null,
+  email: `${id}@acme.test`,
+  billingPausedAt: null,
+  lastLoginAt: new Date(Date.now() - days * DAY),
+  createdAt: new Date(Date.now() - 100 * DAY),
+  userRoles: [{ role: { key: 'sales', name: 'Sales' } }],
+});
+
+describe('what a newer version changes', () => {
+  const v1 = {
+    priceMonthly: 999,
+    priceYearly: 9990,
+    limits: { users: 5, projects: null },
+    capabilities: { teamChat: true },
+  };
+
+  it('lists lower and higher limits, features and prices', () => {
+    const v2 = {
+      priceMonthly: 1199,
+      priceYearly: 9990,
+      limits: { users: 3, projects: 10 },
+      capabilities: { teamChat: false, premiumTemplates: true },
+    };
+    const changes = versionChanges(v1, v2);
+    expect(changes.map((c) => [describeChange(c), c.lower])).toEqual([
+      ['3 users instead of 5', true],
+      ['10 projects instead of unlimited', true],
+      ['no Team chat', true],
+      ['Premium templates included', false],
+    ]);
+    expect(priceChange(v1, v2)).toEqual({
+      monthly: { from: 999, to: 1199 },
+      yearly: null,
+    });
+  });
+
+  it('a price change on its own is a change, not a lower one', () => {
+    expect(versionChanges(v1, { ...v1, priceMonthly: 1199 })).toEqual([]);
+    expect(priceChange(v1, { ...v1, priceMonthly: 1199 })).not.toBeNull();
+  });
+});
+
+describe('renewal moves to the latest version (paid plans)', () => {
+  /** On Growth v1 (5 users) with 4 members; Growth v2: 3 users, 2,500. */
+  async function renewalDue(sub: Record<string, unknown> = {}) {
+    const t = setup(
+      {
+        planId: 'growth',
+        amount: 2000,
+        renewsAt: new Date(Date.now() + 3 * DAY),
+        ...sub,
+      },
+      { users: [member('m1', 1), member('m2', 2), member('m3', 30)] },
+    );
+    t.usage.users = 4;
+    const v1 = await ensureLatestPlanVersion(
+      t.db,
+      t.planById('growth') as never,
+    );
+    t.row().planVersionId = v1!.id;
+    return t;
+  }
+  const overview = (db: any) =>
+    new OrgBillingV2Service(
+      db as never,
+      { getMode: async () => ({ mode: 'online', reason: null }) } as never,
+      undefined,
+      new BillingRetentionService(db as never),
+    );
+  const keepUsers = {
+    targetPlanId: 'growth',
+    userIds: ['u-admin', 'm3', 'm2'],
+    projectIds: [],
+    landingPageIds: [],
+    templateIds: [],
+  } as never;
+
+  it('from the renewal window the overview says what changes: limits, features and price', async () => {
+    const t = await renewalDue();
+    await t.edit('growth', { priceMonthly: 2500, limits: { users: 3 } });
+    const o = await overview(t.db).getOverview('org-1');
+    expect(o.planVersion).toBe(1);
+    expect(o.nextVersion).toMatchObject({
+      planName: 'Growth',
+      fromVersion: 1,
+      toVersion: 2,
+      reason: 'renewal',
+      lower: true,
+      price: { interval: 'monthly', from: 2000, to: 2500 },
+      changes: [{ key: 'users', from: 5, to: 3, text: '3 users instead of 5' }],
+    });
+    expect(o.nextVersion!.at).toBe(t.row().renewsAt.toISOString().slice(0, 10));
+    // "Choose what stays" for the new version: the banner's summary.
+    expect(o.retention).toMatchObject({ targetPlanId: 'growth' });
+  });
+
+  it('a price change on its own is shown too (not lower)', async () => {
+    const t = await renewalDue();
+    await t.edit('growth', { priceMonthly: 2500 });
+    const o = await overview(t.db).getOverview('org-1');
+    expect(o.nextVersion).toMatchObject({
+      lower: false,
+      changes: [],
+      price: { from: 2000, to: 2500 },
+    });
+  });
+
+  it('nothing before the renewal window, or with a change of plan scheduled', async () => {
+    const early = await renewalDue({
+      renewsAt: new Date(Date.now() + 20 * DAY),
+    });
+    await early.edit('growth', { limits: { users: 3 } });
+    expect(
+      (await overview(early.db).getOverview('org-1')).nextVersion,
+    ).toBeNull();
+    const scheduled = await renewalDue({ scheduledPlanId: 'basic' });
+    await scheduled.edit('growth', { limits: { users: 3 } });
+    expect(
+      (await overview(scheduled.db).getOverview('org-1')).nextVersion,
+    ).toBeNull();
+  });
+
+  it('choose what stays is open for the new version (not locked), applies at renewal, and pauses nothing yet', async () => {
+    const t = await renewalDue();
+    await t.edit('growth', { limits: { users: 3 } });
+    const retention = new BillingRetentionService(t.db as never);
+    const choices = await retention.getChoices('org-1');
+    expect(choices).toMatchObject({
+      targetPlan: { id: 'growth', limits: { users: 3 } },
+      locked: false,
+      appliesOn: t.row().renewsAt.toISOString().slice(0, 10),
+    });
+    await retention.saveChoices('org-1', 'u-admin', keepUsers);
+    expect(t.db.retentionChoice.rows).toHaveLength(1);
+    expect(t.db.user.rows.every((u: any) => !u.billingPausedAt)).toBe(true);
+  });
+
+  it('the renewal moves the org to the latest version and pauses what does not fit (their choice)', async () => {
+    const t = await renewalDue();
+    await t.edit('growth', { priceMonthly: 2500, limits: { users: 3 } });
+    await new BillingRetentionService(t.db as never).saveChoices(
+      'org-1',
+      'u-admin',
+      keepUsers,
+    );
+    await applyPlanChange(t.db as never, {
+      organisationId: 'org-1',
+      toPlanId: 'growth',
+      toInterval: 'monthly',
+      kind: 'renewal',
+      source: 'payment',
+      actorId: null,
+    });
+    expect(t.row()).toMatchObject({
+      planVersionId: t.version('growth', 2).id,
+      amount: 2500,
+    });
+    const paused = t.db.user.rows.filter((u: any) => u.billingPausedAt);
+    expect(paused.map((u: any) => u.id)).toEqual(['m1']);
+  });
+
+  it('the org is told once, when the renewal window opens', async () => {
+    const t = await renewalDue();
+    await t.edit('growth', { priceMonthly: 2500, limits: { users: 3 } });
+    await applyPlanVersionChanges(t.db as never, 'org-1');
+    await applyPlanVersionChanges(t.db as never, 'org-1');
+    const notes = t.db.notification.rows;
+    expect(new Set(notes.map((n: any) => n.title)).size).toBe(1);
+    expect(notes[0].title).toMatch(
+      /^Growth changes at your renewal on .+ \(v2\)$/,
+    );
+    expect(notes[0].body).toContain('3 users instead of 5');
+    expect(notes[0].body).toContain('Growth will be ₹2,500 + GST (was ₹2,000)');
+    expect(notes[0].body).toContain('Choose what stays');
+  });
+
+  it('a price change on its own: "Growth will be ₹2,500 + GST (was ₹2,000) from <date>"', async () => {
+    const t = await renewalDue();
+    await t.edit('growth', { priceMonthly: 2500 });
+    await applyPlanVersionChanges(t.db as never, 'org-1');
+    expect(t.db.notification.rows[0].title).toMatch(
+      /^Growth will be ₹2,500 \+ GST \(was ₹2,000\) from .+ \(v2\)$/,
+    );
+  });
+});
+
+describe('Basic: a new version applies now, or after 7 days for orgs over it', () => {
+  async function onBasic(users: number) {
+    const t = setup(
+      { planId: 'basic', amount: 0, renewsAt: null },
+      { users: [member('m1', 1), member('m2', 9)] },
+    );
+    t.usage.users = users;
+    const v1 = await ensureLatestPlanVersion(
+      t.db,
+      t.planById('basic') as never,
+    );
+    t.row().planVersionId = v1!.id;
+    return t;
+  }
+
+  it('a bigger Basic: every Basic org moves straight away', async () => {
+    const t = await onBasic(2);
+    await t.edit('basic', { limits: { users: 4 } });
+    await applyPlanVersionChanges(t.db as never);
+    expect(t.row().planVersionId).toBe(t.version('basic', 2).id);
+  });
+
+  it('a smaller Basic the org fits: moves straight away', async () => {
+    const t = await onBasic(1);
+    await t.edit('basic', { limits: { users: 1 } });
+    await applyPlanVersionChanges(t.db as never);
+    expect(t.row().planVersionId).toBe(t.version('basic', 2).id);
+    expect(t.db.notification.rows).toHaveLength(0);
+  });
+
+  it('a smaller Basic the org is over: told once, keeps its version for 7 days, then moves with what does not fit paused', async () => {
+    const t = await onBasic(3);
+    const v2 = await t.edit('basic', { limits: { users: 1 } });
+    await applyPlanVersionChanges(t.db as never);
+    await applyPlanVersionChanges(t.db as never);
+    expect(t.row().planVersionId).toBe(t.version('basic', 1).id);
+    // Once (one per admin; the fake sends it to every member).
+    expect(new Set(t.db.notification.rows.map((n: any) => n.title)).size).toBe(
+      1,
+    );
+    expect(t.db.notification.rows[0].body).toContain('1 user instead of 2');
+    // Still on v1 limits meanwhile.
+    const active = await getOrgActivePlan(t.db as never, 'org-1');
+    expect(resolveLimit(active!.plan, 'users')).toBe(2);
+    // 7 days later.
+    await applyPlanVersionChanges(
+      t.db as never,
+      undefined,
+      new Date(v2!.createdAt.getTime() + 7 * DAY + 1000),
+    );
+    expect(t.row().planVersionId).toBe(v2!.id);
+    expect(t.db.user.rows.filter((u: any) => u.billingPausedAt)).toHaveLength(
+      2,
+    );
+    expect(t.db.notification.rows.at(-1).title).toBe('Basic has changed');
+  });
+});
+
+describe('the older renew path (no checkout)', () => {
+  it('renewOrgSubscription moves the org to the latest version, even for a deactivated plan', async () => {
+    const t = setup({ planId: 'growth', amount: 2000 });
+    const v1 = await ensureLatestPlanVersion(
+      t.db,
+      t.planById('growth') as never,
+    );
+    t.row().planVersionId = v1!.id;
+    await t.edit('growth', { limits: { users: 8 }, isActive: false });
+    await renewOrgSubscription(t.db as never, 'org-1');
+    expect(t.row().planVersionId).toBe(t.version('growth', 2).id);
   });
 });

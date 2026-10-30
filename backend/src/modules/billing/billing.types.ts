@@ -67,10 +67,46 @@ export type PlanChangeBlockedReasonV2 =
   // A paid online checkout is being checked (needs_review). Renewals still go through.
   | 'payment_review';
 
+/** One limit or feature that differs in the plan's newer version. */
+export interface PlanVersionChangeV2 {
+  key: string;
+  kind: 'limit' | 'feature';
+  label: string;
+  /** Limits: a number, or null for unlimited. Features: on / off. */
+  from: number | boolean | null;
+  to: number | boolean | null;
+  /** Fewer than before, or a feature switched off. */
+  lower: boolean;
+  /** "3 users instead of 5", "no Team chat". */
+  text: string;
+}
+
+/**
+ * The plan's newer version the org moves to: at its renewal (shown from the
+ * renewal window and in grace), or for Basic at the end of the notice.
+ */
+export interface NextPlanVersionV2 {
+  planName: string;
+  fromVersion: number | null;
+  toVersion: number;
+  /** YYYY-MM-DD: the renewal date, or (Basic) when the new version applies. */
+  at: string;
+  reason: 'renewal' | 'basic';
+  /** The org's interval; null when the price doesn't change. Rupees before GST. */
+  price: { interval: BillingInterval; from: number; to: number } | null;
+  changes: PlanVersionChangeV2[];
+  /** Some limit is lower or a feature is off: "Choose what stays" applies. */
+  lower: boolean;
+}
+
 export interface BillingOverviewV2 {
   orgName: string;
   ownerName: string;
   plan: BillingPlanV2;
+  /** The version of `plan` the org is on (null = latest / not recorded). */
+  planVersion?: number | null;
+  /** What changes when the org moves to the plan's newer version; null = nothing. */
+  nextVersion?: NextPlanVersionV2 | null;
   paidPlan: BillingPlanV2 | null;
   interval: BillingInterval;
   status: SubscriptionStatusV2;

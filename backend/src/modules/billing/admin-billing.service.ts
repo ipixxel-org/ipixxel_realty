@@ -10,10 +10,14 @@ import {
 } from '../../common/utils/billing-clock.util';
 import {
   applyOrgSubscriptionLifecycle,
+  applyPlanVersionChanges,
   readReminderSettings,
   REMINDER_IDS,
 } from '../../common/utils/subscription-lifecycle.util';
-import { ensureLatestPlanVersion } from '../../common/utils/plan-version.util';
+import {
+  ensureLatestPlanVersion,
+  latestPlanVersion,
+} from '../../common/utils/plan-version.util';
 import { PlatformConfigService } from '../platform-config/platform-config.service';
 import { RazorpaySettingsService } from '../payments/razorpay-settings.service';
 import { BillingModeService } from './billing-mode.service';
@@ -204,7 +208,17 @@ export class AdminBillingService {
     // A change to the price, limits or features is the plan's next version;
     // a name / tagline change isn't.
     const updated = await this.prisma.plan.findUniqueOrThrow({ where: { id } });
-    await ensureLatestPlanVersion(this.prisma, updated, actorId);
+    const before = await latestPlanVersion(this.prisma, id);
+    const version = await ensureLatestPlanVersion(
+      this.prisma,
+      updated,
+      actorId,
+    );
+    // A new version: Basic orgs that fit move now (the rest get notice);
+    // orgs in their renewal window are told what changes.
+    if (version && version.id !== before?.id) {
+      await applyPlanVersionChanges(this.prisma).catch(() => undefined);
+    }
 
     const active = await this.prisma.plan.findMany({
       where: { isActive: true },

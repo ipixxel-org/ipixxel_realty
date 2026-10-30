@@ -10,7 +10,11 @@ import { UpdatePlanDto } from './dto/update-plan.dto';
 import { ListPlansQueryDto } from './dto/list-plans-query.dto';
 import { normalizeCapabilityMap } from './plan-capabilities';
 import { carryV2Keys } from '../billing/plan-modules';
-import { ensureLatestPlanVersion } from '../../common/utils/plan-version.util';
+import {
+  ensureLatestPlanVersion,
+  latestPlanVersion,
+} from '../../common/utils/plan-version.util';
+import { applyPlanVersionChanges } from '../../common/utils/subscription-lifecycle.util';
 
 function slugify(input: string): string {
   return input
@@ -235,7 +239,19 @@ export class PlansService {
 
     const updated = await this.prisma.plan.update({ where: { id }, data });
     // A change to the price, limits or features is the plan's next version.
-    await ensureLatestPlanVersion(this.prisma, updated, actorId);
+    const before = await latestPlanVersion(this.prisma, id);
+    const version = await ensureLatestPlanVersion(
+      this.prisma,
+      updated,
+      actorId,
+    );
+    // Basic orgs that fit move now (the rest get notice); orgs in their
+    // renewal window are told what changes.
+    if (version && before && version.id !== before.id) {
+      await applyPlanVersionChanges(this.prisma as never).catch(
+        () => undefined,
+      );
+    }
     return toPlanResponse(updated);
   }
 

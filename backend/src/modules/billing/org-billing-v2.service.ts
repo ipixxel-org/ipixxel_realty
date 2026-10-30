@@ -1,8 +1,15 @@
 import { billingNow } from '../../common/utils/billing-clock.util';
 import {
+  planVersionsApplied,
   SUB_PLAN_INCLUDE,
   withEffectivePlan,
 } from '../../common/utils/plan-version.util';
+import {
+  describeChange,
+  upcomingVersion,
+} from '../../common/utils/plan-version-change.util';
+
+const isoDay = (d: Date) => d.toISOString().slice(0, 10);
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../../database/prisma.service';
 import {
@@ -200,7 +207,37 @@ export class OrgBillingV2Service {
       ? [owner.firstName, owner.lastName].filter(Boolean).join(' ') ||
         owner.email
       : '';
-    return buildOverview({
+    // Plan versions: the one the org is on, and what its newer one changes.
+    const up = await upcomingVersion(this.prisma, subscription, {
+      notifyDays: cfg.notifyDays,
+      now,
+    });
+    const upPrice = up?.price
+      ? nextInterval === 'yearly'
+        ? up.price.yearly
+        : up.price.monthly
+      : null;
+    const versions = {
+      planVersion:
+        planVersionsApplied() && subscription?.planVersion
+          ? subscription.planVersion.version
+          : null,
+      nextVersion: up
+        ? {
+            planName: up.planName,
+            fromVersion: up.fromVersion,
+            toVersion: up.toVersion,
+            at: isoDay(up.at),
+            reason: up.reason,
+            price: upPrice
+              ? { interval: nextInterval ?? 'monthly', ...upPrice }
+              : null,
+            changes: up.changes.map((c) => ({ ...c, text: describeChange(c) })),
+            lower: up.lower,
+          }
+        : null,
+    };
+    const overview = buildOverview({
       now,
       orgName: org.name,
       ownerName,
@@ -252,6 +289,7 @@ export class OrgBillingV2Service {
       retention: retentionSummary,
       freePlanName: ranked.find(isFreePlan)?.name,
     });
+    return { ...overview, ...versions };
   }
 
   /**

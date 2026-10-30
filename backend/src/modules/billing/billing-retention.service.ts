@@ -35,6 +35,8 @@ import {
   SUB_PLAN_INCLUDE,
   withEffectivePlan,
 } from '../../common/utils/plan-version.util';
+import { upcomingVersion } from '../../common/utils/plan-version-change.util';
+import { billingNow } from '../../common/utils/billing-clock.util';
 import { planRanker, toBillingPlan } from './plan-modules';
 import type {
   RetentionChoicesV2,
@@ -51,7 +53,20 @@ const shortDate = (d: Date) =>
   });
 const isoDate = (d: Date) => d.toISOString().slice(0, 10);
 
-type SubWithPlan = Subscription & { plan: Plan };
+type SubWithPlan = Subscription & {
+  plan: Plan;
+  /**
+   * Plan versions: the org's plan as it will be (its newer version) when that
+   * has lower limits or fewer features, and when it applies — then the org
+   * chooses what stays on its own plan, like a downgrade.
+   */
+  upcomingPlan?: Plan | null;
+  upcomingAt?: Date | null;
+};
+
+/** The org's plan, as it is today (not a newer version still to come). */
+const isLive = (sub: SubWithPlan | null, target: Plan) =>
+  sub?.planId === target.id && !sub.upcomingPlan;
 
 /**
  * Billing v2 step 6 — "choose what stays". Which users, projects, landing
@@ -66,16 +81,27 @@ export class BillingRetentionService {
   constructor(private readonly prisma: PrismaService) {}
 
   private async context(orgId: string) {
-    const [sub, active] = await Promise.all([
-      this.prisma.subscription
-        .findFirst({
-          where: { orgId, status: { not: 'cancelled' } },
-          include: SUB_PLAN_INCLUDE,
-        })
-        // `plan` is the org's version of its plan.
-        .then(withEffectivePlan),
+    const [raw, active, cfg] = await Promise.all([
+      this.prisma.subscription.findFirst({
+        where: { orgId, status: { not: 'cancelled' } },
+        include: SUB_PLAN_INCLUDE,
+      }),
       this.prisma.plan.findMany({ where: { isActive: true } }),
+      getBillingExpiryConfig(this.prisma),
     ]);
+    const up = await upcomingVersion(this.prisma, raw, {
+      notifyDays: cfg.notifyDays,
+      now: billingNow(),
+    });
+    // `plan` is the org's version of its plan.
+    const held = withEffectivePlan(raw);
+    const sub: SubWithPlan | null = held
+      ? {
+          ...held,
+          upcomingPlan: up?.lower ? up.plan : null,
+          upcomingAt: up?.lower ? up.at : null,
+        }
+      : null;
     return { sub, active };
   }
 
@@ -88,12 +114,17 @@ export class BillingRetentionService {
       const scheduled = active.find((p) => p.id === sub.scheduledPlanId);
       if (scheduled) return scheduled;
     }
+    // A newer version of their plan with lower limits (not while in grace,
+    // where an unpaid renewal ends on Basic).
+    if (sub?.upcomingPlan && sub.status !== 'past_due') return sub.upcomingPlan;
     return findFreePlan(this.prisma);
   }
 
   /** When the choice takes effect; null when the org is already on that plan. */
   private appliesOn(sub: SubWithPlan | null, target: Plan): string | null {
-    if (!sub || sub.planId === target.id) return null;
+    if (!sub || isLive(sub, target)) return null;
+    if (sub.planId === target.id && sub.upcomingAt)
+      return isoDate(sub.upcomingAt);
     if (sub.status === 'past_due' && sub.graceEndsAt)
       return isoDate(sub.graceEndsAt);
     return sub.renewsAt ? isoDate(sub.renewsAt) : null;
@@ -150,8 +181,13 @@ export class BillingRetentionService {
     if (!target) {
       throw billingError('plan_not_found', 'That plan is not available.');
     }
-    // The plan the org is on: the limits of its version, not the latest.
-    return { target: target.id === sub?.planId ? sub.plan : target, request };
+    // The plan the org is on: the limits of its version, or of the newer
+    // version it's about to move to (lower limits: choose what stays).
+    return {
+      target:
+        target.id === sub?.planId ? (sub.upcomingPlan ?? sub.plan) : target,
+      request,
+    };
   }
 
   /**
@@ -175,7 +211,9 @@ export class BillingRetentionService {
       requestId,
     );
     if (!request) {
-      const locked = await whatStaysLockedForOrg(this.prisma, orgId, target.id);
+      const locked =
+        isLive(sub, target) &&
+        (await whatStaysLockedForOrg(this.prisma, orgId, target.id));
       return this.choicesFor(orgId, sub, active, target, locked);
     }
     const latest = (await latestRequest(this.prisma, orgId))?.id === request.id;
@@ -291,21 +329,16 @@ export class BillingRetentionService {
     const defaults = pickRetention(ranked, limits, null);
     // On the plan the org is on, what's active is the live state (the pause
     // markers), not a re-run of the picks.
-    const selected =
-      sub?.planId === target.id
-        ? {
-            users: ranked.users.filter((u) => !u.paused).map((u) => u.id),
-            projects: ranked.projects
-              .filter((p) => !p.viewOnly)
-              .map((p) => p.id),
-            landingPages: ranked.landingPages
-              .filter((p) => !p.offline)
-              .map((p) => p.id),
-            templates: ranked.templates
-              .filter((t) => !t.paused)
-              .map((t) => t.id),
-          }
-        : pickRetention(ranked, limits, saved);
+    const selected = isLive(sub, target)
+      ? {
+          users: ranked.users.filter((u) => !u.paused).map((u) => u.id),
+          projects: ranked.projects.filter((p) => !p.viewOnly).map((p) => p.id),
+          landingPages: ranked.landingPages
+            .filter((p) => !p.offline)
+            .map((p) => p.id),
+          templates: ranked.templates.filter((t) => !t.paused).map((t) => t.id),
+        }
+      : pickRetention(ranked, limits, saved);
     const rank = planRanker(
       active.some((p) => p.id === target.id) ? active : [...active, target],
     )(target);
@@ -418,8 +451,17 @@ export class BillingRetentionService {
     if (dto.requestId) {
       await assertLatestRequest(this.prisma, orgId, dto.requestId);
     }
+    // A newer version of their own plan with lower limits: theirs to choose.
+    const upcoming =
+      !dto.requestId && sub?.planId === target.id && !!sub.upcomingPlan;
     if (
-      await whatStaysLockedForOrg(this.prisma, orgId, target.id, dto.requestId)
+      !upcoming &&
+      (await whatStaysLockedForOrg(
+        this.prisma,
+        orgId,
+        target.id,
+        dto.requestId,
+      ))
     ) {
       throw billingError('what_stays_locked', WHAT_STAYS_LOCKED_MESSAGE);
     }
@@ -478,7 +520,7 @@ export class BillingRetentionService {
     const ids = await this.validate(orgId, target, dto);
     await this.store(orgId, adminId, target.id, ids);
     await this.useSavedOnOpenPayment(request?.id);
-    const applyNow = sub?.planId === target.id && (!request || requestApplied);
+    const applyNow = isLive(sub, target) && (!request || requestApplied);
     if (applyNow) {
       await applyRetention(this.prisma, orgId, target);
       if (request) {
@@ -676,12 +718,13 @@ export class BillingRetentionService {
     const cfg = await getBillingExpiryConfig(this.prisma);
     const heading =
       !!sub.scheduledPlanId ||
+      !!sub.upcomingPlan ||
       sub.cancelAtPeriodEnd ||
       !!sub.movedToBasicAt ||
       (sub.status === 'past_due' && cfg.behavior === 'fall_back_to_basic');
     if (!heading) return null;
     const target = sub.movedToBasicAt
-      ? sub.plan
+      ? (sub.upcomingPlan ?? sub.plan)
       : await this.defaultTarget(sub, active);
     if (!target) return null;
     const ranked = rankRetention(

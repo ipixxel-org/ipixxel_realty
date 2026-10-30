@@ -4,6 +4,7 @@ import {
   assertLimit,
   countOrgLandingPages,
   resolveLimit,
+  usageOverLimits,
 } from './plan-quota.util';
 import { orgBillingRecipientsWhere } from './notification-recipients.util';
 import { NO_SCHEDULED_CHANGE } from './plan-change.util';
@@ -15,10 +16,17 @@ import {
 } from './retention.util';
 import { billingNow, isBillingV2Server } from './billing-clock.util';
 import {
+  effectivePlan,
   latestPlanVersionId,
+  planVersionsApplied,
   SUB_PLAN_INCLUDE,
   withEffectivePlan,
 } from './plan-version.util';
+import {
+  describeChange,
+  upcomingVersion,
+  type UpcomingVersion,
+} from './plan-version-change.util';
 
 // ---------------------------------------------------------------------------
 // Subscription expiry lifecycle + plan-package gates for org-owned resources.
@@ -151,7 +159,7 @@ type PrismaLike = Pick<
   | 'lead'
 > &
   // Plan versions (optional so older test mocks still fit).
-  Partial<Pick<PrismaClient, 'planVersion'>>;
+  Partial<Pick<PrismaClient, 'planVersion' | 'auditLog'>>;
 
 function defaultExpiryConfig(): BillingExpiryConfig {
   return {
@@ -406,7 +414,133 @@ export async function applyOrgSubscriptionLifecycle(
     // act (publish, quota asserts) still do their own hard checks.
     return summary;
   }
+  await applyPlanVersionChanges(prisma, orgId, now).catch(() => undefined);
   return summary;
+}
+
+const inr = (rupees: number) => `₹${rupees.toLocaleString('en-IN')}`;
+
+/** "3 users instead of 5, no Team chat" — what a newer version changes. */
+function changesText(up: UpcomingVersion): string {
+  return up.changes.map(describeChange).join(', ');
+}
+
+/** "Starter will be ₹1,199 + GST (was ₹999)" for the org's billing interval. */
+function priceText(up: UpcomingVersion, interval: string): string | null {
+  const p = interval === 'yearly' ? up.price?.yearly : up.price?.monthly;
+  return p
+    ? `${up.planName} will be ${inr(p.to)} + GST${interval === 'yearly' ? ' a year' : ''} (was ${inr(p.from)})`
+    : null;
+}
+
+const WHAT_STAYS_HINT =
+  'Choose what stays from Settings → Billing; otherwise the default picks apply. Nothing is deleted.';
+
+/**
+ * Plan versions, run with every sweep (billing v2 only):
+ * - Basic: a newer version that isn't lower, or that the org fits, applies
+ *   now; a lower one the org is over applies BASIC_NOTICE_DAYS after it was
+ *   made (what doesn't fit is paused: their choice or the default picks) and
+ *   until then the org is told once.
+ * - Paid plans move at renewal (applyPlanChange); from the renewal window the
+ *   org is told once what changes (price, limits, features).
+ */
+export async function applyPlanVersionChanges(
+  prisma: PrismaLike,
+  orgId?: string,
+  now: Date = billingNow(),
+): Promise<{ moved: number; notified: number }> {
+  const out = { moved: 0, notified: 0 };
+  if (!planVersionsApplied() || !prisma.planVersion) return out;
+  const cfg = await getBillingExpiryConfig(prisma);
+  const subs = await prisma.subscription.findMany({
+    where: {
+      ...(orgId ? { orgId } : {}),
+      status: { not: 'cancelled' },
+      planVersionId: { not: null },
+    },
+    include: SUB_PLAN_INCLUDE,
+  });
+  for (const sub of subs) {
+    const up = await upcomingVersion(prisma, sub, {
+      notifyDays: cfg.notifyDays,
+      now,
+    });
+    if (!up) continue;
+    if (up.reason === 'basic') {
+      const target = effectivePlan(up.plan, null);
+      const over = up.lower
+        ? (await usageOverLimits(prisma, sub.orgId, target)).length > 0
+        : false;
+      if (!over || now.getTime() >= up.at.getTime()) {
+        await prisma.subscription.update({
+          where: { id: sub.id },
+          data: { planVersionId: up.toVersionId },
+        });
+        out.moved++;
+        if (over) {
+          const retention = await applyRetention(prisma, sub.orgId, target);
+          await notifyOrgAdmins(
+            prisma,
+            sub,
+            'subscription_expiring',
+            `${up.planName} has changed`,
+            `${up.planName} now has ${changesText(up)}. What doesn't fit is paused, not deleted, and leads keep coming in. Upgrade to bring it back.`,
+          );
+          await prisma.auditLog
+            ?.create({
+              data: {
+                orgId: sub.orgId,
+                action: 'plan_version_applied',
+                entity: 'Subscription',
+                entityId: sub.id,
+                metadata: {
+                  planId: sub.planId,
+                  version: up.toVersion,
+                  paused: retention.paused,
+                },
+              },
+            })
+            .catch(() => undefined);
+        }
+        continue;
+      }
+      if (
+        await notifyOnce(
+          prisma,
+          sub,
+          'subscription_expiring',
+          `${up.planName} changes on ${dayLabel(up.at)}`,
+          `From ${dayLabel(up.at)}, ${up.planName} has ${changesText(up)}. ${WHAT_STAYS_HINT}`,
+        )
+      )
+        out.notified++;
+      continue;
+    }
+    // A paid plan: told once per version, from the renewal window.
+    const price = priceText(up, sub.billingCycle);
+    const title = up.changes.length
+      ? `${up.planName} changes at your renewal on ${dayLabel(up.at)}`
+      : `${price} from ${dayLabel(up.at)}`;
+    const parts = [
+      up.changes.length
+        ? `From your renewal, ${up.planName} has ${changesText(up)}.`
+        : null,
+      up.changes.length && price ? `${price}.` : null,
+      up.lower ? WHAT_STAYS_HINT : null,
+    ].filter(Boolean);
+    if (
+      await notifyOnce(
+        prisma,
+        sub,
+        'subscription_expiring',
+        `${title} (v${up.toVersion})`,
+        parts.length ? parts.join(' ') : `${price}.`,
+      )
+    )
+      out.notified++;
+  }
+  return out;
 }
 
 const dayLabel = (d: Date) =>
@@ -711,6 +845,8 @@ export async function renewOrgSubscription(
   }
 
   const periodMs = sub.billingCycle === 'yearly' ? 365 * DAY_MS : 30 * DAY_MS;
+  // A renewal moves the org to its plan's latest version.
+  const planVersionId = await latestPlanVersionId(prisma, sub.planId);
   const renewed = await prisma.subscription.update({
     where: { id: sub.id },
     data: {
@@ -719,8 +855,19 @@ export async function renewOrgSubscription(
       graceExtensionDays: 0,
       cancelledAt: null,
       renewsAt: new Date(billingNow().getTime() + periodMs),
+      ...(planVersionId ? { planVersionId } : {}),
     },
   });
+  // Smaller limits in the new version: what doesn't fit is paused (their
+  // choice or the default picks).
+  if (
+    planVersionsApplied() &&
+    planVersionId &&
+    planVersionId !== sub.planVersionId
+  ) {
+    const plan = await prisma.plan.findUnique({ where: { id: sub.planId } });
+    if (plan) await applyRetention(prisma, orgId, plan);
+  }
   return renewed;
 }
 
