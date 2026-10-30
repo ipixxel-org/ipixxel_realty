@@ -1,6 +1,9 @@
 /* eslint-disable @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-argument, @typescript-eslint/no-unsafe-return, @typescript-eslint/require-await -- test-only in-memory Prisma fake: rows are untyped on purpose */
 import { PaymentEventsService } from '../payments/payment-events';
-import { AdminSubscriptionsService } from './admin-subscriptions.service';
+import {
+  AdminSubscriptionsService,
+  graceExtendedText,
+} from './admin-subscriptions.service';
 import { BillingCheckoutService } from './billing-checkout.service';
 import { BillingInvoiceMailer } from './billing-invoice-mailer.service';
 import {
@@ -332,6 +335,24 @@ describe('Super Admin actions', () => {
     });
     expect(await code(active.admin.extendGrace('org-1', 'admin', 5))).toBe(
       'not_in_grace',
+    );
+  });
+
+  it('extend grace twice: days add up; each extension is a timeline line with who, days, new end and note', async () => {
+    const { admin, sub } = setup({ graceExtensionDays: 0 });
+    await admin.extendGrace('org-1', 'u-admin', 3, 'Customer promised a bank transfer by Friday');
+    const d = await admin.extendGrace('org-1', 'u-admin', 2);
+    expect(sub().graceExtensionDays).toBe(5);
+    const lines = d.timeline.filter((e) => e.kind === 'grace').map((e) => e.text);
+    expect(lines).toHaveLength(2);
+    expect(lines.some((t) => /^Grace extended by 3 days → .+ by Asha · 'Customer promised a bank transfer by Friday'$/.test(t))).toBe(true);
+    expect(lines.some((t) => /^Grace extended by 2 days → .+ by Asha$/.test(t))).toBe(true);
+  });
+
+  it('grace extension text: singular day, no actor or note when missing', () => {
+    expect(graceExtendedText({ days: 1, until: '2026-11-04', note: '' })).toBe('Grace extended by 1 day → 4 Nov 2026');
+    expect(graceExtendedText({ days: 3, until: '2026-11-04', note: 'Bank holiday' }, 'admin@acme.test')).toBe(
+      "Grace extended by 3 days → 4 Nov 2026 by admin@acme.test · 'Bank holiday'",
     );
   });
 

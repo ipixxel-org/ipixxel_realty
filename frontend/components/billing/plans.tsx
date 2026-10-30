@@ -107,7 +107,9 @@ export function PlansScreen({
     }
     // Same paid plan: monthly → yearly is an upgrade (credit for the unused month);
     // yearly → monthly is scheduled for the renewal date.
-    const label = samePlan ? (up ? (live ? "Switch to yearly" : "Request yearly billing") : "Switch to monthly") : "Change plan";
+    // Moved to Basic: the plan they had reads "Buy again" (the banner's button lands here).
+    const buyAgain = overview!.status === "moved_to_basic" && p.id === overview!.paidPlan?.id;
+    const label = samePlan ? (up ? (live ? "Switch to yearly" : "Request yearly billing") : "Switch to monthly") : buyAgain ? "Buy again" : "Change plan";
     return up
       ? go("checkout", { plan: p.id, interval, coupon }, "btn btn-primary", <>{arrow} {label}</>)
       : go("downgrade", { plan: p.id, interval }, "btn btn-ghost", <>{arrow} {label}</>);

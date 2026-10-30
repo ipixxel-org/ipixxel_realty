@@ -247,8 +247,10 @@ export function createMockBillingClient(opts: { initial?: Partial<MockState>; pe
         keyDate: ov.graceEndsAt ?? ov.movedToBasicAt ?? d.periodEnd,
         users: o.users,
         couponCode: o.couponCode ?? null,
+        graceExtraDays: ov.graceExtraDays ?? 0,
       };
     }
+    const inGrace = o.status === "past_due" || o.status === "grace_ending";
     return {
       orgId: o.id,
       orgName: o.name,
@@ -261,6 +263,7 @@ export function createMockBillingClient(opts: { initial?: Partial<MockState>; pe
       keyDate: o.keyDate,
       users: o.users,
       couponCode: o.couponCode ?? null,
+      graceExtraDays: inGrace ? (o.graceExtraDays ?? 0) : 0,
     };
   }
 
@@ -299,10 +302,15 @@ export function createMockBillingClient(opts: { initial?: Partial<MockState>; pe
     if (!o) throw new BillingError("No organisation with that id.");
     const row = orgRow(o);
     const coupon = o.couponCode ? s.coupons.find((c) => c.code === o.couponCode) : undefined;
+    const inGrace = row.status === "past_due" || row.status === "grace_ending";
+    const graceDays = s.lifecycle.graceDays;
     return {
       ...row,
       renewalAmount: withGst(planPrice(row.plan, row.interval), o.state),
-      graceDays: s.lifecycle.graceDays,
+      graceDays,
+      // Grace ends dueDate + graceDays + extra days (same rule as the backend).
+      dueDate:
+        o.id === DEMO_ORG.id ? overview().dueDate : inGrace && row.keyDate ? addDays(row.keyDate, -(graceDays + (row.graceExtraDays ?? 0))) : null,
       timeline: o.timeline,
       payments: s.payments.filter((p) => p.orgId === orgId).sort((a, b) => b.createdAt.localeCompare(a.createdAt)).map(paymentRow),
       coupon: coupon ? couponRow(coupon) : null,
@@ -573,7 +581,8 @@ export function createMockBillingClient(opts: { initial?: Partial<MockState>; pe
       if (!o) return fail("No organisation with that id.");
       if ((o.status !== "past_due" && o.status !== "grace_ending") || !o.keyDate) return fail("Only an organisation in its grace period can get more time.");
       const until = addDays(o.keyDate, req.days);
-      updateOrg(o.id, () => ({ status: "past_due", keyDate: until, ...event(o, "grace", `Grace extended by ${req.days} days to ${formatDate(until)}${req.note ? ` — ${req.note}` : ""}`) }));
+      const text = `Grace extended by ${req.days} ${req.days === 1 ? "day" : "days"} → ${formatDate(until)} by Super Admin${req.note ? ` · '${req.note}'` : ""}`;
+      updateOrg(o.id, () => ({ status: "past_due", keyDate: until, graceExtraDays: (o.graceExtraDays ?? 0) + req.days, ...event(o, "grace", text) }));
       return ok(detail(o.id));
     },
     markPaidOffline(req) {

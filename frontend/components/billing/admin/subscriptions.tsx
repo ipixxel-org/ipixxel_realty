@@ -42,7 +42,42 @@ const TIMELINE_COLOR: Record<TimelineEvent["kind"], string> = {
   cancel: "var(--amber)",
 };
 
-const ALL: SubscriptionStatus[] = ["free", "active", "renewal_due", "past_due", "grace_ending", "expired", "moved_to_basic", "cancellation_scheduled", "downgrade_scheduled"];
+const plural = (n: number, one: string) => `${n} ${one}${n === 1 ? "" : "s"}`;
+
+/** "+3 days" next to the status while grace has been extended by Super Admin. */
+function GraceExtraTag({ days }: { days?: number }) {
+  if (!days || days <= 0) return null;
+  return (
+    <span className="badge b-amber" style={{ marginLeft: 6 }} title={`Grace extended by ${plural(days, "day")}`} data-testid="grace-extra-tag">
+      +{plural(days, "day")}
+    </span>
+  );
+}
+
+/** Extend grace: whole days, 1–60 per extension (the backend's ExtendGraceDto limit). */
+export const GRACE_EXTEND_MAX = 60;
+
+export function graceDaysError(raw: string): string | null {
+  const v = raw.trim();
+  if (v === "") return "Enter the number of extra days.";
+  if (!/^\d+$/.test(v)) return "Whole days only (no decimals).";
+  const n = Number(v);
+  if (n < 1) return "At least 1 day.";
+  if (n > GRACE_EXTEND_MAX) return `At most ${GRACE_EXTEND_MAX} days at a time.`;
+  return null;
+}
+
+/**
+ * Grace end after adding `more` days — the backend's graceEndFor: due date +
+ * grace days + every extra day (earlier ones and these). Without a due date,
+ * the current end + the new days (the same date).
+ */
+export function graceEndAfter(d: Pick<SubscriptionDetail, "dueDate" | "graceDays" | "graceExtraDays" | "keyDate">, more: number): string | null {
+  if (d.dueDate) return addDays(d.dueDate, d.graceDays + (d.graceExtraDays ?? 0) + more);
+  return d.keyDate ? addDays(d.keyDate, more) : null;
+}
+
+const ALL: SubscriptionStatus[] =["free", "active", "renewal_due", "past_due", "grace_ending", "expired", "moved_to_basic", "cancellation_scheduled", "downgrade_scheduled"];
 
 /* ------------------------------------------------------------------- List */
 
@@ -140,6 +175,7 @@ export function SubscriptionsList({ syncUrl = false }: { syncUrl?: boolean } = {
                     </td>
                     <td>
                       <span className={`badge ${STATUS_META[o.status].badge}`}>{ADMIN_STATUS_LABEL[o.status]}</span>
+                      <GraceExtraTag days={o.graceExtraDays} />
                     </td>
                     <td>{o.status === "free" ? "—" : o.renewalMode === "auto" ? "Automatic" : "Pay each time"}</td>
                     <td style={{ whiteSpace: "nowrap" }}>
@@ -204,7 +240,11 @@ function ActionDialog({
   const { toast } = useToast();
   const { data: coupons } = useBillingQuery((c) => c.listCoupons(), []);
   const today = new Date().toISOString().slice(0, 10);
-  const [graceDays, setGraceDays] = useState(3);
+  const [graceRaw, setGraceRaw] = useState("3");
+  const graceError = graceDaysError(graceRaw);
+  const graceDays = graceError ? 0 : Number(graceRaw.trim());
+  const extraBefore = detail.graceExtraDays ?? 0;
+  const newGraceEnd = graceError ? null : graceEndAfter(detail, graceDays);
   const [note, setNote] = useState("");
   const [offline, setOffline] = useState({ amount: String(detail.renewalAmount), method: "NEFT / RTGS", reference: "", date: today });
   const [code, setCode] = useState("");
@@ -227,7 +267,7 @@ function ActionDialog({
         onDone(d, `${code} will reduce ${detail.orgName}'s next payment.`);
       } else if (action === "cancel") {
         const d = await client.cancelSubscription({ orgId: detail.orgId, when, note: note || undefined });
-        onDone(d, when === "now" ? `${detail.orgName} moved to Basic.` : "Cancellation scheduled.");
+        onDone(d, when === "now" ? `${detail.orgName} moved to Basic.` : `Move to Basic scheduled${detail.keyDate ? ` for ${formatDate(detail.keyDate)}` : ""}.`);
       }
     } catch (e) {
       const msg = e instanceof Error ? e.message : "Something went wrong.";
@@ -242,13 +282,13 @@ function ActionDialog({
     grace: "Give more time to pay",
     offline: "Mark as paid offline",
     coupon: "Apply a coupon",
-    cancel: `Cancel ${detail.orgName}'s ${detail.plan.name} plan`,
+    cancel: `Move ${detail.orgName} to Basic`,
   };
   const confirmLabel: Record<SubscriptionAction, string> = {
-    grace: `Extend by ${graceDays} days`,
+    grace: graceError ? "Extend grace" : `Extend by ${plural(graceDays, "day")}`,
     offline: "Mark as paid",
     coupon: "Apply",
-    cancel: "Cancel plan",
+    cancel: "Move to Basic",
   };
 
   return (
@@ -261,7 +301,7 @@ function ActionDialog({
           <button type="button" className="btn btn-ghost btn-sm" onClick={onClose}>
             Back
           </button>
-          <button type="button" className={`btn btn-sm ${action === "cancel" ? "btn-danger" : "btn-primary"}`} disabled={busy || (action === "coupon" && !code)} onClick={() => void confirm()}>
+          <button type="button" className={`btn btn-sm ${action === "cancel" ? "btn-danger" : "btn-primary"}`} disabled={busy || (action === "coupon" && !code) || (action === "grace" && !!graceError)} onClick={() => void confirm()}>
             {action ? confirmLabel[action] : ""}
           </button>
         </DialogActions>
@@ -270,16 +310,38 @@ function ActionDialog({
       <div className="bl-stack" style={{ gap: 12 }}>
         {action === "grace" ? (
           <>
-            <div className="bl-muted">Grace currently ends {detail.keyDate ? formatDate(detail.keyDate) : "—"}. Everything keeps working until the new date.</div>
+            <div className="bl-muted" data-testid="grace-intro">
+              Grace currently ends {detail.keyDate ? formatDate(detail.keyDate) : "—"}
+              {extraBefore > 0 ? ` (includes ${plural(extraBefore, "extra day")} given earlier). The new days are added on top` : ""}. Everything keeps working until the new
+              date.
+            </div>
             <div className="field" style={{ marginBottom: 0 }}>
-              <label>Extra days</label>
-              <select className="inp" value={graceDays} onChange={(e) => setGraceDays(Number(e.target.value))}>
-                {[1, 3, 5, 7, 14].map((d) => (
-                  <option key={d} value={d}>
-                    {d} day{d === 1 ? "" : "s"} → {detail.keyDate ? formatDate(addDays(detail.keyDate, d)) : ""}
-                  </option>
-                ))}
-              </select>
+              <label htmlFor="bl-grace-days">Extra days</label>
+              <input
+                id="bl-grace-days"
+                className="inp"
+                type="number"
+                inputMode="numeric"
+                min={1}
+                max={GRACE_EXTEND_MAX}
+                step={1}
+                style={{ maxWidth: 140 }}
+                value={graceRaw}
+                aria-invalid={!!graceError}
+                aria-describedby="bl-grace-days-help"
+                onChange={(e) => setGraceRaw(e.target.value)}
+              />
+              <div id="bl-grace-days-help" style={{ marginTop: 6 }}>
+                {graceError ? (
+                  <div className="bl-coupon-err" data-testid="grace-days-error">
+                    ✕ {graceError}
+                  </div>
+                ) : (
+                  <div className="hint" data-testid="grace-new-end">
+                    Grace will end on {newGraceEnd ? formatDate(newGraceEnd) : "—"} (currently {detail.keyDate ? formatDate(detail.keyDate) : "—"})
+                  </div>
+                )}
+              </div>
             </div>
             <div className="field" style={{ marginBottom: 0 }}>
               <label>Note (optional)</label>
@@ -334,7 +396,7 @@ function ActionDialog({
           <>
             {(
               [
-                ["period_end", `At the end of the period${detail.keyDate ? ` (${formatDate(detail.keyDate)})` : ""} — access continues until then`],
+                ["period_end", `At the end of the period${detail.keyDate ? ` (${formatDate(detail.keyDate)})` : ""} — keeps ${detail.plan.name} until then`],
                 ["now", "Straight away — moves to Basic now (no automatic refund)"],
               ] as const
             ).map(([v, l]) => (
@@ -384,6 +446,7 @@ export function SubscriptionDetailView({
   const d = (override?.version === version ? override.detail : null) ?? data;
   if (!d) return <Loading what="subscription" />;
   const inGrace = d.status === "past_due" || d.status === "grace_ending";
+  const extra = d.graceExtraDays ?? 0;
   const paid = !d.plan.isFree;
   // Manual mode: payments and coupons go through the org's request (Package
   // requests → Mark as paid), so those two actions aren't offered here.
@@ -395,7 +458,7 @@ export function SubscriptionDetailView({
     grace: noEdit ?? (inGrace ? null : "Only for an organisation in its grace period (payment due after the renewal date)"),
     offline: noEdit ?? (paid ? null : onBasic),
     coupon: noEdit ?? (paid ? null : onBasic),
-    cancel: noEdit ?? (!paid ? onBasic : d.status === "cancellation_scheduled" ? "Cancellation is already scheduled" : null),
+    cancel: noEdit ?? (!paid ? onBasic : d.status === "cancellation_scheduled" ? "A move to Basic is already scheduled" : null),
   };
   const actionButton = (a: SubscriptionAction, className: string, label: React.ReactNode) =>
     viaRequest(a) ? null : (
@@ -416,7 +479,7 @@ export function SubscriptionDetailView({
         {actionButton("offline", "btn btn-ghost", <><Icon name="check" size={15} /> Mark paid offline</>)}
         {actionButton("coupon", "btn btn-ghost", <><Icon name="tag" size={15} /> Apply coupon</>)}
         */}
-        {actionButton("cancel", "btn btn-danger", "Cancel")}
+        {actionButton("cancel", "btn btn-danger", "Move to Basic")}
         {actions?.(d)}
       </div>
       <Section title={d.orgName} sub={`${d.city}, ${d.state} · ${d.users} users`}>
@@ -428,12 +491,20 @@ export function SubscriptionDetailView({
           <Kv label="Status">
             <span className={`badge ${STATUS_META[d.status].badge}`}>{ADMIN_STATUS_LABEL[d.status]}</span>
           </Kv>
-          <Kv label={DATE_LABEL[d.status] === "—" ? "Key date" : DATE_LABEL[d.status]}>{d.keyDate ? formatDate(d.keyDate) : "—"}</Kv>
+          <Kv label={DATE_LABEL[d.status] === "—" ? "Key date" : DATE_LABEL[d.status]}>
+            <span data-testid="summary-key-date">{d.keyDate ? formatDate(d.keyDate) : "—"}</span>
+            {inGrace && extra > 0 ? (
+              <div className="bl-muted bl-small" style={{ fontWeight: 500, marginTop: 2 }} data-testid="summary-grace-extra">
+                {plural(d.graceDays, "day")} + {plural(extra, "extra day")}
+              </div>
+            ) : null}
+          </Kv>
           <Kv label="Renewal">{!paid ? "—" : d.renewalMode === "auto" ? "Automatic (saved card / UPI)" : "Pay each time"}</Kv>
         </div>
         {paid ? (
           <div className="bl-muted" style={{ marginTop: 12 }}>
-            Next charge {formatINR(d.renewalAmount)} incl. GST. Grace period {d.graceDays} days.
+            Next charge {formatINR(d.renewalAmount)} incl. GST. Grace period {plural(d.graceDays, "day")}
+            {inGrace && extra > 0 ? ` + ${plural(extra, "extra day")} given` : ""}.
           </div>
         ) : null}
       </Section>

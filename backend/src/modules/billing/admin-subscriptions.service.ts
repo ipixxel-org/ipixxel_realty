@@ -79,6 +79,8 @@ export interface SubscriptionRowV2 {
   keyDate: string | null;
   users: number;
   couponCode: string | null;
+  /** Extra grace days a Super Admin gave for the current due date (0 = none; only while in grace). */
+  graceExtraDays: number;
 }
 
 export interface TimelineEventV2 {
@@ -242,6 +244,10 @@ export class AdminSubscriptionsService {
         keyDate: keyDate ? isoDate(keyDate) : null,
         users: seatsBy.get(o.id) ?? 0,
         couponCode: sub?.couponId ? (codeOf.get(sub.couponId) ?? null) : null,
+        graceExtraDays:
+          status === 'past_due' || status === 'grace_ending'
+            ? Math.max(0, sub?.graceExtensionDays ?? 0)
+            : 0,
       });
     }
 
@@ -300,9 +306,30 @@ export class AdminSubscriptionsService {
             : ov.status === 'free'
               ? null
               : ov.periodEnd;
+    // Who gave extra grace: "by <name or email>" on those timeline lines.
+    const actorIds = [
+      ...new Set(
+        audits
+          .filter((a) => a.action === 'grace_extended' && a.actorId)
+          .map((a) => a.actorId as string),
+      ),
+    ];
+    const actors = new Map<string, string>(
+      actorIds.length
+        ? (
+            await this.prisma.user.findMany({
+              where: { id: { in: actorIds } },
+              select: { id: true, firstName: true, lastName: true, email: true },
+            })
+          ).map((u) => [
+            u.id,
+            [u.firstName, u.lastName].filter(Boolean).join(' ') || u.email,
+          ])
+        : [],
+    );
     const timeline: TimelineEventV2[] = [
       ...audits
-        .map((a) => toTimeline(a))
+        .map((a) => toTimeline(a, actors))
         .filter((e): e is TimelineEventV2 => !!e),
       ...payments
         .filter((p) => p.status === 'failed')
@@ -326,6 +353,10 @@ export class AdminSubscriptionsService {
       couponCode: coupon?.code ?? null,
       renewalAmount: ov.renewalAmount ?? 0,
       graceDays: ov.graceDays,
+      // Extra grace days given for this due date; grace ends at
+      // dueDate + graceDays + graceExtraDays (graceEndFor).
+      graceExtraDays: ov.graceExtraDays,
+      dueDate: ov.dueDate,
       // Manual mode hides "Mark paid offline" and "Apply coupon" (requests do both).
       paymentMode: ov.paymentMode,
       // "Choose what stays" on the org page only when no request set the
@@ -696,11 +727,15 @@ const TIMELINE_ACTIONS = [
   'payment_refunded',
 ];
 
-function toTimeline(a: {
-  createdAt: Date;
-  action: string;
-  metadata: unknown;
-}): TimelineEventV2 | null {
+function toTimeline(
+  a: {
+    createdAt: Date;
+    action: string;
+    actorId?: string | null;
+    metadata: unknown;
+  },
+  actors: Map<string, string> = new Map(),
+): TimelineEventV2 | null {
   const m = (a.metadata ?? {}) as Record<string, unknown>;
   const s = (v: unknown) =>
     typeof v === 'string' || typeof v === 'number' ? String(v) : '';
@@ -774,7 +809,7 @@ function toTimeline(a: {
       return {
         at,
         kind: 'grace',
-        text: `Grace extended by ${s(m.days)} days to ${dateLabel(new Date(s(m.until)))}${m.note ? ` — ${s(m.note)}` : ''}`,
+        text: graceExtendedText(m, a.actorId ? actors.get(a.actorId) : undefined),
       };
     case 'coupon_applied':
       return {
@@ -797,4 +832,20 @@ function toTimeline(a: {
     default:
       return null;
   }
+}
+
+/** "Grace extended by 3 days → 4 Nov 2026 by Asha Rao · 'Customer promised a bank transfer'". */
+export function graceExtendedText(
+  m: Record<string, unknown>,
+  actor?: string,
+): string {
+  const days = Number(m.days) || 0;
+  const until =
+    typeof m.until === 'string' ? ` → ${dateLabel(new Date(m.until))}` : '';
+  const by = actor ? ` by ${actor}` : '';
+  const note =
+    typeof m.note === 'string' && m.note.trim()
+      ? ` · '${m.note.trim()}'`
+      : '';
+  return `Grace extended by ${days} ${days === 1 ? 'day' : 'days'}${until}${by}${note}`;
 }

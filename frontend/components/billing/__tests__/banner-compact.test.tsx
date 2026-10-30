@@ -210,6 +210,20 @@ describe("renewal buttons go to the Plans page", () => {
     expect(renew.getAttribute("href")).toMatch(/\/checkout\?.*renew=1/);
   });
 
+  it("moved to Basic: banner 'Buy <plan> again' (with the price) links to Plans, where that plan reads Buy again → checkout", async () => {
+    const client = at("moved_to_basic");
+    const o = await client.getBillingOverview();
+    const paid = o.paidPlan!;
+    await show(client, <BannerOnly />);
+    const buy = screen.getByRole("link", { name: new RegExp(`^Buy ${paid.name} again · ₹[\\d,]+ \\+ GST$`) });
+    expect(buy.getAttribute("href")).toMatch(/^\/org\/settings\/billing\/plans(\?|$)/);
+    cleanup();
+    await show(client, <PlansScreen />);
+    const links = screen.getAllByRole("link", { name: "Buy again" });
+    expect(links).toHaveLength(1);
+    expect(links[0].getAttribute("href")).toMatch(new RegExp(`/checkout\\?.*plan=${paid.id}`));
+  });
+
   it("outside the renewal window the current plan is just Current plan", async () => {
     await show(at("active"), <PlansScreen />);
     const card = screen.getByTestId("current-plan-card");
