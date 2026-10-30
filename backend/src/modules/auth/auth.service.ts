@@ -1,4 +1,9 @@
 import {
+  latestPlanVersionId,
+  SUB_PLAN_INCLUDE,
+  withEffectivePlan,
+} from '../../common/utils/plan-version.util';
+import {
   BadRequestException,
   ConflictException,
   ForbiddenException,
@@ -316,6 +321,7 @@ export class AuthService {
             data: {
               orgId: organisation.id,
               planId: plan.id,
+              planVersionId: await latestPlanVersionId(tx, dto.planId),
               billingCycle: billingCycle as any,
               status: 'active',
               amount,
@@ -1069,11 +1075,14 @@ export class AuthService {
         orderBy: { createdAt: 'asc' },
         select: { firstName: true, lastName: true, email: true },
       }),
-      this.prisma.subscription.findFirst({
-        where: { orgId, status: { not: 'cancelled' } },
-        include: { plan: { select: { name: true, limits: true } } },
-      }),
+      this.prisma.subscription
+        .findFirst({
+          where: { orgId, status: { not: 'cancelled' } },
+          include: SUB_PLAN_INCLUDE,
+        })
+        .then(withEffectivePlan),
     ]);
+    // The user limit of the org's version of its plan.
     const limit = (sub?.plan.limits as { users?: unknown } | null)?.users;
     throw new ForbiddenException({
       statusCode: 403,

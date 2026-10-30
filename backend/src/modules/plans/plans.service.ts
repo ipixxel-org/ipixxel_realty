@@ -10,6 +10,7 @@ import { UpdatePlanDto } from './dto/update-plan.dto';
 import { ListPlansQueryDto } from './dto/list-plans-query.dto';
 import { normalizeCapabilityMap } from './plan-capabilities';
 import { carryV2Keys } from '../billing/plan-modules';
+import { ensureLatestPlanVersion } from '../../common/utils/plan-version.util';
 
 function slugify(input: string): string {
   return input
@@ -149,7 +150,7 @@ export class PlansService {
     return toPlanResponse(plan);
   }
 
-  async create(dto: CreatePlanDto) {
+  async create(dto: CreatePlanDto, actorId: string | null = null) {
     const slug = dto.slug ? slugify(dto.slug) : slugify(dto.name);
     const existing = await this.prisma.plan.findUnique({ where: { slug } });
     if (existing) throw new ConflictException(`Plan slug "${slug}" already exists`);
@@ -174,10 +175,12 @@ export class PlansService {
         isActive: dto.isActive ?? true,
       },
     });
+    // v1 of the new plan.
+    await ensureLatestPlanVersion(this.prisma, created, actorId);
     return toPlanResponse(created);
   }
 
-  async update(id: string, dto: UpdatePlanDto) {
+  async update(id: string, dto: UpdatePlanDto, actorId: string | null = null) {
     const plan = await this.prisma.plan.findUnique({ where: { id } });
     if (!plan) throw new NotFoundException('Plan not found');
 
@@ -231,6 +234,8 @@ export class PlansService {
     if (dto.isActive !== undefined) data.isActive = dto.isActive;
 
     const updated = await this.prisma.plan.update({ where: { id }, data });
+    // A change to the price, limits or features is the plan's next version.
+    await ensureLatestPlanVersion(this.prisma, updated, actorId);
     return toPlanResponse(updated);
   }
 

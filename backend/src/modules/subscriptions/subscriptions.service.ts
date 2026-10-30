@@ -1,3 +1,4 @@
+import { latestPlanVersionId } from '../../common/utils/plan-version.util';
 import {
   BadRequestException,
   ConflictException,
@@ -175,6 +176,7 @@ export class SubscriptionsService {
       data: {
         orgId: dto.orgId,
         planId: dto.planId,
+        planVersionId: await latestPlanVersionId(this.prisma, dto.planId),
         billingCycle: billingCycle as any,
         status: (dto.status as any) ?? 'active',
         amount,
@@ -213,6 +215,11 @@ export class SubscriptionsService {
       await assertPlanFitsCurrentUsage(this.prisma, sub.orgId, newPlan);
       targetPlan = newPlan;
       data.plan = { connect: { id: dto.planId } };
+      // A plan change gets the new plan's latest version.
+      const versionId = await latestPlanVersionId(this.prisma, dto.planId);
+      data.planVersion = versionId
+        ? { connect: { id: versionId } }
+        : { disconnect: true };
     }
 
     const billingCycle = dto.billingCycle ?? sub.billingCycle;

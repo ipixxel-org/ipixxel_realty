@@ -14,6 +14,11 @@ import {
   type RetentionDb,
 } from './retention.util';
 import { billingNow, isBillingV2Server } from './billing-clock.util';
+import {
+  latestPlanVersionId,
+  SUB_PLAN_INCLUDE,
+  withEffectivePlan,
+} from './plan-version.util';
 
 // ---------------------------------------------------------------------------
 // Subscription expiry lifecycle + plan-package gates for org-owned resources.
@@ -144,7 +149,9 @@ type PrismaLike = Pick<
   | 'refreshToken'
   | 'retentionChoice'
   | 'lead'
->;
+> &
+  // Plan versions (optional so older test mocks still fit).
+  Partial<Pick<PrismaClient, 'planVersion'>>;
 
 function defaultExpiryConfig(): BillingExpiryConfig {
   return {
@@ -450,7 +457,9 @@ type ChangeDb = Pick<
   'plan' | 'subscription' | 'notification' | 'user'
 > &
   RetentionDb &
-  Partial<Pick<PrismaClient, 'auditLog' | 'packageChangeRequest'>>;
+  Partial<
+    Pick<PrismaClient, 'auditLog' | 'packageChangeRequest' | 'planVersion'>
+  >;
 
 export async function notifyOrgAdmins(
   prisma: ChangeDb,
@@ -511,6 +520,7 @@ export async function moveToFreePlan(
     where: { id: sub.id },
     data: {
       planId: free.id,
+      planVersionId: await latestPlanVersionId(prisma, free.id),
       billingCycle: 'monthly',
       status: 'active',
       amount: 0,
@@ -599,6 +609,8 @@ async function applyScheduledPlan(
     where: { id: sub.id },
     data: {
       planId: plan.id,
+      // A scheduled change gets the plan's version as it is now (the latest).
+      planVersionId: await latestPlanVersionId(prisma, plan.id),
       billingCycle: interval,
       amount,
       mrr: interval === 'yearly' ? Math.round(amount / 12) : amount,
@@ -733,10 +745,13 @@ export async function getOrgActivePlan(
 } | null> {
   await applyOrgSubscriptionLifecycle(prisma, orgId);
 
-  let sub = await prisma.subscription.findFirst({
-    where: { orgId, status: { not: 'cancelled' } },
-    include: { plan: true },
-  });
+  // The plan as the org has it: its version's limits, features and price.
+  let sub = withEffectivePlan(
+    await prisma.subscription.findFirst({
+      where: { orgId, status: { not: 'cancelled' } },
+      include: SUB_PLAN_INCLUDE,
+    }),
+  );
   if (sub && isSubscriptionUsable(sub.status)) {
     return {
       subscription: sub,
@@ -902,10 +917,12 @@ export async function assertOrgCanPublish(
   // the moment the user hits publish instead of waiting for the timer.
   await applyOrgSubscriptionLifecycle(prisma, orgId);
 
-  const sub = await prisma.subscription.findFirst({
-    where: { orgId, status: { not: 'cancelled' } },
-    include: { plan: true },
-  });
+  const sub = withEffectivePlan(
+    await prisma.subscription.findFirst({
+      where: { orgId, status: { not: 'cancelled' } },
+      include: SUB_PLAN_INCLUDE,
+    }),
+  );
 
   if (!sub) {
     throw new ForbiddenException(

@@ -251,10 +251,27 @@ export function createFakeBillingDb(seed: Seed) {
 
   const db: Row = {};
   db.plan = table(plans, 'plan');
+  // Plan versions (billing.plan_versions): findFirst is always "the newest".
+  const versions = table([], 'ver');
+  db.planVersion = {
+    ...versions,
+    findFirst: async ({ where }: { where?: Where } = {}) =>
+      versions.rows
+        .filter((v: Row) => matches(v, where))
+        .sort((a: Row, b: Row) => b.version - a.version)[0] ?? null,
+  };
+  const versionById = (vid: string | null | undefined) =>
+    versions.rows.find((v: Row) => v.id === vid) ?? null;
   db.subscription = table(
     seed.subscription ? [{ ...seed.subscription }] : [],
     'sub',
-    (r, inc) => (inc?.plan ? { ...r, plan: planById(r.planId) } : r),
+    (r, inc) => ({
+      ...r,
+      ...(inc?.plan ? { plan: planById(r.planId) } : {}),
+      ...(inc?.planVersion
+        ? { planVersion: versionById(r.planVersionId) }
+        : {}),
+    }),
   );
   db.packageChangeRequest = table([], 'pcr', (r, inc) => ({
     ...r,
@@ -373,5 +390,5 @@ export function createFakeBillingDb(seed: Seed) {
   };
   db.$queryRaw = async () => [];
   db.$executeRaw = async () => 0;
-  return { db, usage, planById };
+  return { db, usage, planById, versions: versions.rows };
 }

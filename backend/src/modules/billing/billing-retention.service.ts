@@ -31,6 +31,10 @@ import {
   whatStaysPlace,
 } from './what-stays';
 import { billingError } from './billing-checkout.service';
+import {
+  SUB_PLAN_INCLUDE,
+  withEffectivePlan,
+} from '../../common/utils/plan-version.util';
 import { planRanker, toBillingPlan } from './plan-modules';
 import type {
   RetentionChoicesV2,
@@ -63,10 +67,13 @@ export class BillingRetentionService {
 
   private async context(orgId: string) {
     const [sub, active] = await Promise.all([
-      this.prisma.subscription.findFirst({
-        where: { orgId, status: { not: 'cancelled' } },
-        include: { plan: true },
-      }),
+      this.prisma.subscription
+        .findFirst({
+          where: { orgId, status: { not: 'cancelled' } },
+          include: SUB_PLAN_INCLUDE,
+        })
+        // `plan` is the org's version of its plan.
+        .then(withEffectivePlan),
       this.prisma.plan.findMany({ where: { isActive: true } }),
     ]);
     return { sub, active };
@@ -143,7 +150,8 @@ export class BillingRetentionService {
     if (!target) {
       throw billingError('plan_not_found', 'That plan is not available.');
     }
-    return { target, request };
+    // The plan the org is on: the limits of its version, not the latest.
+    return { target: target.id === sub?.planId ? sub.plan : target, request };
   }
 
   /**

@@ -374,8 +374,12 @@ export class AdminBillingController {
   }
 
   @Put('plans/:id')
-  savePlan(@Param('id') id: string, @Body() dto: SaveAdminPlanDto) {
-    return this.service.savePlan(id, dto);
+  savePlan(
+    @CurrentUser() user: JwtPayload,
+    @Param('id') id: string,
+    @Body() dto: SaveAdminPlanDto,
+  ) {
+    return this.service.savePlan(id, dto, user.sub);
   }
 
   @Get('lifecycle')

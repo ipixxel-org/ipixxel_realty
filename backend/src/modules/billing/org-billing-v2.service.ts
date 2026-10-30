@@ -1,4 +1,8 @@
 import { billingNow } from '../../common/utils/billing-clock.util';
+import {
+  SUB_PLAN_INCLUDE,
+  withEffectivePlan,
+} from '../../common/utils/plan-version.util';
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../../database/prisma.service';
 import {
@@ -97,7 +101,7 @@ export class OrgBillingV2Service {
       }),
       this.prisma.subscription.findFirst({
         where: { orgId, status: { not: 'cancelled' } },
-        include: { plan: true },
+        include: SUB_PLAN_INCLUDE,
       }),
       this.prisma.plan.findMany({ where: { isActive: true } }),
       countBillableOrgUsers(this.prisma, orgId),
@@ -133,7 +137,9 @@ export class OrgBillingV2Service {
     // internal plan sits between its neighbours.
     const ranked = sortPlans(activePlans);
     const rankOf = planRanker(activePlans);
-    const planRow = subscription?.plan ?? ranked.find(isFreePlan) ?? null;
+    // The plan as the org has it (its version's price, limits and features).
+    const planRow =
+      withEffectivePlan(subscription)?.plan ?? ranked.find(isFreePlan) ?? null;
     if (!planRow)
       throw new NotFoundException(
         'No plan is configured for this organisation.',
@@ -145,7 +151,8 @@ export class OrgBillingV2Service {
       : null;
     const nextInterval =
       subscription?.scheduledInterval ?? subscription?.billingCycle;
-    const nextPlan = scheduledRow ?? planRow;
+    // The renewal is at the plan's latest price (it moves to the latest version).
+    const nextPlan = scheduledRow ?? subscription?.plan ?? planRow;
     // "Pay now · ₹X" must equal what the renewal checkout charges.
     const price = subscription
       ? nextInterval === 'yearly'
@@ -201,6 +208,9 @@ export class OrgBillingV2Service {
       pendingUpgrade,
       rejectedUpgrade,
       plan: toBillingPlan(planRow, rankOf(planRow)),
+      renewalPlan: subscription
+        ? toBillingPlan(subscription.plan, rankOf(subscription.plan))
+        : null,
       subscription: subscription
         ? {
             status: subscription.status as never,

@@ -13,6 +13,7 @@ import {
   readReminderSettings,
   REMINDER_IDS,
 } from '../../common/utils/subscription-lifecycle.util';
+import { ensureLatestPlanVersion } from '../../common/utils/plan-version.util';
 import { PlatformConfigService } from '../platform-config/platform-config.service';
 import { RazorpaySettingsService } from '../payments/razorpay-settings.service';
 import { BillingModeService } from './billing-mode.service';
@@ -156,7 +157,11 @@ export class AdminBillingService {
     return toBillingPlans(plans);
   }
 
-  async savePlan(id: string, dto: SaveAdminPlanDto): Promise<BillingPlanV2> {
+  async savePlan(
+    id: string,
+    dto: SaveAdminPlanDto,
+    actorId: string | null = null,
+  ): Promise<BillingPlanV2> {
     const stored = await this.prisma.plan.findUnique({ where: { id } });
     if (!stored) throw new NotFoundException('Plan not found');
     const problem = validateAdminPlan(dto, stored);
@@ -196,6 +201,10 @@ export class AdminBillingService {
         capabilities,
       },
     });
+    // A change to the price, limits or features is the plan's next version;
+    // a name / tagline change isn't.
+    const updated = await this.prisma.plan.findUniqueOrThrow({ where: { id } });
+    await ensureLatestPlanVersion(this.prisma, updated, actorId);
 
     const active = await this.prisma.plan.findMany({
       where: { isActive: true },

@@ -6,6 +6,7 @@ import {
   assertPlanFitsCurrentUsage,
 } from '../../common/utils/plan-quota.util';
 import { applyPlanChange } from '../../common/utils/plan-change.util';
+import { effectivePlan } from '../../common/utils/plan-version.util';
 import { whatStaysFor } from '../../common/utils/retention.util';
 import {
   isAppliedStatus,
@@ -792,14 +793,22 @@ export class PackageChangeRequestsService {
       throw new BadRequestException('Request is no longer pending approval');
     }
 
-    const targetPlan = request.targetPlan;
-
     // Billing v2: a request raised by a manual-mode checkout keeps that
     // checkout's period rule (an upgrade keeps renewsAt); older requests start
     // a new cycle now, exactly as before.
     const checkout = await this.prisma.billingCheckout.findUnique({
       where: { packageChangeRequestId: requestId },
     });
+    // The version quoted when the request was sent (what the org gets), even
+    // if the plan was edited while it waited.
+    const targetPlan = effectivePlan(
+      request.targetPlan,
+      checkout?.planVersionId
+        ? await this.prisma.planVersion?.findUnique({
+            where: { id: checkout.planVersionId },
+          })
+        : null,
+    );
     // Manual mode: Mark as paid comes first (unless there's nothing to pay).
     const payment = checkout
       ? await this.prisma.offlinePayment.findUnique({
@@ -862,6 +871,8 @@ export class PackageChangeRequestsService {
         requestId,
         requestedById: request.requestedById,
         periodStart,
+        // The version quoted when the request was sent, even if the plan changed since.
+        planVersionId: checkout?.planVersionId ?? null,
       });
       let invoiceId: string | null = null;
       if (checkout) {

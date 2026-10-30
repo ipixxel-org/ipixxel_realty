@@ -1,3 +1,4 @@
+import { latestPlanVersionId } from './plan-version.util';
 import type { OnboardingStep } from '@prisma/client';
 import { onboardingStepIndex } from './onboarding.util';
 import {
@@ -61,6 +62,7 @@ export async function assignBasicPlanIfMissing(
     data: {
       orgId,
       planId: basic.id,
+      planVersionId: await latestPlanVersionId(prisma as never, basic.id),
       billingCycle: 'monthly',
       status: 'active',
       amount: basic.priceMonthly,

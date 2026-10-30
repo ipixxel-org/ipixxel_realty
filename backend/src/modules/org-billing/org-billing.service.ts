@@ -1,3 +1,8 @@
+import {
+  latestPlanVersionId,
+  SUB_PLAN_INCLUDE,
+  withEffectivePlan,
+} from '../../common/utils/plan-version.util';
 import { Injectable } from '@nestjs/common';
 import { BadRequestException, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../../database/prisma.service';
@@ -56,10 +61,13 @@ export class OrgBillingService {
     // same lookup rather than assuming a unique index exists.
     const [subscription, templatesUsed, projectsUsed, usersUsed, landingPagesUsed, landingPagesCreateUsed] =
       await Promise.all([
-        this.prisma.subscription.findFirst({
-          where: { orgId, status: { not: 'cancelled' } },
-          include: { plan: true },
-        }),
+        // `plan` is the org's version of its plan (limits, features, price).
+        this.prisma.subscription
+          .findFirst({
+            where: { orgId, status: { not: 'cancelled' } },
+            include: SUB_PLAN_INCLUDE,
+          })
+          .then(withEffectivePlan),
         this.prisma.organisationTemplate.count({ where: { orgId } }),
         countOrgProjects(this.prisma, orgId),
         countBillableOrgUsers(this.prisma, orgId),
@@ -218,10 +226,12 @@ export class OrgBillingService {
       where: { orgId, status: { not: 'cancelled' } },
     });
 
+    const planVersionId = await latestPlanVersionId(this.prisma, plan.id);
     let subscription: any;
     if (existing) {
       const data: Record<string, unknown> = {
         planId: plan.id,
+        planVersionId,
         billingCycle: billingCycle as any,
         amount,
         mrr,
@@ -251,6 +261,7 @@ export class OrgBillingService {
         data: {
           orgId,
           planId: plan.id,
+          planVersionId,
           billingCycle: billingCycle as any,
           status: 'active',
           amount,

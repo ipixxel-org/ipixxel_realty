@@ -4,6 +4,7 @@ import { orgBillingRecipientsWhere } from './notification-recipients.util';
 import { applyRetention, whatStaysFor } from './retention.util';
 import { billingNow } from './billing-clock.util';
 import { closeScheduledChange } from './scheduled-change.util';
+import { effectivePlan, ensureLatestPlanVersion } from './plan-version.util';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 const CYCLE_DAYS = { monthly: 30, yearly: 365 } as const;
@@ -69,6 +70,12 @@ export interface ApplyPlanChangeInput {
    * a request approved after the org fell back to Basic — from the payment date).
    */
   periodStart?: Date | null;
+  /**
+   * The plan version that was quoted (the checkout's); the org gets that
+   * version's price, limits and features even if the plan was edited
+   * meanwhile. Default: the plan's latest version.
+   */
+  planVersionId?: string | null;
   now?: Date;
 }
 
@@ -107,8 +114,18 @@ export async function applyPlanChange(
     }
   }
 
+  // The version the org gets: the one quoted, else the latest.
+  const quoted = input.planVersionId
+    ? await tx.planVersion?.findUnique({ where: { id: input.planVersionId } })
+    : null;
+  const version =
+    quoted && quoted.planId === plan.id
+      ? quoted
+      : await ensureLatestPlanVersion(tx, plan);
+  const held = effectivePlan(plan, version);
+
   const isYearly = input.toInterval === 'yearly';
-  const amount = isYearly ? plan.priceYearly : plan.priceMonthly;
+  const amount = isYearly ? held.priceYearly : held.priceMonthly;
   const mrr = isYearly ? Math.round(amount / 12) : amount;
   const freshRenewsAt = new Date(
     now.getTime() + CYCLE_DAYS[input.toInterval] * DAY_MS,
@@ -133,6 +150,7 @@ export async function applyPlanChange(
         where: { id: activeSub.id },
         data: {
           planId: plan.id,
+          planVersionId: version?.id ?? null,
           billingCycle: input.toInterval,
           status: 'active',
           amount,
@@ -153,6 +171,7 @@ export async function applyPlanChange(
         data: {
           orgId: input.organisationId,
           planId: plan.id,
+          planVersionId: version?.id ?? null,
           billingCycle: input.toInterval,
           status: 'active',
           amount,
@@ -169,12 +188,12 @@ export async function applyPlanChange(
     input.organisationId,
     { planId: plan.id, interval: input.toInterval },
     now,
-    () => whatStaysFor(tx, input.organisationId, plan, true, now),
+    () => whatStaysFor(tx, input.organisationId, held, true, now),
   );
 
   // "Choose what stays": a bigger plan brings paused things back; a smaller
   // one (a renewal onto a scheduled downgrade) pauses what doesn't fit.
-  await applyRetention(tx, input.organisationId, plan, now);
+  await applyRetention(tx, input.organisationId, held, now);
 
   await tx.auditLog.create({
     data: {
@@ -191,6 +210,7 @@ export async function applyPlanChange(
       metadata: {
         planId: plan.id,
         planName: plan.name,
+        planVersion: version?.version ?? null,
         billingCycle: input.toInterval,
         kind: input.kind,
         source: input.source,

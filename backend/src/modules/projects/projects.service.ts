@@ -1,4 +1,8 @@
 import {
+  SUB_PLAN_INCLUDE,
+  withEffectivePlan,
+} from '../../common/utils/plan-version.util';
+import {
   BadRequestException,
   ForbiddenException,
   Injectable,
@@ -161,10 +165,13 @@ export class ProjectsService {
 
     // Plan project quota — enforced only when the org has a subscription
     // (mirrors the template-quota behaviour). All projects count, any status.
-    const subscription = await this.prisma.subscription.findFirst({
-      where: { orgId, status: { not: 'cancelled' } },
-      include: { plan: true },
-    });
+    // The org's version of its plan, not the plan's latest.
+    const subscription = withEffectivePlan(
+      await this.prisma.subscription.findFirst({
+        where: { orgId, status: { not: 'cancelled' } },
+        include: SUB_PLAN_INCLUDE,
+      }),
+    );
     if (subscription) {
       const currentCount = await countOrgProjects(this.prisma, orgId);
       assertLimit(subscription.plan, 'projects', currentCount, 1);
@@ -580,10 +587,12 @@ export class ProjectsService {
     const source = await this.getOwnedProject(orgId, id, actor);
 
     // A duplicate is a new project, so it counts against the plan quota.
-    const subscription = await this.prisma.subscription.findFirst({
-      where: { orgId, status: { not: 'cancelled' } },
-      include: { plan: true },
-    });
+    const subscription = withEffectivePlan(
+      await this.prisma.subscription.findFirst({
+        where: { orgId, status: { not: 'cancelled' } },
+        include: SUB_PLAN_INCLUDE,
+      }),
+    );
     if (subscription) {
       const currentCount = await countOrgProjects(this.prisma, orgId);
       assertLimit(subscription.plan, 'projects', currentCount, 1);

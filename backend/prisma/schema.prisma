@@ -1063,8 +1063,34 @@ model Plan {
   targetPlanRequests  PackageChangeRequest[] @relation("TargetPlanRequests")
   checkoutsFrom       BillingCheckout[]      @relation("BillingCheckoutFromPlan")
   checkoutsTo         BillingCheckout[]      @relation("BillingCheckoutToPlan")
+  versions            PlanVersion[]
 
   @@map("plans")
+  @@schema("billing")
+}
+
+// Billing v2 plan versions: a snapshot of a plan's price, limits and features
+// (capabilities). Saving a change to any of them in Plans & Pricing creates
+// the next version; the plans row always holds the latest. An org keeps the
+// version it bought (subscriptions.plan_version_id) until its next renewal.
+model PlanVersion {
+  id           String   @id @default(uuid())
+  planId       String   @map("plan_id")
+  version      Int
+  priceMonthly Int      @map("price_monthly")
+  priceYearly  Int      @map("price_yearly")
+  limits       Json?
+  capabilities Json     @default("{}")
+  // Who saved the change; null for v1 made by the migration.
+  createdById  String?  @map("created_by_id")
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  plan          Plan              @relation(fields: [planId], references: [id], onDelete: Cascade)
+  subscriptions Subscription[]
+  checkouts     BillingCheckout[]
+
+  @@unique([planId, version])
+  @@map("plan_versions")
   @@schema("billing")
 }
 
@@ -1109,11 +1135,16 @@ model Subscription {
   movedToBasicAt     DateTime?     @map("moved_to_basic_at")
   previousPlanId     String?       @map("previous_plan_id")
   previousInterval   BillingCycle? @map("previous_interval")
+  // The plan version the org is on (price, limits, features); null = the
+  // plan's latest. Set on every purchase / plan change; renewal moves it to
+  // the latest. Ignored while BILLING_V2 is off.
+  planVersionId      String?       @map("plan_version_id")
   createdAt    DateTime           @default(now()) @map("created_at")
   updatedAt    DateTime           @updatedAt @map("updated_at")
 
   organisation Organisation @relation(fields: [orgId], references: [id], onDelete: Cascade)
   plan         Plan         @relation(fields: [planId], references: [id], onDelete: Restrict)
+  planVersion  PlanVersion? @relation(fields: [planVersionId], references: [id], onDelete: SetNull)
 
   @@index([orgId])
   @@index([planId])
@@ -1369,6 +1400,9 @@ model BillingCheckout {
   // Manual mode: the amounts before the Super Admin added a coupon to the
   // request (restored by Remove); null = no coupon added on the request.
   quoteBeforeCoupon      Json?                 @map("quote_before_coupon")
+  // The version of toPlan that was quoted; applied when it's paid / approved
+  // even if the plan was edited meanwhile. Null = latest.
+  planVersionId          String?               @map("plan_version_id")
   createdAt              DateTime              @default(now()) @map("created_at")
   updatedAt              DateTime              @updatedAt @map("updated_at")
 
@@ -1379,6 +1413,7 @@ model BillingCheckout {
   packageChangeRequest PackageChangeRequest? @relation(fields: [packageChangeRequestId], references: [id], onDelete: SetNull)
   createdBy            User?                 @relation("BillingCheckoutCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
   coupon               Coupon?               @relation(fields: [couponId], references: [id], onDelete: Restrict)
+  planVersion          PlanVersion?          @relation(fields: [planVersionId], references: [id], onDelete: SetNull)
 
   @@index([organisationId, status])
   @@index([status])

@@ -1,4 +1,8 @@
 import { billingNow } from '../../common/utils/billing-clock.util';
+import {
+  SUB_PLAN_INCLUDE,
+  withEffectivePlan,
+} from '../../common/utils/plan-version.util';
 import { Injectable, NotFoundException, Optional } from '@nestjs/common';
 import type { Plan } from '@prisma/client';
 import { PrismaService } from '../../database/prisma.service';
@@ -158,7 +162,7 @@ export class AdminSubscriptionsService {
           state: true,
           subscriptions: {
             where: { status: { not: 'cancelled' } },
-            include: { plan: true },
+            include: SUB_PLAN_INCLUDE,
             take: 1,
           },
         },
@@ -185,7 +189,8 @@ export class AdminSubscriptionsService {
 
     const rows: SubscriptionRowV2[] = [];
     for (const o of orgs) {
-      const sub = o.subscriptions[0] ?? null;
+      // `plan` is the org's version of its plan (its limits and price).
+      const sub = withEffectivePlan(o.subscriptions[0] ?? null);
       const planRow: Plan | null = sub?.plan ?? free;
       if (!planRow) continue;
       const plan = toBillingPlan(planRow, rankOf(planRow));
