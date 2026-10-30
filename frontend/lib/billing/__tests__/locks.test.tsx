@@ -296,8 +296,8 @@ describe("price display", () => {
         </BillingEnvProvider>
       </ToastProvider>,
     );
-    expect(screen.getByRole("button", { name: "Pay now · ₹1,499 + GST" })).toBeInTheDocument();
-    expect(document.body.textContent).toContain(`Your ${growth.name} renewal (₹1,499 + GST) was due on`);
+    expect(screen.getByRole("link", { name: "Pay now · ₹1,499 + GST" })).toBeInTheDocument();
+    expect(document.body.textContent).toContain(`${growth.name} renewal overdue`);
     expect(screen.queryByText(/1,768\.82/)).toBeNull();
   });
 

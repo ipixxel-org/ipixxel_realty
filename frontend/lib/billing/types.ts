@@ -354,6 +354,12 @@ export interface BillingOverview {
   /** Date the org moves to Basic if still unpaid. */
   graceEndsAt: string | null;
   graceDays: number;
+  /**
+   * Extra grace days our team added (Super Admin "extend grace"); graceEndsAt
+   * already includes them. Total grace = graceDays + graceExtraDays. Absent on
+   * older payloads = 0.
+   */
+  graceExtraDays?: number;
   graceDay: number;
   graceDaysLeft: number;
   movedToBasicAt: string | null;

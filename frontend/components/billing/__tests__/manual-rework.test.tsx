@@ -239,11 +239,13 @@ describe("Settings → Billing → Requests: payment state", () => {
 /* ------------------------------------------------------ Org: manual mode */
 
 describe("org, manual mode", () => {
-  it("in the renewal window the banner and the overview offer Request renewal (to the renewal request)", async () => {
+  it("in the renewal window the banner and the overview offer Request renewal (to the Plans page)", async () => {
     await show(createMockBillingClient({ initial: manual({ situation: "renewal_3d", renewalMode: "manual" }) }), <BillingOverviewPanel showInvoices={false} />);
     const links = screen.getAllByRole("link", { name: /Request renewal/ });
     expect(links.length).toBeGreaterThanOrEqual(2); // banner + action row
-    for (const a of links) expect(a.getAttribute("href")).toContain("renew=1");
+    for (const a of links) expect(a.getAttribute("href")).toBe("/org/settings/billing/plans");
+    // The amount stays on the button.
+    for (const a of links) expect(a.textContent).toContain(" + GST");
     expect(screen.queryByRole("button", { name: /Pay now/ })).toBeNull();
   });
 

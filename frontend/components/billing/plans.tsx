@@ -7,6 +7,7 @@ import { formatINR, packagePriceText, yearlySaving } from "@/lib/billing/pricing
 import { isOverdue, planChangeRoute } from "@/lib/billing/direction";
 import { planChangeBlock } from "@/lib/billing/requests";
 import type { BillingInterval, BillingPlan } from "@/lib/billing/types";
+import { renewalOpen, RenewPlanButton } from "./banners";
 import { useBillingQuery, useOrgBilling } from "./context";
 import { BLink, countLabel, ErrorNote, Loading, PlanPrice, Section, planFeatureRows, useCheckoutLive } from "./ui";
 
@@ -63,6 +64,8 @@ export function PlansScreen({
   // checkout (the missed term continues; manual: a request); Basic moves the
   // org straight away.
   const overdue = isOverdue(overview);
+  // Renewal window, grace or expired: the current plan's button is Renew (manual: Request renewal).
+  const renewing = renewalOpen(overview);
   /** A plan action link — disabled, with the reason, while plan changes are blocked. */
   const go = (to: "checkout" | "downgrade", params: Record<string, string | undefined>, className: string, children: ReactNode) =>
     block ? (
@@ -77,6 +80,9 @@ export function PlansScreen({
       </BLink>
     );
   function action(p: BillingPlan) {
+    if (renewing && p.id === current.id && interval === overview!.interval) {
+      return <RenewPlanButton overview={overview!} style={{ width: "100%", justifyContent: "center" }} />;
+    }
     if (pending && pending.toPlan.id === p.id && pending.interval === interval) {
       return (
         <button type="button" className="btn btn-ghost" disabled style={{ width: "100%", justifyContent: "center" }} title="Waiting for approval by our team">
@@ -97,9 +103,6 @@ export function PlansScreen({
     const arrow = <Icon name={up ? "arrow-up" : "arrow-down"} size={15} data-icon={up ? "arrow-up" : "arrow-down"} />;
     const samePlan = p.id === current.id;
     if (overdue) {
-      if (samePlan && interval === overview!.interval) {
-        return go("checkout", { plan: p.id, interval, renew: "1" }, "btn btn-primary", <>{arrow} {live ? "Pay now" : "Request renewal"}</>);
-      }
       return go(route, p.isFree ? { plan: p.id } : { plan: p.id, interval }, p.rank > current.rank ? "btn btn-primary" : "btn btn-ghost", <>{arrow} Change plan</>);
     }
     // Same paid plan: monthly → yearly is an upgrade (credit for the unused month);
@@ -134,7 +137,7 @@ export function PlansScreen({
         {plans.map((p) => {
           const isCurrent = p.id === current.id;
           return (
-            <div key={p.id} className={`bl-plan-card${isCurrent ? " current" : ""}`}>
+            <div key={p.id} className={`bl-plan-card${isCurrent ? " current" : ""}`} data-testid={isCurrent ? "current-plan-card" : undefined}>
               {isCurrent ? <span className="bl-plan-flag">Current plan</span> : null}
               <h3>{p.name}</h3>
               <div className="bl-muted" style={{ minHeight: 34 }}>{p.tagline}</div>

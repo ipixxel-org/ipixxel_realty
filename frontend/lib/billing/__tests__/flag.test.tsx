@@ -219,8 +219,8 @@ describe("billing v2 flag", () => {
     await settle();
     expect(apiFetch).toHaveBeenCalledWith("/org/billing/v2", { cache: "no-store" });
     expect(screen.getByText("Your Growth plan has expired")).toBeInTheDocument();
-    // Manual mode: the renewal is a request (Request renewal → the renewal request screen).
-    expect(screen.getByRole("link", { name: /Request renewal/ })).toHaveAttribute("href", expect.stringContaining("renew=1"));
+    // Manual mode: the renewal is a request (Request renewal → the Plans page, then the renewal request).
+    expect(screen.getByRole("link", { name: /Request renewal/ })).toHaveAttribute("href", "/org/settings/billing/plans");
     expect(screen.queryByLabelText("composer")).toBeNull();
     expect(screen.getByText(/Team chat isn't included in Basic/)).toBeInTheDocument();
     expect(errors).toEqual([]);
@@ -336,7 +336,7 @@ describe("billing v2 flag", () => {
     expect(errors).toEqual([]);
   });
 
-  it("on, online mode: Pay now is live; with incomplete organisation details it opens the renewal checkout", async () => {
+  it("on, online mode: Pay now is live and opens the Plans page (no payment started)", async () => {
     backend.overview = overview({
       billingProfile: { legalName: "", addressLine1: "", addressLine2: null, city: "", state: "", pincode: "", country: "IN", gstin: null },
       billingDetailsMissing: ["legalName", "addressLine1", "city", "state", "pincode"],
@@ -358,11 +358,10 @@ describe("billing v2 flag", () => {
     );
     await settle();
     // The package price + GST (never the GST-inclusive ₹2,360).
-    const pay = screen.getAllByRole("button", { name: "Pay now · ₹2,000 + GST" })[0];
-    expect(pay).toBeEnabled();
+    const pay = screen.getAllByRole("link", { name: "Pay now · ₹2,000 + GST" })[0];
+    expect(pay).toHaveAttribute("href", "/org/settings/billing/plans");
     fireEvent.click(pay);
     await settle();
-    expect(push).toHaveBeenCalledWith("/org/settings/billing/checkout?plan=uuid-growth&interval=monthly&renew=1");
     expect(apiFetch.mock.calls.some(([p]) => p === "/org/billing/checkout")).toBe(false);
   });
 

@@ -281,6 +281,7 @@ export function deriveOverview(s: MockState, today: string): BillingOverview {
     dueDate: d.dueDate,
     graceEndsAt: d.graceEndsAt,
     graceDays: s.lifecycle.graceDays,
+    graceExtraDays: 0,
     graceDay: d.dueDate && inGrace ? daysBetween(d.dueDate, today) + 1 : 0,
     graceDaysLeft: d.graceEndsAt ? Math.max(0, daysBetween(today, d.graceEndsAt)) : 0,
     movedToBasicAt: d.movedToBasicAt,

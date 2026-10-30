@@ -107,6 +107,8 @@ export interface BillingOverviewV2 {
   dueDate: string | null;
   graceEndsAt: string | null;
   graceDays: number;
+  /** Extra grace days our team added on top of graceDays (0 = none); total = graceDays + graceExtraDays. */
+  graceExtraDays: number;
   graceDay: number;
   graceDaysLeft: number;
   movedToBasicAt: string | null;
