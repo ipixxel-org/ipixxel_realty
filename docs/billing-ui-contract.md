@@ -32,6 +32,7 @@ client is the reference behaviour (see `frontend/lib/billing/__tests__/mock-clie
 | Scheduled change blocks plan changes | `change_scheduled` refusal (checkout start, legacy request, `scheduleDowngrade`, `cancelPlan`); `BillingOverview.planChangeBlockedReason` / `planChangeBlockedMessage` | `common/utils/scheduled-change.util.ts` (`scheduledChangeBlock`), `billing-checkout.service.ts`, `billing-plan-change.service.ts`, `package-change-requests.service.ts`, `billing-overview.ts` (`planChangeBlock`); frontend `lib/billing/requests.ts` (`planChangeBlock`), `components/billing/banners.tsx` (`ScheduledChangeNote`), `plans.tsx`, `checkout.tsx`, `plan-changes.tsx` |
 | Manual mode: coupon on the request | Super Admin `PUT` / `DELETE /admin/package-change-requests/:id/coupon`; Mark as paid amount = the request total; `OrgPlanRequest.quote` / admin row `quote`; `SubscriptionDetail.paymentMode`; org-level offline payment / apply coupon refused in manual mode (`use_request`) | `package-change-requests.service.ts` (`applyCoupon` / `removeCoupon`), `request-coupon.ts`, `coupon-lookup.ts` (`findCouponFor`, shared with checkout), `coupon-settlement.ts`; migration `20261025090000_request_coupon` |
 | Online steps 1–4 (2026-10-29) | Grace rules, "choose what stays" at the checkout, online payments as rows, `payment_review` block, superseded checkouts, `resolveAdminCheckout`; `OrgPlanRequest.kind` `online_payment` / `online`, `CheckoutPreview.usageConflict` in both modes | `checkout-quote.ts`, `billing-checkout.service.ts` (`whatStaysProblem`, `adminResolve`), `billing-plan-change.service.ts`, `billing/online-rows.ts`, `billing-overview.ts`; frontend `lib/billing/direction.ts` (`isOverdue`), `lib/billing/requests.ts`, `components/billing/requests.tsx`, `admin/package-requests.tsx`, `admin/checkouts-review.tsx`; migrations `20261029090000_checkout_what_stays_choice`, `20261029100000_online_payment_rows` |
+| Plan versions (2026-10-30) | `previewAdminPlanSave`; `BillingPlan.version` / `versions` (admin list); `BillingOverview.planVersion` / `nextVersion`; `SubscriptionRow.planVersion` / `latestVersion` / `versionAppliesOn`; `CheckoutPreview` unchanged | `common/utils/plan-version.util.ts`, `common/utils/plan-version-change.util.ts`, `applyPlanVersionChanges` (sweep), `applyPlanChange` (`planVersionId`), `admin-billing.service.ts` (`previewPlanSave`); frontend `lib/billing/versions.ts`, `components/billing/{banners,overview}.tsx`, `admin/{plans-editor,subscriptions}.tsx`; migration `20261030090000_plan_versions` |
 | Fixes after testing (2) | one `plan_locked` error; list filters `viewOnly` / `offline` / `paused` / `needsReassign`; invoice email; `packagePriceText` | `common/utils/plan-lock.util.ts`, `billing-invoice-mailer.service.ts`, `lead-assignee.util.ts`; frontend `lib/plan-lock.ts`, `PlanLockBadge` (`components/billing/locked.tsx`); migration `20261016093000_billing_invoice_email` |
 
 Every function is real except `updatePaymentMethod`, which stays unimplemented on purpose: renewals are
@@ -733,6 +734,66 @@ in `docs/archive/online-mode-audit.md`.
   as it does for drafts. The public slug route still falls back to unpublished pages for pages
   unpublished by hand (existing behaviour); only billing-offline pages are excluded.
 
+### Plan versions (2026-10-30)
+
+Every change to a plan's **price (monthly or yearly), limits or features** in Plans & Pricing
+(either editor) creates the plan's next version. Name, description, colour, "popular" and the
+marketing bullet points don't. A save whose price, limits and features are unchanged creates no
+version. "Features" = the feature switches (team chat, Meta lead ads, publishing, premium
+templates, …) plus the Meta pages limit.
+
+- **Data:** `billing.plan_versions` (plan, version number, prices, `limits`, `capabilities`,
+  created by / at); `subscriptions.plan_version_id` and `billing_checkouts.plan_version_id`
+  (null = the plan's latest). The `plans` row always holds the latest version. The migration gives
+  every plan a v1 from its current values and points every subscription and checkout at it
+  (guarded, re-runnable).
+- **Flag:** versions are always recorded, but only applied with `BILLING_V2=true` on the server;
+  with it off every org follows the latest values, as before.
+- **What an org gets:** a new purchase, a change to another plan, a plan assigned by Super Admin,
+  buying again after Basic and a scheduled downgrade taking effect → the latest version. A
+  checkout or manual request keeps the version that was quoted (and its price) even if the plan is
+  edited before it's paid / approved.
+- **What's enforced:** every org read uses the org's version (`effectivePlan` /
+  `withEffectivePlan`): user / project / landing page / template limits, publishing, features,
+  the overview's `plan` and usage, `getAccessStatus`, choose what stays, Super Admin's org list.
+  An upgrade's credit uses the price of the org's version; the new plan its latest price. The
+  renewal is quoted and charged at the latest price (`BillingOverview.renewalAmount`).
+- **Renewal:** every renewal (online, manual approval, Super Admin offline renewal, legacy renew)
+  moves the org to the latest version. Renewing a deactivated plan is allowed, onto its latest
+  version. If limits go down, what doesn't fit is paused at renewal (their choice or the default
+  picks), like a downgrade.
+- **Notice (paid plans):** from the renewal window (`notifyDays` before) and in grace,
+  `BillingOverview.nextVersion` = `{ planName, fromVersion, toVersion, at, reason, price,
+  changes[], lower }` — `price` for the org's interval (null when unchanged), each `change` with
+  `text` ("3 users instead of 5", "no Team chat"). A price change on its own is shown too
+  ("Growth will be ₹2,500 + GST from 26 Nov 2026"). One in-app notification per version when
+  the window opens (type `subscription_expiring`). Not shown while a change to another plan or to
+  Basic is scheduled.
+- **Choose what stays for a lower version:** `getRetentionChoices` without a target returns the
+  org's own plan at the new limits, `locked: false`, `appliesOn` = the renewal date; saving stores
+  the choice and pauses nothing until the renewal. A manual-mode renewal request isn't refused
+  for being over the new limits.
+- **Basic** (no renewal): a new Basic version that isn't lower, or that the org fits, applies at
+  once (on save, and on every lifecycle sweep). An org over a lower version keeps its version for
+  **7 days** from when the version was made (`BASIC_NOTICE_DAYS`), is told once (banner +
+  notification, with Choose what stays), then moves with what doesn't fit paused and a "Basic has
+  changed" notification.
+- **Super Admin:**
+  - `GET /admin/billing/plans` adds `version` (newest) and `versions[]` `{ version, orgs }`:
+    organisations currently subscribed, per version (none recorded counts as the newest; older
+    versions listed only while someone is on them).
+  - `POST /admin/billing/plans/:id/preview` (body = the plan being saved) → `PlanSavePreview`
+    `{ planName, isFree, createsVersion, version, orgsOnPlan, basic }`. The edit form asks before a
+    save that creates a version: "This creates v4. 16 organisations stay on their current version
+    until their next renewal." Basic: "This creates Basic v3. 2 organisations on Basic are over
+    the new limits; they get 7 days' notice. The 5 organisations on Basic that fit move to it now."
+  - `PUT /admin/billing/plans/:id` accepts (and ignores) the read-only `version` / `versions`.
+  - `SubscriptionRow` / `SubscriptionDetail`: `planVersion`, `latestVersion`,
+    `versionAppliesOn` — shown as "Starter v2" and "v3 applies at renewal on 26 Nov 2026"
+    (Basic: "v3 applies on …").
+- **Org UI:** the current plan reads "Growth (v1)"; under it and on the banner, what the newer
+  version changes (price, each limit / feature) with Choose what stays when something goes down.
+
 ### Step 7 notes — invoices, payments, Super Admin tools
 
 - **Invoices** (`billing.invoices`): a GST tax invoice for every paid plan payment — issued in
@@ -839,8 +900,9 @@ page shows the paused message (`frontend/lib/billing/paused.ts`).
 
 | Method | Endpoint | Request | Response |
 |---|---|---|---|
-| `listAdminPlans()` | `GET /admin/billing/plans` | — | `BillingPlan[]` |
-| `saveAdminPlan(plan)` | `PUT /admin/billing/plans/:id` | `BillingPlan` | `BillingPlan` |
+| `listAdminPlans()` | `GET /admin/billing/plans` | — | `BillingPlan[]` (with `version` and `versions[]` per plan) |
+| `previewAdminPlanSave(plan)` | `POST /admin/billing/plans/:id/preview` | `BillingPlan` | `PlanSavePreview` (a new version? who it affects — the save confirm) |
+| `saveAdminPlan(plan)` | `PUT /admin/billing/plans/:id` | `BillingPlan` | `BillingPlan` (a price / limit / feature change creates the next version) |
 | `listCoupons()` | `GET /admin/billing/coupons` | — | `CouponRow[]` |
 | `getCoupon(code)` | `GET /admin/billing/coupons/:code` | — | `CouponDetail` |
 | `saveCoupon(req)` | `POST /admin/billing/coupons` (new) · `PUT /admin/billing/coupons/:code` | `SaveCouponRequest` | `CouponRow` |
