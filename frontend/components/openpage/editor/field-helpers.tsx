@@ -129,6 +129,7 @@ export const RE_PRICING_CARD_FIELDS: ItemFieldDef[] = [
   { key: "name", label: "Plan Name", kind: "text", placeholder: "e.g. 2 BHK" },
   { key: "price", label: "Price", kind: "text", placeholder: "e.g. ₹ 1.42 Cr*" },
   { key: "meta", label: "Note", kind: "text", placeholder: "e.g. 1,250 sq.ft." },
+  { key: "description", label: "Description (optional)", kind: "textarea", rows: 3, placeholder: "e.g. Size 1325 - 1350 Sq. Ft." },
   {
     key: "cta",
     label: "Button text (clear to hide the button)",

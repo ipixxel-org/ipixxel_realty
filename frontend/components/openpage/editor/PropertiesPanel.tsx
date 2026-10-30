@@ -57,7 +57,7 @@ interface FieldDef {
  * block's renderer uses for that part.
  */
 const ITEM_SUB_ELEMENTS: Partial<Record<string, Record<string, Array<{ key: string; label: string }>>>> = {
-  features: { items: [{ key: 'icon', label: 'Icon' }, { key: 'title', label: 'Title' }, { key: 'description', label: 'Description' }, { key: 'image', label: 'Image' }] },
+  features: { items: [{ key: 'icon', label: 'Icon' }, { key: 'bullet', label: 'Bullet' }, { key: 'title', label: 'Title' }, { key: 'description', label: 'Description' }, { key: 'image', label: 'Image' }] },
   faq: { items: [{ key: 'question', label: 'Question' }, { key: 'answer', label: 'Answer' }] },
   amenities: { items: [{ key: 'icon', label: 'Icon' }, { key: 'title', label: 'Title' }, { key: 'description', label: 'Description' }] },
   'project-banner': { stats: [{ key: 'value', label: 'Value' }, { key: 'label', label: 'Label' }] },
@@ -76,7 +76,7 @@ const ITEM_SUB_ELEMENTS: Partial<Record<string, Record<string, Array<{ key: stri
       { key: 'cta', label: 'Button' },
     ],
   },
-  're-pricing': { items: [{ key: 'name', label: 'Name' }, { key: 'price', label: 'Price' }, { key: 'meta', label: 'Note' }, { key: 'cta', label: 'Button' }] },
+  're-pricing': { items: [{ key: 'name', label: 'Name' }, { key: 'price', label: 'Price' }, { key: 'meta', label: 'Note' }, { key: 'description', label: 'Description' }, { key: 'cta', label: 'Button' }] },
   testimonials: { items: [{ key: 'quote', label: 'Quote' }, { key: 'name', label: 'Name' }, { key: 'role', label: 'Role' }, { key: 'avatar', label: 'Photo' }] },
   developer: { stats: [{ key: 'value', label: 'Value' }, { key: 'label', label: 'Label' }] },
   location: { items: [{ key: 'title', label: 'Title' }, { key: 'meta', label: 'Meta' }] },
@@ -217,6 +217,8 @@ const blockFields: Partial<Record<BlockType, { sections: { title: string; fields
         title: 'Style',
         fields: [
           { key: 'variant', label: 'Variant', type: 'select', options: ['grid', 'list', 'alternating'] },
+          // List template only. 'icons' keeps the icon boxes.
+          { key: 'bulletStyle', label: 'List bullets (list template)', type: 'select', options: ['icons', 'arrow', 'check', 'dot', 'number', 'pin', 'none'] },
         ],
       },
     ],
@@ -636,6 +638,8 @@ const blockFields: Partial<Record<BlockType, { sections: { title: string; fields
   location: {
       sections: [{ title: 'Layout', fields: [
         { key: 'variant', label: 'Template', type: 'select', options: ['split-map', 'list', 'map-only', 'cards', 'editorial'] },
+        // Bullet before each nearby place; the location pin by default.
+        { key: 'bulletStyle', label: 'Nearby bullet', type: 'select', options: ['pin', 'arrow', 'check', 'dot', 'number', 'none'] },
       ]}, { title: 'Content', fields: [
         { key: 'title', label: 'Title', type: 'text' },
         { key: 'subtitle', label: 'Subheading', type: 'text' },
@@ -644,7 +648,9 @@ const blockFields: Partial<Record<BlockType, { sections: { title: string; fields
         { key: 'embedUrl', label: 'Google Maps link (place link, embed code, address or lat,lng)', type: 'text' },
         { key: 'items', label: 'Nearby', type: 'array-items' },
         { key: 'anchor', label: 'Section ID (menu scroll)', type: 'text' },
-      ]}, { title: 'CTA Button', fields: ctaFields('cta', 'CTA', { textKey: 'ctaText', url: true }) }],
+      ]}, { title: 'CTA Button', fields: ctaFields('cta', 'CTA', { textKey: 'ctaText', url: true }) },
+      // Optional second button beside the first; empty text hides it.
+      { title: 'Second Button', fields: ctaFields('secondaryCta', 'Second button', { textKey: 'secondaryCtaText', url: true }) }],
     },
   'google-maps': {
     sections: [{ title: 'Layout', fields: [
@@ -1429,7 +1435,7 @@ function PropertyField({ field, block }: { field: FieldDef; block: BlockConfig }
           team: { members: { name: '', role: '', avatar: '' } },
           features: { items: { icon: '', title: '', description: '' } },
           'unit-config': { items: { type: '', config: '', area: '', price: '', image: '' } },
-          're-pricing': { items: { name: '', price: '', meta: '', cta: 'Enquire', url: '' } },
+          're-pricing': { items: { name: '', price: '', meta: '', description: '', cta: 'Enquire', url: '' } },
           pricing: { tiers: { name: '', price: '', period: '', description: '', features: [], cta: '', featured: false } },
           'icon-box': { items: {
             title: String(block.props.title ?? ''),

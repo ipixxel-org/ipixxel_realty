@@ -10,6 +10,7 @@ import { DynamicLeadForm } from "@/components/openpage/dynamic-lead-form";
 import { findFormById, loadFormLibrary } from "@/lib/openpage/forms-store";
 import { mergeFormLibraries } from "@/lib/openpage/resolve-form";
 import { isMediaSrc } from "@/lib/media";
+import { Bullet, isBulletStyle } from "../Bullet";
 import { useDevice } from "@/components/openpage/runtime/device";
 import { resolveBlockStyleForDevice } from "@/lib/openpage/block-style";
 
@@ -1490,18 +1491,39 @@ export function AmenitiesBlock({ block }: { block: BlockConfig }) {
             </El>
           ) : null}
           <div className="grid grid-cols-1 @sm:grid-cols-2 gap-4 content-start">
-            {rest.map((a) => (
-              <El key={itemPart("items", a)} block={block} id={itemPart("items", a)} className="rounded-2xl border border-border-default bg-bg-2 p-5">
-                <El block={block} id={subElementId(itemPart("items", a), "title")} as="h3" className="font-semibold mb-1">
-                  {a.title}
+            {rest.map((a) => {
+              const id = itemPart("items", a);
+              // Smaller cards show their own image (or uploaded icon) too;
+              // without either they look as before.
+              return (
+                <El key={id} block={block} id={id} className="rounded-2xl border border-border-default bg-bg-2 overflow-hidden">
+                  {a.image ? (
+                    <El block={block} id={subElementId(id, "image")} className="block aspect-[4/3] bg-bg-3">
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img src={a.image} alt={a.title} className="w-full h-full object-cover" />
+                    </El>
+                  ) : null}
+                  <div className="p-5">
+                    {!a.image && isMediaSrc(a.icon) ? (
+                      <El block={block} id={subElementId(id, "icon")} className="w-10 h-10 rounded-xl bg-green/10 flex items-center justify-center mb-3 overflow-hidden">
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img src={a.icon} alt="" className="w-6 h-6 object-contain" />
+                      </El>
+                    ) : null}
+                    {a.title ? (
+                      <El block={block} id={subElementId(id, "title")} as="h3" className="font-semibold mb-1">
+                        {a.title}
+                      </El>
+                    ) : null}
+                    {a.description ? (
+                      <El block={block} id={subElementId(id, "description")} as="p" className="text-text-2 text-sm">
+                        {a.description}
+                      </El>
+                    ) : null}
+                  </div>
                 </El>
-                {a.description ? (
-                  <El block={block} id={subElementId(itemPart("items", a), "description")} as="p" className="text-text-2 text-sm">
-                    {a.description}
-                  </El>
-                ) : null}
-              </El>
-            ))}
+              );
+            })}
           </div>
         </div>
         {exploreButton}
@@ -2010,7 +2032,7 @@ export function UnitConfigBlock({ block }: { block: BlockConfig }) {
 
 export function RePricingBlock({ block }: { block: BlockConfig }) {
   const p = block.props;
-  type PriceCard = { _id?: string; name: string; price: string; meta?: string; cta?: string; url?: string; priceColor?: string };
+  type PriceCard = { _id?: string; name: string; price: string; meta?: string; description?: string; cta?: string; url?: string; priceColor?: string };
   const cards = items<PriceCard>(p.items).map((c, i) => ({ ...c, id: itemPart("items", { _id: c._id || `idx_${i}` }) }));
   const variant = block.variant || (cards.length ? "cards" : "simple");
   const startingPrice = str(p.startingPrice).trim();
@@ -2078,7 +2100,14 @@ export function RePricingBlock({ block }: { block: BlockConfig }) {
                         {c.price}
                       </El>
                     </td>
-                    <El block={block} id={subElementId(c.id, "meta")} as="td" className="py-4 text-text-2">{c.meta || "—"}</El>
+                    <td className="py-4 text-text-2">
+                      <El block={block} id={subElementId(c.id, "meta")} as="span">{c.meta || (str(c.description).trim() ? "" : "—")}</El>
+                      {str(c.description).trim() ? (
+                        <El block={block} id={subElementId(c.id, "description")} as="span" className="block text-xs text-text-3 mt-1 whitespace-pre-line">
+                          {str(c.description).trim()}
+                        </El>
+                      ) : null}
+                    </td>
                   </El>
                 ))}
               </tbody>
@@ -2138,6 +2167,11 @@ export function RePricingBlock({ block }: { block: BlockConfig }) {
                   {c.price}
                 </El>
                 {c.meta ? <El block={block} id={subElementId(c.id, "meta")} as="p" className="text-text-3 text-xs mb-5">{c.meta}</El> : null}
+                {str(c.description).trim() ? (
+                  <El block={block} id={subElementId(c.id, "description")} as="p" className="text-text-2 text-sm leading-relaxed mb-5 whitespace-pre-line">
+                    {str(c.description).trim()}
+                  </El>
+                ) : null}
                 <CtaButton
                   block={block}
                   id={subElementId(c.id, "cta")}
@@ -2347,28 +2381,50 @@ export function LocationBlock({ block }: { block: BlockConfig }) {
       <MapFrame src={embed} title={str(p.title, "Google Maps")} />
     </El>
   );
+  // The section's buttons: the main CTA and an optional second button, side by
+  // side. Each has its own text, link and colours ("CTA Button" / "Second
+  // Button" in the inspector); either can be hidden by clearing its text.
+  const ctaText = str(p.ctaText).trim();
+  const secondText = str(p.secondaryCtaText).trim();
   const cta = (className = "") =>
-    str(p.ctaText).trim() ? (
-      <div className={className}>
-        <CtaButton
-          block={block}
-          id={part(block, "cta")}
-          prefix="cta"
-          label={str(p.ctaText)}
-          href={str(p.ctaUrl) || (embed.startsWith("http") ? embed : "#enquire")}
-          target={str(p.ctaTarget) || (str(p.ctaUrl) ? "" : embed.startsWith("http") ? "_blank" : "")}
-          className="px-6 py-3 rounded-lg bg-green text-black text-sm font-semibold hover:bg-green-dim"
-        />
+    ctaText || secondText ? (
+      <div className={`flex flex-wrap items-center gap-3 ${className}`}>
+        {ctaText ? (
+          <CtaButton
+            block={block}
+            id={part(block, "cta")}
+            prefix="cta"
+            label={ctaText}
+            href={str(p.ctaUrl) || (embed.startsWith("http") ? embed : "#enquire")}
+            target={str(p.ctaTarget) || (str(p.ctaUrl) ? "" : embed.startsWith("http") ? "_blank" : "")}
+            className="px-6 py-3 rounded-lg bg-green text-black text-sm font-semibold hover:bg-green-dim"
+          />
+        ) : null}
+        {secondText ? (
+          <CtaButton
+            block={block}
+            id={part(block, "secondaryCta")}
+            prefix="secondaryCta"
+            label={secondText}
+            href={str(p.secondaryCtaUrl) || "#enquire"}
+            target={str(p.secondaryCtaTarget)}
+            icon={null}
+            className="px-6 py-3 rounded-lg border border-border-default bg-bg-1 text-text-0 text-sm font-semibold hover:bg-bg-2"
+          />
+        ) : null}
       </div>
     ) : null;
+  // Bullet before each nearby place: the location pin by default, or the
+  // style chosen in "Bullet" (arrow, check, dot, number, none).
+  const bullet = isBulletStyle(p.bulletStyle) ? p.bulletStyle : "pin";
   const rows = (rowClass: string) =>
-    nearby.map((n) => {
+    nearby.map((n, i) => {
       const id = itemPart("items", n);
       const row = locationItem(n);
       return (
         <El key={id} block={block} id={id} className={rowClass}>
           <El block={block} id={subElementId(id, "title")} as="div" className={`flex items-center gap-2 text-sm font-medium min-w-0 ${tone.text}`}>
-            <MapPin size={14} className="text-green shrink-0" />
+            <Bullet style={bullet} index={i} />
             <span className="min-w-0">{row.title}</span>
           </El>
           <El block={block} id={subElementId(id, "meta")} as="div" className={`${tone.muted} text-sm shrink-0 text-right`}>
@@ -2409,12 +2465,16 @@ export function LocationBlock({ block }: { block: BlockConfig }) {
         {heading("Location Advantages")}
         {address("justify-center mb-8 -mt-4")}
         <div className="grid @md:grid-cols-2 @2xl:grid-cols-3 gap-4 max-w-5xl mx-auto mb-8">
-          {nearby.map((n) => {
+          {nearby.map((n, i) => {
             const id = itemPart("items", n);
             const row = locationItem(n);
             return (
               <El key={id} block={block} id={id} className={`rounded-2xl border ${tone.tile} p-5 text-center`}>
-                <MapPin size={18} className="text-green mx-auto mb-3" />
+                {bullet !== "none" ? (
+                  <span className="mb-3 flex justify-center">
+                    <Bullet style={bullet} index={i} size={18} />
+                  </span>
+                ) : null}
                 <El block={block} id={subElementId(id, "title")} as="div" className={`font-semibold mb-1 ${tone.text}`}>
                   {row.title}
                 </El>

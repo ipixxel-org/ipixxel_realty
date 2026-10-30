@@ -10,6 +10,7 @@ import { isMediaSrc } from '@/lib/media'
 import { listElementId, subElementId } from '@/lib/openpage/element-style'
 import { El } from '../El'
 import { CtaButton } from '../CtaButton'
+import { Bullet, isBulletStyle } from '../Bullet'
 
 interface FeatureItem {
   _id?: string
@@ -35,6 +36,8 @@ interface FeaturesProps {
   buttonText?: string
   ctaUrl?: string
   ctaTarget?: string
+  /** List template: 'icons' (default boxes) or a bullet style (arrow, check, …). */
+  bulletStyle?: string
 }
 
 function text(v: unknown): string {
@@ -159,6 +162,39 @@ function FeaturesGrid({ block, props }: { block: BlockConfig; props: FeaturesPro
 
 function FeaturesList({ block, props }: { block: BlockConfig; props: FeaturesProps }) {
   const hasImage = Boolean(text(props.image))
+  // A bullet style turns the cards into a compact bulleted list.
+  const bullet = isBulletStyle(props.bulletStyle) ? props.bulletStyle : null
+  if (bullet) {
+    return (
+      <section id={sectionId(props)} className="px-6 @md:px-10 py-16 @md:py-20">
+        <Header block={block} props={props} className="reveal-fade-up reveal-d1 text-center mb-10" />
+        <div className={hasImage ? 'max-w-6xl mx-auto grid @lg:grid-cols-2 gap-8 @lg:gap-12 items-center' : ''}>
+          <SectionImage block={block} props={props} className="rounded-[24px] overflow-hidden aspect-[4/3] bg-bg-3" />
+          <ul className={`${hasImage ? '' : 'max-w-2xl mx-auto '}space-y-3`}>
+            {(props.items || []).map((item, i) => {
+              const id = cardId(item, i)
+              return (
+                <El key={id} block={block} id={id} as="li" className="flex items-start gap-3">
+                  {bullet !== 'none' ? (
+                    <El block={block} id={subElementId(id, 'bullet')} as="span" className="mt-[3px] w-4 flex justify-center shrink-0">
+                      <Bullet style={bullet} index={i} />
+                    </El>
+                  ) : null}
+                  <span className="min-w-0">
+                    <El block={block} id={subElementId(id, 'title')} as="span" className="text-[13.5px] text-text-1 tracking-wide">{item.title}</El>
+                    {text(item.description) ? (
+                      <El block={block} id={subElementId(id, 'description')} as="span" className="block text-[12.5px] text-text-2 leading-relaxed mt-0.5">{item.description}</El>
+                    ) : null}
+                  </span>
+                </El>
+              )
+            })}
+          </ul>
+        </div>
+        <SectionCta block={block} props={props} />
+      </section>
+    )
+  }
   return (
     <section id={sectionId(props)} className="px-6 @md:px-10 py-16 @md:py-20">
       <Header block={block} props={props} className="reveal-fade-up reveal-d1 text-center mb-10" />
