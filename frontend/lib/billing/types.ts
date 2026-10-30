@@ -58,6 +58,50 @@ export interface PlanVersionCount {
   orgs: number;
 }
 
+/** One version in the Super Admin version history (GET /admin/billing/plans/:id/versions). */
+export interface PlanVersionDetail {
+  id: string;
+  version: number;
+  /** The plan's newest version. */
+  latest: boolean;
+  /** YYYY-MM-DD */
+  createdAt: string;
+  /** Who saved it; null for v1 made when versions started. */
+  createdBy: string | null;
+  priceMonthly: number;
+  priceYearly: number;
+  /** By limitRows key; null = unlimited. */
+  limits: Record<string, number | null>;
+  /** By featureRows key: on / off. */
+  features: Record<string, boolean>;
+  /** Organisations currently subscribed on this version. */
+  orgs: number;
+}
+
+export interface PlanVersionHistory {
+  planId: PlanId;
+  planName: string;
+  isFree: boolean;
+  limitRows: { key: string; label: string }[];
+  featureRows: { key: string; label: string }[];
+  /** Newest first. */
+  versions: PlanVersionDetail[];
+}
+
+/** An organisation on a version (GET …/versions/:versionId/orgs). */
+export interface PlanVersionOrg {
+  orgId: string;
+  orgName: string;
+  interval: BillingInterval;
+  /** YYYY-MM-DD it moves to the latest version (renewal; Basic: end of the notice); null = on the latest. */
+  movesOn: string | null;
+}
+
+export interface ListPlanVersionOrgsRequest extends PageRequest {
+  planId: PlanId;
+  versionId: string;
+}
+
 /** POST /admin/billing/plans/:id/preview — what saving a plan change would do. */
 export interface PlanSavePreview {
   planName: string;
@@ -841,6 +885,8 @@ export interface SubscriptionRow {
   graceExtraDays?: number;
   /** Plan versions: the org's version (null / absent = not recorded). */
   planVersion?: number | null;
+  /** That version's id ("View" opens its values). */
+  planVersionId?: string | null;
   /** The plan's newest version. */
   latestVersion?: number | null;
   /** YYYY-MM-DD the newer version applies (renewal, or end of Basic's notice); null = on the newest. */

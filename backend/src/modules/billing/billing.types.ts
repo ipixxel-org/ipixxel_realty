@@ -48,6 +48,46 @@ export interface BillingPlanV2 {
   versions?: { version: number; orgs: number }[];
 }
 
+/** One version in GET /admin/billing/plans/:id/versions. */
+export interface PlanVersionV2 {
+  id: string;
+  version: number;
+  /** The plan's newest version. */
+  latest: boolean;
+  /** YYYY-MM-DD */
+  createdAt: string;
+  /** Who saved it (name, else email); null for v1 made by the migration. */
+  createdBy: string | null;
+  priceMonthly: number;
+  priceYearly: number;
+  /** By HISTORY_LIMITS key; null = unlimited. */
+  limits: Record<string, number | null>;
+  /** By feature key: on / off. */
+  features: Record<string, boolean>;
+  /** Organisations currently subscribed on this version. */
+  orgs: number;
+}
+
+/** GET /admin/billing/plans/:id/versions — newest first. */
+export interface PlanVersionHistoryV2 {
+  planId: string;
+  planName: string;
+  isFree: boolean;
+  /** The rows, in order. */
+  limitRows: { key: string; label: string }[];
+  featureRows: { key: string; label: string }[];
+  versions: PlanVersionV2[];
+}
+
+/** GET /admin/billing/plans/:id/versions/:versionId/orgs — one organisation on a version. */
+export interface PlanVersionOrgV2 {
+  orgId: string;
+  orgName: string;
+  interval: BillingInterval;
+  /** YYYY-MM-DD it moves to the latest version (renewal; Basic: end of the notice); null = on the latest. */
+  movesOn: string | null;
+}
+
 /** POST /admin/billing/plans/:id/preview — what saving this change would do. */
 export interface PlanSavePreviewV2 {
   planName: string;

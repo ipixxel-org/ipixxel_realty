@@ -11,6 +11,7 @@ import { useBillingEnv, useBillingQuery } from "../context";
 import { BillingDialog, DialogActions } from "../dialog";
 import { BLink, Empty, ErrorNote, Kv, Loading, PAYMENT_STATUS_META, Section, STATUS_META } from "../ui";
 import { OrderIdCell, PaymentDocuments } from "./payment-cells";
+import { PlanVersionHistoryDialog } from "./plan-version-history";
 
 const ADMIN_STATUS_LABEL: Record<SubscriptionStatus, string> = {
   ...Object.fromEntries(Object.entries(STATUS_META).map(([k, v]) => [k, v.label])),
@@ -72,6 +73,33 @@ function NewerVersionNote({ row }: { row: SubscriptionRow }) {
       {note}
     </div>
   ) : null;
+}
+
+/** "View" next to "Starter v1": that version's prices, limits and features. */
+function ViewVersion({ row }: { row: SubscriptionRow }) {
+  const [open, setOpen] = useState(false);
+  if (!row.planVersionId) return null;
+  return (
+    <>
+      {" "}
+      <button
+        type="button"
+        data-testid="view-plan-version"
+        onClick={() => setOpen(true)}
+        style={{ background: "none", border: 0, padding: 0, color: "var(--brand)", cursor: "pointer", fontWeight: 600, fontSize: 12.5 }}
+      >
+        View
+      </button>
+      <PlanVersionHistoryDialog
+        open={open}
+        onClose={() => setOpen(false)}
+        planId={row.plan.id}
+        planName={row.plan.name}
+        onlyVersionId={row.planVersionId}
+        title={planWithVersion(row)}
+      />
+    </>
+  );
 }
 
 /** Extend grace: whole days, 1–60 per extension (the backend's ExtendGraceDto limit). */
@@ -508,6 +536,7 @@ export function SubscriptionDetailView({
           <Kv label="Plan">
             <span data-testid="summary-plan">{planWithVersion(d)}</span>
             {paid ? <span className="bl-muted" style={{ fontWeight: 500 }}> · {d.interval}</span> : null}
+            <ViewVersion row={d} />
             <NewerVersionNote row={d} />
           </Kv>
           <Kv label="Status">

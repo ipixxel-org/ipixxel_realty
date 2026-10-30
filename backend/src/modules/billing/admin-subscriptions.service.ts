@@ -91,6 +91,7 @@ export interface SubscriptionRowV2 {
   graceExtraDays: number;
   /** Plan versions: the org's version, the plan's newest, and when the newer one applies. */
   planVersion: number | null;
+  planVersionId: string | null;
   latestVersion: number | null;
   versionAppliesOn: string | null;
 }

@@ -13,6 +13,7 @@ import type { BillingPlan, PlanLimits, PlanModules, PlanSavePreview, PlanVersion
 import { useBillingEnv, useBillingQuery } from "../context";
 import { BillingDialog, DialogActions } from "../dialog";
 import { BLink, ErrorNote, Loading } from "../ui";
+import { PlanVersionHistoryDialog } from "./plan-version-history";
 
 /** Same keys as app/admin-console/subscriptions/subscriptions-shared.ts. */
 const SUBS_PATH = "/admin-console/subscriptions";
@@ -105,6 +106,7 @@ export function AdminPlansEditor({ canDelete = false }: { canDelete?: boolean })
   const { toast } = useToast();
   const { data, error, reload } = useBillingQuery((c) => c.listAdminPlans(), []);
   const [deleting, setDeleting] = useState<BillingPlan | null>(null);
+  const [history, setHistory] = useState<BillingPlan | null>(null);
   const [busy, setBusy] = useState(false);
   if (error) return <ErrorNote message={error} />;
   if (!data) return <Loading what="plans" />;
@@ -188,9 +190,15 @@ export function AdminPlansEditor({ canDelete = false }: { canDelete?: boolean })
                 ))}
               </div>
               {p.versions?.length ? (
-                <div data-testid="plan-version-counts" style={{ fontSize: 12, color: "#64748b", marginBottom: 12 }} title="Organisations on this plan, by the version they're on">
-                  {versionCountsText(p.versions)}
-                </div>
+                <button
+                  type="button"
+                  data-testid="plan-version-counts"
+                  onClick={() => setHistory(p)}
+                  title="Version history: each version's prices, limits and features, and the organisations on it"
+                  style={{ display: "block", fontSize: 12, color: "var(--brand, #4f46e5)", marginBottom: 12, background: "none", border: 0, padding: 0, cursor: "pointer", textAlign: "left", textDecoration: "underline" }}
+                >
+                  Version history · {versionCountsText(p.versions)}
+                </button>
               ) : null}
               <LimitWarnings warnings={warnings.filter((w) => w.planId === p.id)} />
             </div>
@@ -231,6 +239,7 @@ export function AdminPlansEditor({ canDelete = false }: { canDelete?: boolean })
           </div>
         ))}
       </div>
+      <PlanVersionHistoryDialog open={!!history} onClose={() => setHistory(null)} planId={history?.id ?? ""} planName={history?.name ?? ""} />
       <BillingDialog
         open={!!deleting}
         onClose={() => setDeleting(null)}

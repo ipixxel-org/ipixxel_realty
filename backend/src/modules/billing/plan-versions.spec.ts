@@ -20,6 +20,7 @@ import {
   versionChanges,
 } from '../../common/utils/plan-version-change.util';
 import { AdminBillingService } from './admin-billing.service';
+import { platformModuleForPath } from '../../common/utils/permissions.util';
 import { BillingRetentionService } from './billing-retention.service';
 import { resolveLimit } from '../../common/utils/plan-quota.util';
 import { OrgBillingV2Service } from './org-billing-v2.service';
@@ -745,6 +746,7 @@ describe('Super Admin: versions on plans and organisations', () => {
     });
     expect(orgPlanVersionInfo(sub, latest)).toEqual({
       planVersion: 1,
+      planVersionId: expect.any(String),
       latestVersion: 2,
       versionAppliesOn: t.row().renewsAt.toISOString().slice(0, 10),
     });
@@ -776,5 +778,125 @@ describe('Super Admin: versions on plans and organisations', () => {
     ).toBe(
       new Date(v2!.createdAt.getTime() + 7 * DAY).toISOString().slice(0, 10),
     );
+  });
+});
+
+/* --------------------------------------------- Version history (Super Admin) */
+
+describe('Super Admin: version history', () => {
+  const adminBilling = (db: any) =>
+    new AdminBillingService(db as never, {} as never, {} as never, {} as never);
+
+  /** Growth v1 (₹2,000, 5 users, team chat on) → v2 (₹2,500, 3 users, team chat off), saved by Asha. */
+  async function history() {
+    const t = setup({ planId: 'growth', amount: 2000 });
+    const v1 = await ensureLatestPlanVersion(
+      t.db,
+      t.planById('growth') as never,
+    );
+    t.row().planVersionId = v1!.id;
+    const plan = t.planById('growth')!;
+    Object.assign(plan, {
+      priceMonthly: 2500,
+      limits: { users: 3, landingPagesCreate: 4 },
+      capabilities: { teamChat: false },
+    });
+    await ensureLatestPlanVersion(t.db, plan as never, 'u-admin');
+    // A second org on the latest (no version recorded counts as the latest).
+    t.db.subscription.rows.push({
+      id: 'sub-2',
+      orgId: 'org-2',
+      planId: 'growth',
+      planVersionId: null,
+      status: 'active',
+      billingCycle: 'yearly',
+      renewsAt: new Date(Date.now() + 40 * DAY),
+    });
+    return t;
+  }
+
+  it('every version newest first: values, who made it, and orgs on it', async () => {
+    const t = await history();
+    const h = await adminBilling(t.db).planVersions('growth');
+    expect(h).toMatchObject({
+      planId: 'growth',
+      planName: 'Growth',
+      isFree: false,
+    });
+    expect(h.limitRows.map((r) => r.label)).toEqual([
+      'Users',
+      'Projects',
+      'Live landing pages',
+      'Created landing pages',
+      'Templates',
+      'Meta pages',
+    ]);
+    expect(h.featureRows.slice(0, 2).map((f) => f.label)).toEqual([
+      'Team chat',
+      'Meta lead ads',
+    ]);
+    const [v2, v1] = h.versions;
+    expect(v2).toMatchObject({
+      version: 2,
+      latest: true,
+      createdBy: 'Asha',
+      priceMonthly: 2500,
+      limits: { users: 3, landingPagesCreate: 4, projects: null },
+      features: { teamChat: false, metaLeadAds: true },
+      orgs: 1,
+    });
+    expect(v1).toMatchObject({
+      version: 1,
+      latest: false,
+      createdBy: null,
+      priceMonthly: 2000,
+      limits: { users: 5, landingPagesCreate: null },
+      features: { teamChat: true },
+      orgs: 1,
+    });
+  });
+
+  it('the orgs on a version: when they move to the latest (renewal); none for the latest', async () => {
+    const t = await history();
+    const service = adminBilling(t.db);
+    const h = await service.planVersions('growth');
+    const old = await service.planVersionOrgs('growth', h.versions[1].id);
+    expect(old).toMatchObject({ total: 1, page: 1 });
+    expect(old.data[0]).toMatchObject({
+      orgId: 'org-1',
+      interval: 'monthly',
+      movesOn: t.row().renewsAt.toISOString().slice(0, 10),
+    });
+    const latest = await service.planVersionOrgs('growth', h.versions[0].id);
+    expect(latest.data).toEqual([
+      expect.objectContaining({
+        orgId: 'org-2',
+        interval: 'yearly',
+        movesOn: null,
+      }),
+    ]);
+    // Paged.
+    const page2 = await service.planVersionOrgs('growth', h.versions[0].id, {
+      page: 2,
+      pageSize: 1,
+    });
+    expect(page2).toMatchObject({ data: [], total: 1, page: 2, pageSize: 1 });
+  });
+
+  it('a version of another plan is not found', async () => {
+    const t = await history();
+    const h = await adminBilling(t.db).planVersions('growth');
+    await expect(
+      adminBilling(t.db).planVersionOrgs('pro', h.versions[0].id),
+    ).rejects.toThrow('Version not found');
+  });
+
+  it('the paths are Plans & Pricing (admin_subscriptions)', () => {
+    expect(platformModuleForPath('/admin/billing/plans/growth/versions')).toBe(
+      'admin_subscriptions',
+    );
+    expect(
+      platformModuleForPath('/admin/billing/plans/growth/versions/v1/orgs'),
+    ).toBe('admin_subscriptions');
   });
 });

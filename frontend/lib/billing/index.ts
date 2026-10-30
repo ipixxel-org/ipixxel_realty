@@ -18,6 +18,9 @@ export const REAL_FUNCTIONS: Record<BillingFunction, boolean> = {
   listAdminPlans: true,
   // Plan versions: the save confirm (a new version? who it affects).
   previewAdminPlanSave: true,
+  // Plan versions: version history and the orgs on a version.
+  getPlanVersions: true,
+  listPlanVersionOrgs: true,
   saveAdminPlan: true,
   getLifecycleSettings: true,
   saveLifecycleSettings: true,

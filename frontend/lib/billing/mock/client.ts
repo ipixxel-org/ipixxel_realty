@@ -528,6 +528,50 @@ export function createMockBillingClient(opts: { initial?: Partial<MockState>; pe
     /* ------------------------------------------------------------ admin */
 
     listAdminPlans: () => ok([...get().plans].sort((a, b) => a.rank - b.rank)),
+    // The mock keeps no history: each plan is its own v1, with the mock orgs on it.
+    getPlanVersions(planId) {
+      const s = get();
+      const p = s.plans.find((x) => x.id === planId);
+      if (!p) return fail("Plan not found");
+      return ok({
+        planId: p.id,
+        planName: p.name,
+        isFree: p.isFree,
+        limitRows: [
+          { key: "users", label: "Users" },
+          { key: "projects", label: "Projects" },
+          { key: "landingPages", label: "Live landing pages" },
+          { key: "landingPagesCreate", label: "Created landing pages" },
+          { key: "templates", label: "Templates" },
+          { key: "metaPages", label: "Meta pages" },
+        ],
+        featureRows: [
+          { key: "teamChat", label: "Team chat" },
+          { key: "metaLeadAds", label: "Meta lead ads" },
+        ],
+        versions: [
+          {
+            id: `${p.id}-v1`,
+            version: 1,
+            latest: true,
+            createdAt: TODAY,
+            createdBy: null,
+            priceMonthly: p.priceMonthly,
+            priceYearly: p.priceYearly,
+            limits: { ...p.limits, landingPagesCreate: null, metaPages: p.modules.metaPages },
+            features: { teamChat: p.modules.teamChat, metaLeadAds: p.modules.metaLeadAds },
+            orgs: s.orgs.filter((o) => o.plan === p.id).length,
+          },
+        ],
+      });
+    },
+    listPlanVersionOrgs({ planId, page = 1, pageSize = 20 }) {
+      const rows = get()
+        .orgs.filter((o) => o.plan === planId)
+        .map((o) => ({ orgId: o.id, orgName: o.name, interval: o.cycle, movesOn: null }))
+        .sort((a, b) => a.orgName.localeCompare(b.orgName));
+      return ok({ data: rows.slice((page - 1) * pageSize, page * pageSize), total: rows.length, page, pageSize });
+    },
     previewAdminPlanSave(plan) {
       const s = get();
       const stored = s.plans.find((p) => p.id === plan.id);

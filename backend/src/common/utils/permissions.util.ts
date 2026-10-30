@@ -327,6 +327,8 @@ export const PLATFORM_ROUTE_MODULES: Array<{ prefix: string; module: string }> =
   { prefix: '/admin/billing/lifecycle', module: 'admin_settings' },
   { prefix: '/admin/billing/online-payments', module: 'admin_settings' },
   { prefix: '/admin/billing/company', module: 'admin_settings' },
+  // Plans & Pricing: plans, save preview, version history and the orgs on a version.
+  { prefix: '/admin/billing/plans', module: 'admin_subscriptions' },
   { prefix: '/admin/billing', module: 'admin_subscriptions' },
   { prefix: '/admin/email', module: 'admin_email' },
   { prefix: '/admin/notifications', module: 'admin_notifications' },

@@ -21,7 +21,10 @@ import {
 } from '../../common/utils/plan-version.util';
 import {
   BASIC_NOTICE_DAYS,
+  HISTORY_FEATURES,
+  HISTORY_LIMITS,
   versionChanges,
+  versionValues,
 } from '../../common/utils/plan-version-change.util';
 import { usageOverLimits } from '../../common/utils/plan-quota.util';
 import { PlatformConfigService } from '../platform-config/platform-config.service';
@@ -43,6 +46,8 @@ import type {
   LifecycleSettingsV2,
   OnlinePaymentsV2,
   PlanSavePreviewV2,
+  PlanVersionHistoryV2,
+  PlanVersionOrgV2,
   SellerSettingsV2,
 } from './billing.types';
 import type { SaveAdminPlanDto } from './dto/save-admin-plan.dto';
@@ -249,6 +254,143 @@ export class AdminBillingService {
           .filter((v) => v.version === latest.version || v.orgs > 0),
       };
     });
+  }
+
+  /**
+   * Version history of a plan, newest first: each version's prices, limits
+   * and feature switches, who made it and when, and how many organisations
+   * are on it now (none recorded counts as the newest).
+   */
+  async planVersions(id: string): Promise<PlanVersionHistoryV2> {
+    const plan = await this.prisma.plan.findUnique({ where: { id } });
+    if (!plan) throw new NotFoundException('Plan not found');
+    // A plan saved before versions existed gets its v1 now.
+    await ensureLatestPlanVersion(this.prisma, plan);
+    const [versions, subs] = await Promise.all([
+      this.prisma.planVersion.findMany({
+        where: { planId: id },
+        orderBy: { version: 'desc' },
+      }),
+      this.prisma.subscription.findMany({
+        where: { planId: id, status: { not: 'cancelled' } },
+        select: { planVersionId: true },
+      }),
+    ]);
+    const creatorIds = [
+      ...new Set(versions.map((v) => v.createdById).filter(Boolean)),
+    ] as string[];
+    const creators = new Map(
+      creatorIds.length
+        ? (
+            await this.prisma.user.findMany({
+              where: { id: { in: creatorIds } },
+              select: {
+                id: true,
+                firstName: true,
+                lastName: true,
+                email: true,
+              },
+            })
+          ).map((u) => [
+            u.id,
+            [u.firstName, u.lastName].filter(Boolean).join(' ') || u.email,
+          ])
+        : [],
+    );
+    const latestId = versions[0]?.id;
+    const known = new Set(versions.map((v) => v.id));
+    const orgsOn = (vid: string) =>
+      subs.filter(
+        (s) =>
+          s.planVersionId === vid ||
+          (vid === latestId &&
+            (!s.planVersionId || !known.has(s.planVersionId))),
+      ).length;
+    return {
+      planId: plan.id,
+      planName: plan.name,
+      isFree: isFreePlan(plan),
+      limitRows: HISTORY_LIMITS.map((l) => ({ key: l.key, label: l.label })),
+      featureRows: HISTORY_FEATURES,
+      versions: versions.map((v) => ({
+        id: v.id,
+        version: v.version,
+        latest: v.id === latestId,
+        createdAt: v.createdAt.toISOString().slice(0, 10),
+        createdBy: v.createdById ? (creators.get(v.createdById) ?? null) : null,
+        ...versionValues(v),
+        orgs: orgsOn(v.id),
+      })),
+    };
+  }
+
+  /**
+   * The organisations on one version (paged, by name), with when they move to
+   * the latest version: their renewal (Basic: the end of the 7 days' notice).
+   */
+  async planVersionOrgs(
+    id: string,
+    versionId: string,
+    q: { page?: number; pageSize?: number } = {},
+  ): Promise<{
+    data: PlanVersionOrgV2[];
+    total: number;
+    page: number;
+    pageSize: number;
+  }> {
+    const plan = await this.prisma.plan.findUnique({ where: { id } });
+    if (!plan) throw new NotFoundException('Plan not found');
+    const [version, latest] = await Promise.all([
+      this.prisma.planVersion.findFirst({
+        where: { id: versionId, planId: id },
+      }),
+      latestPlanVersion(this.prisma, id),
+    ]);
+    if (!version) throw new NotFoundException('Version not found');
+    const isLatest = version.id === latest?.id;
+    const subs = await this.prisma.subscription.findMany({
+      where: {
+        planId: id,
+        status: { not: 'cancelled' },
+        ...(isLatest
+          ? {
+              OR: [{ planVersionId: version.id }, { planVersionId: null }],
+            }
+          : { planVersionId: version.id }),
+      },
+      select: {
+        orgId: true,
+        billingCycle: true,
+        renewsAt: true,
+        organisation: { select: { name: true } },
+      },
+    });
+    const rows = subs
+      .map((s) => {
+        const moves = isLatest
+          ? null
+          : isFreePlan(plan)
+            ? new Date(
+                latest!.createdAt.getTime() +
+                  BASIC_NOTICE_DAYS * 24 * 60 * 60 * 1000,
+              )
+            : s.renewsAt;
+        return {
+          orgId: s.orgId,
+          orgName: s.organisation?.name ?? s.orgId,
+          interval: s.billingCycle,
+          movesOn: moves ? moves.toISOString().slice(0, 10) : null,
+        };
+      })
+      .sort((a, b) => a.orgName.localeCompare(b.orgName));
+    const pageSize = Math.min(Math.max(1, q.pageSize ?? 20), 100);
+    const page = Math.max(1, q.page ?? 1);
+    return {
+      data: rows.slice((page - 1) * pageSize, page * pageSize),
+      total: rows.length,
+      page,
+      pageSize,
+    };
   }
 
   /** What saving this change would do: a new version or not, and who it affects. */

@@ -236,6 +236,8 @@ export async function latestVersionsByPlan(db: {
 export interface OrgPlanVersionInfo {
   /** null = not recorded (treated as the latest). */
   planVersion: number | null;
+  /** That version's id (Super Admin "View" opens its values). */
+  planVersionId: string | null;
   latestVersion: number | null;
   /** YYYY-MM-DD the newer version applies (renewal, or the end of Basic's notice); null = on the latest. */
   versionAppliesOn: string | null;
@@ -260,6 +262,7 @@ export function orgPlanVersionInfo(
       : sub!.renewsAt;
   return {
     planVersion: mine?.version ?? newest?.version ?? null,
+    planVersionId: mine?.id ?? newest?.id ?? null,
     latestVersion: newest?.version ?? null,
     versionAppliesOn: appliesOn ? appliesOn.toISOString().slice(0, 10) : null,
   };
@@ -321,5 +324,38 @@ export function worseNotice(
         have > (c.to as number)
       );
     }),
+  };
+}
+
+/** The limits a version history shows, in order. null = unlimited. */
+export const HISTORY_LIMITS = [
+  { key: 'users', label: 'Users' },
+  { key: 'projects', label: 'Projects' },
+  { key: 'landingPages', label: 'Live landing pages' },
+  { key: 'landingPagesCreate', label: 'Created landing pages' },
+  { key: 'templates', label: 'Templates' },
+  { key: 'metaPages', label: 'Meta pages' },
+] as const;
+
+/** Every feature switch, in order: team chat, Meta lead ads, then the capability catalog. */
+export const HISTORY_FEATURES: { key: string; label: string }[] =
+  Object.entries(FEATURE_LABELS).map(([key, label]) => ({ key, label }));
+
+/** A version's values for the Super Admin history table. */
+export function versionValues(v: {
+  priceMonthly: number;
+  priceYearly: number;
+  limits: unknown;
+  capabilities: unknown;
+}) {
+  return {
+    priceMonthly: v.priceMonthly,
+    priceYearly: v.priceYearly,
+    limits: Object.fromEntries(
+      HISTORY_LIMITS.map((l) => [l.key, limitOf(v.limits, l.key)]),
+    ) as Record<(typeof HISTORY_LIMITS)[number]['key'], number | null>,
+    features: Object.fromEntries(
+      HISTORY_FEATURES.map((f) => [f.key, featureOn(v.capabilities, f.key)]),
+    ),
   };
 }
