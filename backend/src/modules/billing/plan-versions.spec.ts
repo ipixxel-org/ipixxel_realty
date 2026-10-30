@@ -510,27 +510,45 @@ describe('renewal moves to the latest version (paid plans)', () => {
     expect(paused.map((u: any) => u.id)).toEqual(['m1']);
   });
 
-  it('the org is told once, when the renewal window opens', async () => {
+  it('the org is told once, when the renewal window opens — what gets worse, no version number', async () => {
     const t = await renewalDue();
     await t.edit('growth', { priceMonthly: 2500, limits: { users: 3 } });
     await applyPlanVersionChanges(t.db as never, 'org-1');
     await applyPlanVersionChanges(t.db as never, 'org-1');
     const notes = t.db.notification.rows;
     expect(new Set(notes.map((n: any) => n.title)).size).toBe(1);
-    expect(notes[0].title).toMatch(
-      /^Growth changes at your renewal on .+ \(v2\)$/,
+    expect(notes[0].title).toBe('Growth: changes at your next renewal');
+    expect(notes[0].body).toMatch(
+      /^From your next renewal on .+, Growth includes 3 users \(you have 4\) and costs ₹2,500 \+ GST\. Choose what stays/,
     );
-    expect(notes[0].body).toContain('3 users instead of 5');
-    expect(notes[0].body).toContain('Growth will be ₹2,500 + GST (was ₹2,000)');
-    expect(notes[0].body).toContain('Choose what stays');
+    expect(`${notes[0].title} ${notes[0].body}`).not.toMatch(/\bv\d/);
   });
 
-  it('a price change on its own: "Growth will be ₹2,500 + GST (was ₹2,000) from <date>"', async () => {
+  it('a price rise on its own: "… Growth costs ₹2,500 + GST."', async () => {
     const t = await renewalDue();
     await t.edit('growth', { priceMonthly: 2500 });
     await applyPlanVersionChanges(t.db as never, 'org-1');
-    expect(t.db.notification.rows[0].title).toMatch(
-      /^Growth will be ₹2,500 \+ GST \(was ₹2,000\) from .+ \(v2\)$/,
+    expect(t.db.notification.rows[0].body).toMatch(
+      /^From your next renewal on .+, Growth costs ₹2,500 \+ GST\.$/,
+    );
+  });
+
+  it('no reminder when the new version is the same or better', async () => {
+    const t = await renewalDue();
+    await t.edit('growth', { priceMonthly: 1800, limits: { users: 8 } });
+    await applyPlanVersionChanges(t.db as never, 'org-1');
+    expect(t.db.notification.rows).toHaveLength(0);
+  });
+
+  it('in grace: "When you renew, …" (never a past date)', async () => {
+    const t = await renewalDue({
+      status: 'past_due',
+      renewsAt: new Date(Date.now() - 2 * DAY),
+    });
+    await t.edit('growth', { limits: { users: 3 } });
+    await applyPlanVersionChanges(t.db as never, 'org-1');
+    expect(t.db.notification.rows[0].body).toMatch(
+      /^When you renew, Growth includes 3 users \(you have 4\)\./,
     );
   });
 });
@@ -575,7 +593,10 @@ describe('Basic: a new version applies now, or after 7 days for orgs over it', (
     expect(new Set(t.db.notification.rows.map((n: any) => n.title)).size).toBe(
       1,
     );
-    expect(t.db.notification.rows[0].body).toContain('1 user instead of 2');
+    expect(t.db.notification.rows[0].body).toContain(
+      'Basic includes 1 user (you have 3)',
+    );
+    expect(t.db.notification.rows[0].title).not.toMatch(/\bv\d/);
     // Still on v1 limits meanwhile.
     const active = await getOrgActivePlan(t.db as never, 'org-1');
     expect(resolveLimit(active!.plan, 'users')).toBe(2);

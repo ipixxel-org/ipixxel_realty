@@ -264,3 +264,62 @@ export function orgPlanVersionInfo(
     versionAppliesOn: appliesOn ? appliesOn.toISOString().slice(0, 10) : null,
   };
 }
+
+/** "3 users", "1 live landing page". */
+const countText = (n: number, label: string) =>
+  `${n} ${n === 1 ? label.replace(/s$/, '') : label}`;
+
+const andList = (items: string[]) =>
+  items.length <= 1
+    ? (items[0] ?? '')
+    : `${items.slice(0, -1).join(', ')} and ${items[items.length - 1]}`;
+
+/**
+ * The org-facing notice for a newer version — only when it's worse for the
+ * org (a lower limit, a feature off, or a higher price for their interval),
+ * listing only what gets worse and never a version number:
+ *   "From your next renewal on 26 Nov 2026, Starter includes 3 users (you
+ *    have 5) and costs ₹1,199 + GST."
+ * During grace (or once the date has passed): "When you renew, …".
+ * Same rule and wording as the frontend's renewalChangeNotice.
+ */
+export function worseNotice(
+  up: UpcomingVersion,
+  usage: Partial<Record<string, number>>,
+  opts: { interval: string; overdue: boolean; dateLabel: (d: Date) => string },
+): { text: string; overLimit: boolean } | null {
+  const worse = up.changes.filter((c) => c.lower);
+  const items = worse.map((c) => {
+    if (c.kind === 'feature') return `no ${FEATURE_LABELS[c.key] ?? c.label}`;
+    const have = usage[c.key];
+    const was = have ?? c.from;
+    return `${countText(c.to as number, c.label)} (${have !== undefined ? 'you have' : 'now'} ${was === null ? 'unlimited' : String(was)})`;
+  });
+  const p = opts.interval === 'yearly' ? up.price?.yearly : up.price?.monthly;
+  const price =
+    p && p.to > p.from
+      ? `₹${p.to.toLocaleString('en-IN')} + GST${opts.interval === 'yearly' ? ' a year' : ''}`
+      : null;
+  if (!items.length && !price) return null;
+  const when =
+    up.reason === 'basic'
+      ? `From ${opts.dateLabel(up.at)}`
+      : opts.overdue
+        ? 'When you renew'
+        : `From your next renewal on ${opts.dateLabel(up.at)}`;
+  const what = items.length
+    ? `includes ${andList(items)}${price ? ` and costs ${price}` : ''}`
+    : `costs ${price}`;
+  return {
+    text: `${when}, ${up.planName} ${what}.`,
+    overLimit: worse.some((c) => {
+      const have = usage[c.key];
+      return (
+        c.kind === 'limit' &&
+        c.to !== null &&
+        have !== undefined &&
+        have > (c.to as number)
+      );
+    }),
+  };
+}

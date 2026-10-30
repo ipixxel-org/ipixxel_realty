@@ -6,7 +6,7 @@ import { useToast } from "@/components/ui/toast";
 import { formatDate, formatINR, packagePriceText, planPrice, renewalPriceNote, renewalPriceText, round2 } from "@/lib/billing/pricing";
 import { blockingRequest, pendingRequestText, planChangeBlock } from "@/lib/billing/requests";
 import { graceDayText, graceExtraDays } from "@/lib/billing/grace";
-import { nextVersionLine, nextVersionShort, nextVersionTitle } from "@/lib/billing/versions";
+import { renewalChangeNotice } from "@/lib/billing/versions";
 import type { BillingOverview, RetentionSummary } from "@/lib/billing/types";
 import { useBillingEnv, useOptionalOrgBilling } from "./context";
 import { BillingDialog, DialogActions } from "./dialog";
@@ -322,9 +322,10 @@ export function BillingBanner({ overview }: { overview: BillingOverview }) {
   const picks = o.retention ? <PicksSummary retention={o.retention} /> : undefined;
   const n = daysLeft(o);
   const chip = n > 0 ? <Countdown days={n} /> : undefined;
-  // Plan versions: what the plan's newer version changes (at renewal; Basic: after the notice).
-  const nv = o.nextVersion ?? null;
-  const chooseNewVersion = nv?.lower ? (
+  // The plan's next version, only when it's worse for them (never a version number).
+  const change = renewalChangeNotice(o);
+  const changeLine = change ? <span data-testid="banner-renewal-change"> {change.text}</span> : null;
+  const chooseNewVersion = change?.overLimit ? (
     <BLink to="chooseWhatStays" params={{ target: o.plan.id }} className="btn btn-ghost btn-sm">
       Choose what stays
     </BLink>
@@ -353,7 +354,7 @@ export function BillingBanner({ overview }: { overview: BillingOverview }) {
             <>
               Pay {renewalPriceText(o)} before then to keep everything running
               {o.downgradeTo ? ` — that's ${o.downgradeTo.name} (${o.downgradeInterval ?? o.interval}) from then on` : ""}.
-              {nv ? <span data-testid="banner-next-version"> {nextVersionLine(nv)}</span> : null}
+              {changeLine}
             </>
           }
           actions={
@@ -395,7 +396,7 @@ export function BillingBanner({ overview }: { overview: BillingOverview }) {
               <>
                 {graceDayText(o)}
                 {auto ? " — we'll try the charge again every day" : ""}. Everything keeps working until {formatDate(o.graceEndsAt!)}; after that you move to Basic.
-                {nv ? <span data-testid="banner-next-version"> Renewing moves you to the new {nv.planName}: {nextVersionShort(nv)}.</span> : null}
+                {changeLine}
               </>
             )
           }
@@ -532,16 +533,16 @@ export function BillingBanner({ overview }: { overview: BillingOverview }) {
     default:
       // Nothing else to say, but a newer version of the plan is coming:
       // Basic after a change (7 days' notice), or a plan in its renewal window.
-      return nv ? (
+      return change ? (
         <CompactBanner
-          state={`version-${nv.toVersion}`}
+          state="renewal-change"
           tone="amber"
           icon="calendar"
-          title={nextVersionTitle(nv)}
-          line={<span data-testid="banner-next-version">{nextVersionLine(nv)}</span>}
-          details={nv.lower ? picks : undefined}
+          title={change.title}
+          line={<span data-testid="banner-renewal-change">{change.text}</span>}
+          details={change.overLimit ? picks : undefined}
           actions={chooseNewVersion ?? undefined}
-          strip={nextVersionTitle(nv)}
+          strip={change.title}
         />
       ) : null;
   }
@@ -568,6 +569,8 @@ export function RenewalReminderPopup({ overview, alwaysOpen = false }: { overvie
     }
   };
   const plan = overview.paidPlan ?? overview.plan;
+  // Same rule and wording as the banner: only when the next renewal is worse for them.
+  const change = renewalChangeNotice(overview);
   const b = overview.renewalBreakdown;
   const price = b?.price ?? (overview.interval === "yearly" ? plan.priceYearly : plan.priceMonthly);
   const left = overview.daysLeftInPeriod;
@@ -583,7 +586,7 @@ export function RenewalReminderPopup({ overview, alwaysOpen = false }: { overvie
         open={show}
         onClose={dismiss}
         title={left > 0 ? `Your ${plan.name} plan renews in ${left} ${left === 1 ? "day" : "days"}` : `Your ${plan.name} plan renews today`}
-        description={`Renewal date: ${overview.periodEnd ? formatDate(overview.periodEnd) : ""}. ${manual ? "Send a renewal request so nothing is interrupted — our team confirms how to pay." : "Pay now so nothing is interrupted."}`}
+        description={`Renewal date: ${overview.periodEnd ? formatDate(overview.periodEnd) : ""}. ${manual ? "Send a renewal request so nothing is interrupted — our team confirms how to pay." : "Pay now so nothing is interrupted."}${change ? ` ${change.text}` : ""}`}
         footer={
           <DialogActions>
             <button type="button" className="btn btn-ghost btn-sm" onClick={dismiss}>

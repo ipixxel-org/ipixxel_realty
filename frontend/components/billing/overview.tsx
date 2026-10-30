@@ -3,7 +3,7 @@
 import { Icon } from "@/components/icons";
 import { formatDate, packagePriceText, planPrice } from "@/lib/billing/pricing";
 import { graceDayText, graceExtraDays } from "@/lib/billing/grace";
-import { nextVersionTitle, planNameWithVersion, versionPriceText } from "@/lib/billing/versions";
+import { renewalChangeNotice } from "@/lib/billing/versions";
 import type { BillingOverview } from "@/lib/billing/types";
 import { BillingBanner, renewalOpen, RenewalReminderPopup, RequestRenewalButton } from "./banners";
 
@@ -29,34 +29,29 @@ function planLine(o: BillingOverview): string {
   return `Renews on ${formatDate(o.periodEnd!)}${o.renewalMode === "auto" && o.autoRenewAvailable ? " automatically" : ""}`;
 }
 
-/** What the plan's newer version changes, under the current plan: price, then each limit / feature. */
-function NextVersionBlock({ overview: o }: { overview: BillingOverview }) {
-  const v = o.nextVersion!;
-  const price = versionPriceText(v);
+/**
+ * Under the current plan, only when the plan's next version is worse for the
+ * org (a lower limit, a feature off, a higher price): what gets worse, in one
+ * sentence — never a version number. "Choose what stays" when they're over a
+ * new limit.
+ */
+function RenewalChangeBlock({ overview: o }: { overview: BillingOverview }) {
+  const notice = renewalChangeNotice(o);
+  if (!notice) return null;
   return (
-    <div data-testid="next-version" style={{ marginTop: 12, padding: "12px 16px", borderRadius: 12, border: "1px solid var(--line-2)" }}>
+    <div data-testid="renewal-change" style={{ marginTop: 12, padding: "12px 16px", borderRadius: 12, border: "1px solid var(--line-2)" }}>
       <div className="bl-between" style={{ gap: 12, flexWrap: "wrap" }}>
         <div>
-          <b style={{ fontSize: 13.5 }}>{nextVersionTitle(v)}</b>
-          <div className="bl-muted" style={{ marginTop: 2 }}>
-            {v.reason === "basic" ? `${v.planName} v${v.toVersion} applies then.` : `Renewing moves you to ${v.planName} v${v.toVersion}.`}
-          </div>
+          <b style={{ fontSize: 13.5 }}>{notice.title}</b>
+          <div style={{ marginTop: 2, fontSize: 13 }}>{notice.text}</div>
         </div>
-        {v.lower ? (
+        {notice.overLimit ? (
           <BLink to="chooseWhatStays" params={{ target: o.plan.id }} className="btn btn-ghost btn-sm">
             Choose what stays
           </BLink>
         ) : null}
       </div>
-      <ul style={{ margin: "8px 0 0", paddingLeft: 18, fontSize: 13 }}>
-        {price ? <li>Price: {price}</li> : null}
-        {v.changes.map((c) => (
-          <li key={c.key} style={c.lower ? { color: "var(--amber)" } : undefined}>
-            {c.text[0].toUpperCase() + c.text.slice(1)}
-          </li>
-        ))}
-      </ul>
-      {v.lower ? <div className="bl-muted bl-small" style={{ marginTop: 6 }}>What doesn&apos;t fit is paused then — your choice, or the default picks. Nothing is deleted.</div> : null}
+      {notice.overLimit ? <div className="bl-muted bl-small" style={{ marginTop: 6 }}>What doesn&apos;t fit is paused then — your choice, or the default picks. Nothing is deleted.</div> : null}
     </div>
   );
 }
@@ -73,7 +68,7 @@ export function CurrentPlanCard({ overview: o }: { overview: BillingOverview }) 
           <div>
             <div className="bl-row" style={{ gap: 8 }}>
               <h3 style={{ margin: 0, fontSize: 17, fontWeight: 700 }} data-testid="current-plan-name">
-                {planNameWithVersion(o)}
+                {o.plan.name}
               </h3>
               <StatusBadge status={o.status} />
             </div>
@@ -91,7 +86,7 @@ export function CurrentPlanCard({ overview: o }: { overview: BillingOverview }) 
           {o.downgradeTo ? <Kv label="From">{`${o.downgradeTo.name} on ${formatDate(o.downgradeAt!)}`}</Kv> : null}
         </div>
       </div>
-      {o.nextVersion ? <NextVersionBlock overview={o} /> : null}
+      <RenewalChangeBlock overview={o} />
     </Section>
   );
 }

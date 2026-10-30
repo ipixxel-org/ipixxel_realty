@@ -2,7 +2,10 @@ import { BadRequestException, ForbiddenException } from '@nestjs/common';
 import type { NotificationType, Subscription, PrismaClient } from '@prisma/client';
 import {
   assertLimit,
+  countBillableOrgUsers,
   countOrgLandingPages,
+  countOrgProjects,
+  countOrgTemplates,
   resolveLimit,
   usageOverLimits,
 } from './plan-quota.util';
@@ -25,6 +28,7 @@ import {
 import {
   describeChange,
   upcomingVersion,
+  worseNotice,
   type UpcomingVersion,
 } from './plan-version-change.util';
 
@@ -418,19 +422,20 @@ export async function applyOrgSubscriptionLifecycle(
   return summary;
 }
 
-const inr = (rupees: number) => `₹${rupees.toLocaleString('en-IN')}`;
-
 /** "3 users instead of 5, no Team chat" — what a newer version changes. */
 function changesText(up: UpcomingVersion): string {
   return up.changes.map(describeChange).join(', ');
 }
 
-/** "Starter will be ₹1,199 + GST (was ₹999)" for the org's billing interval. */
-function priceText(up: UpcomingVersion, interval: string): string | null {
-  const p = interval === 'yearly' ? up.price?.yearly : up.price?.monthly;
-  return p
-    ? `${up.planName} will be ${inr(p.to)} + GST${interval === 'yearly' ? ' a year' : ''} (was ${inr(p.from)})`
-    : null;
+/** The org's usage, for "3 users (you have 5)". */
+async function orgUsage(prisma: PrismaLike, orgId: string) {
+  const [users, projects, landingPages, templates] = await Promise.all([
+    countBillableOrgUsers(prisma, orgId),
+    countOrgProjects(prisma, orgId),
+    countOrgLandingPages(prisma, orgId),
+    countOrgTemplates(prisma, orgId),
+  ]);
+  return { users, projects, landingPages, templates };
 }
 
 const WHAT_STAYS_HINT =
@@ -443,7 +448,8 @@ const WHAT_STAYS_HINT =
  *   made (what doesn't fit is paused: their choice or the default picks) and
  *   until then the org is told once.
  * - Paid plans move at renewal (applyPlanChange); from the renewal window the
- *   org is told once what changes (price, limits, features).
+ *   org is told once — only when the new version is worse for them (a lower
+ *   limit, a feature off, a higher price), never with a version number.
  */
 export async function applyPlanVersionChanges(
   prisma: PrismaLike,
@@ -505,37 +511,43 @@ export async function applyPlanVersionChanges(
         }
         continue;
       }
+      const basic = worseNotice(up, await orgUsage(prisma, sub.orgId), {
+        interval: sub.billingCycle,
+        overdue: false,
+        dateLabel: dayLabel,
+      });
       if (
-        await notifyOnce(
+        basic &&
+        (await notifyOnce(
           prisma,
           sub,
           'subscription_expiring',
           `${up.planName} changes on ${dayLabel(up.at)}`,
-          `From ${dayLabel(up.at)}, ${up.planName} has ${changesText(up)}. ${WHAT_STAYS_HINT}`,
-        )
+          `${basic.text} ${WHAT_STAYS_HINT}`,
+          true,
+        ))
       )
         out.notified++;
       continue;
     }
-    // A paid plan: told once per version, from the renewal window.
-    const price = priceText(up, sub.billingCycle);
-    const title = up.changes.length
-      ? `${up.planName} changes at your renewal on ${dayLabel(up.at)}`
-      : `${price} from ${dayLabel(up.at)}`;
-    const parts = [
-      up.changes.length
-        ? `From your renewal, ${up.planName} has ${changesText(up)}.`
-        : null,
-      up.changes.length && price ? `${price}.` : null,
-      up.lower ? WHAT_STAYS_HINT : null,
-    ].filter(Boolean);
+    // A paid plan: told once, from the renewal window, only when it's worse.
+    const notice = worseNotice(up, await orgUsage(prisma, sub.orgId), {
+      interval: sub.billingCycle,
+      overdue:
+        sub.status === 'past_due' ||
+        sub.status === 'expired' ||
+        up.at.getTime() <= now.getTime(),
+      dateLabel: dayLabel,
+    });
+    if (!notice) continue;
     if (
       await notifyOnce(
         prisma,
         sub,
         'subscription_expiring',
-        `${title} (v${up.toVersion})`,
-        parts.length ? parts.join(' ') : `${price}.`,
+        `${up.planName}: changes at your next renewal`,
+        notice.overLimit ? `${notice.text} ${WHAT_STAYS_HINT}` : notice.text,
+        true,
       )
     )
       out.notified++;
@@ -562,9 +574,17 @@ async function notifyOnce(
   type: NotificationType,
   title: string,
   body: string,
+  // Plan version notices: once per wording (a later, different change is new).
+  matchBody = false,
 ): Promise<boolean> {
   const existing = await prisma.notification.count({
-    where: { orgId: sub.orgId, type, entityId: sub.id, title },
+    where: {
+      orgId: sub.orgId,
+      type,
+      entityId: sub.id,
+      title,
+      ...(matchBody ? { body } : {}),
+    },
   });
   if (existing > 0) return false;
   const recipients = await prisma.user.findMany({

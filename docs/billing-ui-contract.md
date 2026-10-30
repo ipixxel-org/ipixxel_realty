@@ -765,10 +765,11 @@ templates, …) plus the Meta pages limit.
 - **Notice (paid plans):** from the renewal window (`notifyDays` before) and in grace,
   `BillingOverview.nextVersion` = `{ planName, fromVersion, toVersion, at, reason, price,
   changes[], lower }` — `price` for the org's interval (null when unchanged), each `change` with
-  `text` ("3 users instead of 5", "no Team chat"). A price change on its own is shown too
-  ("Growth will be ₹2,500 + GST from 26 Nov 2026"). One in-app notification per version when
-  the window opens (type `subscription_expiring`). Not shown while a change to another plan or to
-  Basic is scheduled.
+  `text` ("3 users instead of 5", "no Team chat"). The org sees it **only when the new
+  version is worse for them** (a lower limit, a feature off, or a higher price for their
+  interval), listing only what gets worse — see "Org UI". One in-app notification (type
+  `subscription_expiring`) with the same rule and wording when the window opens. Not shown while
+  a change to another plan or to Basic is scheduled.
 - **Choose what stays for a lower version:** `getRetentionChoices` without a target returns the
   org's own plan at the new limits, `locked: false`, `appliesOn` = the renewal date; saving stores
   the choice and pauses nothing until the renewal. A manual-mode renewal request isn't refused
@@ -791,8 +792,15 @@ templates, …) plus the Meta pages limit.
   - `SubscriptionRow` / `SubscriptionDetail`: `planVersion`, `latestVersion`,
     `versionAppliesOn` — shown as "Starter v2" and "v3 applies at renewal on 26 Nov 2026"
     (Basic: "v3 applies on …").
-- **Org UI:** the current plan reads "Growth (v1)"; under it and on the banner, what the newer
-  version changes (price, each limit / feature) with Choose what stays when something goes down.
+- **Org UI:** organisations never see version numbers — only the plan name (Billing, plan cards,
+  checkout, Requests, banners, notifications, invoices). When the next version is worse, the
+  current-plan card, the renewal banner and the renewal popup show one sentence
+  (`renewalChangeNotice` in `frontend/lib/billing/versions.ts`; the backend twin is
+  `worseNotice` in `plan-version-change.util.ts`): "From your next renewal on 26 Nov 2026,
+  Starter includes 3 users (you have 5) and costs ₹1,199 + GST." During grace (or once the date
+  has passed): "When you renew, …". Basic: "From 6 Nov 2026, Basic includes …". "Choose what
+  stays" only when they're over a new limit. Nothing is shown when the new version is the same or
+  better.
 
 ### Step 7 notes — invoices, payments, Super Admin tools
 
