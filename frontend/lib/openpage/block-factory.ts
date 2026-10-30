@@ -11,6 +11,18 @@ export interface DragItemPayload {
 }
 
 export function createBlockFromType(type: BlockType): BlockConfig | null {
+  // "Section" is a Blocks panel tile, not a stored type: it is always a
+  // single full-width column, whatever Container's defaults become.
+  if (type === "section") {
+    const container = createBlockFromType("columns");
+    if (!container) return null;
+    return {
+      ...container,
+      id: `block-section-${Date.now().toString(36)}`,
+      variant: "1-col",
+      props: { ...container.props, columns: [{ width: 100, blocks: [] }] },
+    };
+  }
   const meta = blockMetadata.find((b) => b.type === type);
   let props = meta?.defaultProps
     ? JSON.parse(JSON.stringify(meta.defaultProps))

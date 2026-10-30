@@ -1,6 +1,8 @@
 import type { FormDefinition } from "@/lib/openpage/forms-store";
 
 export type GenericBlockType =
+  /** Blocks panel tile only; created as a one-column `columns` block, never stored. */
+  | "section"
   | "navbar"
   | "hero"
   | "features"

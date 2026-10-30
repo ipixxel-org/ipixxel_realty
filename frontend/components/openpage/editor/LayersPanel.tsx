@@ -10,7 +10,7 @@ import {
   Building2, MapPin, Home, Trees, FileText, Download, Mail, Save, Layers,
   ChevronDown, ChevronRight, Type, Box, Code2,
   LayoutTemplate, Blocks, Globe, PanelLeftClose, X, ClipboardList,
-  Sparkles,
+  Sparkles, Square,
 } from "lucide-react";
 import {
   DndContext,
@@ -37,11 +37,13 @@ import {
   createBlockFromPreset,
   type SectionPresetCategory,
 } from "@/lib/openpage/section-presets";
+import { createBlockFromType } from "@/lib/openpage/block-factory";
 import type { BlockType, BlockConfig } from "@/components/openpage/blocks/types";
 import { EMPTY_GLOBAL_WIDGETS } from "./AdvancedPanel";
 import { FormBuilder } from "./FormBuilder";
 
 const blockIcons: Partial<Record<BlockType, typeof Layout>> = {
+  section: Square,
   navbar: Layout,
   footer: PanelBottom,
   "project-banner": Home,
@@ -100,7 +102,7 @@ export const PICKER_GROUPS: { id: string; title: string; defaultOpen: boolean; t
     title: "Layout",
     defaultOpen: false,
     // Container / Spacer / Divider live in Core.
-    types: ["banner"],
+    types: ["section", "banner"],
   },
   {
     id: "content",
@@ -137,6 +139,7 @@ export const PICKER_GROUPS: { id: string; title: string; defaultOpen: boolean; t
 ]
 
 const GRID_LABELS: Partial<Record<BlockType, string>> = {
+  section: "Section",
   columns: "Container",
   heading: "Heading",
   text: "Text Editor",
@@ -204,6 +207,7 @@ const blockLabels: Partial<Record<BlockType, string>> = {
 // Per-widget accent colors used for the sidebar icons + chips. Kept as raw
 // hex so the soft alpha backgrounds can be derived inline (e.g. color+"14").
 const WIDGET_COLORS: Partial<Record<BlockType, string>> = {
+  section: "#38bdf8",
   columns: "#38bdf8",
   navbar: "#38bdf8",
   footer: "#38bdf8",
@@ -670,13 +674,10 @@ export function LayersPanel() {
 
   function handleAddBlock(type: BlockType) {
     const meta = blockMetadata.find((b) => b.type === type)
-    if (!meta) return
-    const block: BlockConfig = {
-      id: `block-${Date.now()}`,
-      type,
-      variant: meta.variants[0],
-      props: { ...meta.defaultProps },
-    }
+    // Same factory as drag-and-drop: deep-copied defaults and one-column
+    // containers, so a click and a drag create identical blocks.
+    const block = createBlockFromType(type)
+    if (!meta || !block) return
     addBlock(block)
     selectBlock(block.id)
     toast(`${meta.label} added`)
@@ -840,13 +841,10 @@ function ComponentsPanel() {
 
   function handleAdd(type: BlockType) {
     const meta = blockMetadata.find((b) => b.type === type)
-    if (!meta) return
-    const block: BlockConfig = {
-      id: `block-${Date.now()}`,
-      type,
-      variant: meta.variants[0],
-      props: { ...meta.defaultProps },
-    }
+    // Same factory as drag-and-drop: deep-copied defaults and one-column
+    // containers, so a click and a drag create identical blocks.
+    const block = createBlockFromType(type)
+    if (!meta || !block) return
     addBlock(block)
     selectBlock(block.id)
     toast(`${meta.label} added`)
