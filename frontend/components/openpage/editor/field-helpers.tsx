@@ -129,6 +129,7 @@ export const RE_PRICING_CARD_FIELDS: ItemFieldDef[] = [
   { key: "name", label: "Plan Name", kind: "text", placeholder: "e.g. 2 BHK" },
   { key: "price", label: "Price", kind: "text", placeholder: "e.g. ₹ 1.42 Cr*" },
   { key: "meta", label: "Note", kind: "text", placeholder: "e.g. 1,250 sq.ft." },
+  { key: "description", label: "Description (optional)", kind: "textarea", rows: 3, placeholder: "e.g. Size 1325 - 1350 Sq. Ft." },
   {
     key: "cta",
     label: "Button text (clear to hide the button)",
@@ -146,6 +147,28 @@ export const RE_PRICING_CARD_FIELDS: ItemFieldDef[] = [
   },
   { key: "url", label: "Button URL", kind: "text", placeholder: "https://… or #enquire" },
   { key: "priceColor", label: "Price color (this card)", kind: "color" },
+];
+
+export const FEATURE_FIELDS: ItemFieldDef[] = [
+  { key: "icon", label: "Icon", kind: "icon" },
+  { key: "title", label: "Title", kind: "text" },
+  { key: "description", label: "Description", kind: "textarea", rows: 3 },
+  { key: "image", label: "Image (alternating template)", kind: "image" },
+  { key: "label", label: "Small label (optional)", kind: "text" },
+  { key: "tags", label: "Tags (optional)", kind: "array-strings" },
+];
+
+export const OVERVIEW_HIGHLIGHT_FIELDS: ItemFieldDef[] = [
+  { key: "title", label: "Highlight", kind: "text", placeholder: "e.g. 4-Side Ventilated Homes" },
+  { key: "description", label: "Description (optional)", kind: "textarea", rows: 2 },
+  // Replaces the check mark (or step number) when set.
+  { key: "icon", label: "Logo / icon (optional)", kind: "icon" },
+];
+
+/** Project Overview "Slider images" (centered template slideshow). */
+export const OVERVIEW_SLIDE_FIELDS: ItemFieldDef[] = [
+  { key: "image", label: "Image", kind: "image" },
+  { key: "caption", label: "Caption (optional)", kind: "text", placeholder: "e.g. Artistic impression" },
 ];
 
 export const TESTIMONIAL_FIELDS: ItemFieldDef[] = [

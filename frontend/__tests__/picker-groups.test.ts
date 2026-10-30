@@ -15,7 +15,7 @@ describe("Blocks panel groups", () => {
       "location", "html-code", "banner", "features", "faq", "cta", "custom-section", "gallery", "image-box",
       "project-banner", "project-overview", "property-details", "unit-config", "amenities", "floor-plans",
       "re-pricing", "developer", "testimonials", "lead-form", "download-brochure", "site-visit", "newsletter",
-      "navbar", "footer",
+      "navbar", "footer", "section",
     ]) {
       expect(offered.has(type as never), type).toBe(true);
     }

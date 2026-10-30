@@ -10,6 +10,8 @@ import { DynamicLeadForm } from "@/components/openpage/dynamic-lead-form";
 import { findFormById, loadFormLibrary } from "@/lib/openpage/forms-store";
 import { mergeFormLibraries } from "@/lib/openpage/resolve-form";
 import { isMediaSrc } from "@/lib/media";
+import { Bullet, isBulletStyle } from "../Bullet";
+import { ImageSlideshow, slideIntervalMs, type Slide } from "../ImageSlideshow";
 import { useDevice } from "@/components/openpage/runtime/device";
 import { resolveBlockStyleForDevice } from "@/lib/openpage/block-style";
 
@@ -108,12 +110,15 @@ function Title({
   block,
   title,
   subtitle,
+  description,
   align = "center",
   onDark = false,
 }: {
   block?: BlockConfig;
   title?: string;
   subtitle?: string;
+  /** Optional paragraph shown directly under the title (before the subtitle). */
+  description?: string;
   align?: "center" | "left";
   /** Section background is dark — use light text so the heading stays readable. */
   onDark?: boolean;
@@ -128,6 +133,16 @@ function Title({
           className={`font-display text-3xl @md:text-4xl font-semibold tracking-tight mb-2${onDark ? " text-white" : ""}`}
         >
           {title}
+        </El>
+      ) : null}
+      {description && block ? (
+        <El
+          block={block}
+          id={part(block, "description")}
+          as="p"
+          className={`${onDark ? "text-white/80" : "text-text-1"} text-[15px] leading-relaxed mb-2 whitespace-pre-line`}
+        >
+          {description}
         </El>
       ) : null}
       {subtitle ? (
@@ -774,6 +789,8 @@ const OVERVIEW_KNOWN_PROPS = [
   "ctaText",
   "ctaAnchor",
   "imagePosition",
+  "slides",
+  "slideInterval",
   "formTitle",
   "formSubtitle",
   "formId",
@@ -805,14 +822,31 @@ function CustomPropList({ rows }: { rows: Array<{ label: string; value: string }
 
 export function ProjectOverviewBlock({ block }: { block: BlockConfig }) {
   const p = block.props;
-  const highlights = items<Record<string, unknown>>(p.highlights).map((h, i) => ({
-    id: itemPart("highlights", { _id: typeof h?._id === "string" && h._id ? h._id : `idx_${i}` }),
-    title: str(h?.title),
-    description: str(h?.description),
-  }));
+  // A highlight may be plain text (AI-generated / older pages) or
+  // { title, description }; empty ones are skipped instead of showing a bare icon.
+  const highlights = items<unknown>(p.highlights)
+    .map((raw, i) => {
+      const h = typeof raw === "string" ? { title: raw } : ((raw ?? {}) as Record<string, unknown>);
+      return {
+        id: itemPart("highlights", { _id: typeof h._id === "string" && h._id ? h._id : `idx_${i}` }),
+        title: str(h.title).trim(),
+        description: str(h.description).trim(),
+        icon: str(h.icon).trim(),
+      };
+    })
+    .filter((h) => h.title || h.description);
   const overviewStats = statItems(p.stats, "stats");
   const customRows = customScalarProps(p, OVERVIEW_KNOWN_PROPS);
   const variant = block.variant || (str(p.image) ? "split" : "centered");
+  // Centered template slideshow: the main image followed by the "Slider
+  // images". With two or more it rotates automatically; otherwise the single
+  // image shows as before.
+  const overviewSlides: Slide[] = [];
+  if (str(p.image).trim()) overviewSlides.push({ src: str(p.image).trim(), alt: str(p.title) });
+  for (const s of items<Record<string, unknown>>(p.slides)) {
+    if (!s || !str(s.image).trim()) continue;
+    overviewSlides.push({ src: str(s.image).trim(), alt: str(s.caption) || str(p.title), caption: str(s.caption).trim() });
+  }
 
   const body = (className: string) =>
     str(p.body) ? (
@@ -837,8 +871,20 @@ export function ProjectOverviewBlock({ block }: { block: BlockConfig }) {
         {cta("px-5 py-2.5 rounded-lg bg-green text-black text-sm font-semibold hover:bg-green-dim")}
       </div>
     ) : null;
-  const sub = (h: { id: string }, key: "title" | "description") =>
+  const sub = (h: { id: string }, key: "title" | "description" | "icon") =>
     subElementId(h.id, key);
+  // A highlight's uploaded logo / icon, or `fallback` (check mark, step number)
+  // when none is set. Selectable as "Icon" for per-item styling.
+  const hlIcon = (h: { id: string; icon: string }, className: string, imgClass: string, fallback: React.ReactNode) => (
+    <El block={block} id={sub(h, "icon")} as="span" className={className}>
+      {isMediaSrc(h.icon) ? (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img src={h.icon} alt="" className={imgClass} />
+      ) : (
+        fallback
+      )}
+    </El>
+  );
 
   if (variant === "cards") {
     return (
@@ -848,9 +894,7 @@ export function ProjectOverviewBlock({ block }: { block: BlockConfig }) {
         <div className="grid @md:grid-cols-3 gap-4 max-w-5xl mx-auto">
           {highlights.map((h) => (
             <El key={h.id} block={block} id={h.id} className="rounded-2xl border border-border-default bg-bg-2 p-6 text-center hover:-translate-y-0.5 hover:border-border-hover transition-all">
-              <div className="w-10 h-10 rounded-full bg-green/10 text-green flex items-center justify-center mx-auto mb-3">
-                <Check size={14} />
-              </div>
+              {hlIcon(h, "w-10 h-10 rounded-full bg-green/10 text-green flex items-center justify-center mx-auto mb-3 overflow-hidden", "w-6 h-6 object-contain", <Check size={14} />)}
               <El block={block} id={sub(h, "title")} as="h3" className="font-semibold mb-1">{h.title}</El>
               {h.description ? <El block={block} id={sub(h, "description")} as="p" className="text-text-2 text-sm">{h.description}</El> : null}
             </El>
@@ -869,7 +913,7 @@ export function ProjectOverviewBlock({ block }: { block: BlockConfig }) {
         <ol className="max-w-xl mx-auto space-y-0">
           {highlights.map((h, i) => (
             <El key={h.id} block={block} id={h.id} as="li" className="relative pl-10 pb-8 last:pb-0">
-              <span className="absolute left-0 top-1 w-6 h-6 rounded-full bg-green text-black text-[11px] font-bold flex items-center justify-center">{i + 1}</span>
+              {hlIcon(h, "absolute left-0 top-1 w-6 h-6 rounded-full bg-green text-black text-[11px] font-bold flex items-center justify-center overflow-hidden", "w-4 h-4 object-contain", i + 1)}
               {i < highlights.length - 1 ? <span className="absolute left-[11px] top-8 bottom-0 w-px bg-border-default" /> : null}
               <El block={block} id={sub(h, "title")} className="font-semibold">{h.title}</El>
               {h.description ? <El block={block} id={sub(h, "description")} as="p" className="text-text-2 text-sm mt-1">{h.description}</El> : null}
@@ -908,7 +952,7 @@ export function ProjectOverviewBlock({ block }: { block: BlockConfig }) {
               <ul className="space-y-3 mb-7">
                 {highlights.map((h) => (
                   <El key={h.id} block={block} id={h.id} as="li" className="flex gap-3 text-sm">
-                    <span className="mt-0.5 w-5 h-5 rounded-full bg-green/15 text-green flex items-center justify-center shrink-0"><Check size={12} /></span>
+                    {hlIcon(h, "mt-0.5 w-5 h-5 rounded-full bg-green/15 text-green flex items-center justify-center shrink-0 overflow-hidden", "w-3.5 h-3.5 object-contain", <Check size={12} />)}
                     <span>
                       <El block={block} id={sub(h, "title")} as="strong" className="text-text-0">{h.title}</El>
                       {h.description ? (
@@ -963,13 +1007,18 @@ export function ProjectOverviewBlock({ block }: { block: BlockConfig }) {
         <div className="mt-10 grid @md:grid-cols-3 gap-4 max-w-5xl mx-auto">
           {highlights.map((h) => (
             <El key={h.id} block={block} id={h.id} className="rounded-2xl border border-border-default bg-bg-2 p-5">
+              {isMediaSrc(h.icon) ? hlIcon(h, "w-10 h-10 mb-3 flex items-center justify-center overflow-hidden", "w-10 h-10 object-contain", null) : null}
               <El block={block} id={sub(h, "title")} as="h3" className="font-semibold mb-1">{h.title}</El>
               {h.description ? <El block={block} id={sub(h, "description")} as="p" className="text-text-2 text-sm">{h.description}</El> : null}
             </El>
           ))}
         </div>
       ) : null}
-      {str(p.image) ? (
+      {overviewSlides.length > 1 ? (
+        <El block={block} id={part(block, "slider")} className="mt-10 max-w-5xl mx-auto rounded-[28px] overflow-hidden bg-bg-2">
+          <ImageSlideshow slides={overviewSlides} intervalMs={slideIntervalMs(p.slideInterval)} className="aspect-[16/9]" />
+        </El>
+      ) : str(p.image) ? (
         <div className="mt-10 max-w-5xl mx-auto rounded-[28px] overflow-hidden aspect-[16/9] bg-bg-2">
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img src={str(p.image)} alt={str(p.title)} className="w-full h-full object-cover" />
@@ -1131,10 +1180,19 @@ export function PropertyDetailsBlock({ block }: { block: BlockConfig }) {
     );
   }
 
+  // Cards sit in a wrapping flex row (not a fixed 5-column grid) so they can
+  // be aligned: "Card alignment" in Content, or the row's own Layout & Flex in
+  // the Element tab (click the empty space beside the cards). Each card keeps
+  // the old column width - 2 / 3 / 5 per row - so the default looks the same.
+  const cardsAlign = str(block.props.cardsAlign, "left");
+  const justify = cardsAlign === "center" ? "justify-center" : cardsAlign === "right" ? "justify-end" : "justify-start";
+  const cardClass =
+    "basis-[calc(50%-0.5rem)] @md:basis-[calc(33.333%-0.667rem)] @2xl:basis-[calc(20%-0.8rem)] grow-0 shrink min-w-0 " +
+    "rounded-2xl border border-border-default bg-bg-1 p-5 text-center hover:-translate-y-0.5 hover:border-border-hover transition-all";
   return (
     <SectionShell id={str(block.props.anchor, "highlights")} className="bg-bg-2">
       <Title block={block} title={str(block.props.title, "Project Highlights")} subtitle={str(block.props.subtitle)} />
-      <div className="grid grid-cols-2 @md:grid-cols-3 @2xl:grid-cols-5 gap-4 max-w-6xl mx-auto">
+      <El block={block} id={part(block, "cardsRow")} className={`flex flex-wrap gap-4 max-w-6xl mx-auto ${justify}`}>
         {cells.map(({ i, id, label, value }) => {
           const inner = (
             <>
@@ -1150,17 +1208,17 @@ export function PropertyDetailsBlock({ block }: { block: BlockConfig }) {
               key={i}
               block={block}
               id={id}
-              className="rounded-2xl border border-border-default bg-bg-1 p-5 text-center hover:-translate-y-0.5 hover:border-border-hover transition-all"
+              className={cardClass}
             >
               {inner}
             </El>
           ) : (
-            <div key={i} className="rounded-2xl border border-border-default bg-bg-1 p-5 text-center hover:-translate-y-0.5 hover:border-border-hover transition-all">
+            <div key={i} className={cardClass}>
               {inner}
             </div>
           );
         })}
-      </div>
+      </El>
     </SectionShell>
   );
 }
@@ -1462,18 +1520,39 @@ export function AmenitiesBlock({ block }: { block: BlockConfig }) {
             </El>
           ) : null}
           <div className="grid grid-cols-1 @sm:grid-cols-2 gap-4 content-start">
-            {rest.map((a) => (
-              <El key={itemPart("items", a)} block={block} id={itemPart("items", a)} className="rounded-2xl border border-border-default bg-bg-2 p-5">
-                <El block={block} id={subElementId(itemPart("items", a), "title")} as="h3" className="font-semibold mb-1">
-                  {a.title}
+            {rest.map((a) => {
+              const id = itemPart("items", a);
+              // Smaller cards show their own image (or uploaded icon) too;
+              // without either they look as before.
+              return (
+                <El key={id} block={block} id={id} className="rounded-2xl border border-border-default bg-bg-2 overflow-hidden">
+                  {a.image ? (
+                    <El block={block} id={subElementId(id, "image")} className="block aspect-[4/3] bg-bg-3">
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img src={a.image} alt={a.title} className="w-full h-full object-cover" />
+                    </El>
+                  ) : null}
+                  <div className="p-5">
+                    {!a.image && isMediaSrc(a.icon) ? (
+                      <El block={block} id={subElementId(id, "icon")} className="w-10 h-10 rounded-xl bg-green/10 flex items-center justify-center mb-3 overflow-hidden">
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img src={a.icon} alt="" className="w-6 h-6 object-contain" />
+                      </El>
+                    ) : null}
+                    {a.title ? (
+                      <El block={block} id={subElementId(id, "title")} as="h3" className="font-semibold mb-1">
+                        {a.title}
+                      </El>
+                    ) : null}
+                    {a.description ? (
+                      <El block={block} id={subElementId(id, "description")} as="p" className="text-text-2 text-sm">
+                        {a.description}
+                      </El>
+                    ) : null}
+                  </div>
                 </El>
-                {a.description ? (
-                  <El block={block} id={subElementId(itemPart("items", a), "description")} as="p" className="text-text-2 text-sm">
-                    {a.description}
-                  </El>
-                ) : null}
-              </El>
-            ))}
+              );
+            })}
           </div>
         </div>
         {exploreButton}
@@ -1982,7 +2061,7 @@ export function UnitConfigBlock({ block }: { block: BlockConfig }) {
 
 export function RePricingBlock({ block }: { block: BlockConfig }) {
   const p = block.props;
-  type PriceCard = { _id?: string; name: string; price: string; meta?: string; cta?: string; url?: string; priceColor?: string };
+  type PriceCard = { _id?: string; name: string; price: string; meta?: string; description?: string; cta?: string; url?: string; priceColor?: string };
   const cards = items<PriceCard>(p.items).map((c, i) => ({ ...c, id: itemPart("items", { _id: c._id || `idx_${i}` }) }));
   const variant = block.variant || (cards.length ? "cards" : "simple");
   const startingPrice = str(p.startingPrice).trim();
@@ -2050,7 +2129,14 @@ export function RePricingBlock({ block }: { block: BlockConfig }) {
                         {c.price}
                       </El>
                     </td>
-                    <El block={block} id={subElementId(c.id, "meta")} as="td" className="py-4 text-text-2">{c.meta || "—"}</El>
+                    <td className="py-4 text-text-2">
+                      <El block={block} id={subElementId(c.id, "meta")} as="span">{c.meta || (str(c.description).trim() ? "" : "—")}</El>
+                      {str(c.description).trim() ? (
+                        <El block={block} id={subElementId(c.id, "description")} as="span" className="block text-xs text-text-3 mt-1 whitespace-pre-line">
+                          {str(c.description).trim()}
+                        </El>
+                      ) : null}
+                    </td>
                   </El>
                 ))}
               </tbody>
@@ -2110,6 +2196,11 @@ export function RePricingBlock({ block }: { block: BlockConfig }) {
                   {c.price}
                 </El>
                 {c.meta ? <El block={block} id={subElementId(c.id, "meta")} as="p" className="text-text-3 text-xs mb-5">{c.meta}</El> : null}
+                {str(c.description).trim() ? (
+                  <El block={block} id={subElementId(c.id, "description")} as="p" className="text-text-2 text-sm leading-relaxed mb-5 whitespace-pre-line">
+                    {str(c.description).trim()}
+                  </El>
+                ) : null}
                 <CtaButton
                   block={block}
                   id={subElementId(c.id, "cta")}
@@ -2319,28 +2410,50 @@ export function LocationBlock({ block }: { block: BlockConfig }) {
       <MapFrame src={embed} title={str(p.title, "Google Maps")} />
     </El>
   );
+  // The section's buttons: the main CTA and an optional second button, side by
+  // side. Each has its own text, link and colours ("CTA Button" / "Second
+  // Button" in the inspector); either can be hidden by clearing its text.
+  const ctaText = str(p.ctaText).trim();
+  const secondText = str(p.secondaryCtaText).trim();
   const cta = (className = "") =>
-    str(p.ctaText).trim() ? (
-      <div className={className}>
-        <CtaButton
-          block={block}
-          id={part(block, "cta")}
-          prefix="cta"
-          label={str(p.ctaText)}
-          href={str(p.ctaUrl) || (embed.startsWith("http") ? embed : "#enquire")}
-          target={str(p.ctaTarget) || (str(p.ctaUrl) ? "" : embed.startsWith("http") ? "_blank" : "")}
-          className="px-6 py-3 rounded-lg bg-green text-black text-sm font-semibold hover:bg-green-dim"
-        />
+    ctaText || secondText ? (
+      <div className={`flex flex-wrap items-center gap-3 ${className}`}>
+        {ctaText ? (
+          <CtaButton
+            block={block}
+            id={part(block, "cta")}
+            prefix="cta"
+            label={ctaText}
+            href={str(p.ctaUrl) || (embed.startsWith("http") ? embed : "#enquire")}
+            target={str(p.ctaTarget) || (str(p.ctaUrl) ? "" : embed.startsWith("http") ? "_blank" : "")}
+            className="px-6 py-3 rounded-lg bg-green text-black text-sm font-semibold hover:bg-green-dim"
+          />
+        ) : null}
+        {secondText ? (
+          <CtaButton
+            block={block}
+            id={part(block, "secondaryCta")}
+            prefix="secondaryCta"
+            label={secondText}
+            href={str(p.secondaryCtaUrl) || "#enquire"}
+            target={str(p.secondaryCtaTarget)}
+            icon={null}
+            className="px-6 py-3 rounded-lg border border-border-default bg-bg-1 text-text-0 text-sm font-semibold hover:bg-bg-2"
+          />
+        ) : null}
       </div>
     ) : null;
+  // Bullet before each nearby place: the location pin by default, or the
+  // style chosen in "Bullet" (arrow, check, dot, number, none).
+  const bullet = isBulletStyle(p.bulletStyle) ? p.bulletStyle : "pin";
   const rows = (rowClass: string) =>
-    nearby.map((n) => {
+    nearby.map((n, i) => {
       const id = itemPart("items", n);
       const row = locationItem(n);
       return (
         <El key={id} block={block} id={id} className={rowClass}>
           <El block={block} id={subElementId(id, "title")} as="div" className={`flex items-center gap-2 text-sm font-medium min-w-0 ${tone.text}`}>
-            <MapPin size={14} className="text-green shrink-0" />
+            <Bullet style={bullet} index={i} />
             <span className="min-w-0">{row.title}</span>
           </El>
           <El block={block} id={subElementId(id, "meta")} as="div" className={`${tone.muted} text-sm shrink-0 text-right`}>
@@ -2381,12 +2494,16 @@ export function LocationBlock({ block }: { block: BlockConfig }) {
         {heading("Location Advantages")}
         {address("justify-center mb-8 -mt-4")}
         <div className="grid @md:grid-cols-2 @2xl:grid-cols-3 gap-4 max-w-5xl mx-auto mb-8">
-          {nearby.map((n) => {
+          {nearby.map((n, i) => {
             const id = itemPart("items", n);
             const row = locationItem(n);
             return (
               <El key={id} block={block} id={id} className={`rounded-2xl border ${tone.tile} p-5 text-center`}>
-                <MapPin size={18} className="text-green mx-auto mb-3" />
+                {bullet !== "none" ? (
+                  <span className="mb-3 flex justify-center">
+                    <Bullet style={bullet} index={i} size={18} />
+                  </span>
+                ) : null}
                 <El block={block} id={subElementId(id, "title")} as="div" className={`font-semibold mb-1 ${tone.text}`}>
                   {row.title}
                 </El>
@@ -2726,18 +2843,37 @@ export function LeadFormBlock({ block }: { block: BlockConfig }) {
   const form = formId ? findFormById(formId, forms) : forms[0];
   const variant = block.variant || "card";
 
-  const formEl = form ? (
-    <DynamicLeadForm
-      form={form}
-      live={runtime.live}
-      pageId={runtime.pageId}
-      place="lead-form-block"
-      projectName={runtime.projectName}
-      projectId={runtime.projectId}
-      unitId={runtime.unitId}
-    />
-  ) : (
-    <p className="text-sm text-text-3 text-center">Select a form in Properties.</p>
+  // Consent / disclaimer text shown under the form (the "Consent" field).
+  const consent = str(block.props.consent).trim();
+  // Paragraph shown directly under the title (the "Description" field).
+  const description = str(block.props.description).trim();
+  const descriptionEl = (className: string) =>
+    description ? (
+      <El block={block} id={part(block, "description")} as="p" className={className}>
+        {description}
+      </El>
+    ) : null;
+  const formEl = (
+    <>
+      {form ? (
+        <DynamicLeadForm
+          form={form}
+          live={runtime.live}
+          pageId={runtime.pageId}
+          place="lead-form-block"
+          projectName={runtime.projectName}
+          projectId={runtime.projectId}
+          unitId={runtime.unitId}
+        />
+      ) : (
+        <p className="text-sm text-text-3 text-center">Select a form in Properties.</p>
+      )}
+      {consent ? (
+        <El block={block} id={part(block, "consent")} as="p" className="mt-4 text-[11px] leading-relaxed text-text-3 whitespace-pre-line">
+          {consent}
+        </El>
+      ) : null}
+    </>
   );
   const heading = (fallback: string, className: string) => (
     <El block={block} id={part(block, "title")} as="h2" className={className}>
@@ -2769,6 +2905,7 @@ export function LeadFormBlock({ block }: { block: BlockConfig }) {
         <div className="grid @lg:grid-cols-2 gap-10 max-w-5xl mx-auto items-center">
           <div>
             {heading("Enquire now", "font-display text-3xl @md:text-4xl font-semibold mb-3")}
+            {descriptionEl("text-text-1 text-[15px] leading-relaxed mb-4 whitespace-pre-line")}
             {subtitle(str(block.props.subtitle, "Share your details and our team will get in touch."), "text-text-2 text-sm leading-relaxed mb-4")}
             {benefits.length ? (
               <ul className="space-y-2 mb-6">
@@ -2807,6 +2944,7 @@ export function LeadFormBlock({ block }: { block: BlockConfig }) {
           <div className="flex flex-col @md:flex-row @md:items-end gap-4 @md:gap-8 mb-6">
             <div className="flex-1">
               {heading("Enquire now", "font-display text-2xl font-semibold")}
+              {descriptionEl("text-text-1 text-sm leading-relaxed mt-2 whitespace-pre-line")}
               {subtitle(str(block.props.subtitle), "text-text-2 text-sm mt-1")}
             </div>
           </div>
@@ -2819,7 +2957,7 @@ export function LeadFormBlock({ block }: { block: BlockConfig }) {
   if (variant === "default") {
     return (
       <SectionShell id={str(block.props.anchor, "enquire")} className="bg-bg-2">
-        <Title block={block} title={str(block.props.title, "Get in touch")} subtitle={str(block.props.subtitle)} />
+        <Title block={block} title={str(block.props.title, "Get in touch")} description={description} subtitle={str(block.props.subtitle)} />
         <div className="max-w-lg mx-auto">{formEl}</div>
       </SectionShell>
     );
@@ -2827,7 +2965,7 @@ export function LeadFormBlock({ block }: { block: BlockConfig }) {
 
   return (
     <SectionShell id={str(block.props.anchor, "enquire")}>
-      <Title block={block} title={str(block.props.title, "Enquire now")} subtitle={str(block.props.subtitle)} />
+      <Title block={block} title={str(block.props.title, "Enquire now")} description={description} subtitle={str(block.props.subtitle)} />
       <div data-op-panel="" className="max-w-lg mx-auto rounded-2xl border border-border-default bg-bg-2 p-6 @md:p-8">
         {formEl}
       </div>

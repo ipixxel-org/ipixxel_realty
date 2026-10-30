@@ -10,6 +10,9 @@ export const CUSTOM_FIELDS_KEY = "_customFields";
 /** Blocks that already render their own extra fields. */
 const RENDERS_OWN_CUSTOM_FIELDS = new Set(["project-overview"]);
 
+/** Added fields a block already renders itself, so they are not shown twice. */
+const RENDERED_BY_BLOCK: Record<string, string[]> = { "lead-form": ["consent", "description"] };
+
 export function customFieldKeys(block: BlockConfig): string[] {
   const raw = block.props?.[CUSTOM_FIELDS_KEY];
   return Array.isArray(raw) ? raw.filter((k): k is string => typeof k === "string" && k.length > 0) : [];
@@ -30,7 +33,9 @@ function humanize(key: string): string {
  */
 export function CustomFields({ block }: { block: BlockConfig }) {
   if (RENDERS_OWN_CUSTOM_FIELDS.has(block.type)) return null;
+  const own = RENDERED_BY_BLOCK[block.type] ?? [];
   const rows = customFieldKeys(block)
+    .filter((key) => !own.includes(key))
     .map((key) => ({ key, value: block.props[key] }))
     .filter((r): r is { key: string; value: string } => typeof r.value === "string" && r.value.trim() !== "");
   if (!rows.length) return null;

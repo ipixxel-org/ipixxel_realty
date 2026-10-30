@@ -21,6 +21,9 @@ import {
   PRICING_TIER_FIELDS,
   RE_PRICING_CARD_FIELDS,
   TESTIMONIAL_FIELDS,
+  OVERVIEW_HIGHLIGHT_FIELDS,
+  OVERVIEW_SLIDE_FIELDS,
+  FEATURE_FIELDS,
   FOOTER_LINK_FIELDS,
   FOOTER_SOCIAL_FIELDS,
   FOOTER_COLUMN_FIELDS,
@@ -35,6 +38,9 @@ const ITEM_FIELDS: Record<string, ItemFieldDef[]> = {
   'pricing.tiers': PRICING_TIER_FIELDS,
   're-pricing.items': RE_PRICING_CARD_FIELDS,
   'testimonials.items': TESTIMONIAL_FIELDS,
+  'project-overview.highlights': OVERVIEW_HIGHLIGHT_FIELDS,
+  'project-overview.slides': OVERVIEW_SLIDE_FIELDS,
+  'features.items': FEATURE_FIELDS,
   'footer.menuLinks': FOOTER_LINK_FIELDS,
   'footer.socialLinks': FOOTER_SOCIAL_FIELDS,
   'footer.linkColumns': FOOTER_COLUMN_FIELDS,
@@ -53,12 +59,12 @@ interface FieldDef {
  * block's renderer uses for that part.
  */
 const ITEM_SUB_ELEMENTS: Partial<Record<string, Record<string, Array<{ key: string; label: string }>>>> = {
-  features: { items: [{ key: 'icon', label: 'Icon' }, { key: 'title', label: 'Title' }, { key: 'description', label: 'Description' }] },
+  features: { items: [{ key: 'icon', label: 'Icon' }, { key: 'bullet', label: 'Bullet' }, { key: 'title', label: 'Title' }, { key: 'description', label: 'Description' }, { key: 'image', label: 'Image' }] },
   faq: { items: [{ key: 'question', label: 'Question' }, { key: 'answer', label: 'Answer' }] },
   amenities: { items: [{ key: 'icon', label: 'Icon' }, { key: 'title', label: 'Title' }, { key: 'description', label: 'Description' }] },
   'project-banner': { stats: [{ key: 'value', label: 'Value' }, { key: 'label', label: 'Label' }] },
   'project-overview': {
-    highlights: [{ key: 'title', label: 'Title' }, { key: 'description', label: 'Description' }],
+    highlights: [{ key: 'icon', label: 'Icon' }, { key: 'title', label: 'Title' }, { key: 'description', label: 'Description' }],
     stats: [{ key: 'value', label: 'Value' }, { key: 'label', label: 'Label' }],
   },
   'property-details': { items: [{ key: 'label', label: 'Label' }, { key: 'value', label: 'Value' }] },
@@ -72,7 +78,7 @@ const ITEM_SUB_ELEMENTS: Partial<Record<string, Record<string, Array<{ key: stri
       { key: 'cta', label: 'Button' },
     ],
   },
-  're-pricing': { items: [{ key: 'name', label: 'Name' }, { key: 'price', label: 'Price' }, { key: 'meta', label: 'Note' }, { key: 'cta', label: 'Button' }] },
+  're-pricing': { items: [{ key: 'name', label: 'Name' }, { key: 'price', label: 'Price' }, { key: 'meta', label: 'Note' }, { key: 'description', label: 'Description' }, { key: 'cta', label: 'Button' }] },
   testimonials: { items: [{ key: 'quote', label: 'Quote' }, { key: 'name', label: 'Name' }, { key: 'role', label: 'Role' }, { key: 'avatar', label: 'Photo' }] },
   developer: { stats: [{ key: 'value', label: 'Value' }, { key: 'label', label: 'Label' }] },
   location: { items: [{ key: 'title', label: 'Title' }, { key: 'meta', label: 'Meta' }] },
@@ -191,6 +197,8 @@ const blockFields: Partial<Record<BlockType, { sections: { title: string; fields
           { key: 'label', label: 'Section Label', type: 'text' },
           { key: 'title', label: 'Title', type: 'text' },
           { key: 'subtitle', label: 'Subtitle', type: 'text' },
+          { key: 'image', label: 'Section image', type: 'image' },
+          { key: 'anchor', label: 'Section ID (menu scroll)', type: 'text' },
         ],
       },
       {
@@ -200,9 +208,19 @@ const blockFields: Partial<Record<BlockType, { sections: { title: string; fields
         ],
       },
       {
+        title: 'Button',
+        fields: [
+          { key: 'ctaText', label: 'Button text (empty hides it)', type: 'text' },
+          { key: 'ctaUrl', label: 'Button URL', type: 'text' },
+          { key: 'ctaTarget', label: 'Button link target', type: 'select', options: ['_self', '_blank'] },
+        ],
+      },
+      {
         title: 'Style',
         fields: [
           { key: 'variant', label: 'Variant', type: 'select', options: ['grid', 'list', 'alternating'] },
+          // List template only. 'icons' keeps the icon boxes.
+          { key: 'bulletStyle', label: 'List bullets (list template)', type: 'select', options: ['icons', 'arrow', 'check', 'dot', 'number', 'pin', 'none'] },
         ],
       },
     ],
@@ -256,33 +274,29 @@ const blockFields: Partial<Record<BlockType, { sections: { title: string; fields
     ],
   },
   footer: {
+    // Every template shows each field below once it has a value.
     sections: [
-      {
-        title: 'Content',
-        fields: [
-          { key: 'logo', label: 'Logo Text', type: 'text' },
-          { key: 'logoImage', label: 'Logo', type: 'image' },
-          { key: 'copyright', label: 'Copyright', type: 'text' },
-          { key: 'tagline', label: 'Tagline (clear to hide)', type: 'textarea' },
-          { key: 'address', label: 'Address', type: 'text' },
-          { key: 'phone', label: 'Phone', type: 'text' },
-          { key: 'email', label: 'Email', type: 'text' },
-        ],
-      },
-      {
-        title: 'Menu & Social Links',
-        fields: [
-          { key: 'menuLinks', label: 'Menu links', type: 'array-items' },
-          { key: 'linkColumns', label: 'Link columns (multi-column, premium, contact)', type: 'array-items' },
-          { key: 'socialLinks', label: 'Social links', type: 'array-items' },
-        ],
-      },
-      {
-        title: 'Style',
-        fields: [
-          { key: 'variant', label: 'Variant', type: 'select', options: ['simple', 'multi-column', 'minimal', 'premium', 'contact'] },
-        ],
-      },
+      { title: 'Layout', fields: [
+        { key: 'variant', label: 'Template', type: 'select', options: ['simple', 'multi-column', 'minimal', 'premium', 'contact'] },
+      ]},
+      { title: 'Brand', fields: [
+        { key: 'logoImage', label: 'Logo', type: 'image' },
+        { key: 'logo', label: 'Logo text', type: 'text' },
+        { key: 'tagline', label: 'Tagline (clear to hide)', type: 'textarea' },
+      ]},
+      { title: 'Contact', fields: [
+        { key: 'address', label: 'Address', type: 'textarea' },
+        { key: 'phone', label: 'Phone', type: 'text' },
+        { key: 'email', label: 'Email', type: 'text' },
+      ]},
+      { title: 'Bottom Bar', fields: [
+        { key: 'copyright', label: 'Copyright', type: 'textarea' },
+      ]},
+      { title: 'Menu & Social Links', fields: [
+        { key: 'menuLinks', label: 'Menu links', type: 'array-items' },
+        { key: 'linkColumns', label: 'Link columns (multi-column, premium, contact)', type: 'array-items' },
+        { key: 'socialLinks', label: 'Social links', type: 'array-items' },
+      ]},
     ],
   },
   testimonials: {
@@ -525,6 +539,10 @@ const blockFields: Partial<Record<BlockType, { sections: { title: string; fields
       { key: 'stats', label: 'Stats', type: 'array-items' },
       { key: 'imagePosition', label: 'Image side', type: 'select', options: ['left', 'right'] },
       { key: 'anchor', label: 'Section ID (menu scroll)', type: 'text' },
+    ]}, { title: 'Image Slider (centered template)', fields: [
+      // The main Image plus these rotate automatically when 2+ are set.
+      { key: 'slides', label: 'Slider images', type: 'array-items' },
+      { key: 'slideInterval', label: 'Seconds per image (default 4)', type: 'number' },
     ]}, { title: 'CTA Button', fields: [
       ...ctaFields('cta', 'CTA', { textKey: 'ctaText', url: true }),
       { key: 'ctaAnchor', label: 'CTA section ID (when no URL)', type: 'text' },
@@ -533,6 +551,8 @@ const blockFields: Partial<Record<BlockType, { sections: { title: string; fields
   'property-details': {
     sections: [{ title: 'Layout', fields: [
       { key: 'variant', label: 'Template', type: 'select', options: ['grid', 'table', 'two-column', 'checklist'] },
+      // Grid template only: where a row with fewer cards than columns sits.
+      { key: 'cardsAlign', label: 'Card alignment (grid)', type: 'select', options: ['left', 'center', 'right'] },
     ]}, { title: 'Content', fields: [
       { key: 'title', label: 'Title', type: 'text' },
       { key: 'subtitle', label: 'Subtitle', type: 'text' },
@@ -620,6 +640,8 @@ const blockFields: Partial<Record<BlockType, { sections: { title: string; fields
   location: {
       sections: [{ title: 'Layout', fields: [
         { key: 'variant', label: 'Template', type: 'select', options: ['split-map', 'list', 'map-only', 'cards', 'editorial'] },
+        // Bullet before each nearby place; the location pin by default.
+        { key: 'bulletStyle', label: 'Nearby bullet', type: 'select', options: ['pin', 'arrow', 'check', 'dot', 'number', 'none'] },
       ]}, { title: 'Content', fields: [
         { key: 'title', label: 'Title', type: 'text' },
         { key: 'subtitle', label: 'Subheading', type: 'text' },
@@ -628,7 +650,9 @@ const blockFields: Partial<Record<BlockType, { sections: { title: string; fields
         { key: 'embedUrl', label: 'Google Maps link (place link, embed code, address or lat,lng)', type: 'text' },
         { key: 'items', label: 'Nearby', type: 'array-items' },
         { key: 'anchor', label: 'Section ID (menu scroll)', type: 'text' },
-      ]}, { title: 'CTA Button', fields: ctaFields('cta', 'CTA', { textKey: 'ctaText', url: true }) }],
+      ]}, { title: 'CTA Button', fields: ctaFields('cta', 'CTA', { textKey: 'ctaText', url: true }) },
+      // Optional second button beside the first; empty text hides it.
+      { title: 'Second Button', fields: ctaFields('secondaryCta', 'Second button', { textKey: 'secondaryCtaText', url: true }) }],
     },
   'google-maps': {
     sections: [{ title: 'Layout', fields: [
@@ -660,9 +684,13 @@ const blockFields: Partial<Record<BlockType, { sections: { title: string; fields
     ]}, { title: 'Form', fields: [
       { key: 'title', label: 'Title', type: 'text' },
       { key: 'subtitle', label: 'Subtitle', type: 'text' },
+      // Shown directly under the title; empty hides it.
+      { key: 'description', label: 'Description (under the title)', type: 'textarea' },
       { key: 'image', label: 'Side image (split)', type: 'image' },
       { key: 'benefits', label: 'Benefits (split)', type: 'array-items' },
       { key: 'formId', label: 'Form (Form Builder)', type: 'form-select' },
+      // Shown as small text under the form; empty hides it.
+      { key: 'consent', label: 'Consent text (under the form)', type: 'textarea' },
       { key: 'anchor', label: 'Section ID (menu scroll)', type: 'text' },
     ]}],
   },
@@ -1405,7 +1433,7 @@ function PropertyField({ field, block }: { field: FieldDef; block: BlockConfig }
           stats: { items: { value: '', label: '' } },
           developer: { stats: { value: '', label: '' } },
           'project-banner': { stats: { value: '', label: '' } },
-          'project-overview': { stats: { value: '', label: '' }, highlights: { title: '', description: '' } },
+          'project-overview': { stats: { value: '', label: '' }, highlights: { title: '', description: '', icon: '' }, slides: { image: '', caption: '' } },
           'property-details': { items: { label: '', value: '' } },
           amenities: { items: { title: '', description: '', image: '', icon: '' } },
           location: { items: { title: '', meta: '' } },
@@ -1413,7 +1441,7 @@ function PropertyField({ field, block }: { field: FieldDef; block: BlockConfig }
           team: { members: { name: '', role: '', avatar: '' } },
           features: { items: { icon: '', title: '', description: '' } },
           'unit-config': { items: { type: '', config: '', area: '', price: '', image: '' } },
-          're-pricing': { items: { name: '', price: '', meta: '', cta: 'Enquire', url: '' } },
+          're-pricing': { items: { name: '', price: '', meta: '', description: '', cta: 'Enquire', url: '' } },
           pricing: { tiers: { name: '', price: '', period: '', description: '', features: [], cta: '', featured: false } },
           'icon-box': { items: {
             title: String(block.props.title ?? ''),

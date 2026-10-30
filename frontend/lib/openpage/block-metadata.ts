@@ -11,6 +11,17 @@ export interface BlockMeta {
 
 export const blockMetadata: BlockMeta[] = [
   {
+    // A single full-width box for other widgets. Created as a one-column
+    // `columns` block (see createBlockFromType), so it shares Container's
+    // nesting, drag-and-drop, styling and rendering.
+    type: 'section',
+    label: 'Section',
+    description: 'A single full-width box that holds other widgets',
+    category: 'Core',
+    variants: ['1-col'],
+    defaultProps: { gap: '24px' },
+  },
+  {
     type: 'columns',
     label: 'Container / Columns',
     description: 'Single-column container that can expand into a grid',

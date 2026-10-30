@@ -121,10 +121,12 @@ function Brand({ block, p, size }: { block: BlockConfig; p: Record<string, unkno
   )
 }
 
-function Tagline({ block, p, className }: { block: BlockConfig; p: Record<string, unknown>; className: string }) {
-  const tagline = optionalText(p.tagline, SAMPLE_TAGLINE)
+function Tagline({ block, p, className, sample = true }: { block: BlockConfig; p: Record<string, unknown>; className: string; sample?: boolean }) {
+  // `sample={false}`: only the user's own text, so templates that never showed
+  // a tagline don't suddenly show the sample on existing pages.
+  const tagline = sample ? optionalText(p.tagline, SAMPLE_TAGLINE) : str(p.tagline).trim()
   return tagline ? (
-    <El block={block} id="footer:tagline" as="p" className={className}>
+    <El block={block} id="footer:tagline" as="p" className={`${className} whitespace-pre-line`}>
       {tagline}
     </El>
   ) : null
@@ -133,7 +135,7 @@ function Tagline({ block, p, className }: { block: BlockConfig; p: Record<string
 function Copyright({ block, p, className }: { block: BlockConfig; p: Record<string, unknown>; className: string }) {
   const text = str(p.copyright)
   return text ? (
-    <El block={block} id="footer:copyright" as="span" className={className}>
+    <El block={block} id="footer:copyright" as="span" className={`${className} whitespace-pre-line`}>
       {text}
     </El>
   ) : null
@@ -209,7 +211,7 @@ function Columns({ block, columns }: { block: BlockConfig; columns: FooterColumn
 function ContactLines({ block, p, className }: { block: BlockConfig; p: Record<string, unknown>; className: string }) {
   return (
     <>
-      {str(p.address) ? <El block={block} id="footer:address" as="p" className={`${className} mt-3`}>{str(p.address)}</El> : null}
+      {str(p.address) ? <El block={block} id="footer:address" as="p" className={`${className} mt-3 whitespace-pre-line`}>{str(p.address)}</El> : null}
       {str(p.phone) ? <El block={block} id="footer:phone" as="p" className={`${className} mt-1`}>{str(p.phone)}</El> : null}
       {str(p.email) ? <El block={block} id="footer:email" as="p" className={className}>{str(p.email)}</El> : null}
     </>
@@ -220,13 +222,18 @@ function FooterSimple({ block, p, data }: FooterViewProps) {
   return (
     <footer className="px-6 @md:px-10 py-8 border-t border-border-subtle">
       <div className="flex flex-col @lg:flex-row items-center justify-between gap-4">
-        <Brand block={block} p={p} size="sm" />
+        {/* Brand, then the tagline and contact details when they are set. */}
+        <div className="flex flex-col items-center @lg:items-start text-center @lg:text-left max-w-md">
+          <Brand block={block} p={p} size="sm" />
+          <Tagline block={block} p={p} sample={false} className="text-[12px] text-text-3 leading-relaxed mt-2" />
+          <ContactLines block={block} p={p} className="text-[12px] text-text-2" />
+        </div>
         <div className="flex flex-wrap items-center justify-center gap-4">
           <Links block={block} links={data.links} className="text-[12px] text-text-3 hover:text-text-1 transition-colors" />
         </div>
-        <div className="flex flex-col items-center @lg:items-end gap-2">
+        <div className="flex flex-col items-center @lg:items-end gap-2 max-w-md">
           <Socials block={block} socials={data.socials} />
-          <Copyright block={block} p={p} className="text-[11px] text-text-3" />
+          <Copyright block={block} p={p} className="text-[11px] text-text-3 text-center @lg:text-right" />
         </div>
       </div>
     </footer>
@@ -281,6 +288,18 @@ function FooterMultiColumn({ block, p, data }: FooterViewProps) {
 function FooterMinimal({ block, p, data }: FooterViewProps) {
   return (
     <footer className="px-6 @md:px-10 py-6">
+      {/* Logo, tagline and contact details only when the user set them. */}
+      {str(p.logo) || str(p.logoImage) ? (
+        <div className="mb-3 flex justify-center"><Brand block={block} p={p} size="sm" /></div>
+      ) : null}
+      <Tagline block={block} p={p} sample={false} className="text-[12px] text-text-3 leading-relaxed text-center max-w-2xl mx-auto mb-3" />
+      {str(p.address) || str(p.phone) || str(p.email) ? (
+        <div className="flex flex-wrap items-center justify-center gap-x-4 gap-y-1 text-[11px] text-text-2 mb-3">
+          {str(p.address) ? <El block={block} id="footer:address" as="span" className="whitespace-pre-line text-center">{str(p.address)}</El> : null}
+          {str(p.phone) ? <El block={block} id="footer:phone" as="span">{str(p.phone)}</El> : null}
+          {str(p.email) ? <El block={block} id="footer:email" as="span">{str(p.email)}</El> : null}
+        </div>
+      ) : null}
       <div className="flex flex-wrap items-center justify-center gap-x-3 gap-y-1.5 text-[11px] text-text-3">
         <Copyright block={block} p={p} className="" />
         <Links block={block} links={data.links} className="hover:text-text-1 transition-colors" />
@@ -312,6 +331,11 @@ function FooterPremium({ block, p, data }: FooterViewProps) {
             {str(p.phone) ? <El block={block} id="footer:phone" as="span">{str(p.phone)}</El> : null}
             {str(p.email) ? <El block={block} id="footer:email" as="span">{str(p.email)}</El> : null}
           </div>
+          {str(p.address) ? (
+            <El block={block} id="footer:address" as="p" className="mt-2 text-[11px] text-text-3 leading-relaxed whitespace-pre-line max-w-[300px]">
+              {str(p.address)}
+            </El>
+          ) : null}
         </div>
         <Columns block={block} columns={columns} />
       </div>
@@ -343,7 +367,7 @@ function FooterContact({ block, p, data }: FooterViewProps) {
           {contactCards.map((card) => (
             <El key={card.key} block={block} id={`footer:${card.key}Card`} className="rounded-xl border border-border-subtle bg-bg-2/60 px-4 py-4">
               <div className="text-[10px] uppercase tracking-wider text-text-3 mb-1">{card.label}</div>
-              <div className="text-[13px] font-medium text-text-0">{card.value}</div>
+              <div className="text-[13px] font-medium text-text-0 whitespace-pre-line">{card.value}</div>
             </El>
           ))}
         </div>
