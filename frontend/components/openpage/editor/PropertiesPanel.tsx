@@ -22,6 +22,7 @@ import {
   RE_PRICING_CARD_FIELDS,
   TESTIMONIAL_FIELDS,
   OVERVIEW_HIGHLIGHT_FIELDS,
+  OVERVIEW_SLIDE_FIELDS,
   FEATURE_FIELDS,
   FOOTER_LINK_FIELDS,
   FOOTER_SOCIAL_FIELDS,
@@ -38,6 +39,7 @@ const ITEM_FIELDS: Record<string, ItemFieldDef[]> = {
   're-pricing.items': RE_PRICING_CARD_FIELDS,
   'testimonials.items': TESTIMONIAL_FIELDS,
   'project-overview.highlights': OVERVIEW_HIGHLIGHT_FIELDS,
+  'project-overview.slides': OVERVIEW_SLIDE_FIELDS,
   'features.items': FEATURE_FIELDS,
   'footer.menuLinks': FOOTER_LINK_FIELDS,
   'footer.socialLinks': FOOTER_SOCIAL_FIELDS,
@@ -541,6 +543,10 @@ const blockFields: Partial<Record<BlockType, { sections: { title: string; fields
       { key: 'stats', label: 'Stats', type: 'array-items' },
       { key: 'imagePosition', label: 'Image side', type: 'select', options: ['left', 'right'] },
       { key: 'anchor', label: 'Section ID (menu scroll)', type: 'text' },
+    ]}, { title: 'Image Slider (centered template)', fields: [
+      // The main Image plus these rotate automatically when 2+ are set.
+      { key: 'slides', label: 'Slider images', type: 'array-items' },
+      { key: 'slideInterval', label: 'Seconds per image (default 4)', type: 'number' },
     ]}, { title: 'CTA Button', fields: [
       ...ctaFields('cta', 'CTA', { textKey: 'ctaText', url: true }),
       { key: 'ctaAnchor', label: 'CTA section ID (when no URL)', type: 'text' },
@@ -682,9 +688,13 @@ const blockFields: Partial<Record<BlockType, { sections: { title: string; fields
     ]}, { title: 'Form', fields: [
       { key: 'title', label: 'Title', type: 'text' },
       { key: 'subtitle', label: 'Subtitle', type: 'text' },
+      // Shown directly under the title; empty hides it.
+      { key: 'description', label: 'Description (under the title)', type: 'textarea' },
       { key: 'image', label: 'Side image (split)', type: 'image' },
       { key: 'benefits', label: 'Benefits (split)', type: 'array-items' },
       { key: 'formId', label: 'Form (Form Builder)', type: 'form-select' },
+      // Shown as small text under the form; empty hides it.
+      { key: 'consent', label: 'Consent text (under the form)', type: 'textarea' },
       { key: 'anchor', label: 'Section ID (menu scroll)', type: 'text' },
     ]}],
   },
@@ -1427,7 +1437,7 @@ function PropertyField({ field, block }: { field: FieldDef; block: BlockConfig }
           stats: { items: { value: '', label: '' } },
           developer: { stats: { value: '', label: '' } },
           'project-banner': { stats: { value: '', label: '' } },
-          'project-overview': { stats: { value: '', label: '' }, highlights: { title: '', description: '', icon: '' } },
+          'project-overview': { stats: { value: '', label: '' }, highlights: { title: '', description: '', icon: '' }, slides: { image: '', caption: '' } },
           'property-details': { items: { label: '', value: '' } },
           amenities: { items: { title: '', description: '', image: '', icon: '' } },
           location: { items: { title: '', meta: '' } },

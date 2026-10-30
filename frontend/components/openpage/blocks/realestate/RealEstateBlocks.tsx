@@ -11,6 +11,7 @@ import { findFormById, loadFormLibrary } from "@/lib/openpage/forms-store";
 import { mergeFormLibraries } from "@/lib/openpage/resolve-form";
 import { isMediaSrc } from "@/lib/media";
 import { Bullet, isBulletStyle } from "../Bullet";
+import { ImageSlideshow, slideIntervalMs, type Slide } from "../ImageSlideshow";
 import { useDevice } from "@/components/openpage/runtime/device";
 import { resolveBlockStyleForDevice } from "@/lib/openpage/block-style";
 
@@ -109,12 +110,15 @@ function Title({
   block,
   title,
   subtitle,
+  description,
   align = "center",
   onDark = false,
 }: {
   block?: BlockConfig;
   title?: string;
   subtitle?: string;
+  /** Optional paragraph shown directly under the title (before the subtitle). */
+  description?: string;
   align?: "center" | "left";
   /** Section background is dark — use light text so the heading stays readable. */
   onDark?: boolean;
@@ -129,6 +133,16 @@ function Title({
           className={`font-display text-3xl @md:text-4xl font-semibold tracking-tight mb-2${onDark ? " text-white" : ""}`}
         >
           {title}
+        </El>
+      ) : null}
+      {description && block ? (
+        <El
+          block={block}
+          id={part(block, "description")}
+          as="p"
+          className={`${onDark ? "text-white/80" : "text-text-1"} text-[15px] leading-relaxed mb-2 whitespace-pre-line`}
+        >
+          {description}
         </El>
       ) : null}
       {subtitle ? (
@@ -775,6 +789,8 @@ const OVERVIEW_KNOWN_PROPS = [
   "ctaText",
   "ctaAnchor",
   "imagePosition",
+  "slides",
+  "slideInterval",
   "formTitle",
   "formSubtitle",
   "formId",
@@ -822,6 +838,15 @@ export function ProjectOverviewBlock({ block }: { block: BlockConfig }) {
   const overviewStats = statItems(p.stats, "stats");
   const customRows = customScalarProps(p, OVERVIEW_KNOWN_PROPS);
   const variant = block.variant || (str(p.image) ? "split" : "centered");
+  // Centered template slideshow: the main image followed by the "Slider
+  // images". With two or more it rotates automatically; otherwise the single
+  // image shows as before.
+  const overviewSlides: Slide[] = [];
+  if (str(p.image).trim()) overviewSlides.push({ src: str(p.image).trim(), alt: str(p.title) });
+  for (const s of items<Record<string, unknown>>(p.slides)) {
+    if (!s || !str(s.image).trim()) continue;
+    overviewSlides.push({ src: str(s.image).trim(), alt: str(s.caption) || str(p.title), caption: str(s.caption).trim() });
+  }
 
   const body = (className: string) =>
     str(p.body) ? (
@@ -989,7 +1014,11 @@ export function ProjectOverviewBlock({ block }: { block: BlockConfig }) {
           ))}
         </div>
       ) : null}
-      {str(p.image) ? (
+      {overviewSlides.length > 1 ? (
+        <El block={block} id={part(block, "slider")} className="mt-10 max-w-5xl mx-auto rounded-[28px] overflow-hidden bg-bg-2">
+          <ImageSlideshow slides={overviewSlides} intervalMs={slideIntervalMs(p.slideInterval)} className="aspect-[16/9]" />
+        </El>
+      ) : str(p.image) ? (
         <div className="mt-10 max-w-5xl mx-auto rounded-[28px] overflow-hidden aspect-[16/9] bg-bg-2">
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img src={str(p.image)} alt={str(p.title)} className="w-full h-full object-cover" />
@@ -2814,18 +2843,37 @@ export function LeadFormBlock({ block }: { block: BlockConfig }) {
   const form = formId ? findFormById(formId, forms) : forms[0];
   const variant = block.variant || "card";
 
-  const formEl = form ? (
-    <DynamicLeadForm
-      form={form}
-      live={runtime.live}
-      pageId={runtime.pageId}
-      place="lead-form-block"
-      projectName={runtime.projectName}
-      projectId={runtime.projectId}
-      unitId={runtime.unitId}
-    />
-  ) : (
-    <p className="text-sm text-text-3 text-center">Select a form in Properties.</p>
+  // Consent / disclaimer text shown under the form (the "Consent" field).
+  const consent = str(block.props.consent).trim();
+  // Paragraph shown directly under the title (the "Description" field).
+  const description = str(block.props.description).trim();
+  const descriptionEl = (className: string) =>
+    description ? (
+      <El block={block} id={part(block, "description")} as="p" className={className}>
+        {description}
+      </El>
+    ) : null;
+  const formEl = (
+    <>
+      {form ? (
+        <DynamicLeadForm
+          form={form}
+          live={runtime.live}
+          pageId={runtime.pageId}
+          place="lead-form-block"
+          projectName={runtime.projectName}
+          projectId={runtime.projectId}
+          unitId={runtime.unitId}
+        />
+      ) : (
+        <p className="text-sm text-text-3 text-center">Select a form in Properties.</p>
+      )}
+      {consent ? (
+        <El block={block} id={part(block, "consent")} as="p" className="mt-4 text-[11px] leading-relaxed text-text-3 whitespace-pre-line">
+          {consent}
+        </El>
+      ) : null}
+    </>
   );
   const heading = (fallback: string, className: string) => (
     <El block={block} id={part(block, "title")} as="h2" className={className}>
@@ -2857,6 +2905,7 @@ export function LeadFormBlock({ block }: { block: BlockConfig }) {
         <div className="grid @lg:grid-cols-2 gap-10 max-w-5xl mx-auto items-center">
           <div>
             {heading("Enquire now", "font-display text-3xl @md:text-4xl font-semibold mb-3")}
+            {descriptionEl("text-text-1 text-[15px] leading-relaxed mb-4 whitespace-pre-line")}
             {subtitle(str(block.props.subtitle, "Share your details and our team will get in touch."), "text-text-2 text-sm leading-relaxed mb-4")}
             {benefits.length ? (
               <ul className="space-y-2 mb-6">
@@ -2895,6 +2944,7 @@ export function LeadFormBlock({ block }: { block: BlockConfig }) {
           <div className="flex flex-col @md:flex-row @md:items-end gap-4 @md:gap-8 mb-6">
             <div className="flex-1">
               {heading("Enquire now", "font-display text-2xl font-semibold")}
+              {descriptionEl("text-text-1 text-sm leading-relaxed mt-2 whitespace-pre-line")}
               {subtitle(str(block.props.subtitle), "text-text-2 text-sm mt-1")}
             </div>
           </div>
@@ -2907,7 +2957,7 @@ export function LeadFormBlock({ block }: { block: BlockConfig }) {
   if (variant === "default") {
     return (
       <SectionShell id={str(block.props.anchor, "enquire")} className="bg-bg-2">
-        <Title block={block} title={str(block.props.title, "Get in touch")} subtitle={str(block.props.subtitle)} />
+        <Title block={block} title={str(block.props.title, "Get in touch")} description={description} subtitle={str(block.props.subtitle)} />
         <div className="max-w-lg mx-auto">{formEl}</div>
       </SectionShell>
     );
@@ -2915,7 +2965,7 @@ export function LeadFormBlock({ block }: { block: BlockConfig }) {
 
   return (
     <SectionShell id={str(block.props.anchor, "enquire")}>
-      <Title block={block} title={str(block.props.title, "Enquire now")} subtitle={str(block.props.subtitle)} />
+      <Title block={block} title={str(block.props.title, "Enquire now")} description={description} subtitle={str(block.props.subtitle)} />
       <div data-op-panel="" className="max-w-lg mx-auto rounded-2xl border border-border-default bg-bg-2 p-6 @md:p-8">
         {formEl}
       </div>

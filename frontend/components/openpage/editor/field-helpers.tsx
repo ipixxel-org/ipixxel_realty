@@ -165,6 +165,12 @@ export const OVERVIEW_HIGHLIGHT_FIELDS: ItemFieldDef[] = [
   { key: "icon", label: "Logo / icon (optional)", kind: "icon" },
 ];
 
+/** Project Overview "Slider images" (centered template slideshow). */
+export const OVERVIEW_SLIDE_FIELDS: ItemFieldDef[] = [
+  { key: "image", label: "Image", kind: "image" },
+  { key: "caption", label: "Caption (optional)", kind: "text", placeholder: "e.g. Artistic impression" },
+];
+
 export const TESTIMONIAL_FIELDS: ItemFieldDef[] = [
   { key: "name", label: "Name", kind: "text", placeholder: "e.g. Priya Sharma" },
   { key: "role", label: "Role / detail", kind: "text", placeholder: "e.g. Homeowner, Tower B" },
