@@ -274,33 +274,29 @@ const blockFields: Partial<Record<BlockType, { sections: { title: string; fields
     ],
   },
   footer: {
+    // Every template shows each field below once it has a value.
     sections: [
-      {
-        title: 'Content',
-        fields: [
-          { key: 'logo', label: 'Logo Text', type: 'text' },
-          { key: 'logoImage', label: 'Logo', type: 'image' },
-          { key: 'copyright', label: 'Copyright', type: 'text' },
-          { key: 'tagline', label: 'Tagline (clear to hide)', type: 'textarea' },
-          { key: 'address', label: 'Address', type: 'text' },
-          { key: 'phone', label: 'Phone', type: 'text' },
-          { key: 'email', label: 'Email', type: 'text' },
-        ],
-      },
-      {
-        title: 'Menu & Social Links',
-        fields: [
-          { key: 'menuLinks', label: 'Menu links', type: 'array-items' },
-          { key: 'linkColumns', label: 'Link columns (multi-column, premium, contact)', type: 'array-items' },
-          { key: 'socialLinks', label: 'Social links', type: 'array-items' },
-        ],
-      },
-      {
-        title: 'Style',
-        fields: [
-          { key: 'variant', label: 'Variant', type: 'select', options: ['simple', 'multi-column', 'minimal', 'premium', 'contact'] },
-        ],
-      },
+      { title: 'Layout', fields: [
+        { key: 'variant', label: 'Template', type: 'select', options: ['simple', 'multi-column', 'minimal', 'premium', 'contact'] },
+      ]},
+      { title: 'Brand', fields: [
+        { key: 'logoImage', label: 'Logo', type: 'image' },
+        { key: 'logo', label: 'Logo text', type: 'text' },
+        { key: 'tagline', label: 'Tagline (clear to hide)', type: 'textarea' },
+      ]},
+      { title: 'Contact', fields: [
+        { key: 'address', label: 'Address', type: 'textarea' },
+        { key: 'phone', label: 'Phone', type: 'text' },
+        { key: 'email', label: 'Email', type: 'text' },
+      ]},
+      { title: 'Bottom Bar', fields: [
+        { key: 'copyright', label: 'Copyright', type: 'textarea' },
+      ]},
+      { title: 'Menu & Social Links', fields: [
+        { key: 'menuLinks', label: 'Menu links', type: 'array-items' },
+        { key: 'linkColumns', label: 'Link columns (multi-column, premium, contact)', type: 'array-items' },
+        { key: 'socialLinks', label: 'Social links', type: 'array-items' },
+      ]},
     ],
   },
   testimonials: {
