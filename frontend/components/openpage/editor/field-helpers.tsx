@@ -148,6 +148,22 @@ export const RE_PRICING_CARD_FIELDS: ItemFieldDef[] = [
   { key: "priceColor", label: "Price color (this card)", kind: "color" },
 ];
 
+export const FEATURE_FIELDS: ItemFieldDef[] = [
+  { key: "icon", label: "Icon", kind: "icon" },
+  { key: "title", label: "Title", kind: "text" },
+  { key: "description", label: "Description", kind: "textarea", rows: 3 },
+  { key: "image", label: "Image (alternating template)", kind: "image" },
+  { key: "label", label: "Small label (optional)", kind: "text" },
+  { key: "tags", label: "Tags (optional)", kind: "array-strings" },
+];
+
+export const OVERVIEW_HIGHLIGHT_FIELDS: ItemFieldDef[] = [
+  { key: "title", label: "Highlight", kind: "text", placeholder: "e.g. 4-Side Ventilated Homes" },
+  { key: "description", label: "Description (optional)", kind: "textarea", rows: 2 },
+  // Replaces the check mark (or step number) when set.
+  { key: "icon", label: "Logo / icon (optional)", kind: "icon" },
+];
+
 export const TESTIMONIAL_FIELDS: ItemFieldDef[] = [
   { key: "name", label: "Name", kind: "text", placeholder: "e.g. Priya Sharma" },
   { key: "role", label: "Role / detail", kind: "text", placeholder: "e.g. Homeowner, Tower B" },

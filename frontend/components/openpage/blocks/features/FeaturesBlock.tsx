@@ -9,6 +9,7 @@ import type { LucideIcon } from 'lucide-react'
 import { isMediaSrc } from '@/lib/media'
 import { listElementId, subElementId } from '@/lib/openpage/element-style'
 import { El } from '../El'
+import { CtaButton } from '../CtaButton'
 
 interface FeatureItem {
   _id?: string
@@ -25,6 +26,58 @@ interface FeaturesProps {
   title: string
   subtitle?: string
   items: FeatureItem[]
+  /** Section image: beside the list (list template) or under the heading. */
+  image?: string
+  /** Section ID for menu links. */
+  anchor?: string
+  ctaText?: string
+  /** Older / AI-generated name for the button text. */
+  buttonText?: string
+  ctaUrl?: string
+  ctaTarget?: string
+}
+
+function text(v: unknown): string {
+  return typeof v === 'string' ? v.trim() : ''
+}
+
+/** The section-level image, selectable for styling. */
+function SectionImage({ block, props, className }: { block: BlockConfig; props: FeaturesProps; className: string }) {
+  const src = text(props.image)
+  if (!src) return null
+  return (
+    <El block={block} id="features:image" className={className}>
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img src={src} alt={text(props.title)} className="w-full h-full object-cover" />
+    </El>
+  )
+}
+
+/** Optional section button ("Cta Text"; falls back to "Button Text"). */
+function SectionCta({ block, props }: { block: BlockConfig; props: FeaturesProps }) {
+  // A cleared Button text hides the button; the older field only fills in
+  // when Button text was never set.
+  const label = typeof props.ctaText === 'string' ? text(props.ctaText) : text(props.buttonText)
+  if (!label) return null
+  return (
+    <div className="mt-10 flex justify-center">
+      <CtaButton
+        block={block}
+        id="features:cta"
+        prefix="cta"
+        label={label}
+        href={text(props.ctaUrl) || '#enquire'}
+        target={text(props.ctaTarget)}
+        icon={null}
+        className="px-6 py-3 rounded-lg bg-green text-black text-sm font-semibold hover:bg-green-dim"
+      />
+    </div>
+  )
+}
+
+/** Section ID only when the user set one, so existing pages keep their markup. */
+function sectionId(props: FeaturesProps): string | undefined {
+  return text(props.anchor) || undefined
 }
 
 const iconMap: Record<string, LucideIcon> = {
@@ -76,8 +129,9 @@ function Header({ block, props, className }: { block: BlockConfig; props: Featur
 
 function FeaturesGrid({ block, props }: { block: BlockConfig; props: FeaturesProps }) {
   return (
-    <section className="px-6 @md:px-10 py-16 @md:py-20">
+    <section id={sectionId(props)} className="px-6 @md:px-10 py-16 @md:py-20">
       <Header block={block} props={props} className="reveal-fade-up reveal-d1 text-center mb-10" />
+      <SectionImage block={block} props={props} className="max-w-5xl mx-auto mb-10 rounded-[24px] overflow-hidden aspect-[16/9] bg-bg-3" />
 
       <div className="grid grid-cols-1 @lg:grid-cols-2 @3xl:grid-cols-3 gap-4">
         {(props.items || []).map((item, i) => {
@@ -98,16 +152,20 @@ function FeaturesGrid({ block, props }: { block: BlockConfig; props: FeaturesPro
           )
         })}
       </div>
+      <SectionCta block={block} props={props} />
     </section>
   )
 }
 
 function FeaturesList({ block, props }: { block: BlockConfig; props: FeaturesProps }) {
+  const hasImage = Boolean(text(props.image))
   return (
-    <section className="px-6 @md:px-10 py-16 @md:py-20">
+    <section id={sectionId(props)} className="px-6 @md:px-10 py-16 @md:py-20">
       <Header block={block} props={props} className="reveal-fade-up reveal-d1 text-center mb-10" />
 
-      <div className="max-w-2xl mx-auto space-y-4">
+      <div className={hasImage ? 'max-w-6xl mx-auto grid @lg:grid-cols-2 gap-8 @lg:gap-12 items-center' : ''}>
+      <SectionImage block={block} props={props} className="rounded-[24px] overflow-hidden aspect-[4/3] bg-bg-3" />
+      <div className={`${hasImage ? '' : 'max-w-2xl mx-auto '}space-y-4`}>
         {(props.items || []).map((item, i) => {
           const id = cardId(item, i)
           return (
@@ -128,14 +186,17 @@ function FeaturesList({ block, props }: { block: BlockConfig; props: FeaturesPro
           )
         })}
       </div>
+      </div>
+      <SectionCta block={block} props={props} />
     </section>
   )
 }
 
 function FeaturesAlternating({ block, props }: { block: BlockConfig; props: FeaturesProps }) {
   return (
-    <section className="px-6 @md:px-10 py-16 @md:py-20">
+    <section id={sectionId(props)} className="px-6 @md:px-10 py-16 @md:py-20">
       <Header block={block} props={props} className="reveal-fade-up reveal-d1 text-center mb-12" />
+      <SectionImage block={block} props={props} className="max-w-5xl mx-auto mb-12 rounded-[24px] overflow-hidden aspect-[16/9] bg-bg-3" />
 
       <div className="space-y-8">
         {(props.items || []).map((item, i) => {
@@ -150,17 +211,17 @@ function FeaturesAlternating({ block, props }: { block: BlockConfig; props: Feat
               id={id}
               className={`reveal-fade-up reveal-d${Math.min(i + 2, 8)} flex flex-col @lg:flex-row items-center gap-6 @lg:gap-10 ${isReversed ? '@lg:flex-row-reverse' : ''}`}
             >
-              {/* Image / placeholder */}
-              <div className="flex-1 w-full">
-                {item.image ? (
+              {/* Image / placeholder (each card's own Image field) */}
+              <El block={block} id={subElementId(id, 'image')} className="flex-1 w-full">
+                {text(item.image) ? (
                   // eslint-disable-next-line @next/next/no-img-element
-                  <img src={item.image} alt={item.title} className="w-full h-56 @lg:h-72 object-cover rounded-[24px]" />
+                  <img src={text(item.image)} alt={item.title} className="w-full h-56 @lg:h-72 object-cover rounded-[24px]" />
                 ) : (
                   <div className="w-full h-56 @lg:h-72 rounded-[24px] bg-bg-3 border border-border-default flex items-center justify-center text-green">
                     <FeatureGlyph icon={item.icon} />
                   </div>
                 )}
-              </div>
+              </El>
               {/* Text */}
               <div className="flex-1">
                 <El block={block} id={subElementId(id, 'icon')} className="w-10 h-10 rounded-lg bg-green/10 border border-green/20 flex items-center justify-center text-green mb-3">
@@ -187,6 +248,7 @@ function FeaturesAlternating({ block, props }: { block: BlockConfig; props: Feat
           )
         })}
       </div>
+      <SectionCta block={block} props={props} />
     </section>
   )
 }

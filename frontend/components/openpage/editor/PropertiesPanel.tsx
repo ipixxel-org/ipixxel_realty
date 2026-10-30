@@ -21,6 +21,8 @@ import {
   PRICING_TIER_FIELDS,
   RE_PRICING_CARD_FIELDS,
   TESTIMONIAL_FIELDS,
+  OVERVIEW_HIGHLIGHT_FIELDS,
+  FEATURE_FIELDS,
   FOOTER_LINK_FIELDS,
   FOOTER_SOCIAL_FIELDS,
   FOOTER_COLUMN_FIELDS,
@@ -35,6 +37,8 @@ const ITEM_FIELDS: Record<string, ItemFieldDef[]> = {
   'pricing.tiers': PRICING_TIER_FIELDS,
   're-pricing.items': RE_PRICING_CARD_FIELDS,
   'testimonials.items': TESTIMONIAL_FIELDS,
+  'project-overview.highlights': OVERVIEW_HIGHLIGHT_FIELDS,
+  'features.items': FEATURE_FIELDS,
   'footer.menuLinks': FOOTER_LINK_FIELDS,
   'footer.socialLinks': FOOTER_SOCIAL_FIELDS,
   'footer.linkColumns': FOOTER_COLUMN_FIELDS,
@@ -53,12 +57,12 @@ interface FieldDef {
  * block's renderer uses for that part.
  */
 const ITEM_SUB_ELEMENTS: Partial<Record<string, Record<string, Array<{ key: string; label: string }>>>> = {
-  features: { items: [{ key: 'icon', label: 'Icon' }, { key: 'title', label: 'Title' }, { key: 'description', label: 'Description' }] },
+  features: { items: [{ key: 'icon', label: 'Icon' }, { key: 'title', label: 'Title' }, { key: 'description', label: 'Description' }, { key: 'image', label: 'Image' }] },
   faq: { items: [{ key: 'question', label: 'Question' }, { key: 'answer', label: 'Answer' }] },
   amenities: { items: [{ key: 'icon', label: 'Icon' }, { key: 'title', label: 'Title' }, { key: 'description', label: 'Description' }] },
   'project-banner': { stats: [{ key: 'value', label: 'Value' }, { key: 'label', label: 'Label' }] },
   'project-overview': {
-    highlights: [{ key: 'title', label: 'Title' }, { key: 'description', label: 'Description' }],
+    highlights: [{ key: 'icon', label: 'Icon' }, { key: 'title', label: 'Title' }, { key: 'description', label: 'Description' }],
     stats: [{ key: 'value', label: 'Value' }, { key: 'label', label: 'Label' }],
   },
   'property-details': { items: [{ key: 'label', label: 'Label' }, { key: 'value', label: 'Value' }] },
@@ -191,12 +195,22 @@ const blockFields: Partial<Record<BlockType, { sections: { title: string; fields
           { key: 'label', label: 'Section Label', type: 'text' },
           { key: 'title', label: 'Title', type: 'text' },
           { key: 'subtitle', label: 'Subtitle', type: 'text' },
+          { key: 'image', label: 'Section image', type: 'image' },
+          { key: 'anchor', label: 'Section ID (menu scroll)', type: 'text' },
         ],
       },
       {
         title: 'Items',
         fields: [
           { key: 'items', label: 'Feature Cards', type: 'array-items' },
+        ],
+      },
+      {
+        title: 'Button',
+        fields: [
+          { key: 'ctaText', label: 'Button text (empty hides it)', type: 'text' },
+          { key: 'ctaUrl', label: 'Button URL', type: 'text' },
+          { key: 'ctaTarget', label: 'Button link target', type: 'select', options: ['_self', '_blank'] },
         ],
       },
       {
@@ -533,6 +547,8 @@ const blockFields: Partial<Record<BlockType, { sections: { title: string; fields
   'property-details': {
     sections: [{ title: 'Layout', fields: [
       { key: 'variant', label: 'Template', type: 'select', options: ['grid', 'table', 'two-column', 'checklist'] },
+      // Grid template only: where a row with fewer cards than columns sits.
+      { key: 'cardsAlign', label: 'Card alignment (grid)', type: 'select', options: ['left', 'center', 'right'] },
     ]}, { title: 'Content', fields: [
       { key: 'title', label: 'Title', type: 'text' },
       { key: 'subtitle', label: 'Subtitle', type: 'text' },
@@ -1405,7 +1421,7 @@ function PropertyField({ field, block }: { field: FieldDef; block: BlockConfig }
           stats: { items: { value: '', label: '' } },
           developer: { stats: { value: '', label: '' } },
           'project-banner': { stats: { value: '', label: '' } },
-          'project-overview': { stats: { value: '', label: '' }, highlights: { title: '', description: '' } },
+          'project-overview': { stats: { value: '', label: '' }, highlights: { title: '', description: '', icon: '' } },
           'property-details': { items: { label: '', value: '' } },
           amenities: { items: { title: '', description: '', image: '', icon: '' } },
           location: { items: { title: '', meta: '' } },

@@ -200,8 +200,35 @@ export function isDynamicList(value: unknown): value is Array<Record<string, unk
 }
 
 /**
- * Backfill `_id` on all dynamic list items in a block. Idempotent, so it is safe
- * to run on every document load.
+ * Lists the inspector edits as objects, with the field a plain-text entry
+ * belongs in. AI-generated or imported pages sometimes store these as bare
+ * strings, which the list editor would split into one box per character and
+ * the renderer would show as an empty card.
+ */
+const TEXT_ITEM_FIELD: Record<string, string> = {
+  "project-overview.highlights": "title",
+  "project-highlights.items": "title",
+  "features.items": "title",
+  "amenities.items": "title",
+  "icon-box.items": "title",
+  "location.items": "title",
+  "testimonials.items": "quote",
+  "faq.items": "question",
+};
+
+/** Turn plain-text entries of a known object list into `{ [field]: text }`. */
+function textItemsToObjects(type: string, key: string, list: unknown[]): unknown[] {
+  const field = TEXT_ITEM_FIELD[`${type}.${key}`];
+  if (!field || !list.some((entry) => typeof entry === "string")) return list;
+  return list
+    .filter((entry) => typeof entry !== "string" || entry.trim())
+    .map((entry) => (typeof entry === "string" ? { [field]: entry.trim() } : entry));
+}
+
+/**
+ * Backfill `_id` on all dynamic list items in a block, and upgrade plain-text
+ * entries of known object lists (see TEXT_ITEM_FIELD). Idempotent, so it is
+ * safe to run on every document load.
  */
 export function migrateBlockListIds(block: BlockConfig): BlockConfig {
   let changed = false;
@@ -211,7 +238,7 @@ export function migrateBlockListIds(block: BlockConfig): BlockConfig {
       props[key] = value;
       continue;
     }
-    const next = ensureIdsDeep(value);
+    const next = ensureIdsDeep(textItemsToObjects(block.type, key, value));
     if (JSON.stringify(next) !== JSON.stringify(value)) changed = true;
     props[key] = next;
   }

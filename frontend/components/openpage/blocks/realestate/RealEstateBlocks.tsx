@@ -805,11 +805,19 @@ function CustomPropList({ rows }: { rows: Array<{ label: string; value: string }
 
 export function ProjectOverviewBlock({ block }: { block: BlockConfig }) {
   const p = block.props;
-  const highlights = items<Record<string, unknown>>(p.highlights).map((h, i) => ({
-    id: itemPart("highlights", { _id: typeof h?._id === "string" && h._id ? h._id : `idx_${i}` }),
-    title: str(h?.title),
-    description: str(h?.description),
-  }));
+  // A highlight may be plain text (AI-generated / older pages) or
+  // { title, description }; empty ones are skipped instead of showing a bare icon.
+  const highlights = items<unknown>(p.highlights)
+    .map((raw, i) => {
+      const h = typeof raw === "string" ? { title: raw } : ((raw ?? {}) as Record<string, unknown>);
+      return {
+        id: itemPart("highlights", { _id: typeof h._id === "string" && h._id ? h._id : `idx_${i}` }),
+        title: str(h.title).trim(),
+        description: str(h.description).trim(),
+        icon: str(h.icon).trim(),
+      };
+    })
+    .filter((h) => h.title || h.description);
   const overviewStats = statItems(p.stats, "stats");
   const customRows = customScalarProps(p, OVERVIEW_KNOWN_PROPS);
   const variant = block.variant || (str(p.image) ? "split" : "centered");
@@ -837,8 +845,20 @@ export function ProjectOverviewBlock({ block }: { block: BlockConfig }) {
         {cta("px-5 py-2.5 rounded-lg bg-green text-black text-sm font-semibold hover:bg-green-dim")}
       </div>
     ) : null;
-  const sub = (h: { id: string }, key: "title" | "description") =>
+  const sub = (h: { id: string }, key: "title" | "description" | "icon") =>
     subElementId(h.id, key);
+  // A highlight's uploaded logo / icon, or `fallback` (check mark, step number)
+  // when none is set. Selectable as "Icon" for per-item styling.
+  const hlIcon = (h: { id: string; icon: string }, className: string, imgClass: string, fallback: React.ReactNode) => (
+    <El block={block} id={sub(h, "icon")} as="span" className={className}>
+      {isMediaSrc(h.icon) ? (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img src={h.icon} alt="" className={imgClass} />
+      ) : (
+        fallback
+      )}
+    </El>
+  );
 
   if (variant === "cards") {
     return (
@@ -848,9 +868,7 @@ export function ProjectOverviewBlock({ block }: { block: BlockConfig }) {
         <div className="grid @md:grid-cols-3 gap-4 max-w-5xl mx-auto">
           {highlights.map((h) => (
             <El key={h.id} block={block} id={h.id} className="rounded-2xl border border-border-default bg-bg-2 p-6 text-center hover:-translate-y-0.5 hover:border-border-hover transition-all">
-              <div className="w-10 h-10 rounded-full bg-green/10 text-green flex items-center justify-center mx-auto mb-3">
-                <Check size={14} />
-              </div>
+              {hlIcon(h, "w-10 h-10 rounded-full bg-green/10 text-green flex items-center justify-center mx-auto mb-3 overflow-hidden", "w-6 h-6 object-contain", <Check size={14} />)}
               <El block={block} id={sub(h, "title")} as="h3" className="font-semibold mb-1">{h.title}</El>
               {h.description ? <El block={block} id={sub(h, "description")} as="p" className="text-text-2 text-sm">{h.description}</El> : null}
             </El>
@@ -869,7 +887,7 @@ export function ProjectOverviewBlock({ block }: { block: BlockConfig }) {
         <ol className="max-w-xl mx-auto space-y-0">
           {highlights.map((h, i) => (
             <El key={h.id} block={block} id={h.id} as="li" className="relative pl-10 pb-8 last:pb-0">
-              <span className="absolute left-0 top-1 w-6 h-6 rounded-full bg-green text-black text-[11px] font-bold flex items-center justify-center">{i + 1}</span>
+              {hlIcon(h, "absolute left-0 top-1 w-6 h-6 rounded-full bg-green text-black text-[11px] font-bold flex items-center justify-center overflow-hidden", "w-4 h-4 object-contain", i + 1)}
               {i < highlights.length - 1 ? <span className="absolute left-[11px] top-8 bottom-0 w-px bg-border-default" /> : null}
               <El block={block} id={sub(h, "title")} className="font-semibold">{h.title}</El>
               {h.description ? <El block={block} id={sub(h, "description")} as="p" className="text-text-2 text-sm mt-1">{h.description}</El> : null}
@@ -908,7 +926,7 @@ export function ProjectOverviewBlock({ block }: { block: BlockConfig }) {
               <ul className="space-y-3 mb-7">
                 {highlights.map((h) => (
                   <El key={h.id} block={block} id={h.id} as="li" className="flex gap-3 text-sm">
-                    <span className="mt-0.5 w-5 h-5 rounded-full bg-green/15 text-green flex items-center justify-center shrink-0"><Check size={12} /></span>
+                    {hlIcon(h, "mt-0.5 w-5 h-5 rounded-full bg-green/15 text-green flex items-center justify-center shrink-0 overflow-hidden", "w-3.5 h-3.5 object-contain", <Check size={12} />)}
                     <span>
                       <El block={block} id={sub(h, "title")} as="strong" className="text-text-0">{h.title}</El>
                       {h.description ? (
@@ -963,6 +981,7 @@ export function ProjectOverviewBlock({ block }: { block: BlockConfig }) {
         <div className="mt-10 grid @md:grid-cols-3 gap-4 max-w-5xl mx-auto">
           {highlights.map((h) => (
             <El key={h.id} block={block} id={h.id} className="rounded-2xl border border-border-default bg-bg-2 p-5">
+              {isMediaSrc(h.icon) ? hlIcon(h, "w-10 h-10 mb-3 flex items-center justify-center overflow-hidden", "w-10 h-10 object-contain", null) : null}
               <El block={block} id={sub(h, "title")} as="h3" className="font-semibold mb-1">{h.title}</El>
               {h.description ? <El block={block} id={sub(h, "description")} as="p" className="text-text-2 text-sm">{h.description}</El> : null}
             </El>
@@ -1131,10 +1150,19 @@ export function PropertyDetailsBlock({ block }: { block: BlockConfig }) {
     );
   }
 
+  // Cards sit in a wrapping flex row (not a fixed 5-column grid) so they can
+  // be aligned: "Card alignment" in Content, or the row's own Layout & Flex in
+  // the Element tab (click the empty space beside the cards). Each card keeps
+  // the old column width - 2 / 3 / 5 per row - so the default looks the same.
+  const cardsAlign = str(block.props.cardsAlign, "left");
+  const justify = cardsAlign === "center" ? "justify-center" : cardsAlign === "right" ? "justify-end" : "justify-start";
+  const cardClass =
+    "basis-[calc(50%-0.5rem)] @md:basis-[calc(33.333%-0.667rem)] @2xl:basis-[calc(20%-0.8rem)] grow-0 shrink min-w-0 " +
+    "rounded-2xl border border-border-default bg-bg-1 p-5 text-center hover:-translate-y-0.5 hover:border-border-hover transition-all";
   return (
     <SectionShell id={str(block.props.anchor, "highlights")} className="bg-bg-2">
       <Title block={block} title={str(block.props.title, "Project Highlights")} subtitle={str(block.props.subtitle)} />
-      <div className="grid grid-cols-2 @md:grid-cols-3 @2xl:grid-cols-5 gap-4 max-w-6xl mx-auto">
+      <El block={block} id={part(block, "cardsRow")} className={`flex flex-wrap gap-4 max-w-6xl mx-auto ${justify}`}>
         {cells.map(({ i, id, label, value }) => {
           const inner = (
             <>
@@ -1150,17 +1178,17 @@ export function PropertyDetailsBlock({ block }: { block: BlockConfig }) {
               key={i}
               block={block}
               id={id}
-              className="rounded-2xl border border-border-default bg-bg-1 p-5 text-center hover:-translate-y-0.5 hover:border-border-hover transition-all"
+              className={cardClass}
             >
               {inner}
             </El>
           ) : (
-            <div key={i} className="rounded-2xl border border-border-default bg-bg-1 p-5 text-center hover:-translate-y-0.5 hover:border-border-hover transition-all">
+            <div key={i} className={cardClass}>
               {inner}
             </div>
           );
         })}
-      </div>
+      </El>
     </SectionShell>
   );
 }
