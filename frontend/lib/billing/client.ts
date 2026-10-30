@@ -13,6 +13,7 @@ import type {
   ApplyCouponRequest,
   BillingOverview,
   BillingPlan,
+  PlanSavePreview,
   CancelPlanRequest,
   CheckoutPreview,
   CompanyDetails,
@@ -110,6 +111,8 @@ export interface BillingClient {
   /* ---------------- Super Admin (admin_subscriptions) ---------------- */
   /** GET /admin/billing/plans */
   listAdminPlans(): Promise<BillingPlan[]>;
+  /** POST /admin/billing/plans/:id/preview — a new version or not, and who it affects (the save confirm). */
+  previewAdminPlanSave(plan: BillingPlan): Promise<PlanSavePreview>;
   /** PUT /admin/billing/plans/:id */
   saveAdminPlan(plan: BillingPlan): Promise<BillingPlan>;
   /** GET /admin/billing/coupons */

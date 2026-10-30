@@ -14,9 +14,12 @@ import {
 } from '../../common/utils/subscription-lifecycle.util';
 import {
   describeChange,
+  latestVersionsByPlan,
+  orgPlanVersionInfo,
   priceChange,
   versionChanges,
 } from '../../common/utils/plan-version-change.util';
+import { AdminBillingService } from './admin-billing.service';
 import { BillingRetentionService } from './billing-retention.service';
 import { resolveLimit } from '../../common/utils/plan-quota.util';
 import { OrgBillingV2Service } from './org-billing-v2.service';
@@ -601,5 +604,156 @@ describe('the older renew path (no checkout)', () => {
     await t.edit('growth', { limits: { users: 8 }, isActive: false });
     await renewOrgSubscription(t.db as never, 'org-1');
     expect(t.row().planVersionId).toBe(t.version('growth', 2).id);
+  });
+});
+
+/* ------------------------------------------------- Super Admin (commit 5) */
+
+describe('Super Admin: versions on plans and organisations', () => {
+  const dto = (over: Record<string, unknown> = {}) =>
+    ({
+      name: 'Growth',
+      tagline: '',
+      priceMonthly: 2000,
+      priceYearly: 20000,
+      isFree: false,
+      limits: { users: 5, projects: null, landingPages: null, templates: null },
+      modules: { teamChat: true, metaLeadAds: true, metaPages: null },
+      ...over,
+    }) as never;
+  const adminBilling = (db: any) =>
+    new AdminBillingService(db as never, {} as never, {} as never, {} as never);
+  /** Growth with v1 + v2; the org on v1. */
+  async function twoVersions() {
+    const t = setup({ planId: 'growth', amount: 2000 });
+    const v1 = await ensureLatestPlanVersion(
+      t.db,
+      t.planById('growth') as never,
+    );
+    t.row().planVersionId = v1!.id;
+    await t.edit('growth', { priceMonthly: 2500 });
+    return t;
+  }
+
+  it('the plan list: newest version and organisations per version (none recorded = newest)', async () => {
+    const t = await twoVersions();
+    t.db.subscription.rows.push({
+      id: 'sub-2',
+      orgId: 'org-2',
+      planId: 'growth',
+      planVersionId: null,
+      status: 'active',
+    });
+    t.db.subscription.groupBy = async () => {
+      const groups = new Map<string, any>();
+      for (const s of t.db.subscription.rows.filter(
+        (r: any) => r.status !== 'cancelled',
+      )) {
+        const key = `${s.planId}|${s.planVersionId}`;
+        const g = groups.get(key) ?? {
+          planId: s.planId,
+          planVersionId: s.planVersionId ?? null,
+          _count: { _all: 0 },
+        };
+        g._count._all++;
+        groups.set(key, g);
+      }
+      return [...groups.values()];
+    };
+    const plans = await adminBilling(t.db).listPlans();
+    const growth = plans.find((p) => p.id === 'growth')!;
+    expect(growth.version).toBe(2);
+    expect(growth.versions).toEqual([
+      { version: 2, orgs: 1 },
+      { version: 1, orgs: 1 },
+    ]);
+  });
+
+  it('save preview (paid): a price change makes the next version; a name change does not', async () => {
+    const t = await twoVersions();
+    const service = adminBilling(t.db);
+    expect(
+      await service.previewPlanSave(
+        'growth',
+        dto({ name: 'Growth+', priceMonthly: 2500 }),
+      ),
+    ).toMatchObject({ createsVersion: false, version: 2, orgsOnPlan: 1 });
+    expect(
+      await service.previewPlanSave('growth', dto({ priceMonthly: 2700 })),
+    ).toMatchObject({
+      createsVersion: true,
+      version: 3,
+      orgsOnPlan: 1,
+      basic: null,
+    });
+  });
+
+  it('save preview (Basic): how many are over the new limits (7 days notice) and how many move now', async () => {
+    const t = setup({ planId: 'basic', amount: 0, renewsAt: null });
+    const v1 = await ensureLatestPlanVersion(
+      t.db,
+      t.planById('basic') as never,
+    );
+    t.row().planVersionId = v1!.id;
+    t.usage.users = 2;
+    const basicDto = (users: number) =>
+      dto({
+        name: 'Basic',
+        priceMonthly: 0,
+        priceYearly: 0,
+        isFree: true,
+        limits: { users, projects: null, landingPages: null, templates: null },
+      });
+    const service = adminBilling(t.db);
+    expect(await service.previewPlanSave('basic', basicDto(1))).toMatchObject({
+      createsVersion: true,
+      isFree: true,
+      version: 2,
+      basic: { overLimits: 1, moveNow: 0, noticeDays: 7 },
+    });
+    expect(await service.previewPlanSave('basic', basicDto(4))).toMatchObject({
+      basic: { overLimits: 0, moveNow: 1 },
+    });
+  });
+
+  it('an organisation: its version, the newest, and when the newer one applies', async () => {
+    const t = await twoVersions();
+    const latest = await latestVersionsByPlan(t.db);
+    const sub = await t.db.subscription.findFirst({
+      include: { plan: true, planVersion: true },
+    });
+    expect(orgPlanVersionInfo(sub, latest)).toEqual({
+      planVersion: 1,
+      latestVersion: 2,
+      versionAppliesOn: t.row().renewsAt.toISOString().slice(0, 10),
+    });
+    // On the newest: nothing applies later.
+    t.row().planVersionId = t.version('growth', 2).id;
+    const now = await t.db.subscription.findFirst({
+      include: { plan: true, planVersion: true },
+    });
+    expect(orgPlanVersionInfo(now, latest)).toMatchObject({
+      planVersion: 2,
+      versionAppliesOn: null,
+    });
+  });
+
+  it('Basic: the newer version applies 7 days after it was made', async () => {
+    const t = setup({ planId: 'basic', amount: 0, renewsAt: null });
+    const v1 = await ensureLatestPlanVersion(
+      t.db,
+      t.planById('basic') as never,
+    );
+    t.row().planVersionId = v1!.id;
+    const v2 = await t.edit('basic', { limits: { users: 1 } });
+    const sub = await t.db.subscription.findFirst({
+      include: { plan: true, planVersion: true },
+    });
+    expect(
+      orgPlanVersionInfo(sub, await latestVersionsByPlan(t.db))
+        .versionAppliesOn,
+    ).toBe(
+      new Date(v2!.createdAt.getTime() + 7 * DAY).toISOString().slice(0, 10),
+    );
   });
 });

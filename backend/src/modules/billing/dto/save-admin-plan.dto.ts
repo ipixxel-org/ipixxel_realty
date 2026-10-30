@@ -1,5 +1,6 @@
 import { Type } from 'class-transformer';
 import {
+  IsArray,
   IsBoolean,
   IsInt,
   IsNumber,
@@ -33,6 +34,10 @@ export class SaveAdminPlanDto {
   // A plan that isn't offered (inactive / internal) has a half rank, e.g. 0.5.
   @IsOptional() @IsNumber() rank?: number;
   @IsOptional() @IsBoolean() isActive?: boolean;
+  // Plan versions (the Super Admin list): read-only, accepted so the plan
+  // round-trips, then ignored — the version is decided by what changed.
+  @IsOptional() @IsInt() version?: number | null;
+  @IsOptional() @IsArray() versions?: unknown[];
   @IsString() @MaxLength(80) name!: string;
   @IsOptional() @IsString() @MaxLength(300) tagline?: string;
   @IsNumber() priceMonthly!: number;

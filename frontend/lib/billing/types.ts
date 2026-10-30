@@ -47,6 +47,29 @@ export interface BillingPlan {
   rank: number;
   limits: PlanLimits;
   modules: PlanModules;
+  /** Super Admin plan list: the newest version's number (plan versions). */
+  version?: number | null;
+  /** Super Admin plan list: organisations on the plan per version, newest first. */
+  versions?: PlanVersionCount[];
+}
+
+export interface PlanVersionCount {
+  version: number;
+  orgs: number;
+}
+
+/** POST /admin/billing/plans/:id/preview — what saving a plan change would do. */
+export interface PlanSavePreview {
+  planName: string;
+  isFree: boolean;
+  /** Price, limits or features change: saving makes a new version. */
+  createsVersion: boolean;
+  /** The new version's number (or the current one when nothing changes). */
+  version: number;
+  /** Organisations currently subscribed to the plan. */
+  orgsOnPlan: number;
+  /** Basic only, when it makes a version: over the new limits (notice) / moving now. */
+  basic: { overLimits: number; moveNow: number; noticeDays: number } | null;
 }
 
 /* ----------------------------------------------------------- Subscription */
@@ -783,6 +806,12 @@ export interface SubscriptionRow {
   couponCode: string | null;
   /** Extra grace days a Super Admin gave for the current due date (0 / absent = none; only while in grace). */
   graceExtraDays?: number;
+  /** Plan versions: the org's version (null / absent = not recorded). */
+  planVersion?: number | null;
+  /** The plan's newest version. */
+  latestVersion?: number | null;
+  /** YYYY-MM-DD the newer version applies (renewal, or end of Basic's notice); null = on the newest. */
+  versionAppliesOn?: string | null;
 }
 
 export interface SubscriptionList extends Paged<SubscriptionRow> {

@@ -23,6 +23,7 @@ import {
 import type {
   AdminPaymentRow,
   BillingInterval,
+  BillingPlan,
   BillingOverview,
   CheckoutPreview,
   CheckoutReceipt,
@@ -527,6 +528,24 @@ export function createMockBillingClient(opts: { initial?: Partial<MockState>; pe
     /* ------------------------------------------------------------ admin */
 
     listAdminPlans: () => ok([...get().plans].sort((a, b) => a.rank - b.rank)),
+    previewAdminPlanSave(plan) {
+      const s = get();
+      const stored = s.plans.find((p) => p.id === plan.id);
+      if (!stored) return fail("Plan not found");
+      // Same rule as the backend: price, limits or features → a new version.
+      const terms = (p: BillingPlan) => JSON.stringify([p.priceMonthly, p.priceYearly, p.limits, p.modules]);
+      const createsVersion = terms(stored) !== terms(plan);
+      const current = stored.version ?? 1;
+      const orgsOnPlan = s.orgs.filter((o) => o.plan === plan.id).length;
+      return ok({
+        planName: plan.name,
+        isFree: plan.isFree,
+        createsVersion,
+        version: createsVersion ? current + 1 : current,
+        orgsOnPlan,
+        basic: plan.isFree && createsVersion ? { overLimits: 0, moveNow: orgsOnPlan, noticeDays: 7 } : null,
+      });
+    },
     saveAdminPlan(plan) {
       if (plan.isFree && (plan.priceMonthly !== 0 || plan.priceYearly !== 0)) return fail("The free plan can't have a price.");
       if (!plan.isFree && plan.priceMonthly <= 0) return fail("A paid plan needs a monthly price.");

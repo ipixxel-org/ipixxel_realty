@@ -17,7 +17,13 @@ import {
 import {
   ensureLatestPlanVersion,
   latestPlanVersion,
+  sameTerms,
 } from '../../common/utils/plan-version.util';
+import {
+  BASIC_NOTICE_DAYS,
+  versionChanges,
+} from '../../common/utils/plan-version-change.util';
+import { usageOverLimits } from '../../common/utils/plan-quota.util';
 import { PlatformConfigService } from '../platform-config/platform-config.service';
 import { RazorpaySettingsService } from '../payments/razorpay-settings.service';
 import { BillingModeService } from './billing-mode.service';
@@ -36,6 +42,7 @@ import type {
   LifecycleRunResultV2,
   LifecycleSettingsV2,
   OnlinePaymentsV2,
+  PlanSavePreviewV2,
   SellerSettingsV2,
 } from './billing.types';
 import type { SaveAdminPlanDto } from './dto/save-admin-plan.dto';
@@ -95,6 +102,40 @@ const LIMIT_LABEL = {
  * Semantic checks for a plan save (shape is checked by the DTO). Returns the
  * first problem as a customer-readable message, or null. Pure — unit-tested.
  */
+/**
+ * The limits and capabilities a Plans & Pricing save stores: what v2 edits,
+ * keeping everything it doesn't (landingPagesCreate, catalog capabilities,
+ * WhatsApp).
+ */
+export function adminPlanTerms(
+  stored: { limits: unknown; capabilities: unknown },
+  dto: Pick<SaveAdminPlanDto, 'limits' | 'modules'>,
+) {
+  const oldLimits = (
+    stored.limits && typeof stored.limits === 'object' ? stored.limits : {}
+  ) as Record<string, unknown>;
+  const oldCaps = (
+    stored.capabilities && typeof stored.capabilities === 'object'
+      ? stored.capabilities
+      : {}
+  ) as Record<string, unknown>;
+  return {
+    limits: {
+      ...oldLimits,
+      users: dto.limits.users ?? null,
+      projects: dto.limits.projects ?? null,
+      landingPages: dto.limits.landingPages ?? null,
+      templates: dto.limits.templates ?? null,
+      metaPages: dto.modules.metaLeadAds ? (dto.modules.metaPages ?? null) : 0,
+    },
+    capabilities: {
+      ...oldCaps,
+      teamChat: dto.modules.teamChat,
+      metaLeadAds: dto.modules.metaLeadAds,
+    },
+  };
+}
+
 export function validateAdminPlan(
   input: SaveAdminPlanDto,
   stored: {
@@ -157,8 +198,108 @@ export class AdminBillingService {
 
   /** Every plan, inactive ones too (marked `isActive: false`), so they can be edited or deleted. */
   async listPlans(): Promise<BillingPlanV2[]> {
-    const plans = await this.prisma.plan.findMany();
-    return toBillingPlans(plans);
+    type VersionRow = { id: string; planId: string; version: number };
+    type CountRow = {
+      planId: string;
+      planVersionId: string | null;
+      _count: { _all: number };
+    };
+    // Old test mocks have only plan.findMany.
+    const [plans, versions, counts]: [
+      Awaited<ReturnType<PrismaService['plan']['findMany']>>,
+      VersionRow[],
+      CountRow[],
+    ] = await Promise.all([
+      this.prisma.plan.findMany(),
+      this.prisma.planVersion
+        ? this.prisma.planVersion.findMany({
+            select: { id: true, planId: true, version: true },
+            orderBy: { version: 'desc' },
+          })
+        : Promise.resolve([]),
+      this.prisma.subscription?.groupBy
+        ? (this.prisma.subscription.groupBy({
+            by: ['planId', 'planVersionId'],
+            where: { status: { not: 'cancelled' } },
+            _count: { _all: true },
+          }) as unknown as Promise<CountRow[]>)
+        : Promise.resolve([]),
+    ]);
+    return toBillingPlans(plans).map((p) => {
+      const mine = versions.filter((v) => v.planId === p.id);
+      if (!mine.length) return p;
+      const latest = mine[0];
+      // Organisations currently subscribed, per version (none recorded = the newest).
+      const orgsOn = (id: string) =>
+        counts
+          .filter(
+            (c) =>
+              c.planId === p.id &&
+              (c.planVersionId === id ||
+                (id === latest.id &&
+                  (c.planVersionId === null ||
+                    !mine.some((v) => v.id === c.planVersionId)))),
+          )
+          .reduce((n, c) => n + c._count._all, 0);
+      return {
+        ...p,
+        version: latest.version,
+        versions: mine
+          .map((v) => ({ version: v.version, orgs: orgsOn(v.id) }))
+          .filter((v) => v.version === latest.version || v.orgs > 0),
+      };
+    });
+  }
+
+  /** What saving this change would do: a new version or not, and who it affects. */
+  async previewPlanSave(
+    id: string,
+    dto: SaveAdminPlanDto,
+  ): Promise<PlanSavePreviewV2> {
+    const stored = await this.prisma.plan.findUnique({ where: { id } });
+    if (!stored) throw new NotFoundException('Plan not found');
+    const problem = validateAdminPlan(dto, stored);
+    if (problem) throw new BadRequestException(problem);
+    const terms = {
+      priceMonthly: dto.priceMonthly,
+      priceYearly: dto.priceYearly,
+      ...adminPlanTerms(stored, dto),
+    };
+    const latest = await latestPlanVersion(this.prisma, id);
+    const createsVersion = !sameTerms(latest ?? stored, terms);
+    const subs = await this.prisma.subscription.findMany({
+      where: { planId: id, status: { not: 'cancelled' } },
+      include: { planVersion: true },
+    });
+    let basic: PlanSavePreviewV2['basic'] = null;
+    if (isFreePlan(stored) && createsVersion) {
+      // Over the new limits (lower than the version they're on): 7 days' notice.
+      let overLimits = 0;
+      for (const s of subs) {
+        const held = s.planVersion ?? latest ?? stored;
+        const lower = versionChanges(held, terms).some((c) => c.lower);
+        if (
+          lower &&
+          (await usageOverLimits(this.prisma, s.orgId, terms)).length
+        )
+          overLimits++;
+      }
+      basic = {
+        overLimits,
+        moveNow: subs.length - overLimits,
+        noticeDays: BASIC_NOTICE_DAYS,
+      };
+    }
+    return {
+      planName: dto.name.trim() || stored.name,
+      isFree: isFreePlan(stored),
+      createsVersion,
+      version: createsVersion
+        ? (latest?.version ?? 0) + 1
+        : (latest?.version ?? 1),
+      orgsOnPlan: subs.length,
+      basic,
+    };
   }
 
   async savePlan(
@@ -171,28 +312,7 @@ export class AdminBillingService {
     const problem = validateAdminPlan(dto, stored);
     if (problem) throw new BadRequestException(problem);
 
-    const oldLimits = (
-      stored.limits && typeof stored.limits === 'object' ? stored.limits : {}
-    ) as Record<string, unknown>;
-    const oldCaps = (
-      stored.capabilities && typeof stored.capabilities === 'object'
-        ? stored.capabilities
-        : {}
-    ) as Record<string, unknown>;
-    // Keep everything v2 doesn't edit (landingPagesCreate, catalog capabilities, WhatsApp).
-    const limits = {
-      ...oldLimits,
-      users: dto.limits.users ?? null,
-      projects: dto.limits.projects ?? null,
-      landingPages: dto.limits.landingPages ?? null,
-      templates: dto.limits.templates ?? null,
-      metaPages: dto.modules.metaLeadAds ? (dto.modules.metaPages ?? null) : 0,
-    };
-    const capabilities = {
-      ...oldCaps,
-      teamChat: dto.modules.teamChat,
-      metaLeadAds: dto.modules.metaLeadAds,
-    };
+    const { limits, capabilities } = adminPlanTerms(stored, dto);
 
     await this.prisma.plan.update({
       where: { id },
@@ -226,7 +346,10 @@ export class AdminBillingService {
     const saved =
       active.find((p) => p.id === id) ??
       (await this.prisma.plan.findUniqueOrThrow({ where: { id } }));
-    return toBillingPlan(saved, planRanker(active)(saved));
+    return {
+      ...toBillingPlan(saved, planRanker(active)(saved)),
+      version: version?.version ?? null,
+    };
   }
 
   /* -------------------------------------------------------------- lifecycle */

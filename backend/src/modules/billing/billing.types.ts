@@ -38,6 +38,31 @@ export interface BillingPlanV2 {
   rank: number;
   limits: PlanLimitsV2;
   modules: PlanModulesV2;
+  /** Super Admin plan list: the newest version's number. */
+  version?: number | null;
+  /**
+   * Super Admin plan list: organisations currently subscribed to the plan, per
+   * version (newest first; the newest is always listed, older ones only while
+   * an organisation is on them).
+   */
+  versions?: { version: number; orgs: number }[];
+}
+
+/** POST /admin/billing/plans/:id/preview — what saving this change would do. */
+export interface PlanSavePreviewV2 {
+  planName: string;
+  isFree: boolean;
+  /** Price, limits or features change: saving makes a new version. */
+  createsVersion: boolean;
+  /** The new version's number (or the current one when nothing changes). */
+  version: number;
+  /** Organisations currently subscribed to the plan. */
+  orgsOnPlan: number;
+  /**
+   * Basic only, when it makes a version: how many organisations are over the
+   * new limits (they get noticeDays' notice) and how many move straight away.
+   */
+  basic: { overLimits: number; moveNow: number; noticeDays: number } | null;
 }
 
 export type SubscriptionStatusV2 =

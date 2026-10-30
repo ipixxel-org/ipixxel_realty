@@ -220,3 +220,47 @@ export async function upcomingVersion(
     lower: changes.some((c) => c.lower),
   };
 }
+
+/** Each plan's newest version, by plan id. */
+export async function latestVersionsByPlan(db: {
+  planVersion?: { findMany: (args: object) => Promise<PlanVersion[]> };
+}): Promise<Map<string, PlanVersion>> {
+  const out = new Map<string, PlanVersion>();
+  if (!db.planVersion) return out;
+  const rows = await db.planVersion.findMany({ orderBy: { version: 'desc' } });
+  for (const v of rows) if (!out.has(v.planId)) out.set(v.planId, v);
+  return out;
+}
+
+/** For Super Admin: the version an org is on, the plan's newest, and when it moves. */
+export interface OrgPlanVersionInfo {
+  /** null = not recorded (treated as the latest). */
+  planVersion: number | null;
+  latestVersion: number | null;
+  /** YYYY-MM-DD the newer version applies (renewal, or the end of Basic's notice); null = on the latest. */
+  versionAppliesOn: string | null;
+}
+
+export function orgPlanVersionInfo(
+  sub: {
+    planId: string;
+    renewsAt: Date | null;
+    planVersion?: { id: string; version: number } | null;
+    plan?: { isSystem: boolean } | null;
+  } | null,
+  latest: Map<string, PlanVersion>,
+): OrgPlanVersionInfo {
+  const newest = sub ? latest.get(sub.planId) : undefined;
+  const mine = sub?.planVersion ?? null;
+  const behind = !!mine && !!newest && newest.id !== mine.id;
+  const appliesOn = !behind
+    ? null
+    : sub!.plan?.isSystem
+      ? new Date(newest.createdAt.getTime() + BASIC_NOTICE_DAYS * DAY_MS)
+      : sub!.renewsAt;
+  return {
+    planVersion: mine?.version ?? newest?.version ?? null,
+    latestVersion: newest?.version ?? null,
+    versionAppliesOn: appliesOn ? appliesOn.toISOString().slice(0, 10) : null,
+  };
+}

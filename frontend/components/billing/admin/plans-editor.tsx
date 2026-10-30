@@ -9,7 +9,7 @@ import { apiFetch } from "@/lib/api";
 import { setFlash } from "@/lib/flash";
 import { planLimitWarnings, planLimitWarningsFor, type PlanLimitWarning } from "@/lib/billing/plan-limit-warnings";
 import { formatINR, packagePriceText, yearlySaving } from "@/lib/billing/pricing";
-import type { BillingPlan, PlanLimits, PlanModules } from "@/lib/billing/types";
+import type { BillingPlan, PlanLimits, PlanModules, PlanSavePreview, PlanVersionCount } from "@/lib/billing/types";
 import { useBillingEnv, useBillingQuery } from "../context";
 import { BillingDialog, DialogActions } from "../dialog";
 import { BLink, ErrorNote, Loading } from "../ui";
@@ -32,6 +32,39 @@ const limitLabel = (n: number | null) => (n == null ? "Unlimited" : n.toLocaleSt
 export function yearlyHint(priceMonthly: number, priceYearly: number): string | null {
   const s = yearlySaving(priceMonthly, priceYearly);
   return s ? `${s.percent}% cheaper than 12 × monthly (saves ${formatINR(s.amount)} a year)` : null;
+}
+
+const orgsText = (n: number) => `${n.toLocaleString("en-IN")} ${n === 1 ? "org" : "orgs"}`;
+const organisations = (n: number) => `${n.toLocaleString("en-IN")} ${n === 1 ? "organisation" : "organisations"}`;
+
+/** "v3 · 12 orgs, v2 · 4 orgs, v1 · 1 org" — organisations on each version, newest first. */
+export function versionCountsText(versions: PlanVersionCount[]): string {
+  return versions.map((v) => `v${v.version} · ${orgsText(v.orgs)}`).join(", ");
+}
+
+/**
+ * The save confirm: "This creates v4. 16 organisations stay on their current
+ * version until their next renewal." Basic: "This creates Basic v3. 2
+ * organisations on Basic are over the new limits; they get 7 days' notice."
+ */
+export function versionConfirmText(p: PlanSavePreview): string {
+  if (p.basic) {
+    const head = `This creates ${p.planName} v${p.version}.`;
+    const { overLimits: over, moveNow: now, noticeDays } = p.basic;
+    const moving =
+      now === 0 ? "" : now === 1 ? `The 1 organisation on ${p.planName} that fits moves to it now.` : `The ${now} organisations on ${p.planName} that fit move to it now.`;
+    if (over === 0) {
+      return now === 0
+        ? `${head} No organisations are on ${p.planName} yet.`
+        : `${head} ${now === 1 ? `The 1 organisation on ${p.planName} moves` : `All ${now} organisations on ${p.planName} move`} to it now.`;
+    }
+    return `${head} ${organisations(over)} on ${p.planName} ${over === 1 ? "is" : "are"} over the new limits; they get ${noticeDays} days' notice.${moving ? ` ${moving}` : ""}`;
+  }
+  return `This creates v${p.version}. ${
+    p.orgsOnPlan === 0
+      ? "No organisations are on this plan yet."
+      : `${organisations(p.orgsOnPlan)} ${p.orgsOnPlan === 1 ? "stays" : "stay"} on ${p.orgsOnPlan === 1 ? "its" : "their"} current version until ${p.orgsOnPlan === 1 ? "its" : "their"} next renewal.`
+  }`;
 }
 
 /* ------------------------------------------------------------------ Cards */
@@ -114,6 +147,11 @@ export function AdminPlansEditor({ canDelete = false }: { canDelete?: boolean })
             <div>
               <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 10, flexWrap: "wrap" }}>
                 <span style={{ padding: "3px 10px", borderRadius: 8, background: "rgba(21, 27, 46, 0.08)", color: "#0f1424", fontWeight: 700, fontSize: 12 }}>{p.name}</span>
+                {p.version ? (
+                  <span data-testid="plan-version" title="The newest version: new purchases and renewals get it" style={chip}>
+                    v{p.version}
+                  </span>
+                ) : null}
                 {p.isFree ? (
                   <span
                     title="Every new organisation starts on it, and organisations fall back to it. It can be edited but never deleted."
@@ -149,6 +187,11 @@ export function AdminPlansEditor({ canDelete = false }: { canDelete?: boolean })
                   </span>
                 ))}
               </div>
+              {p.versions?.length ? (
+                <div data-testid="plan-version-counts" style={{ fontSize: 12, color: "#64748b", marginBottom: 12 }} title="Organisations on this plan, by the version they're on">
+                  {versionCountsText(p.versions)}
+                </div>
+              ) : null}
               <LimitWarnings warnings={warnings.filter((w) => w.planId === p.id)} />
             </div>
 
@@ -260,6 +303,8 @@ export function PlanEditForm({
   const [saved, setSaved] = useState(initial);
   const [plan, setPlan] = useState(initial);
   const [busy, setBusy] = useState(false);
+  // A change that makes a new version: confirmed first (who it affects).
+  const [confirm, setConfirm] = useState<PlanSavePreview | null>(null);
   const dirty = JSON.stringify(plan) !== JSON.stringify(saved);
   const set = (patch: Partial<BillingPlan>) => setPlan((p) => ({ ...p, ...patch }));
   // Empty = unlimited (null).
@@ -268,7 +313,26 @@ export function PlanEditForm({
   const hint = plan.isFree ? null : yearlyHint(plan.priceMonthly, plan.priceYearly);
   const warnings = plans ? planLimitWarningsFor(plan, plans) : [];
 
+  /** Save: a change to the price, limits or features is a new version — confirm it first. */
+  async function requestSave() {
+    setBusy(true);
+    try {
+      const preview = await client.previewAdminPlanSave(plan);
+      if (preview.createsVersion) {
+        setConfirm(preview);
+        setBusy(false);
+        return;
+      }
+    } catch (e) {
+      toast({ variant: "error", title: "Couldn't save the plan", description: e instanceof Error ? e.message : undefined });
+      setBusy(false);
+      return;
+    }
+    await save();
+  }
+
   async function save() {
+    setConfirm(null);
     setBusy(true);
     try {
       const p = await client.saveAdminPlan(plan);
@@ -369,11 +433,27 @@ export function PlanEditForm({
           <button className={formPageStyles.btn} type="button" onClick={() => (onCancel ? onCancel() : setPlan(saved))}>
             Cancel
           </button>
-          <button className={formPageStyles.btnPrimary} type="button" disabled={!dirty || busy || !canEdit} onClick={() => void save()}>
+          <button className={formPageStyles.btnPrimary} type="button" disabled={!dirty || busy || !canEdit} onClick={() => void requestSave()}>
             {busy ? "Saving…" : "Save plan"}
           </button>
         </div>
       </div>
+      <BillingDialog
+        open={!!confirm}
+        onClose={() => setConfirm(null)}
+        title={confirm ? `Save as ${confirm.isFree ? `${confirm.planName} ` : ""}v${confirm.version}?` : ""}
+        description={confirm ? versionConfirmText(confirm) : undefined}
+        footer={
+          <DialogActions>
+            <button type="button" className="btn btn-ghost btn-sm" onClick={() => setConfirm(null)}>
+              Cancel
+            </button>
+            <button type="button" className="btn btn-primary btn-sm" disabled={busy} onClick={() => void save()}>
+              {confirm ? `Save v${confirm.version}` : "Save"}
+            </button>
+          </DialogActions>
+        }
+      />
     </div>
   );
 }

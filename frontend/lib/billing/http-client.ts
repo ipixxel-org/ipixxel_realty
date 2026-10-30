@@ -49,6 +49,7 @@ export const httpBilling: Impl = {
   listPlans: () => call("/org/billing/plans"),
   getAccessStatus: () => call("/org/billing/access"),
   listAdminPlans: () => call("/admin/billing/plans"),
+  previewAdminPlanSave: (plan) => call(`/admin/billing/plans/${encodeURIComponent(plan.id)}/preview`, post(plan)),
   saveAdminPlan: (plan) => call(`/admin/billing/plans/${encodeURIComponent(plan.id)}`, put(plan)),
   getLifecycleSettings: () => call("/admin/billing/lifecycle"),
   saveLifecycleSettings: (settings) => call("/admin/billing/lifecycle", put(settings)),

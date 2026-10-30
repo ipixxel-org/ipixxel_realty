@@ -373,6 +373,13 @@ export class AdminBillingController {
     return this.service.listPlans();
   }
 
+  /** What saving this change would do (a new version? who it affects) — for the confirm. */
+  @Post('plans/:id/preview')
+  @HttpCode(200)
+  previewPlanSave(@Param('id') id: string, @Body() dto: SaveAdminPlanDto) {
+    return this.service.previewPlanSave(id, dto);
+  }
+
   @Put('plans/:id')
   savePlan(
     @CurrentUser() user: JwtPayload,

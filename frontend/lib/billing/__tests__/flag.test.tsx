@@ -492,6 +492,8 @@ describe("billing v2 flag", () => {
         "listPlans",
         "saveAdminPlan",
         "saveLifecycleSettings",
+        // plan versions: the save confirm
+        "previewAdminPlanSave",
         // step 2
         "previewCheckout",
         "startCheckout",

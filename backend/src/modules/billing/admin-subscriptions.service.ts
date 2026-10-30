@@ -3,6 +3,10 @@ import {
   SUB_PLAN_INCLUDE,
   withEffectivePlan,
 } from '../../common/utils/plan-version.util';
+import {
+  latestVersionsByPlan,
+  orgPlanVersionInfo,
+} from '../../common/utils/plan-version-change.util';
 import { Injectable, NotFoundException, Optional } from '@nestjs/common';
 import type { Plan } from '@prisma/client';
 import { PrismaService } from '../../database/prisma.service';
@@ -85,6 +89,10 @@ export interface SubscriptionRowV2 {
   couponCode: string | null;
   /** Extra grace days a Super Admin gave for the current due date (0 = none; only while in grace). */
   graceExtraDays: number;
+  /** Plan versions: the org's version, the plan's newest, and when the newer one applies. */
+  planVersion: number | null;
+  latestVersion: number | null;
+  versionAppliesOn: string | null;
 }
 
 export interface TimelineEventV2 {
@@ -151,7 +159,7 @@ export class AdminSubscriptionsService {
   > {
     await applyOrgSubscriptionLifecycle(this.prisma);
     const now = billingNow();
-    const [orgs, active, cfg, seats, coupons] = await Promise.all([
+    const [orgs, active, cfg, seats, coupons, latest] = await Promise.all([
       this.prisma.organisation.findMany({
         where: { status: { in: ['active', 'pending'] } },
         orderBy: { name: 'asc' },
@@ -179,6 +187,7 @@ export class AdminSubscriptionsService {
         _count: { _all: true },
       }),
       this.prisma.coupon.findMany({ select: { id: true, code: true } }),
+      latestVersionsByPlan(this.prisma),
     ]);
     const ranked = sortPlans(active);
     const rankOf = planRanker(active);
@@ -253,6 +262,7 @@ export class AdminSubscriptionsService {
           status === 'past_due' || status === 'grace_ending'
             ? Math.max(0, sub?.graceExtensionDays ?? 0)
             : 0,
+        ...orgPlanVersionInfo(sub, latest),
       });
     }
 
@@ -285,10 +295,11 @@ export class AdminSubscriptionsService {
       select: { id: true, name: true, city: true, state: true },
     });
     if (!org) throw new NotFoundException('Organisation not found');
-    const [ov, sub, payments, audits] = await Promise.all([
+    const [ov, sub, payments, audits, latestVersions] = await Promise.all([
       this.overview.getOverview(orgId),
       this.prisma.subscription.findFirst({
         where: { orgId, status: { not: 'cancelled' } },
+        include: SUB_PLAN_INCLUDE,
       }),
       this.ledger.payments(orgId),
       this.prisma.auditLog.findMany({
@@ -296,6 +307,7 @@ export class AdminSubscriptionsService {
         orderBy: { createdAt: 'desc' },
         take: 100,
       }),
+      latestVersionsByPlan(this.prisma),
     ]);
     const users = ov.usage.find((u) => u.key === 'users')?.used ?? 0;
     const coupon = sub?.couponId
@@ -362,6 +374,7 @@ export class AdminSubscriptionsService {
       // dueDate + graceDays + graceExtraDays (graceEndFor).
       graceExtraDays: ov.graceExtraDays,
       dueDate: ov.dueDate,
+      ...orgPlanVersionInfo(sub, latestVersions),
       // Manual mode hides "Mark paid offline" and "Apply coupon" (requests do both).
       paymentMode: ov.paymentMode,
       // "Choose what stays" on the org page only when no request set the
