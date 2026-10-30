@@ -456,7 +456,8 @@ export function BillingBanner({ overview }: { overview: BillingOverview }) {
           details={picks}
           actions={
             <>
-              <BLink to="checkout" params={{ plan: plan.id, interval: o.interval }} className="btn btn-primary btn-sm">
+              {/* Opens the Plans page; picking a plan there goes on to checkout. */}
+              <BLink to="plans" params={{ interval: o.interval }} className="btn btn-primary btn-sm">
                 Buy {plan.name} again · {packagePriceText(planPrice(plan, o.interval))}
               </BLink>
               {/* The move took effect: what stays is view-only for the org now. */}

@@ -384,8 +384,8 @@ describe("one place: the latest row", () => {
     const row = screen.getByTestId("subscription-actions");
     expect(within(row).getByTestId("org-level-what-stays")).toBeInTheDocument();
     expect(within(row).getByRole("button", { name: "Choose what stays" })).toBeInTheDocument();
-    // Next to the Cancel (move to Basic) button, and nowhere else on the page.
-    expect(within(row).getByRole("button", { name: "Cancel" }).parentElement!.nextElementSibling).toBe(within(row).getByTestId("org-level-what-stays"));
+    // Next to the Move to Basic button, and nowhere else on the page.
+    expect(within(row).getByRole("button", { name: "Move to Basic" }).parentElement!.nextElementSibling).toBe(within(row).getByTestId("org-level-what-stays"));
     expect(screen.getAllByTestId("org-level-what-stays")).toHaveLength(1);
   });
 

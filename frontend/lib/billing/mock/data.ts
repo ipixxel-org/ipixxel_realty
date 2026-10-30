@@ -19,6 +19,8 @@ export interface MockOrg {
   id: string; name: string; city: string; state: string; plan: string; cycle: BillingInterval;
   status: SubscriptionStatus; renewalMode: RenewalMode; keyDate: string | null; users: number;
   couponCode?: string; timeline: TimelineEvent[];
+  /** Extra grace days given by Super Admin for the current due date. */
+  graceExtraDays?: number;
 }
 export interface MockRedemption { code: string; orgId: string; at: string; discount: number; plan: string }
 

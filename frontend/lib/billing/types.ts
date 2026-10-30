@@ -781,6 +781,8 @@ export interface SubscriptionRow {
   keyDate: string | null;
   users: number;
   couponCode: string | null;
+  /** Extra grace days a Super Admin gave for the current due date (0 / absent = none; only while in grace). */
+  graceExtraDays?: number;
 }
 
 export interface SubscriptionList extends Paged<SubscriptionRow> {
@@ -803,6 +805,8 @@ export interface SubscriptionDetail extends SubscriptionRow {
   whatStaysOrgLevel?: boolean;
   renewalAmount: number;
   graceDays: number;
+  /** The unpaid renewal's due date while in grace; grace ends dueDate + graceDays + graceExtraDays. */
+  dueDate?: string | null;
   /** Manual mode hides "Mark paid offline" and "Apply coupon" (the org's request does both). */
   paymentMode?: PaymentMode;
   timeline: TimelineEvent[];
