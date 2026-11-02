@@ -1,3 +1,4 @@
+import { SUB_PLAN_INCLUDE, withEffectivePlan } from './plan-version.util';
 import { ConflictException, ForbiddenException, NotFoundException } from '@nestjs/common';
 import * as bcrypt from 'bcrypt';
 import type { Prisma } from '@prisma/client';
@@ -187,10 +188,13 @@ export async function provisionInvitedUser(
   // the org has a subscription. The founding admin is created elsewhere, at
   // org creation, before any subscription — it is not gated here and does
   // not consume a seat; active + pending non-admin users consume seats.
-  const subscription = await prisma.subscription.findFirst({
-    where: { orgId, status: { not: 'cancelled' } },
-    include: { plan: true },
-  });
+  // The org's version of its plan (its user limit), not the plan's latest.
+  const subscription = withEffectivePlan(
+    await prisma.subscription.findFirst({
+      where: { orgId, status: { not: 'cancelled' } },
+      include: SUB_PLAN_INCLUDE,
+    }),
+  );
   if (subscription) {
     const currentCount = await countBillableOrgUsers(prisma, orgId);
     assertLimit(subscription.plan, 'users', currentCount, 1);

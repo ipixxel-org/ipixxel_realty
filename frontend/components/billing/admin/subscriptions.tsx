@@ -6,11 +6,12 @@ import { Icon } from "@/components/icons";
 import { ListPager } from "@/components/ui/list-pager";
 import { useToast } from "@/components/ui/toast";
 import { addDays, describeCoupon, formatDate, formatINR } from "@/lib/billing/pricing";
-import type { SubscriptionDetail, SubscriptionStatus, TimelineEvent } from "@/lib/billing/types";
+import type { SubscriptionDetail, SubscriptionRow, SubscriptionStatus, TimelineEvent } from "@/lib/billing/types";
 import { useBillingEnv, useBillingQuery } from "../context";
 import { BillingDialog, DialogActions } from "../dialog";
 import { BLink, Empty, ErrorNote, Kv, Loading, PAYMENT_STATUS_META, Section, STATUS_META } from "../ui";
 import { OrderIdCell, PaymentDocuments } from "./payment-cells";
+import { PlanVersionHistoryDialog } from "./plan-version-history";
 
 const ADMIN_STATUS_LABEL: Record<SubscriptionStatus, string> = {
   ...Object.fromEntries(Object.entries(STATUS_META).map(([k, v]) => [k, v.label])),
@@ -51,6 +52,53 @@ function GraceExtraTag({ days }: { days?: number }) {
     <span className="badge b-amber" style={{ marginLeft: 6 }} title={`Grace extended by ${plural(days, "day")}`} data-testid="grace-extra-tag">
       +{plural(days, "day")}
     </span>
+  );
+}
+
+/** "Starter v2" — the plan with the version the organisation is on. */
+export function planWithVersion(r: Pick<SubscriptionRow, "plan" | "planVersion">): string {
+  return r.planVersion ? `${r.plan.name} v${r.planVersion}` : r.plan.name;
+}
+
+/** "v3 applies at renewal on 26 Nov 2026" (Basic: "v3 applies on …"); null when on the newest. */
+export function newerVersionNote(r: Pick<SubscriptionRow, "plan" | "latestVersion" | "versionAppliesOn">): string | null {
+  if (!r.latestVersion || !r.versionAppliesOn) return null;
+  return `v${r.latestVersion} applies ${r.plan.isFree ? "on" : "at renewal on"} ${formatDate(r.versionAppliesOn)}`;
+}
+
+function NewerVersionNote({ row }: { row: SubscriptionRow }) {
+  const note = newerVersionNote(row);
+  return note ? (
+    <div className="bl-muted bl-small" data-testid="newer-version-note" title="A newer version of this plan: the organisation keeps its version until then">
+      {note}
+    </div>
+  ) : null;
+}
+
+/** "View" next to "Starter v1": that version's prices, limits and features. */
+function ViewVersion({ row }: { row: SubscriptionRow }) {
+  const [open, setOpen] = useState(false);
+  if (!row.planVersionId) return null;
+  return (
+    <>
+      {" "}
+      <button
+        type="button"
+        data-testid="view-plan-version"
+        onClick={() => setOpen(true)}
+        style={{ background: "none", border: 0, padding: 0, color: "var(--brand)", cursor: "pointer", fontWeight: 600, fontSize: 12.5 }}
+      >
+        View
+      </button>
+      <PlanVersionHistoryDialog
+        open={open}
+        onClose={() => setOpen(false)}
+        planId={row.plan.id}
+        planName={row.plan.name}
+        onlyVersionId={row.planVersionId}
+        title={planWithVersion(row)}
+      />
+    </>
   );
 }
 
@@ -170,8 +218,9 @@ export function SubscriptionsList({ syncUrl = false }: { syncUrl?: boolean } = {
                       </div>
                     </td>
                     <td>
-                      {o.plan.name}
+                      <span data-testid="row-plan">{planWithVersion(o)}</span>
                       {!o.plan.isFree ? <div className="bl-muted bl-small">{o.interval}</div> : null}
+                      <NewerVersionNote row={o} />
                     </td>
                     <td>
                       <span className={`badge ${STATUS_META[o.status].badge}`}>{ADMIN_STATUS_LABEL[o.status]}</span>
@@ -485,8 +534,10 @@ export function SubscriptionDetailView({
       <Section title={d.orgName} sub={`${d.city}, ${d.state} · ${d.users} users`}>
         <div className="bl-grid4">
           <Kv label="Plan">
-            {d.plan.name}
+            <span data-testid="summary-plan">{planWithVersion(d)}</span>
             {paid ? <span className="bl-muted" style={{ fontWeight: 500 }}> · {d.interval}</span> : null}
+            <ViewVersion row={d} />
+            <NewerVersionNote row={d} />
           </Kv>
           <Kv label="Status">
             <span className={`badge ${STATUS_META[d.status].badge}`}>{ADMIN_STATUS_LABEL[d.status]}</span>

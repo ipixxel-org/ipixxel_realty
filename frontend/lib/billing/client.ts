@@ -13,6 +13,10 @@ import type {
   ApplyCouponRequest,
   BillingOverview,
   BillingPlan,
+  PlanSavePreview,
+  PlanVersionHistory,
+  PlanVersionOrg,
+  ListPlanVersionOrgsRequest,
   CancelPlanRequest,
   CheckoutPreview,
   CompanyDetails,
@@ -110,6 +114,12 @@ export interface BillingClient {
   /* ---------------- Super Admin (admin_subscriptions) ---------------- */
   /** GET /admin/billing/plans */
   listAdminPlans(): Promise<BillingPlan[]>;
+  /** GET /admin/billing/plans/:id/versions — version history: values, who / when, orgs per version. */
+  getPlanVersions(planId: string): Promise<PlanVersionHistory>;
+  /** GET /admin/billing/plans/:id/versions/:versionId/orgs — the organisations on a version (paged). */
+  listPlanVersionOrgs(req: ListPlanVersionOrgsRequest): Promise<Paged<PlanVersionOrg>>;
+  /** POST /admin/billing/plans/:id/preview — a new version or not, and who it affects (the save confirm). */
+  previewAdminPlanSave(plan: BillingPlan): Promise<PlanSavePreview>;
   /** PUT /admin/billing/plans/:id */
   saveAdminPlan(plan: BillingPlan): Promise<BillingPlan>;
   /** GET /admin/billing/coupons */

@@ -10,9 +10,23 @@ import {
 } from '../../common/utils/billing-clock.util';
 import {
   applyOrgSubscriptionLifecycle,
+  applyPlanVersionChanges,
   readReminderSettings,
   REMINDER_IDS,
 } from '../../common/utils/subscription-lifecycle.util';
+import {
+  ensureLatestPlanVersion,
+  latestPlanVersion,
+  sameTerms,
+} from '../../common/utils/plan-version.util';
+import {
+  BASIC_NOTICE_DAYS,
+  HISTORY_FEATURES,
+  HISTORY_LIMITS,
+  versionChanges,
+  versionValues,
+} from '../../common/utils/plan-version-change.util';
+import { usageOverLimits } from '../../common/utils/plan-quota.util';
 import { PlatformConfigService } from '../platform-config/platform-config.service';
 import { RazorpaySettingsService } from '../payments/razorpay-settings.service';
 import { BillingModeService } from './billing-mode.service';
@@ -31,6 +45,9 @@ import type {
   LifecycleRunResultV2,
   LifecycleSettingsV2,
   OnlinePaymentsV2,
+  PlanSavePreviewV2,
+  PlanVersionHistoryV2,
+  PlanVersionOrgV2,
   SellerSettingsV2,
 } from './billing.types';
 import type { SaveAdminPlanDto } from './dto/save-admin-plan.dto';
@@ -90,6 +107,43 @@ const LIMIT_LABEL = {
  * Semantic checks for a plan save (shape is checked by the DTO). Returns the
  * first problem as a customer-readable message, or null. Pure — unit-tested.
  */
+/**
+ * The limits and capabilities a Plans & Pricing save stores: what v2 edits,
+ * keeping everything it doesn't (landingPagesCreate, catalog capabilities,
+ * WhatsApp).
+ */
+export function adminPlanTerms(
+  stored: { limits: unknown; capabilities: unknown },
+  dto: Pick<SaveAdminPlanDto, 'limits' | 'modules'>,
+) {
+  const oldLimits = (
+    stored.limits && typeof stored.limits === 'object' ? stored.limits : {}
+  ) as Record<string, unknown>;
+  const oldCaps = (
+    stored.capabilities && typeof stored.capabilities === 'object'
+      ? stored.capabilities
+      : {}
+  ) as Record<string, unknown>;
+  return {
+    limits: {
+      ...oldLimits,
+      users: dto.limits.users ?? null,
+      projects: dto.limits.projects ?? null,
+      landingPages: dto.limits.landingPages ?? null,
+      templates: dto.limits.templates ?? null,
+      metaPages: dto.modules.metaLeadAds ? (dto.modules.metaPages ?? null) : 0,
+    },
+    capabilities: {
+      ...oldCaps,
+      teamChat: dto.modules.teamChat,
+      metaLeadAds: dto.modules.metaLeadAds,
+    },
+  };
+}
+
+/** Organisation names per version on a Plans & Pricing card (the rest: "+N more"). */
+export const PLAN_CARD_ORG_NAMES = 5;
+
 export function validateAdminPlan(
   input: SaveAdminPlanDto,
   stored: {
@@ -152,38 +206,272 @@ export class AdminBillingService {
 
   /** Every plan, inactive ones too (marked `isActive: false`), so they can be edited or deleted. */
   async listPlans(): Promise<BillingPlanV2[]> {
-    const plans = await this.prisma.plan.findMany();
-    return toBillingPlans(plans);
+    type VersionRow = { id: string; planId: string; version: number };
+    type SubRow = {
+      orgId: string;
+      planId: string;
+      planVersionId: string | null;
+      organisation?: { name: string } | null;
+    };
+    // Old test mocks have only plan.findMany.
+    const [plans, versions, subs]: [
+      Awaited<ReturnType<PrismaService['plan']['findMany']>>,
+      VersionRow[],
+      SubRow[],
+    ] = await Promise.all([
+      this.prisma.plan.findMany(),
+      this.prisma.planVersion
+        ? this.prisma.planVersion.findMany({
+            select: { id: true, planId: true, version: true },
+            orderBy: { version: 'desc' },
+          })
+        : Promise.resolve([]),
+      this.prisma.subscription?.findMany
+        ? this.prisma.subscription.findMany({
+            where: { status: { not: 'cancelled' } },
+            select: {
+              orgId: true,
+              planId: true,
+              planVersionId: true,
+              organisation: { select: { name: true } },
+            },
+          })
+        : Promise.resolve([]),
+    ]);
+    return toBillingPlans(plans).map((p) => {
+      const mine = versions.filter((v) => v.planId === p.id);
+      if (!mine.length) return p;
+      const latest = mine[0];
+      // Organisations currently subscribed, per version (none recorded = the newest).
+      const orgsOn = (id: string) =>
+        subs.filter(
+          (s) =>
+            s.planId === p.id &&
+            (s.planVersionId === id ||
+              (id === latest.id &&
+                (s.planVersionId === null ||
+                  !mine.some((v) => v.id === s.planVersionId)))),
+        );
+      return {
+        ...p,
+        version: latest.version,
+        versions: mine
+          .map((v) => {
+            const on = orgsOn(v.id);
+            return {
+              version: v.version,
+              orgs: on.length,
+              // The first few names, A–Z; the rest are in the version history.
+              orgNames: on
+                .map((s) => s.organisation?.name ?? s.orgId)
+                .sort((a, b) => a.localeCompare(b))
+                .slice(0, PLAN_CARD_ORG_NAMES),
+            };
+          })
+          .filter((v) => v.version === latest.version || v.orgs > 0),
+      };
+    });
   }
 
-  async savePlan(id: string, dto: SaveAdminPlanDto): Promise<BillingPlanV2> {
+  /**
+   * Version history of a plan, newest first: each version's prices, limits
+   * and feature switches, who made it and when, and how many organisations
+   * are on it now (none recorded counts as the newest).
+   */
+  async planVersions(id: string): Promise<PlanVersionHistoryV2> {
+    const plan = await this.prisma.plan.findUnique({ where: { id } });
+    if (!plan) throw new NotFoundException('Plan not found');
+    // A plan saved before versions existed gets its v1 now.
+    await ensureLatestPlanVersion(this.prisma, plan);
+    const [versions, subs] = await Promise.all([
+      this.prisma.planVersion.findMany({
+        where: { planId: id },
+        orderBy: { version: 'desc' },
+      }),
+      this.prisma.subscription.findMany({
+        where: { planId: id, status: { not: 'cancelled' } },
+        select: { planVersionId: true },
+      }),
+    ]);
+    const creatorIds = [
+      ...new Set(versions.map((v) => v.createdById).filter(Boolean)),
+    ] as string[];
+    const creators = new Map(
+      creatorIds.length
+        ? (
+            await this.prisma.user.findMany({
+              where: { id: { in: creatorIds } },
+              select: {
+                id: true,
+                firstName: true,
+                lastName: true,
+                email: true,
+              },
+            })
+          ).map((u) => [
+            u.id,
+            [u.firstName, u.lastName].filter(Boolean).join(' ') || u.email,
+          ])
+        : [],
+    );
+    const latestId = versions[0]?.id;
+    const known = new Set(versions.map((v) => v.id));
+    const orgsOn = (vid: string) =>
+      subs.filter(
+        (s) =>
+          s.planVersionId === vid ||
+          (vid === latestId &&
+            (!s.planVersionId || !known.has(s.planVersionId))),
+      ).length;
+    return {
+      planId: plan.id,
+      planName: plan.name,
+      isFree: isFreePlan(plan),
+      limitRows: HISTORY_LIMITS.map((l) => ({ key: l.key, label: l.label })),
+      featureRows: HISTORY_FEATURES,
+      versions: versions.map((v) => ({
+        id: v.id,
+        version: v.version,
+        latest: v.id === latestId,
+        createdAt: v.createdAt.toISOString().slice(0, 10),
+        createdBy: v.createdById ? (creators.get(v.createdById) ?? null) : null,
+        ...versionValues(v),
+        orgs: orgsOn(v.id),
+      })),
+    };
+  }
+
+  /**
+   * The organisations on one version (paged, by name), with when they move to
+   * the latest version: their renewal (Basic: the end of the 7 days' notice).
+   */
+  async planVersionOrgs(
+    id: string,
+    versionId: string,
+    q: { page?: number; pageSize?: number } = {},
+  ): Promise<{
+    data: PlanVersionOrgV2[];
+    total: number;
+    page: number;
+    pageSize: number;
+  }> {
+    const plan = await this.prisma.plan.findUnique({ where: { id } });
+    if (!plan) throw new NotFoundException('Plan not found');
+    const [version, latest] = await Promise.all([
+      this.prisma.planVersion.findFirst({
+        where: { id: versionId, planId: id },
+      }),
+      latestPlanVersion(this.prisma, id),
+    ]);
+    if (!version) throw new NotFoundException('Version not found');
+    const isLatest = version.id === latest?.id;
+    const subs = await this.prisma.subscription.findMany({
+      where: {
+        planId: id,
+        status: { not: 'cancelled' },
+        ...(isLatest
+          ? {
+              OR: [{ planVersionId: version.id }, { planVersionId: null }],
+            }
+          : { planVersionId: version.id }),
+      },
+      select: {
+        orgId: true,
+        billingCycle: true,
+        renewsAt: true,
+        organisation: { select: { name: true } },
+      },
+    });
+    const rows = subs
+      .map((s) => {
+        const moves = isLatest
+          ? null
+          : isFreePlan(plan)
+            ? new Date(
+                latest!.createdAt.getTime() +
+                  BASIC_NOTICE_DAYS * 24 * 60 * 60 * 1000,
+              )
+            : s.renewsAt;
+        return {
+          orgId: s.orgId,
+          orgName: s.organisation?.name ?? s.orgId,
+          interval: s.billingCycle,
+          movesOn: moves ? moves.toISOString().slice(0, 10) : null,
+        };
+      })
+      .sort((a, b) => a.orgName.localeCompare(b.orgName));
+    const pageSize = Math.min(Math.max(1, q.pageSize ?? 20), 100);
+    const page = Math.max(1, q.page ?? 1);
+    return {
+      data: rows.slice((page - 1) * pageSize, page * pageSize),
+      total: rows.length,
+      page,
+      pageSize,
+    };
+  }
+
+  /** What saving this change would do: a new version or not, and who it affects. */
+  async previewPlanSave(
+    id: string,
+    dto: SaveAdminPlanDto,
+  ): Promise<PlanSavePreviewV2> {
+    const stored = await this.prisma.plan.findUnique({ where: { id } });
+    if (!stored) throw new NotFoundException('Plan not found');
+    const problem = validateAdminPlan(dto, stored);
+    if (problem) throw new BadRequestException(problem);
+    const terms = {
+      priceMonthly: dto.priceMonthly,
+      priceYearly: dto.priceYearly,
+      ...adminPlanTerms(stored, dto),
+    };
+    const latest = await latestPlanVersion(this.prisma, id);
+    const createsVersion = !sameTerms(latest ?? stored, terms);
+    const subs = await this.prisma.subscription.findMany({
+      where: { planId: id, status: { not: 'cancelled' } },
+      include: { planVersion: true },
+    });
+    let basic: PlanSavePreviewV2['basic'] = null;
+    if (isFreePlan(stored) && createsVersion) {
+      // Over the new limits (lower than the version they're on): 7 days' notice.
+      let overLimits = 0;
+      for (const s of subs) {
+        const held = s.planVersion ?? latest ?? stored;
+        const lower = versionChanges(held, terms).some((c) => c.lower);
+        if (
+          lower &&
+          (await usageOverLimits(this.prisma, s.orgId, terms)).length
+        )
+          overLimits++;
+      }
+      basic = {
+        overLimits,
+        moveNow: subs.length - overLimits,
+        noticeDays: BASIC_NOTICE_DAYS,
+      };
+    }
+    return {
+      planName: dto.name.trim() || stored.name,
+      isFree: isFreePlan(stored),
+      createsVersion,
+      version: createsVersion
+        ? (latest?.version ?? 0) + 1
+        : (latest?.version ?? 1),
+      orgsOnPlan: subs.length,
+      basic,
+    };
+  }
+
+  async savePlan(
+    id: string,
+    dto: SaveAdminPlanDto,
+    actorId: string | null = null,
+  ): Promise<BillingPlanV2> {
     const stored = await this.prisma.plan.findUnique({ where: { id } });
     if (!stored) throw new NotFoundException('Plan not found');
     const problem = validateAdminPlan(dto, stored);
     if (problem) throw new BadRequestException(problem);
 
-    const oldLimits = (
-      stored.limits && typeof stored.limits === 'object' ? stored.limits : {}
-    ) as Record<string, unknown>;
-    const oldCaps = (
-      stored.capabilities && typeof stored.capabilities === 'object'
-        ? stored.capabilities
-        : {}
-    ) as Record<string, unknown>;
-    // Keep everything v2 doesn't edit (landingPagesCreate, catalog capabilities, WhatsApp).
-    const limits = {
-      ...oldLimits,
-      users: dto.limits.users ?? null,
-      projects: dto.limits.projects ?? null,
-      landingPages: dto.limits.landingPages ?? null,
-      templates: dto.limits.templates ?? null,
-      metaPages: dto.modules.metaLeadAds ? (dto.modules.metaPages ?? null) : 0,
-    };
-    const capabilities = {
-      ...oldCaps,
-      teamChat: dto.modules.teamChat,
-      metaLeadAds: dto.modules.metaLeadAds,
-    };
+    const { limits, capabilities } = adminPlanTerms(stored, dto);
 
     await this.prisma.plan.update({
       where: { id },
@@ -196,6 +484,20 @@ export class AdminBillingService {
         capabilities,
       },
     });
+    // A change to the price, limits or features is the plan's next version;
+    // a name / tagline change isn't.
+    const updated = await this.prisma.plan.findUniqueOrThrow({ where: { id } });
+    const before = await latestPlanVersion(this.prisma, id);
+    const version = await ensureLatestPlanVersion(
+      this.prisma,
+      updated,
+      actorId,
+    );
+    // A new version: Basic orgs that fit move now (the rest get notice);
+    // orgs in their renewal window are told what changes.
+    if (version && version.id !== before?.id) {
+      await applyPlanVersionChanges(this.prisma).catch(() => undefined);
+    }
 
     const active = await this.prisma.plan.findMany({
       where: { isActive: true },
@@ -203,7 +505,10 @@ export class AdminBillingService {
     const saved =
       active.find((p) => p.id === id) ??
       (await this.prisma.plan.findUniqueOrThrow({ where: { id } }));
-    return toBillingPlan(saved, planRanker(active)(saved));
+    return {
+      ...toBillingPlan(saved, planRanker(active)(saved)),
+      version: version?.version ?? null,
+    };
   }
 
   /* -------------------------------------------------------------- lifecycle */

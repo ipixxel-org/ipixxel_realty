@@ -172,7 +172,10 @@ function Editor({
             ? `This applies when ${admin.orgName ?? "the organisation"} moves to ${t.name} on ${formatDate(choices.appliesOn)}. `
             : `${admin.orgName ?? "The organisation"} is on ${t.name} now — saving applies straight away and they're notified. `
           : choices.appliesOn
-            ? `This applies if you move to ${t.name} on ${formatDate(choices.appliesOn)}. `
+            ? billing?.overview?.plan.id === t.id
+              ? // A newer version of their own plan with lower limits.
+                `This applies when ${t.name} changes on ${formatDate(choices.appliesOn)}. `
+              : `This applies if you move to ${t.name} on ${formatDate(choices.appliesOn)}. `
             : `You're on ${t.name} now — changes apply straight away. `}
         Anything you untick is paused, never deleted: paused people can&apos;t sign in, projects become view-only and landing pages go offline. A paused template can&apos;t be
         used for new landing pages; pages already made from it stay live and editable. Leads keep coming in.

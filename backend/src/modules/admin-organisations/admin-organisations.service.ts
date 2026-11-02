@@ -1,4 +1,9 @@
 import {
+  latestPlanVersionId,
+  SUB_PLAN_INCLUDE,
+  withEffectivePlan,
+} from '../../common/utils/plan-version.util';
+import {
   BadRequestException,
   ConflictException,
   Injectable,
@@ -277,6 +282,7 @@ export class AdminOrganisationsService {
           data: {
             orgId: activated.id,
             planId: plan.id,
+            planVersionId: await latestPlanVersionId(tx, dto.planId),
             billingCycle: billingCycle as any,
             status: 'active',
             amount,
@@ -812,7 +818,7 @@ export class AdminOrganisationsService {
         const mrr = isYearly ? Math.round(amount / 12) : amount;
         const renewsAt = isYearly ? new Date(Date.now() + 365 * 24 * 60 * 60 * 1000) : new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
         subscription = await tx.subscription.create({
-          data: { orgId: updated.id, planId: plan.id, billingCycle: billingCycle as any, status: 'active', amount, mrr, currency: 'INR', renewsAt },
+          data: { orgId: updated.id, planId: plan.id, planVersionId: await latestPlanVersionId(tx, dto.planId), billingCycle: billingCycle as any, status: 'active', amount, mrr, currency: 'INR', renewsAt },
         });
       } else if (existingSub) {
         subscription = existingSub;
@@ -969,11 +975,13 @@ export class AdminOrganisationsService {
         );
       }
     }
-    // validate plan limits if subscription exists
-    const sub = await this.prisma.subscription.findFirst({
-      where: { orgId: id, status: { not: 'cancelled' } },
-      include: { plan: true },
-    });
+    // validate plan limits if subscription exists (the org's version of its plan)
+    const sub = withEffectivePlan(
+      await this.prisma.subscription.findFirst({
+        where: { orgId: id, status: { not: 'cancelled' } },
+        include: SUB_PLAN_INCLUDE,
+      }),
+    );
     if (sub) {
       // Paused templates (billing v2) stay assigned but don't use a slot.
       const nextIdSet = new Set(templateIds);

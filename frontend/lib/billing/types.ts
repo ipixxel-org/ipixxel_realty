@@ -47,6 +47,75 @@ export interface BillingPlan {
   rank: number;
   limits: PlanLimits;
   modules: PlanModules;
+  /** Super Admin plan list: the newest version's number (plan versions). */
+  version?: number | null;
+  /** Super Admin plan list: organisations on the plan per version, newest first. */
+  versions?: PlanVersionCount[];
+}
+
+export interface PlanVersionCount {
+  version: number;
+  orgs: number;
+  /** The first few organisation names on it, A–Z (the rest: "+N more"). */
+  orgNames?: string[];
+}
+
+/** One version in the Super Admin version history (GET /admin/billing/plans/:id/versions). */
+export interface PlanVersionDetail {
+  id: string;
+  version: number;
+  /** The plan's newest version. */
+  latest: boolean;
+  /** YYYY-MM-DD */
+  createdAt: string;
+  /** Who saved it; null for v1 made when versions started. */
+  createdBy: string | null;
+  priceMonthly: number;
+  priceYearly: number;
+  /** By limitRows key; null = unlimited. */
+  limits: Record<string, number | null>;
+  /** By featureRows key: on / off. */
+  features: Record<string, boolean>;
+  /** Organisations currently subscribed on this version. */
+  orgs: number;
+}
+
+export interface PlanVersionHistory {
+  planId: PlanId;
+  planName: string;
+  isFree: boolean;
+  limitRows: { key: string; label: string }[];
+  featureRows: { key: string; label: string }[];
+  /** Newest first. */
+  versions: PlanVersionDetail[];
+}
+
+/** An organisation on a version (GET …/versions/:versionId/orgs). */
+export interface PlanVersionOrg {
+  orgId: string;
+  orgName: string;
+  interval: BillingInterval;
+  /** YYYY-MM-DD it moves to the latest version (renewal; Basic: end of the notice); null = on the latest. */
+  movesOn: string | null;
+}
+
+export interface ListPlanVersionOrgsRequest extends PageRequest {
+  planId: PlanId;
+  versionId: string;
+}
+
+/** POST /admin/billing/plans/:id/preview — what saving a plan change would do. */
+export interface PlanSavePreview {
+  planName: string;
+  isFree: boolean;
+  /** Price, limits or features change: saving makes a new version. */
+  createsVersion: boolean;
+  /** The new version's number (or the current one when nothing changes). */
+  version: number;
+  /** Organisations currently subscribed to the plan. */
+  orgsOnPlan: number;
+  /** Basic only, when it makes a version: over the new limits (notice) / moving now. */
+  basic: { overLimits: number; moveNow: number; noticeDays: number } | null;
 }
 
 /* ----------------------------------------------------------- Subscription */
@@ -310,11 +379,44 @@ export interface RenewalBreakdown {
 /** payment_review: a paid online checkout is being checked by our team (renewals still go through). */
 export type PlanChangeBlockedReason = "request_pending" | "change_scheduled" | "payment_review";
 
+/** One limit or feature that differs in the plan's newer version. */
+export interface PlanVersionChange {
+  key: string;
+  kind: "limit" | "feature";
+  label: string;
+  /** Limits: a number, or null for unlimited. Features: on / off. */
+  from: number | boolean | null;
+  to: number | boolean | null;
+  /** Fewer than before, or a feature switched off. */
+  lower: boolean;
+  /** "3 users instead of 5", "no Team chat". */
+  text: string;
+}
+
+/** The plan's newer version the org moves to: at renewal (from the renewal window), or for Basic at the end of the notice. */
+export interface NextPlanVersion {
+  planName: string;
+  fromVersion: number | null;
+  toVersion: number;
+  /** YYYY-MM-DD: the renewal date, or (Basic) when it applies. */
+  at: string;
+  reason: "renewal" | "basic";
+  /** The org's interval; null when the price doesn't change. Rupees before GST. */
+  price: { interval: BillingInterval; from: number; to: number } | null;
+  changes: PlanVersionChange[];
+  /** Some limit is lower or a feature is off: "Choose what stays" applies. */
+  lower: boolean;
+}
+
 export interface BillingOverview {
   orgName: string;
   ownerName: string;
-  /** Plan whose limits apply today. */
+  /** Plan whose limits apply today (the version the org is on). */
   plan: BillingPlan;
+  /** Plan versions: the version of `plan` the org is on (null / absent = not shown). */
+  planVersion?: number | null;
+  /** What changes when the org moves to the plan's newer version; null / absent = nothing. */
+  nextVersion?: NextPlanVersion | null;
   /** The paid plan — current, or the one held before moving to Basic. null for a free sign-up. */
   paidPlan: BillingPlan | null;
   interval: BillingInterval;
@@ -783,6 +885,14 @@ export interface SubscriptionRow {
   couponCode: string | null;
   /** Extra grace days a Super Admin gave for the current due date (0 / absent = none; only while in grace). */
   graceExtraDays?: number;
+  /** Plan versions: the org's version (null / absent = not recorded). */
+  planVersion?: number | null;
+  /** That version's id ("View" opens its values). */
+  planVersionId?: string | null;
+  /** The plan's newest version. */
+  latestVersion?: number | null;
+  /** YYYY-MM-DD the newer version applies (renewal, or end of Basic's notice); null = on the newest. */
+  versionAppliesOn?: string | null;
 }
 
 export interface SubscriptionList extends Paged<SubscriptionRow> {

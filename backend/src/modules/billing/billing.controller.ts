@@ -373,9 +373,36 @@ export class AdminBillingController {
     return this.service.listPlans();
   }
 
+  /** Version history: every version's values, who made it, and the orgs on it. */
+  @Get('plans/:id/versions')
+  planVersions(@Param('id') id: string) {
+    return this.service.planVersions(id);
+  }
+
+  /** The organisations on one version (paged), with when they move to the latest. */
+  @Get('plans/:id/versions/:versionId/orgs')
+  planVersionOrgs(
+    @Param('id') id: string,
+    @Param('versionId') versionId: string,
+    @Query() q: PageQueryDto,
+  ) {
+    return this.service.planVersionOrgs(id, versionId, q);
+  }
+
+  /** What saving this change would do (a new version? who it affects) — for the confirm. */
+  @Post('plans/:id/preview')
+  @HttpCode(200)
+  previewPlanSave(@Param('id') id: string, @Body() dto: SaveAdminPlanDto) {
+    return this.service.previewPlanSave(id, dto);
+  }
+
   @Put('plans/:id')
-  savePlan(@Param('id') id: string, @Body() dto: SaveAdminPlanDto) {
-    return this.service.savePlan(id, dto);
+  savePlan(
+    @CurrentUser() user: JwtPayload,
+    @Param('id') id: string,
+    @Body() dto: SaveAdminPlanDto,
+  ) {
+    return this.service.savePlan(id, dto, user.sub);
   }
 
   @Get('lifecycle')

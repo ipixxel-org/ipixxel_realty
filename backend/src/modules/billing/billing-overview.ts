@@ -40,8 +40,16 @@ export interface OverviewInput {
   billingProfile?: BillingProfileV2 | null;
   pendingUpgrade?: PendingUpgradeV2 | null;
   rejectedUpgrade?: RejectedUpgradeV2 | null;
-  /** The org's plan (subscription plan, or the free plan when it has none). */
+  /**
+   * The org's plan (subscription plan, or the free plan when it has none),
+   * as the org has it: its plan version's price, limits and features.
+   */
   plan: BillingPlanV2;
+  /**
+   * The same plan as it is now (its latest version): what the renewal moves
+   * the org to and charges. Absent = `plan`.
+   */
+  renewalPlan?: BillingPlanV2 | null;
   subscription: {
     status:
       'active' | 'trial' | 'past_due' | 'expired' | 'paused' | 'cancelled';
@@ -179,8 +187,9 @@ export function buildOverview(input: OverviewInput): BillingOverviewV2 {
     status === 'grace_ending' ||
     (status === 'cancellation_scheduled' && sub?.status === 'past_due');
   const scheduled = sub?.scheduled ?? null;
-  // The next term is charged at the scheduled plan's price.
-  const next = scheduled ?? { plan, interval };
+  // The next term is charged at the scheduled plan's price, else the plan's
+  // latest price (a renewal moves the org to the latest version).
+  const next = scheduled ?? { plan: input.renewalPlan ?? plan, interval };
   const price =
     next.interval === 'yearly' ? next.plan.priceYearly : next.plan.priceMonthly;
   const cancelling = !!sub?.cancelAtPeriodEnd;

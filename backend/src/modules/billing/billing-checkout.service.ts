@@ -12,6 +12,12 @@ import type { BillingCheckoutStatus } from '@prisma/client';
 import { PrismaService } from '../../database/prisma.service';
 import { applyPlanChange } from '../../common/utils/plan-change.util';
 import {
+  effectivePlan,
+  latestPlanVersionId,
+  SUB_PLAN_INCLUDE,
+  withEffectivePlan,
+} from '../../common/utils/plan-version.util';
+import {
   assertPlanFitsAfterRetention,
   assertPlanFitsCurrentUsage,
   usageOverLimits,
@@ -170,6 +176,8 @@ export interface QuoteContext {
   usageError: string | null;
   /** Manual mode: over the target in ways "choose what stays" fixes. */
   usageConflict: UsageConflictV2 | null;
+  /** The target plan's version being quoted (its latest); kept on the checkout. */
+  toPlanVersionId?: string | null;
 }
 
 /** What a payment.captured did to its checkout (returned for tests / logs). */
@@ -229,7 +237,7 @@ export class BillingCheckoutService implements OnModuleInit {
         throw billingError('payment_review', PAYMENT_REVIEW_MESSAGE);
       }
     }
-    const ctx = await this.quote(
+    const quoted = await this.quote(
       orgId,
       dto.planId,
       dto.interval,
@@ -237,6 +245,15 @@ export class BillingCheckoutService implements OnModuleInit {
       renewal ? 'renewal' : 'purchase',
       renewal ? null : dto.couponCode,
     );
+    // The price shown is the plan's latest version: that's the one they get,
+    // even if the plan is edited before it's paid / approved.
+    const ctx: QuoteContext = {
+      ...quoted,
+      toPlanVersionId: await latestPlanVersionId(
+        this.prisma,
+        quoted.quote.toPlan.id,
+      ),
+    };
     if (ctx.missingDetails.length) {
       throw billingError(
         'billing_details_incomplete',
@@ -326,7 +343,13 @@ export class BillingCheckoutService implements OnModuleInit {
         userId,
         { targetPlanId: q.toPlan.id, billingCycle: q.toInterval },
         {
-          usage: ctx.usageConflict ? 'after_retention' : 'strict',
+          // A renewal of the same plan may move to a newer version with lower
+          // limits: what doesn't fit is paused when it's approved.
+          usage:
+            ctx.usageConflict ||
+            (q.kind === 'renewal' && q.fromPlan?.id === q.toPlan.id)
+              ? 'after_retention'
+              : 'strict',
           // A renewal (or an overdue change) may be for the plan the org is on.
           renewal: q.kind === 'renewal',
         },
@@ -549,6 +572,7 @@ export class BillingCheckoutService implements OnModuleInit {
       mode,
       status: 'pending' as const,
       createdById: userId,
+      planVersionId: ctx.toPlanVersionId ?? null,
     };
   }
 
@@ -713,7 +737,18 @@ export class BillingCheckoutService implements OnModuleInit {
         // already has); any other change does — like a Super Admin approval:
         // what "choose what stays" can pause is fine with the picked option.
         if (c.kind !== 'renewal' || c.toPlanId !== c.fromPlanId) {
-          const problem = await this.whatStaysProblem(tx, c);
+          // Checked against the version that was quoted (what they get).
+          const problem = await this.whatStaysProblem(tx, {
+            ...c,
+            toPlan: effectivePlan(
+              c.toPlan,
+              c.planVersionId
+                ? await tx.planVersion?.findUnique({
+                    where: { id: c.planVersionId },
+                  })
+                : null,
+            ),
+          });
           if (problem) return review(problem);
           // "Keep the default picks" drops an earlier saved choice; then
           // applyPlanChange → applyRetention pauses what doesn't stay.
@@ -744,6 +779,8 @@ export class BillingCheckoutService implements OnModuleInit {
           actorId: null,
           checkoutId: c.id,
           requestedById: c.createdById,
+          // The version quoted at the checkout, even if the plan changed since.
+          planVersionId: c.planVersionId,
         });
         await settleCoupon(tx, c);
         // GST tax invoice for what was paid (none for a ₹0 checkout).
@@ -887,7 +924,7 @@ export class BillingCheckoutService implements OnModuleInit {
       this.prisma.plan.findMany({ where: { isActive: true } }),
       this.prisma.subscription.findFirst({
         where: { orgId, status: { not: 'cancelled' } },
-        include: { plan: true },
+        include: SUB_PLAN_INCLUDE,
       }),
       loadOrgBillingDetails(this.prisma, orgId),
       this.platformConfig.getSellerSettings(),
@@ -916,9 +953,14 @@ export class BillingCheckoutService implements OnModuleInit {
     const scheduledRow = sub?.scheduledPlanId
       ? active.find((p) => p.id === sub.scheduledPlanId)
       : undefined;
+    // The plan the org is on: an upgrade's credit uses the price of its
+    // version; a renewal is at the plan's latest price (it moves to the
+    // latest version).
+    const heldPlan =
+      purpose === 'renewal' ? sub?.plan : withEffectivePlan(sub)?.plan;
     const current = sub
       ? {
-          plan: asQuotePlan(sub.plan),
+          plan: asQuotePlan(heldPlan ?? sub.plan),
           interval: sub.billingCycle,
           status: sub.status,
           renewsAt: sub.renewsAt,
