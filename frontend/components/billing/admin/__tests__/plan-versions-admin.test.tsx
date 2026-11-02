@@ -105,7 +105,8 @@ describe("Plans & Pricing", () => {
     await show(client, <AdminPlansEditor />);
     const card = screen.getAllByTestId("admin-plan-card").find((c) => within(c).queryByText("Growth"))!;
     expect(within(card).getByTestId("plan-version")).toHaveTextContent("v3");
-    expect(within(card).getByTestId("plan-version-counts")).toHaveTextContent("v3 · 12 orgs, v2 · 4 orgs");
+    // One version per line, newest first.
+    expect(within(card).getAllByTestId("plan-version-line").map((l) => l.textContent)).toEqual(["v3 · 12 orgs", "v2 · 4 orgs"]);
   });
 
   async function editForm(answer: PlanSavePreview) {

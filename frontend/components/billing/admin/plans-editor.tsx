@@ -195,9 +195,15 @@ export function AdminPlansEditor({ canDelete = false }: { canDelete?: boolean })
                   data-testid="plan-version-counts"
                   onClick={() => setHistory(p)}
                   title="Version history: each version's prices, limits and features, and the organisations on it"
-                  style={{ display: "block", fontSize: 12, color: "var(--brand, #4f46e5)", marginBottom: 12, background: "none", border: 0, padding: 0, cursor: "pointer", textAlign: "left", textDecoration: "underline" }}
+                  style={{ display: "block", width: "100%", fontSize: 12, marginBottom: 12, background: "none", border: 0, padding: 0, cursor: "pointer", textAlign: "left" }}
                 >
-                  Version history · {versionCountsText(p.versions)}
+                  <span style={{ display: "block", fontWeight: 600, color: "var(--brand, #4f46e5)", marginBottom: 2 }}>Version history</span>
+                  {/* One version per line, newest first. */}
+                  {p.versions.map((v) => (
+                    <span key={v.version} data-testid="plan-version-line" style={{ display: "block", color: "#64748b", lineHeight: 1.6 }}>
+                      v{v.version} · {orgsText(v.orgs)}
+                    </span>
+                  ))}
                 </button>
               ) : null}
               <LimitWarnings warnings={warnings.filter((w) => w.planId === p.id)} />

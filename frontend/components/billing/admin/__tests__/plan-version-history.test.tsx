@@ -189,7 +189,10 @@ describe("where it opens", () => {
     } as BillingClient;
     await show(c, <AdminPlansEditor />);
     const line = screen.getByTestId("plan-version-counts");
-    expect(line).toHaveTextContent("Version history · v2 · 0 orgs, v1 · 2 orgs");
+    expect(line).toHaveTextContent("Version history");
+    expect(within(line).getAllByTestId("plan-version-line").map((l) => l.textContent)).toEqual(["v2 · 0 orgs", "v1 · 2 orgs"]);
+    // No underline.
+    expect(line.style.textDecoration).toBe("");
     fireEvent.click(line);
     await settle();
     expect(screen.getByRole("dialog")).toHaveTextContent("Growth — version history");
