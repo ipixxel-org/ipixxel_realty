@@ -38,6 +38,17 @@ function planLine(o: BillingOverview): string {
 function RenewalChangeBlock({ overview: o }: { overview: BillingOverview }) {
   const notice = renewalChangeNotice(o);
   if (!notice) return null;
+  // Answered (their choice, or the default picks): one line; still changeable until the date.
+  if (notice.answered) {
+    return (
+      <div data-testid="renewal-change" data-answered="true" className="bl-muted" style={{ marginTop: 12, fontSize: 13 }}>
+        {notice.answeredText} ·{" "}
+        <BLink to="chooseWhatStays" params={{ target: o.plan.id }}>
+          View / Change
+        </BLink>
+      </div>
+    );
+  }
   return (
     <div data-testid="renewal-change" style={{ marginTop: 12, padding: "12px 16px", borderRadius: 12, border: "1px solid var(--line-2)" }}>
       <div className="bl-between" style={{ gap: 12, flexWrap: "wrap" }}>
@@ -169,7 +180,8 @@ export function BillingOverviewPanel({ showInvoices = true }: { showInvoices?: b
         {/* One place, both modes: what stays is chosen with each change (checkout, downgrade, the
             grace / Basic banners) or on the latest request — no standalone button here. On Basic
             already, what stays is view-only for the org (only our team can change it). */}
-        {o.status === "moved_to_basic" ? <WhatStaysLockedNote /> : null}
+        {/* Not while a newer Basic with lower limits is open to choose for. */}
+        {o.status === "moved_to_basic" && !o.nextVersion?.lower ? <WhatStaysLockedNote /> : null}
         <BLink to="coupons" className="btn btn-ghost">
           Coupons
         </BLink>

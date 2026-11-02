@@ -4,7 +4,7 @@ import { usePathname } from "next/navigation";
 import type { ReactNode } from "react";
 import { billingClient } from "@/lib/billing";
 import { BILLING_V2 } from "@/lib/billing/flag";
-import { BillingBanner, RenewalReminderPopup } from "./banners";
+import { BillingBanner, RenewalReminderPopup, UpcomingChoiceModal } from "./banners";
 import { BillingEnvProvider, OrgBillingProvider, useOrgBilling } from "./context";
 import { BillingAccessProvider } from "./locked";
 
@@ -18,6 +18,8 @@ function ShellBanners() {
   return (
     <>
       <RenewalReminderPopup overview={overview} />
+      {/* Over a newer version's limits and not answered yet: billing editors must pick (not on the screen itself). */}
+      <UpcomingChoiceModal overview={overview} onChooseScreen={pathname.includes("/choose-what-stays")} />
       {OWN_BANNER.some((p) => pathname.startsWith(p)) ? null : (
         <div style={{ marginBottom: 16 }}>
           <BillingBanner overview={overview} />

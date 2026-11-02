@@ -44,6 +44,8 @@ export const REAL_FUNCTIONS: Record<BillingFunction, boolean> = {
   // Step 6 — choose what stays (applied by the backend on every plan change)
   getRetentionChoices: true,
   saveRetentionChoices: true,
+  // Plan versions: "Keep the default picks" for an upcoming version.
+  keepDefaultPicks: true,
   // Step 7 — invoices, payments, Super Admin subscriptions and refunds
   listInvoices: true,
   listPayments: true,

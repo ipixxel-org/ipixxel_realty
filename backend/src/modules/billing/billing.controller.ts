@@ -143,6 +143,14 @@ export class OrgBillingV2Controller {
     return this.retention.saveChoices(user.orgId as string, user.sub, dto);
   }
 
+  /** "Keep the default picks" for an upcoming version of their own plan (lower limits). */
+  @RequirePermission('billing', 'edit')
+  @Post('retention/default')
+  @HttpCode(200)
+  keepDefaultPicks(@CurrentUser() user: JwtPayload) {
+    return this.retention.keepDefaultPicks(user.orgId as string, user.sub);
+  }
+
   @RequirePermission('billing', 'view')
   @Get('v2')
   overview(@CurrentUser() user: JwtPayload) {

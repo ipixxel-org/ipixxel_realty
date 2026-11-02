@@ -9,7 +9,7 @@ import type { ReactNode } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { ToastProvider } from "@/components/ui/toast";
 import { BillingEnvProvider } from "@/components/billing/context";
-import { graceDaysError, graceEndAfter, SubscriptionDetailView, SubscriptionsList } from "@/components/billing/admin/subscriptions";
+import { graceDaysError, graceEndAfter, SubscriptionDetailView, SubscriptionsList, SubscriptionTimeline } from "@/components/billing/admin/subscriptions";
 import type { BillingClient } from "@/lib/billing/client";
 import { createMockBillingClient } from "@/lib/billing/mock/client";
 import { formatDate } from "@/lib/billing/pricing";
@@ -201,5 +201,25 @@ describe("Move to Basic", () => {
     expect(dialog).toHaveTextContent(`Move ${detail.orgName} to Basic`);
     expect(within(dialog).getByRole("button", { name: "Move to Basic" })).toBeInTheDocument();
     expect(dialog.textContent).not.toMatch(/Cancel plan/);
+  });
+});
+
+/* ------------------------------------------------------- Timeline order */
+
+describe("timeline", () => {
+  it("in date order (oldest first, like the other timelines); a grace extension sits at its date", () => {
+    render(
+      <SubscriptionTimeline
+        events={[
+          { at: "2026-10-27T09:00:00Z", kind: "bought", text: "Upgrade request approved — Starter (monthly)" },
+          { at: "2026-10-30T09:22:31Z", kind: "grace", text: "Grace extended by 1 day → 3 Nov 2026 by Super Admin" },
+          { at: "2026-10-28T10:00:00Z", kind: "moved_to_basic", text: "Plan ended — moved to Basic" },
+        ]}
+      />,
+    );
+    const items = screen.getAllByRole("listitem").map((li) => li.textContent);
+    expect(items[0]).toContain("Upgrade request approved");
+    expect(items[1]).toContain("Plan ended — moved to Basic");
+    expect(items[2]).toContain("Grace extended by 1 day");
   });
 });

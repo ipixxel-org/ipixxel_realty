@@ -5,22 +5,23 @@
  * lists only what gets worse, and says "when you renew" during grace. The
  * banner, the renewal popup and the current-plan card share the wording.
  */
-import { act, cleanup, render, screen, within } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import type { ReactNode } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ToastProvider } from "@/components/ui/toast";
-import { BillingEnvProvider } from "@/components/billing/context";
-import { BillingBanner, RenewalReminderPopup } from "@/components/billing/banners";
+import { BillingEnvProvider, OrgBillingProvider, useOrgBilling } from "@/components/billing/context";
+import { BillingBanner, pausedCountsText, RenewalReminderPopup, UpcomingChoiceModal } from "@/components/billing/banners";
 import { CurrentPlanCard } from "@/components/billing/overview";
 import type { BillingClient } from "@/lib/billing/client";
 import { createMockBillingClient } from "@/lib/billing/mock/client";
 import type { Situation } from "@/lib/billing/mock/state";
 import { formatDate } from "@/lib/billing/pricing";
 import type { BillingOverview, NextPlanVersion, PlanVersionChange } from "@/lib/billing/types";
-import { renewalChangeNotice } from "@/lib/billing/versions";
+import { renewalChangeNotice, upcomingChoicePrompt } from "@/lib/billing/versions";
 
+const nav = vi.hoisted(() => ({ push: vi.fn(), replace: vi.fn(), back: vi.fn(), prefetch: vi.fn() }));
 vi.mock("next/navigation", () => ({
-  useRouter: () => ({ push: vi.fn(), replace: vi.fn(), back: vi.fn(), prefetch: vi.fn() }),
+  useRouter: () => nav,
   usePathname: () => "/org/settings",
   useSearchParams: () => new URLSearchParams(),
   useParams: () => ({}),
@@ -206,5 +207,164 @@ describe("org billing components don't read version numbers", () => {
       }
     }
     expect(offenders).toEqual([]);
+  });
+});
+
+/* ------------------------- Answering what stays for an upcoming version */
+
+/** Basic changes on AT: 4 users (they have 5). */
+const smallerBasic = (whatStays: NextPlanVersion["whatStays"] = null): NextPlanVersion =>
+  next({
+    planName: "Basic",
+    reason: "basic",
+    changes: [users(5, 4, true)],
+    lower: true,
+    overLimits: [{ key: "users", limit: 4, used: 5 }],
+    whatStays,
+  });
+
+describe("after choosing, the notice is one line", () => {
+  it("chosen (or default picks): 'Basic changes on <date>. You've chosen what stays · View / Change'", async () => {
+    for (const answer of ["chosen", "default"] as const) {
+      const { client, o } = await overviewAt("basic", { nextVersion: smallerBasic(answer) });
+      await show(client, <CurrentPlanCard overview={o} />);
+      const line = screen.getByTestId("renewal-change");
+      expect(line).toHaveAttribute("data-answered", "true");
+      expect(line).toHaveTextContent(`Basic changes on ${formatDate(AT)}. You've chosen what stays · View / Change`);
+      expect(within(line).getByRole("link", { name: "View / Change" }).getAttribute("href")).toContain("choose-what-stays");
+      expect(screen.queryByRole("link", { name: "Choose what stays" })).toBeNull();
+      cleanup();
+    }
+  });
+
+  it("not chosen yet: the full notice with Choose what stays", async () => {
+    const { client, o } = await overviewAt("basic", { nextVersion: smallerBasic(null) });
+    await show(client, <CurrentPlanCard overview={o} />);
+    const box = screen.getByTestId("renewal-change");
+    expect(box).not.toHaveAttribute("data-answered");
+    // "you have" is the org's own count (the sample org has 10 users).
+    expect(box.textContent).toContain(`From ${formatDate(AT)}, Basic includes 4 users (you have `);
+    expect(within(box).getByRole("link", { name: "Choose what stays" })).toBeInTheDocument();
+  });
+
+  it("the prompt text", () => {
+    expect(upcomingChoicePrompt({ nextVersion: smallerBasic(null), status: "free" })).toBe(
+      `Starting ${formatDate(AT)}, Basic includes 4 users (you have 5). Pick what stays active; nothing is deleted.`,
+    );
+    expect(upcomingChoicePrompt({ nextVersion: smallerBasic("default"), status: "free" })).toBeNull();
+    expect(upcomingChoicePrompt({ nextVersion: { ...smallerBasic(null), overLimits: [] }, status: "free" })).toBeNull();
+  });
+});
+
+describe("the question after login", () => {
+  /** An overview the client serves (and updates when they keep the default picks). */
+  async function setup(canEdit: boolean, whatStays: NextPlanVersion["whatStays"] = null) {
+    const base = createMockBillingClient({ initial: { situation: "basic", renewalMode: "manual" } });
+    let o: BillingOverview = { ...(await base.getBillingOverview()), nextVersion: smallerBasic(whatStays) };
+    const keepDefaultPicks = vi.fn(async () => {
+      o = { ...o, nextVersion: smallerBasic("default") };
+      return {} as never;
+    });
+    const client = { ...base, getBillingOverview: async () => o, keepDefaultPicks } as BillingClient;
+    function Modal({ onChooseScreen = false }: { onChooseScreen?: boolean }) {
+      const { overview } = useOrgBilling();
+      return overview ? <UpcomingChoiceModal overview={overview} onChooseScreen={onChooseScreen} /> : null;
+    }
+    const view = (onChooseScreen = false) =>
+      render(
+        <ToastProvider>
+          <BillingEnvProvider client={client} canEdit={canEdit}>
+            <OrgBillingProvider>
+              <Modal onChooseScreen={onChooseScreen} />
+            </OrgBillingProvider>
+          </BillingEnvProvider>
+        </ToastProvider>,
+      );
+    return { view, keepDefaultPicks };
+  }
+
+  it("billing editors over the limits who haven't chosen: the question, with no way to close it", async () => {
+    const { view } = await setup(true);
+    view();
+    await settle();
+    const dialog = screen.getByRole("dialog");
+    expect(within(dialog).getByTestId("upcoming-choice-text")).toHaveTextContent(
+      `Starting ${formatDate(AT)}, Basic includes 4 users (you have 5). Pick what stays active; nothing is deleted.`,
+    );
+    expect(within(dialog).getByRole("button", { name: "Keep the default picks" })).toBeInTheDocument();
+    expect(within(dialog).getByRole("button", { name: "Choose what stays" })).toBeInTheDocument();
+    // No close button; Escape and clicking outside do nothing.
+    expect(within(dialog).queryByRole("button", { name: "Close" })).toBeNull();
+    fireEvent.keyDown(document, { key: "Escape" });
+    const backdrop = document.querySelector(".modal-backdrop");
+    if (backdrop) fireEvent.click(backdrop);
+    expect(screen.getByRole("dialog")).toBeInTheDocument();
+  });
+
+  it("people without billing:edit see nothing", async () => {
+    const { view } = await setup(false);
+    view();
+    await settle();
+    expect(screen.queryByRole("dialog")).toBeNull();
+  });
+
+  it("already answered, or on the Choose what stays screen: nothing", async () => {
+    const answered = await setup(true, "chosen");
+    answered.view();
+    await settle();
+    expect(screen.queryByRole("dialog")).toBeNull();
+    cleanup();
+    const onScreen = await setup(true);
+    onScreen.view(true);
+    await settle();
+    expect(screen.queryByRole("dialog")).toBeNull();
+  });
+
+  it("Keep the default picks: saved, closed, and not shown again", async () => {
+    const { view, keepDefaultPicks } = await setup(true);
+    view();
+    await settle();
+    fireEvent.click(screen.getByRole("button", { name: "Keep the default picks" }));
+    await settle();
+    expect(keepDefaultPicks).toHaveBeenCalledTimes(1);
+    expect(screen.queryByRole("dialog")).toBeNull();
+    // A fresh load (next login): still answered.
+    cleanup();
+    view();
+    await settle();
+    expect(screen.queryByRole("dialog")).toBeNull();
+  });
+
+  it("Choose what stays opens the screen", async () => {
+    const { view } = await setup(true);
+    view();
+    await settle();
+    fireEvent.click(screen.getByRole("button", { name: "Choose what stays" }));
+    expect(nav.push).toHaveBeenCalledWith(expect.stringContaining("/choose-what-stays"));
+  });
+});
+
+describe("the 'You're on Basic now' banner", () => {
+  it("counts: no zeros, singular / plural right", () => {
+    expect(pausedCountsText({ users: 2, projects: 0, landingPages: 1, templates: 2 })).toBe("2 users paused, 1 landing page offline, 2 templates paused");
+    expect(pausedCountsText({ users: 1, projects: 3, landingPages: 0, templates: 1 })).toBe("1 user paused, 3 projects view-only, 1 template paused");
+    expect(pausedCountsText({ users: 0, projects: 0, landingPages: 0, templates: 0 })).toBe("");
+  });
+
+  it("the banner uses them; the support note only when no change is open", async () => {
+    const { client, o } = await overviewAt("moved_to_basic", {
+      locked: { users: 2, projects: 0, landingPages: 1, templates: 2 },
+      nextVersion: null,
+    });
+    await show(client, <BillingBanner overview={o} />);
+    const banner = screen.getByTestId("billing-banner");
+    expect(banner).toHaveTextContent("2 users paused, 1 landing page offline, 2 templates paused. Nothing was deleted");
+    expect(banner.textContent).not.toMatch(/\b0 projects|landing pages offline/);
+    expect(within(banner).getByTestId("what-stays-locked")).toHaveTextContent("To change what stays, contact our support team");
+    cleanup();
+
+    const open = await overviewAt("moved_to_basic", { nextVersion: smallerBasic(null) });
+    await show(open.client, <BillingBanner overview={open.o} />);
+    expect(within(screen.getByTestId("billing-banner")).queryByTestId("what-stays-locked")).toBeNull();
   });
 });

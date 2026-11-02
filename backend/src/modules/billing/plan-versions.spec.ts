@@ -657,7 +657,7 @@ describe('Super Admin: versions on plans and organisations', () => {
     return t;
   }
 
-  it('the plan list: newest version, organisations per version (none recorded = newest) and their names', async () => {
+  it('the plan list: newest version, organisations per version (none recorded = newest), and who is still on an older one', async () => {
     const t = await twoVersions();
     t.db.subscription.rows.push({
       id: 'sub-2',
@@ -666,52 +666,25 @@ describe('Super Admin: versions on plans and organisations', () => {
       planVersionId: null,
       status: 'active',
     });
-    // The fake doesn't join organisations: give each row its org, as the select would.
-    const names: Record<string, string> = {
-      'org-1': 'Acme Realty',
-      'org-2': 'Bay Homes',
-    };
-    const findMany = t.db.subscription.findMany;
-    t.db.subscription.findMany = async (args: any) =>
-      (await findMany(args)).map((s: any) => ({
-        ...s,
-        organisation: { name: names[s.orgId] },
-      }));
     const plans = await adminBilling(t.db).listPlans();
     const growth = plans.find((p) => p.id === 'growth')!;
     expect(growth.version).toBe(2);
     expect(growth.versions).toEqual([
-      { version: 2, orgs: 1, orgNames: ['Bay Homes'] },
-      { version: 1, orgs: 1, orgNames: ['Acme Realty'] },
+      { version: 2, orgs: 1 },
+      { version: 1, orgs: 1 },
     ]);
-  });
-
-  it('the plan list: at most 5 names per version, A–Z', async () => {
-    const t = await twoVersions();
-    const v1 = t.row().planVersionId;
-    for (const n of ['Zeta', 'Echo', 'Delta', 'Charlie', 'Bravo', 'Alpha']) {
-      t.db.subscription.rows.push({
-        id: `sub-${n}`,
-        orgId: n,
-        planId: 'growth',
-        planVersionId: v1,
-        status: 'active',
-      });
-    }
-    const findMany = t.db.subscription.findMany;
-    t.db.subscription.findMany = async (args: any) =>
-      (await findMany(args)).map((s: any) => ({
-        ...s,
-        organisation: { name: s.orgId === 'org-1' ? 'Acme Realty' : s.orgId },
-      }));
-    const growth = (await adminBilling(t.db).listPlans()).find(
+    // org-1 is still on v1 and moves at its renewal.
+    expect(growth.olderOrgs).toEqual({
+      orgs: 1,
+      versions: [1],
+      nextMoveOn: t.row().renewsAt.toISOString().slice(0, 10),
+    });
+    // Everyone on the latest: no summary.
+    t.row().planVersionId = t.version('growth', 2).id;
+    const after = (await adminBilling(t.db).listPlans()).find(
       (p) => p.id === 'growth',
     )!;
-    expect(growth.versions![1]).toEqual({
-      version: 1,
-      orgs: 7,
-      orgNames: ['Acme Realty', 'Alpha', 'Bravo', 'Charlie', 'Delta'],
-    });
+    expect(after.olderOrgs).toBeNull();
   });
 
   it('save preview (paid): a price change makes the next version; a name change does not', async () => {
@@ -921,5 +894,145 @@ describe('Super Admin: version history', () => {
     expect(
       platformModuleForPath('/admin/billing/plans/growth/versions/v1/orgs'),
     ).toBe('admin_subscriptions');
+  });
+});
+
+/* ------------------------- Answering "what stays" for a newer version */
+
+describe('an upcoming version with lower limits: answering what stays', () => {
+  /** On Basic v1 (2 users) with 3 users; Basic v2 allows 1 user (7 days' notice). */
+  async function smallerBasic() {
+    const t = setup(
+      { planId: 'basic', amount: 0, renewsAt: null },
+      { users: [member('m1', 1), member('m2', 9)] },
+    );
+    t.usage.users = 3;
+    const v1 = await ensureLatestPlanVersion(
+      t.db,
+      t.planById('basic') as never,
+    );
+    t.row().planVersionId = v1!.id;
+    const v2 = await t.edit('basic', { limits: { users: 1 } });
+    return { t, v2: v2! };
+  }
+  const overview = (db: any) =>
+    new OrgBillingV2Service(
+      db as never,
+      { getMode: async () => ({ mode: 'online', reason: null }) } as never,
+      undefined,
+      new BillingRetentionService(db as never),
+    );
+
+  it('before answering: the overview says which limits they are over, and that nothing is chosen', async () => {
+    const { t } = await smallerBasic();
+    const o = await overview(t.db).getOverview('org-1');
+    expect(o.nextVersion).toMatchObject({
+      reason: 'basic',
+      overLimits: [{ key: 'users', limit: 1, used: 3 }],
+      whatStays: null,
+    });
+  });
+
+  it('"Keep the default picks" saves the defaults as their answer for that version', async () => {
+    const { t, v2 } = await smallerBasic();
+    await new BillingRetentionService(t.db as never).keepDefaultPicks(
+      'org-1',
+      'u-admin',
+    );
+    expect(t.db.retentionChoice.rows[0]).toMatchObject({
+      targetPlanId: 'basic',
+      targetVersionId: v2.id,
+      defaultPicks: true,
+      userIds: ['u-admin'],
+    });
+    expect(
+      (await overview(t.db).getOverview('org-1')).nextVersion,
+    ).toMatchObject({
+      whatStays: 'default',
+    });
+    // Nothing is paused before the date.
+    expect(t.db.user.rows.every((u: any) => !u.billingPausedAt)).toBe(true);
+  });
+
+  it('saving their own choice answers it too (chosen)', async () => {
+    const { t, v2 } = await smallerBasic();
+    await new BillingRetentionService(t.db as never).saveChoices(
+      'org-1',
+      'u-admin',
+      {
+        targetPlanId: 'basic',
+        userIds: ['u-admin'],
+        projectIds: [],
+        landingPageIds: [],
+        templateIds: [],
+      },
+    );
+    expect(t.db.retentionChoice.rows[0]).toMatchObject({
+      targetVersionId: v2.id,
+      defaultPicks: false,
+    });
+    expect(
+      (await overview(t.db).getOverview('org-1')).nextVersion,
+    ).toMatchObject({
+      whatStays: 'chosen',
+    });
+  });
+
+  it('an earlier choice for the plan (another change) does not count as an answer', async () => {
+    const { t } = await smallerBasic();
+    t.db.retentionChoice.rows.push({
+      id: 'old',
+      organisationId: 'org-1',
+      targetPlanId: 'basic',
+      userIds: ['u-admin'],
+      projectIds: [],
+      landingPageIds: [],
+      templateIds: [],
+      targetVersionId: null,
+      defaultPicks: false,
+    });
+    expect(
+      (await overview(t.db).getOverview('org-1')).nextVersion,
+    ).toMatchObject({
+      whatStays: null,
+    });
+  });
+
+  it('nothing to answer: refused', async () => {
+    const t = setup({ planId: 'basic', amount: 0, renewsAt: null });
+    await expect(
+      new BillingRetentionService(t.db as never).keepDefaultPicks(
+        'org-1',
+        'u-admin',
+      ),
+    ).rejects.toMatchObject({ response: { code: 'nothing_to_choose' } });
+  });
+
+  it('Super Admin org list: what happens next, over new limits, and what stays', async () => {
+    const { t } = await smallerBasic();
+    const admin = new AdminBillingService(
+      t.db as never,
+      {} as never,
+      {} as never,
+      {} as never,
+    );
+    const h = await admin.planVersions('basic');
+    const v1 = h.versions.find((v) => v.version === 1)!;
+    const before = await admin.planVersionOrgs('basic', v1.id);
+    expect(before.data[0]).toMatchObject({
+      orgId: 'org-1',
+      moveReason: 'notice',
+      overLimits: [{ key: 'users', limit: 1, used: 3 }],
+      whatStays: 'not_chosen',
+    });
+    await new BillingRetentionService(t.db as never).keepDefaultPicks(
+      'org-1',
+      'u-admin',
+    );
+    const after = await admin.planVersionOrgs('basic', v1.id);
+    expect(after.data[0].whatStays).toBe('default');
+    // The latest version's tab: nothing to say about limits.
+    const latest = await admin.planVersionOrgs('basic', h.versions[0].id);
+    expect(latest.data).toEqual([]);
   });
 });

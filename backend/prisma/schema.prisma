@@ -1548,6 +1548,15 @@ model RetentionChoice {
   // Template ids (organisation_templates.template_id). Empty on choices saved
   // before templates could be paused: the default picks apply to those.
   templateIds    String[] @default([]) @map("template_ids")
+  // True once templates were chosen (even "keep none"): an empty templateIds
+  // then means none stay, not "no choice yet".
+  templatesChosen Boolean @default(false) @map("templates_chosen")
+  // Plan versions: the newer version of the org's own plan this choice was
+  // made for (null = any other change). It answers that change: no more
+  // reminders, and the notice collapses to one line.
+  targetVersionId String? @map("target_version_id")
+  // "Keep the default picks" (answered with the defaults, not a hand choice).
+  defaultPicks    Boolean @default(false) @map("default_picks")
   updatedById    String?  @map("updated_by_id")
   createdAt      DateTime @default(now()) @map("created_at")
   updatedAt      DateTime @updatedAt @map("updated_at")

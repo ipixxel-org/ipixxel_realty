@@ -23,6 +23,8 @@ import {
   BASIC_NOTICE_DAYS,
   HISTORY_FEATURES,
   HISTORY_LIMITS,
+  overLimitsFor,
+  versionAnswer,
   versionChanges,
   versionValues,
 } from '../../common/utils/plan-version-change.util';
@@ -141,9 +143,6 @@ export function adminPlanTerms(
   };
 }
 
-/** Organisation names per version on a Plans & Pricing card (the rest: "+N more"). */
-export const PLAN_CARD_ORG_NAMES = 5;
-
 export function validateAdminPlan(
   input: SaveAdminPlanDto,
   stored: {
@@ -206,12 +205,17 @@ export class AdminBillingService {
 
   /** Every plan, inactive ones too (marked `isActive: false`), so they can be edited or deleted. */
   async listPlans(): Promise<BillingPlanV2[]> {
-    type VersionRow = { id: string; planId: string; version: number };
+    type VersionRow = {
+      id: string;
+      planId: string;
+      version: number;
+      createdAt: Date;
+    };
     type SubRow = {
       orgId: string;
       planId: string;
       planVersionId: string | null;
-      organisation?: { name: string } | null;
+      renewsAt?: Date | null;
     };
     // Old test mocks have only plan.findMany.
     const [plans, versions, subs]: [
@@ -222,7 +226,7 @@ export class AdminBillingService {
       this.prisma.plan.findMany(),
       this.prisma.planVersion
         ? this.prisma.planVersion.findMany({
-            select: { id: true, planId: true, version: true },
+            select: { id: true, planId: true, version: true, createdAt: true },
             orderBy: { version: 'desc' },
           })
         : Promise.resolve([]),
@@ -233,7 +237,7 @@ export class AdminBillingService {
               orgId: true,
               planId: true,
               planVersionId: true,
-              organisation: { select: { name: true } },
+              renewsAt: true,
             },
           })
         : Promise.resolve([]),
@@ -252,22 +256,31 @@ export class AdminBillingService {
                 (s.planVersionId === null ||
                   !mine.some((v) => v.id === s.planVersionId)))),
         );
+      // Organisations still on an older version, and the next move to the latest.
+      const older = mine.slice(1).filter((v) => orgsOn(v.id).length > 0);
+      const olderSubs = older.flatMap((v) => orgsOn(v.id));
+      const moves = p.isFree
+        ? [
+            new Date(
+              latest.createdAt.getTime() + BASIC_NOTICE_DAYS * 86_400_000,
+            ),
+          ]
+        : olderSubs.map((s) => s.renewsAt).filter((d): d is Date => !!d);
+      const nextMove = moves.length
+        ? new Date(Math.min(...moves.map((d) => d.getTime())))
+        : null;
       return {
         ...p,
         version: latest.version,
+        olderOrgs: olderSubs.length
+          ? {
+              orgs: olderSubs.length,
+              versions: older.map((v) => v.version).sort((a, b) => a - b),
+              nextMoveOn: nextMove ? nextMove.toISOString().slice(0, 10) : null,
+            }
+          : null,
         versions: mine
-          .map((v) => {
-            const on = orgsOn(v.id);
-            return {
-              version: v.version,
-              orgs: on.length,
-              // The first few names, A–Z; the rest are in the version history.
-              orgNames: on
-                .map((s) => s.organisation?.name ?? s.orgId)
-                .sort((a, b) => a.localeCompare(b))
-                .slice(0, PLAN_CARD_ORG_NAMES),
-            };
-          })
+          .map((v) => ({ version: v.version, orgs: orgsOn(v.id).length }))
           .filter((v) => v.version === latest.version || v.orgs > 0),
       };
     });
@@ -397,17 +410,35 @@ export class AdminBillingService {
           orgName: s.organisation?.name ?? s.orgId,
           interval: s.billingCycle,
           movesOn: moves ? moves.toISOString().slice(0, 10) : null,
+          moveReason: isLatest
+            ? null
+            : isFreePlan(plan)
+              ? ('notice' as const)
+              : ('renewal' as const),
         };
       })
       .sort((a, b) => a.orgName.localeCompare(b.orgName));
     const pageSize = Math.min(Math.max(1, q.pageSize ?? 20), 100);
     const page = Math.max(1, q.page ?? 1);
-    return {
-      data: rows.slice((page - 1) * pageSize, page * pageSize),
-      total: rows.length,
-      page,
-      pageSize,
-    };
+    // Over the latest version's limits, and how they answered "what stays"
+    // (only for this page, and only on an older version).
+    const data = await Promise.all(
+      rows.slice((page - 1) * pageSize, page * pageSize).map(async (r) => {
+        const overLimits = isLatest
+          ? []
+          : await overLimitsFor(this.prisma, r.orgId, plan);
+        return {
+          ...r,
+          overLimits,
+          whatStays:
+            overLimits.length && latest
+              ? ((await versionAnswer(this.prisma, r.orgId, id, latest.id)) ??
+                ('not_chosen' as const))
+              : null,
+        };
+      }),
+    );
+    return { data, total: rows.length, page, pageSize };
   }
 
   /** What saving this change would do: a new version or not, and who it affects. */

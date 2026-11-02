@@ -38,11 +38,13 @@ export function yearlyHint(priceMonthly: number, priceYearly: number): string | 
 const orgsText = (n: number) => `${n.toLocaleString("en-IN")} ${n === 1 ? "org" : "orgs"}`;
 const organisations = (n: number) => `${n.toLocaleString("en-IN")} ${n === 1 ? "organisation" : "organisations"}`;
 
-/** "Acme Realty, Bay Homes +3 more" — the names on a version (the API sends the first few). */
-export function orgNamesText(v: PlanVersionCount): string {
-  const names = v.orgNames ?? [];
-  const more = v.orgs - names.length;
-  return `${names.join(", ")}${more > 0 ? ` +${more} more` : ""}`;
+/** "1 org still on v1 · next move 9 Nov" — organisations on older versions. */
+export function olderOrgsText(o: NonNullable<BillingPlan["olderOrgs"]>): string {
+  const on = o.versions.map((v) => `v${v}`).join(", ");
+  const next = o.nextMoveOn
+    ? ` · next move ${new Date(`${o.nextMoveOn}T00:00:00Z`).toLocaleDateString("en-IN", { day: "numeric", month: "short", timeZone: "UTC" })}`
+    : "";
+  return `${orgsText(o.orgs)} still on ${on}${next}`;
 }
 
 /** "v3 · 12 orgs, v2 · 4 orgs, v1 · 1 org" — organisations on each version, newest first. */
@@ -216,13 +218,14 @@ export function AdminPlansEditor({ canDelete = false }: { canDelete?: boolean })
                         {i === 0 ? <span className="bl-plan-versions-latest">Latest</span> : null}
                         <span className="bl-plan-versions-count">{orgsText(v.orgs)}</span>
                       </span>
-                      {v.orgNames?.length ? (
-                        <span data-testid="plan-version-orgs" className="bl-plan-versions-orgs" title={orgNamesText(v)}>
-                          {orgNamesText(v)}
-                        </span>
-                      ) : null}
                     </span>
                   ))}
+                  {/* Who still moves to the latest, and when the next one does. */}
+                  {p.olderOrgs ? (
+                    <span data-testid="plan-version-older" className="bl-plan-versions-older">
+                      {olderOrgsText(p.olderOrgs)}
+                    </span>
+                  ) : null}
                 </button>
               ) : null}
               <LimitWarnings warnings={warnings.filter((w) => w.planId === p.id)} />
@@ -264,7 +267,13 @@ export function AdminPlansEditor({ canDelete = false }: { canDelete?: boolean })
           </div>
         ))}
       </div>
-      <PlanVersionHistoryDialog open={!!history} onClose={() => setHistory(null)} planId={history?.id ?? ""} planName={history?.name ?? ""} />
+      <PlanVersionHistoryDialog
+        open={!!history}
+        onClose={() => setHistory(null)}
+        planId={history?.id ?? ""}
+        planName={history?.name ?? ""}
+        initialVersion={history?.olderOrgs?.versions[0] ?? null}
+      />
       <BillingDialog
         open={!!deleting}
         onClose={() => setDeleting(null)}

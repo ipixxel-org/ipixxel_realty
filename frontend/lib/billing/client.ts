@@ -98,6 +98,8 @@ export interface BillingClient {
   getRetentionChoices(req: GetRetentionChoicesRequest): Promise<RetentionChoices>;
   /** PUT /org/billing/retention */
   saveRetentionChoices(req: SaveRetentionChoicesRequest): Promise<RetentionChoices>;
+  /** POST /org/billing/retention/default — "Keep the default picks" for an upcoming version of their plan. */
+  keepDefaultPicks(): Promise<RetentionChoices>;
   /** GET /org/billing/access — what's paused / view-only / offline, plus limits and modules. */
   getAccessStatus(): Promise<AccessStatus>;
   /** GET /org/billing/invoices */

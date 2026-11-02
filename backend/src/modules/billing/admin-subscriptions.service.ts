@@ -450,14 +450,23 @@ export class AdminSubscriptionsService {
       { renewsAt: sub.renewsAt, graceExtensionDays: extension },
       cfg.gracePeriodDays,
     );
-    await this.prisma.subscription.update({
-      where: { id: sub.id },
-      data: { graceExtensionDays: extension, graceEndsAt: until },
-    });
-    await this.audit(orgId, actorId, 'grace_extended', {
-      days,
-      until: isoDate(until),
-      note: note ?? null,
+    // The extra days and their audit entry (the timeline line) are saved
+    // together: an extension is never applied without being recorded.
+    await this.prisma.$transaction(async (tx) => {
+      await tx.subscription.update({
+        where: { id: sub.id },
+        data: { graceExtensionDays: extension, graceEndsAt: until },
+      });
+      await tx.auditLog.create({
+        data: {
+          orgId,
+          actorId,
+          action: 'grace_extended',
+          entity: 'Subscription',
+          entityId: orgId,
+          metadata: { days, until: isoDate(until), note: note ?? null },
+        },
+      });
     });
     return this.detail(orgId);
   }

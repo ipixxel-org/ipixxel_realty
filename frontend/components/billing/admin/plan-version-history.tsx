@@ -29,6 +29,37 @@ export function historyRows(h: Pick<PlanVersionHistory, "limitRows" | "featureRo
   ];
 }
 
+const OVER_LABEL: Record<string, [string, string]> = {
+  users: ["user", "users"],
+  projects: ["project", "projects"],
+  landingPages: ["live landing page", "live landing pages"],
+  templates: ["template", "templates"],
+};
+
+/** "Yes: 5 users, limit 4; 3 templates, limit 1" / "No". */
+export function overLimitsText(over: PlanVersionOrg["overLimits"]): string {
+  if (!over?.length) return "No";
+  return `Yes: ${over
+    .map((l) => {
+      const [one, many] = OVER_LABEL[l.key] ?? [l.key, l.key];
+      return `${l.used} ${l.used === 1 ? one : many}, limit ${l.limit}`;
+    })
+    .join("; ")}`;
+}
+
+/** "Already on latest" / "Moves to v2 on 9 Nov 2026 (renewal)" / "… (7-day notice)". */
+export function nextStepText(o: PlanVersionOrg, version: Pick<PlanVersionDetail, "latest">, latest: number): string {
+  if (version.latest) return "Already on latest";
+  const why = o.moveReason === "notice" ? "7-day notice" : "renewal";
+  return o.movesOn ? `Moves to v${latest} on ${formatDate(o.movesOn)} (${why})` : `Moves to v${latest} at its ${why}`;
+}
+
+const WHAT_STAYS_TEXT: Record<"chosen" | "default" | "not_chosen", string> = {
+  chosen: "Chosen",
+  default: "Default picks",
+  not_chosen: "Not chosen yet",
+};
+
 /** The organisations on one version, 20 at a time, each linked to its billing page. */
 function VersionOrgs({ planId, version, latest }: { planId: string; version: PlanVersionDetail; latest: number }) {
   const { client } = useBillingEnv();
@@ -50,35 +81,40 @@ function VersionOrgs({ planId, version, latest }: { planId: string; version: Pla
     }
   }
   return (
-    <div data-testid={`version-orgs-v${version.version}`} style={{ marginTop: 12 }}>
-      <b style={{ fontSize: 13 }}>Organisations on v{version.version}</b>
+    <div data-testid={`version-orgs-v${version.version}`} style={{ marginTop: 10 }}>
       {rows.length === 0 ? (
         <div className="bl-muted" style={{ marginTop: 4 }}>
           No organisations are on it.
         </div>
       ) : (
-        <table className="tbl" style={{ marginTop: 6 }}>
-          <thead>
-            <tr>
-              <th>Organisation</th>
-              <th>Billing</th>
-              <th>Moves to v{latest}</th>
-            </tr>
-          </thead>
-          <tbody>
-            {rows.map((o) => (
-              <tr key={o.orgId}>
-                <td>
-                  <BLink to="adminSubscription" params={{ orgId: o.orgId }}>
-                    {o.orgName}
-                  </BLink>
-                </td>
-                <td>{o.interval === "yearly" ? "Yearly" : "Monthly"}</td>
-                <td>{version.latest ? "On the latest" : o.movesOn ? formatDate(o.movesOn) : "—"}</td>
+        <div className="tbl-wrap">
+          <table className="tbl">
+            <thead>
+              <tr>
+                <th>Organisation</th>
+                <th>Billing</th>
+                <th>What happens next</th>
+                <th>Over new limits</th>
+                <th>What stays</th>
               </tr>
-            ))}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              {rows.map((o) => (
+                <tr key={o.orgId} data-testid="version-org-row">
+                  <td>
+                    <BLink to="adminSubscription" params={{ orgId: o.orgId }}>
+                      {o.orgName}
+                    </BLink>
+                  </td>
+                  <td>{o.interval === "yearly" ? "Yearly" : "Monthly"}</td>
+                  <td>{nextStepText(o, version, latest)}</td>
+                  <td>{version.latest ? "—" : overLimitsText(o.overLimits)}</td>
+                  <td>{o.overLimits?.length ? WHAT_STAYS_TEXT[o.whatStays ?? "not_chosen"] : "—"}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       )}
       {rows.length < data.total ? (
         <button type="button" className="btn btn-ghost btn-sm" style={{ marginTop: 6 }} disabled={busy} onClick={() => void more()}>
@@ -89,9 +125,20 @@ function VersionOrgs({ planId, version, latest }: { planId: string; version: Pla
   );
 }
 
-function HistoryTable({ planId, onlyVersionId }: { planId: string; onlyVersionId?: string | null }) {
+/**
+ * The tab a history opens on: the version asked for, else the oldest one
+ * organisations are still on (they move next), else the latest.
+ */
+export function initialTab(versions: PlanVersionDetail[], wanted?: number | null): string | null {
+  const byNumber = wanted != null ? versions.find((v) => v.version === wanted) : undefined;
+  if (byNumber) return byNumber.id;
+  const olderWithOrgs = [...versions].reverse().find((v) => !v.latest && v.orgs > 0);
+  return (olderWithOrgs ?? versions[0])?.id ?? null;
+}
+
+function HistoryTable({ planId, onlyVersionId, initialVersion }: { planId: string; onlyVersionId?: string | null; initialVersion?: number | null }) {
   const { data, error } = useBillingQuery((c) => c.getPlanVersions(planId), [planId]);
-  const [open, setOpen] = useState<string | null>(null);
+  const [tab, setTab] = useState<string | null>(null);
   if (error) return <ErrorNote message={error} />;
   if (!data) return <Loading what="versions" />;
   const all = data.versions;
@@ -101,7 +148,10 @@ function HistoryTable({ planId, onlyVersionId }: { planId: string; onlyVersionId
   // Newest first: the version before is the next one in the list.
   const previous = (v: PlanVersionDetail) => all[all.indexOf(v) + 1];
   const rows = historyRows(data);
-  const expanded = shown.find((v) => v.id === open);
+  // The organisation list: one tab per version, older versions first.
+  const tabs = [...all].reverse();
+  const current = all.find((v) => v.id === (tab ?? initialTab(all, initialVersion)));
+  const setOpen = (id: string) => setTab(id);
   return (
     <div>
       <div className="tbl-wrap" style={{ overflowX: "auto" }}>
@@ -152,12 +202,11 @@ function HistoryTable({ planId, onlyVersionId }: { planId: string; onlyVersionId
               <td className="bl-muted">Organisations</td>
               {shown.map((v) => (
                 <td key={v.id}>
-                  {v.orgs > 0 ? (
+                  {v.orgs > 0 && !onlyVersionId ? (
                     <button
                       type="button"
                       data-testid={`version-orgs-link-v${v.version}`}
-                      aria-expanded={open === v.id}
-                      onClick={() => setOpen(open === v.id ? null : v.id)}
+                      onClick={() => setOpen(v.id)}
                       style={{ background: "none", border: 0, padding: 0, color: "var(--brand)", cursor: "pointer", fontWeight: 600 }}
                     >
                       {orgsText(v.orgs)}
@@ -171,7 +220,28 @@ function HistoryTable({ planId, onlyVersionId }: { planId: string; onlyVersionId
           </tbody>
         </table>
       </div>
-      {expanded ? <VersionOrgs planId={planId} version={expanded} latest={latest} /> : null}
+      {!onlyVersionId && current ? (
+        <div style={{ marginTop: 18 }}>
+          <b style={{ fontSize: 13 }}>Organisations</b>
+          <div className="bl-row" role="tablist" aria-label="Organisations by version" style={{ gap: 6, marginTop: 8, flexWrap: "wrap" }}>
+            {tabs.map((v) => (
+              <button
+                key={v.id}
+                type="button"
+                role="tab"
+                data-testid={`version-tab-v${v.version}`}
+                aria-selected={v.id === current.id}
+                onClick={() => setTab(v.id)}
+                className={`btn btn-sm ${v.id === current.id ? "btn-primary" : "btn-ghost"}`}
+              >
+                v{v.version} · {orgsText(v.orgs)}
+                {v.latest ? " · latest" : ""}
+              </button>
+            ))}
+          </div>
+          <VersionOrgs key={current.id} planId={planId} version={current} latest={latest} />
+        </div>
+      ) : null}
     </div>
   );
 }
@@ -182,6 +252,7 @@ export function PlanVersionHistoryDialog({
   planId,
   planName,
   onlyVersionId,
+  initialVersion,
   title,
 }: {
   open: boolean;
@@ -190,11 +261,13 @@ export function PlanVersionHistoryDialog({
   planName: string;
   /** Show just this version (the org page's "View"). */
   onlyVersionId?: string | null;
+  /** The organisations tab to open on (version number). */
+  initialVersion?: number | null;
   title?: string;
 }) {
   return (
     <BillingDialog open={open} onClose={onClose} size="lg" title={title ?? `${planName} — version history`}>
-      {open ? <HistoryTable planId={planId} onlyVersionId={onlyVersionId} /> : null}
+      {open ? <HistoryTable planId={planId} onlyVersionId={onlyVersionId} initialVersion={initialVersion} /> : null}
     </BillingDialog>
   );
 }

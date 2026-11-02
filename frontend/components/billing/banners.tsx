@@ -6,7 +6,7 @@ import { useToast } from "@/components/ui/toast";
 import { formatDate, formatINR, packagePriceText, planPrice, renewalPriceNote, renewalPriceText, round2 } from "@/lib/billing/pricing";
 import { blockingRequest, pendingRequestText, planChangeBlock } from "@/lib/billing/requests";
 import { graceDayText, graceExtraDays } from "@/lib/billing/grace";
-import { renewalChangeNotice } from "@/lib/billing/versions";
+import { renewalChangeNotice, upcomingChoicePrompt } from "@/lib/billing/versions";
 import type { BillingOverview, RetentionSummary } from "@/lib/billing/types";
 import { useBillingEnv, useOptionalOrgBilling } from "./context";
 import { BillingDialog, DialogActions } from "./dialog";
@@ -324,8 +324,25 @@ export function BillingBanner({ overview }: { overview: BillingOverview }) {
   const chip = n > 0 ? <Countdown days={n} /> : undefined;
   // The plan's next version, only when it's worse for them (never a version number).
   const change = renewalChangeNotice(o);
-  const changeLine = change ? <span data-testid="banner-renewal-change"> {change.text}</span> : null;
-  const chooseNewVersion = change?.overLimit ? (
+  const viewChange = (
+    <BLink to="chooseWhatStays" params={{ target: o.plan.id }}>
+      View / Change
+    </BLink>
+  );
+  // Answered: one line ("… You've chosen what stays · View / Change").
+  const changeLine = change ? (
+    <span data-testid="banner-renewal-change">
+      {" "}
+      {change.answered ? (
+        <>
+          {change.answeredText} · {viewChange}
+        </>
+      ) : (
+        change.text
+      )}
+    </span>
+  ) : null;
+  const chooseNewVersion = change?.overLimit && !change.answered ? (
     <BLink to="chooseWhatStays" params={{ target: o.plan.id }} className="btn btn-ghost btn-sm">
       Choose what stays
     </BLink>
@@ -464,9 +481,8 @@ export function BillingBanner({ overview }: { overview: BillingOverview }) {
           title={`You're on Basic now — ${plan.name} ended on ${formatDate(o.movedToBasicAt!)}`}
           line={
             <>
-              {o.locked.users} users paused, {o.locked.projects} projects view-only, {o.locked.landingPages} landing pages offline
-              {o.locked.templates ? `, ${o.locked.templates} template${o.locked.templates === 1 ? "" : "s"} paused` : ""}. Nothing was deleted and leads keep coming in. Buy
-              again and everything comes back straight away.
+              {pausedCountsText(o.locked) ? `${pausedCountsText(o.locked)}. ` : ""}Nothing was deleted and leads keep coming in. Buy again and everything comes back
+              straight away.
             </>
           }
           details={picks}
@@ -476,8 +492,9 @@ export function BillingBanner({ overview }: { overview: BillingOverview }) {
               <BLink to="plans" params={{ interval: o.interval }} className="btn btn-primary btn-sm">
                 Buy {plan.name} again · {packagePriceText(planPrice(plan, o.interval))}
               </BLink>
-              {/* The move took effect: what stays is view-only for the org now. */}
-              <WhatStaysLockedNote />
+              {/* The move took effect: what stays is view-only for the org now —
+                  unless a newer Basic with lower limits is open to choose for. */}
+              {o.nextVersion?.lower ? null : <WhatStaysLockedNote />}
             </>
           }
           strip={`On Basic now · ${plan.name} items paused, not deleted`}
@@ -539,13 +556,29 @@ export function BillingBanner({ overview }: { overview: BillingOverview }) {
           tone="amber"
           icon="calendar"
           title={change.title}
-          line={<span data-testid="banner-renewal-change">{change.text}</span>}
-          details={change.overLimit ? picks : undefined}
+          line={changeLine}
+          details={change.overLimit && !change.answered ? picks : undefined}
           actions={chooseNewVersion ?? undefined}
           strip={change.title}
         />
       ) : null;
   }
+}
+
+/**
+ * "2 users paused, 1 landing page offline, 2 templates paused" — only what's
+ * paused (no zeros), singular / plural right; "" when nothing is.
+ */
+export function pausedCountsText(locked: Partial<Record<"users" | "projects" | "landingPages" | "templates", number>>): string {
+  const part = (n: number | undefined, one: string, many: string, what: string) => (n ? `${n} ${n === 1 ? one : many} ${what}` : null);
+  return [
+    part(locked.users, "user", "users", "paused"),
+    part(locked.projects, "project", "projects", "view-only"),
+    part(locked.landingPages, "landing page", "landing pages", "offline"),
+    part(locked.templates, "template", "templates", "paused"),
+  ]
+    .filter(Boolean)
+    .join(", ");
 }
 
 /** Option B: the "renews in N days" popup (from the reminder setting). Opens on its own once per renewal date. */
@@ -630,5 +663,54 @@ export function RenewalReminderPopup({ overview, alwaysOpen = false }: { overvie
         </div>
       </BillingDialog>
     </>
+  );
+}
+
+/**
+ * After login: the org is over the limits of a newer version of its plan
+ * (e.g. a smaller Basic) and hasn't answered "what stays" for it. Only for
+ * people who can edit billing; it has no close button and clicking outside
+ * does nothing. "Keep the default picks" answers it with the defaults;
+ * "Choose what stays" opens the screen (hidden there; saving answers it).
+ * Answered once, it never shows again for that change; if nobody answers
+ * before the date, the default picks apply.
+ */
+export function UpcomingChoiceModal({ overview, onChooseScreen = false }: { overview: BillingOverview; onChooseScreen?: boolean }) {
+  const { client, nav, canEdit } = useBillingEnv();
+  const billing = useOptionalOrgBilling();
+  const { toast } = useToast();
+  const [busy, setBusy] = useState(false);
+  const prompt = upcomingChoicePrompt(overview);
+  if (!canEdit || !prompt || onChooseScreen) return null;
+  async function keepDefaults() {
+    setBusy(true);
+    try {
+      await client.keepDefaultPicks();
+      await billing?.refresh();
+      toast({ variant: "success", title: "Default picks kept", description: "You can still change what stays until the date." });
+    } catch (e) {
+      toast({ variant: "error", title: "Couldn't save", description: e instanceof Error ? e.message : undefined });
+    } finally {
+      setBusy(false);
+    }
+  }
+  return (
+    <BillingDialog
+      open
+      dismissible={false}
+      onClose={() => {}}
+      title="Choose what stays active"
+      description={<span data-testid="upcoming-choice-text">{prompt}</span>}
+      footer={
+        <DialogActions>
+          <button type="button" className="btn btn-ghost btn-sm" disabled={busy} onClick={() => void keepDefaults()}>
+            {busy ? "Saving…" : "Keep the default picks"}
+          </button>
+          <button type="button" className="btn btn-primary btn-sm" disabled={busy} onClick={() => nav.go("chooseWhatStays", { target: overview.plan.id })}>
+            Choose what stays
+          </button>
+        </DialogActions>
+      }
+    />
   );
 }

@@ -45,7 +45,18 @@ export interface BillingPlanV2 {
    * version (newest first; the newest is always listed, older ones only while
    * an organisation is on them).
    */
-  versions?: { version: number; orgs: number; orgNames?: string[] }[];
+  versions?: { version: number; orgs: number }[];
+  /**
+   * Super Admin plan list: organisations still on older versions (null =
+   * everyone is on the latest), and when the next one moves to the latest.
+   */
+  olderOrgs?: {
+    orgs: number;
+    /** Oldest first. */
+    versions: number[];
+    /** YYYY-MM-DD */
+    nextMoveOn: string | null;
+  } | null;
 }
 
 /** One version in GET /admin/billing/plans/:id/versions. */
@@ -86,6 +97,12 @@ export interface PlanVersionOrgV2 {
   interval: BillingInterval;
   /** YYYY-MM-DD it moves to the latest version (renewal; Basic: end of the notice); null = on the latest. */
   movesOn: string | null;
+  /** Why then: its renewal, or (Basic) the 7-day notice; null = on the latest. */
+  moveReason: 'renewal' | 'notice' | null;
+  /** The latest version's limits it's using more than (older versions only). */
+  overLimits: { key: string; limit: number; used: number }[];
+  /** Only when over the limits: how it answered "what stays" for the move. */
+  whatStays: 'chosen' | 'default' | 'not_chosen' | null;
 }
 
 /** POST /admin/billing/plans/:id/preview — what saving this change would do. */
@@ -162,6 +179,10 @@ export interface NextPlanVersionV2 {
   changes: PlanVersionChangeV2[];
   /** Some limit is lower or a feature is off: "Choose what stays" applies. */
   lower: boolean;
+  /** The new limits the org is using more than (users, projects, live pages, templates). */
+  overLimits: { key: string; limit: number; used: number }[];
+  /** How they answered "what stays" for this change; null = not yet. */
+  whatStays: 'chosen' | 'default' | null;
 }
 
 export interface BillingOverviewV2 {

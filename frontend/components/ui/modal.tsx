@@ -30,6 +30,7 @@ export function Modal({
   headerActions,
   flush,
   closeDisabled,
+  hideClose,
 }: {
   open: boolean;
   onClose: () => void;
@@ -42,6 +43,8 @@ export function Modal({
   headerActions?: ReactNode;
   flush?: boolean;
   closeDisabled?: boolean;
+  /** No close (×) button — for a question that must be answered (use with closeDisabled). */
+  hideClose?: boolean;
 }) {
   const panelRef = useRef<HTMLDivElement>(null);
 
@@ -163,6 +166,7 @@ export function Modal({
           </div>
           <div style={{ display: "flex", alignItems: "center", gap: 8, flexShrink: 0 }}>
             {headerActions}
+            {hideClose ? null : (
             <button
               type="button"
               onClick={onClose}
@@ -194,6 +198,7 @@ export function Modal({
             >
               <Icon name="close" size={18} />
             </button>
+            )}
           </div>
         </div>
 

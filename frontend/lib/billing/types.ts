@@ -51,13 +51,13 @@ export interface BillingPlan {
   version?: number | null;
   /** Super Admin plan list: organisations on the plan per version, newest first. */
   versions?: PlanVersionCount[];
+  /** Super Admin plan list: organisations still on older versions (null = all on the latest). */
+  olderOrgs?: { orgs: number; versions: number[]; nextMoveOn: string | null } | null;
 }
 
 export interface PlanVersionCount {
   version: number;
   orgs: number;
-  /** The first few organisation names on it, A–Z (the rest: "+N more"). */
-  orgNames?: string[];
 }
 
 /** One version in the Super Admin version history (GET /admin/billing/plans/:id/versions). */
@@ -97,6 +97,12 @@ export interface PlanVersionOrg {
   interval: BillingInterval;
   /** YYYY-MM-DD it moves to the latest version (renewal; Basic: end of the notice); null = on the latest. */
   movesOn: string | null;
+  /** Why then: its renewal, or (Basic) the 7-day notice; null = on the latest. */
+  moveReason?: "renewal" | "notice" | null;
+  /** The latest version's limits it's using more than (older versions only). */
+  overLimits?: { key: string; limit: number; used: number }[];
+  /** Only when over the limits: how it answered "what stays" for the move. */
+  whatStays?: "chosen" | "default" | "not_chosen" | null;
 }
 
 export interface ListPlanVersionOrgsRequest extends PageRequest {
@@ -406,6 +412,10 @@ export interface NextPlanVersion {
   changes: PlanVersionChange[];
   /** Some limit is lower or a feature is off: "Choose what stays" applies. */
   lower: boolean;
+  /** The new limits they're using more than; absent / empty = they fit. */
+  overLimits?: { key: string; limit: number; used: number }[];
+  /** How they answered "what stays" for this change; null / absent = not yet. */
+  whatStays?: "chosen" | "default" | null;
 }
 
 export interface BillingOverview {

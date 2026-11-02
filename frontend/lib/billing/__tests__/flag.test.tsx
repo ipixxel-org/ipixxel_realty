@@ -516,6 +516,7 @@ describe("billing v2 flag", () => {
         // step 6
         "getRetentionChoices",
         "saveRetentionChoices",
+        "keepDefaultPicks",
         // step 7
         "listInvoices",
         "listPayments",

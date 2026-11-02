@@ -62,6 +62,8 @@ type SubWithPlan = Subscription & {
    */
   upcomingPlan?: Plan | null;
   upcomingAt?: Date | null;
+  /** That newer version's id: a choice saved for it answers that change. */
+  upcomingVersionId?: string | null;
 };
 
 /** The org's plan, as it is today (not a newer version still to come). */
@@ -100,6 +102,7 @@ export class BillingRetentionService {
           ...held,
           upcomingPlan: up?.lower ? up.plan : null,
           upcomingAt: up?.lower ? up.at : null,
+          upcomingVersionId: up?.lower ? up.toVersionId : null,
         }
       : null;
     return { sub, active };
@@ -466,7 +469,10 @@ export class BillingRetentionService {
       throw billingError('what_stays_locked', WHAT_STAYS_LOCKED_MESSAGE);
     }
     const ids = await this.validate(orgId, target, dto);
-    await this.store(orgId, userId, target.id, ids);
+    await this.store(orgId, userId, target.id, ids, {
+      templatesChosen: dto.templateIds !== undefined,
+      targetVersionId: this.answersVersion(sub, target, dto.requestId),
+    });
     await this.useSavedOnOpenPayment(dto.requestId);
     await this.refreshOpenCopies(orgId, target);
     await this.audit(orgId, userId, 'retention_choices_saved', {
@@ -518,7 +524,10 @@ export class BillingRetentionService {
       );
     }
     const ids = await this.validate(orgId, target, dto);
-    await this.store(orgId, adminId, target.id, ids);
+    await this.store(orgId, adminId, target.id, ids, {
+      templatesChosen: dto.templateIds !== undefined,
+      targetVersionId: this.answersVersion(sub, target, request?.id),
+    });
     await this.useSavedOnOpenPayment(request?.id);
     const applyNow = isLive(sub, target) && (!request || requestApplied);
     if (applyNow) {
@@ -639,11 +648,64 @@ export class BillingRetentionService {
     return ids;
   }
 
+  /** A choice for the newer version of their own plan answers that change. */
+  private answersVersion(
+    sub: SubWithPlan | null,
+    target: Plan,
+    requestId?: string | null,
+  ): string | null {
+    return !requestId && sub?.planId === target.id
+      ? (sub.upcomingVersionId ?? null)
+      : null;
+  }
+
+  /**
+   * POST /org/billing/retention/default — "Keep the default picks" for the
+   * newer version of their own plan (lower limits): saves the default picks
+   * as their answer, so the reminder stops and the notice collapses.
+   */
+  async keepDefaultPicks(
+    orgId: string,
+    userId: string,
+  ): Promise<RetentionChoicesV2> {
+    const { sub } = await this.context(orgId);
+    if (!sub?.upcomingPlan || !sub.upcomingVersionId) {
+      throw billingError(
+        'nothing_to_choose',
+        'There is no upcoming change to your plan to choose for.',
+      );
+    }
+    const target = sub.upcomingPlan;
+    const ranked = rankRetention(
+      await loadRetentionCandidates(this.prisma, orgId),
+    );
+    const keep = pickRetention(ranked, retentionLimits(target), null);
+    await this.store(orgId, userId, target.id, keep, {
+      templatesChosen: true,
+      targetVersionId: sub.upcomingVersionId,
+      defaultPicks: true,
+    });
+    await this.audit(orgId, userId, 'retention_choices_saved', {
+      targetPlanId: target.id,
+      choice: 'default',
+      ...keep,
+    });
+    return this.getChoices(orgId, target.id);
+  }
+
   private store(
     orgId: string,
     actorId: string,
     targetPlanId: string,
     ids: Record<(typeof RETENTION_KINDS)[number], string[]>,
+    opts: {
+      // The templates were part of this save (an older client may leave them out).
+      templatesChosen: boolean;
+      // The newer version of their own plan this answers (null = another change).
+      targetVersionId: string | null;
+      // "Keep the default picks".
+      defaultPicks?: boolean;
+    },
   ) {
     const data = {
       targetPlanId,
@@ -651,6 +713,9 @@ export class BillingRetentionService {
       projectIds: ids.projects,
       landingPageIds: ids.landingPages,
       templateIds: ids.templates,
+      templatesChosen: opts.templatesChosen,
+      targetVersionId: opts.targetVersionId,
+      defaultPicks: opts.defaultPicks ?? false,
       updatedById: actorId,
     };
     return this.prisma.retentionChoice.upsert({

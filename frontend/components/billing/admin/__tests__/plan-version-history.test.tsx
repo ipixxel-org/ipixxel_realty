@@ -90,13 +90,33 @@ const HISTORY: PlanVersionHistory = {
   ],
 };
 const ORGS: PlanVersionOrg[] = [
-  { orgId: "org-a", orgName: "Acme Realty", interval: "monthly", movesOn: "2026-11-26" },
-  { orgId: "org-b", orgName: "Bay Homes", interval: "yearly", movesOn: "2027-03-01" },
+  {
+    orgId: "org-a",
+    orgName: "Acme Realty",
+    interval: "monthly",
+    movesOn: "2026-11-26",
+    moveReason: "renewal",
+    overLimits: [
+      { key: "users", limit: 4, used: 5 },
+      { key: "templates", limit: 1, used: 3 },
+    ],
+    whatStays: "not_chosen",
+  },
+  {
+    orgId: "org-b",
+    orgName: "Bay Homes",
+    interval: "yearly",
+    movesOn: "2027-03-01",
+    moveReason: "renewal",
+    overLimits: [{ key: "users", limit: 4, used: 6 }],
+    whatStays: "default",
+  },
+  { orgId: "org-c", orgName: "Coast Estates", interval: "monthly", movesOn: "2026-11-09", moveReason: "notice", overLimits: [], whatStays: null },
 ];
 
 function client() {
   const base = createMockBillingClient();
-  const listPlanVersionOrgs = vi.fn(async () => ({ data: ORGS, total: 2, page: 1, pageSize: 20 }));
+  const listPlanVersionOrgs = vi.fn(async () => ({ data: ORGS, total: 3, page: 1, pageSize: 20 }));
   const c = { ...base, getPlanVersions: async () => HISTORY, listPlanVersionOrgs } as BillingClient;
   return { c, listPlanVersionOrgs };
 }
@@ -148,26 +168,56 @@ describe("the history table", () => {
     expect(cell("users", 1)).not.toHaveAttribute("data-changed");
   });
 
-  it("org counts: a link that lists the organisations on that version, each linked to its billing page", async () => {
+  it("organisations: one tab per version, older first; opens on the older version organisations are still on", async () => {
     const { c, listPlanVersionOrgs } = client();
     await show(c, <PlanVersionHistoryDialog open onClose={() => {}} planId="growth" planName="Growth" />);
-    // None on v2: no link.
-    expect(screen.queryByTestId("version-orgs-link-v2")).toBeNull();
-    const link = screen.getByTestId("version-orgs-link-v1");
-    expect(link).toHaveTextContent("2 orgs");
-    fireEvent.click(link);
-    await settle();
+    const tabs = screen.getAllByRole("tab");
+    expect(tabs.map((t) => t.textContent)).toEqual(["v1 · 2 orgs", "v2 · 0 orgs · latest"]);
+    expect(screen.getByTestId("version-tab-v1")).toHaveAttribute("aria-selected", "true");
     expect(listPlanVersionOrgs).toHaveBeenCalledWith({ planId: "growth", versionId: "ver-1", page: 1, pageSize: 20 });
+    // The table's org count also switches the tab.
+    fireEvent.click(screen.getByTestId("version-tab-v2"));
+    await settle();
+    expect(screen.getByTestId("version-tab-v2")).toHaveAttribute("aria-selected", "true");
+    fireEvent.click(screen.getByTestId("version-orgs-link-v1"));
+    await settle();
+    expect(screen.getByTestId("version-tab-v1")).toHaveAttribute("aria-selected", "true");
+  });
+
+  it("the org list columns: organisation, billing, what happens next, over new limits, what stays", async () => {
+    await show(client().c, <PlanVersionHistoryDialog open onClose={() => {}} planId="growth" planName="Growth" />);
     const list = screen.getByTestId("version-orgs-v1");
-    expect(list).toHaveTextContent("Organisations on v1");
+    expect(within(list).getAllByRole("columnheader").map((h) => h.textContent)).toEqual([
+      "Organisation",
+      "Billing",
+      "What happens next",
+      "Over new limits",
+      "What stays",
+    ]);
     expect(within(list).getByRole("link", { name: "Acme Realty" })).toHaveAttribute("href", "/admin-console/subscriptions/org/org-a");
-    const acme = within(list).getByText("Acme Realty").closest("tr")!;
+    const [acme, bay, coast] = within(list).getAllByTestId("version-org-row");
     expect(acme).toHaveTextContent("Monthly");
-    expect(acme).toHaveTextContent(formatDate("2026-11-26"));
-    expect(within(list).getByText("Bay Homes").closest("tr")!).toHaveTextContent("Yearly");
-    // Click again: closed.
-    fireEvent.click(link);
-    expect(screen.queryByTestId("version-orgs-v1")).toBeNull();
+    expect(acme).toHaveTextContent(`Moves to v2 on ${formatDate("2026-11-26")} (renewal)`);
+    expect(acme).toHaveTextContent("Yes: 5 users, limit 4; 3 templates, limit 1");
+    expect(acme).toHaveTextContent("Not chosen yet");
+    expect(bay).toHaveTextContent("Yearly");
+    expect(bay).toHaveTextContent("Default picks");
+    expect(coast).toHaveTextContent(`Moves to v2 on ${formatDate("2026-11-09")} (7-day notice)`);
+    // Fits the new limits: "No", and nothing about what stays.
+    expect(within(coast).getAllByRole("cell").map((c) => c.textContent).slice(3)).toEqual(["No", "—"]);
+  });
+
+  it("the latest version's tab: already on latest", async () => {
+    const { c } = client();
+    const latestOrgs = vi.fn(async () => ({
+      data: [{ orgId: "org-z", orgName: "Zen Homes", interval: "monthly" as const, movesOn: null, moveReason: null, overLimits: [], whatStays: null }],
+      total: 1,
+      page: 1,
+      pageSize: 20,
+    }));
+    await show({ ...c, listPlanVersionOrgs: latestOrgs } as BillingClient, <PlanVersionHistoryDialog open onClose={() => {}} planId="growth" planName="Growth" initialVersion={2} />);
+    const row = within(screen.getByTestId("version-orgs-v2")).getByTestId("version-org-row");
+    expect(row).toHaveTextContent("Already on latest");
   });
 
   it("one version only (the org page's View)", async () => {
