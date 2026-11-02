@@ -626,3 +626,15 @@ export const googleFontOptions = [
   'Fira Code',
   'Source Code Pro',
 ]
+
+/**
+ * The page's background colour, the same in the builder canvas, preview and
+ * live page: the Branding "Background" colour when one is set, otherwise the
+ * theme's page colour (bg0; white by default, dark for dark themes). The
+ * lighter "surface" colour (bg1) is for cards and panels, not the page.
+ */
+export function sitePageBackground(site: SiteThemeSource): string {
+  const branding = site.settings?.theme?.bg?.trim();
+  if (branding) return branding;
+  return resolveTheme(site.theme).bg0?.trim() || "#ffffff";
+}

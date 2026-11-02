@@ -13,7 +13,7 @@ import { isMediaSrc } from "@/lib/media";
 import { Bullet, isBulletStyle } from "../Bullet";
 import { ImageSlideshow, slideIntervalMs, type Slide } from "../ImageSlideshow";
 import { useDevice } from "@/components/openpage/runtime/device";
-import { resolveBlockStyleForDevice } from "@/lib/openpage/block-style";
+import { overlayLayer, resolveBlockStyleForDevice } from "@/lib/openpage/block-style";
 
 function resolveRuntimeForms(runtimeForms: ReturnType<typeof useOpenPageRuntime>["forms"]) {
   const library = typeof window !== "undefined" ? loadFormLibrary() : [];
@@ -372,6 +372,20 @@ export function ProjectBannerBlock({ block }: { block: BlockConfig }) {
   const form = formId ? findFormById(formId, forms) : forms[0];
 
   const stats = statItems(p.stats, "stats");
+  // No built-in darkening: the overlay comes only from Style → Background →
+  // Overlay. It is drawn here, above the cover image (the block-level
+  // overlay sits behind the image and would be hidden).
+  const device = useDevice();
+  const resolvedStyle = resolveBlockStyleForDevice(block.style, device);
+  const overlayBg = overlayLayer(resolvedStyle?.overlayColor, resolvedStyle?.overlayOpacity);
+  // A Style background (image or colour) shows through the section, so the
+  // "no cover image" placeholder must not cover it; and its overlay is
+  // already part of that background, so it is not drawn twice.
+  const styleBackground = Boolean(resolvedStyle?.backgroundImage || resolvedStyle?.backgroundColor);
+  const placeholder = (className: string) => (styleBackground ? null : <div className={className} />);
+  const overlay = overlayBg && str(p.image) ? (
+    <div data-op-overlay="" aria-hidden className="absolute inset-0 pointer-events-none" style={{ backgroundImage: overlayBg }} />
+  ) : null;
 
   const onPrimary = () => scrollToAnchor(str(p.primaryAnchor, "enquire"));
   const onSecondary = () => runtime.openPopup(str(p.popupId) || undefined, { brochureUrl: str(p.pdfUrl) });
@@ -397,9 +411,9 @@ export function ProjectBannerBlock({ block }: { block: BlockConfig }) {
           // eslint-disable-next-line @next/next/no-img-element
           <img src={str(p.image)} alt="" className="absolute inset-0 w-full h-full object-cover" />
         ) : (
-          <div className="absolute inset-0 bg-gradient-to-br from-bg-3 to-bg-2" />
+          placeholder("absolute inset-0 bg-gradient-to-br from-bg-3 to-bg-2")
         )}
-        <div className="absolute inset-0 bg-gradient-to-r from-black/75 via-black/50 to-black/25" />
+        {overlay}
         <div className="relative z-10 grid @lg:grid-cols-[1.15fr_0.85fr] gap-8 items-center px-6 @md:px-12 py-16 @md:py-24 max-w-6xl mx-auto">
           <HeroCopy block={block} p={p} onPrimary={onPrimary} onSecondary={onSecondary} light stats={stats} />
           <div
@@ -439,9 +453,9 @@ export function ProjectBannerBlock({ block }: { block: BlockConfig }) {
           // eslint-disable-next-line @next/next/no-img-element
           <img src={str(p.image)} alt="" className="absolute inset-0 w-full h-full object-cover" />
         ) : (
-          <div className="absolute inset-0 bg-gradient-to-br from-bg-3 via-bg-2 to-green/10" />
+          placeholder("absolute inset-0 bg-gradient-to-br from-bg-3 via-bg-2 to-green/10")
         )}
-        <div className="absolute inset-0 bg-black/55" />
+        {overlay}
         <div className="relative z-10 px-6 @md:px-12 py-24 max-w-3xl mx-auto flex flex-col items-center">
           <HeroCopy block={block} p={p} onPrimary={onPrimary} onSecondary={onSecondary} light centered stats={stats} />
         </div>
@@ -456,9 +470,9 @@ export function ProjectBannerBlock({ block }: { block: BlockConfig }) {
           // eslint-disable-next-line @next/next/no-img-element
           <img src={str(p.image)} alt="" className="absolute inset-0 w-full h-full object-cover" />
         ) : (
-          <div className="absolute inset-0 bg-gradient-to-br from-green/20 to-bg-2" />
+          placeholder("absolute inset-0 bg-gradient-to-br from-green/20 to-bg-2")
         )}
-        <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/45 to-black/20" />
+        {overlay}
         <div className="relative z-10 px-6 @md:px-12 pt-24 pb-10 max-w-5xl">
           <HeroCopy block={block} p={p} onPrimary={onPrimary} onSecondary={onSecondary} light />
         </div>
@@ -491,9 +505,9 @@ export function ProjectBannerBlock({ block }: { block: BlockConfig }) {
           // eslint-disable-next-line @next/next/no-img-element
           <img src={str(p.image)} alt="" className="absolute inset-0 w-full h-full object-cover" />
         ) : (
-          <div className="absolute inset-0 bg-gradient-to-br from-slate-50 via-white to-slate-100" />
+          placeholder("absolute inset-0 bg-gradient-to-br from-slate-50 via-white to-slate-100")
         )}
-        {onImage && <div className="absolute inset-0 bg-gradient-to-r from-black/70 via-black/40 to-black/15" />}
+        {overlay}
         <div className="relative z-10 flex-1 flex flex-col justify-center px-6 @md:px-12 @lg:px-16 pt-28 pb-36 max-w-3xl">
           {str(p.badge) ? (
             <El block={block} id={part(block, "badge")} as="p" className={`text-[11px] uppercase tracking-[0.28em] font-medium mb-5 ${onImage ? "text-white/80" : "text-green"}`}>
@@ -545,9 +559,9 @@ export function ProjectBannerBlock({ block }: { block: BlockConfig }) {
             // eslint-disable-next-line @next/next/no-img-element
             <img src={str(p.image)} alt="" className="absolute inset-0 w-full h-full object-cover" />
           ) : (
-            <div className="absolute inset-0 bg-gradient-to-br from-bg-3 to-bg-2" />
+            placeholder("absolute inset-0 bg-gradient-to-br from-bg-3 to-bg-2")
           )}
-          <div className="absolute inset-0 bg-gradient-to-r from-black/65 via-black/35 to-transparent" />
+          {overlay}
           <div className="relative z-10 flex flex-col justify-end h-full min-h-[560px] @md:min-h-[640px] px-6 @md:px-12 py-12 @md:py-16 max-w-3xl">
             {headline("Luxury residences", "font-display text-3xl @md:text-5xl @lg:text-[3.4rem] font-medium text-white leading-[1.12] mb-6")}
             {stats.length ? (
@@ -585,8 +599,9 @@ export function ProjectBannerBlock({ block }: { block: BlockConfig }) {
                 // eslint-disable-next-line @next/next/no-img-element
                 <img src={str(p.image)} alt="" className="absolute inset-0 w-full h-full object-cover" />
               ) : (
-                <div className="absolute inset-0 bg-gradient-to-br from-bg-3 to-bg-2" />
+                placeholder("absolute inset-0 bg-gradient-to-br from-bg-3 to-bg-2")
               )}
+              {overlay}
             </div>
             {str(p.rera) || str(p.badge) ? (
               <El
@@ -636,9 +651,9 @@ export function ProjectBannerBlock({ block }: { block: BlockConfig }) {
             // eslint-disable-next-line @next/next/no-img-element
             <img src={str(p.image)} alt="" className="absolute inset-0 w-full h-full object-cover" />
           ) : (
-            <div className="absolute inset-0 bg-gradient-to-br from-bg-3 to-bg-2" />
+            placeholder("absolute inset-0 bg-gradient-to-br from-bg-3 to-bg-2")
           )}
-          <div className="absolute inset-0 bg-gradient-to-b from-white/55 via-white/35 to-white/70" />
+          {overlay}
           <div className="relative z-10 flex flex-col items-center justify-center text-center px-6 py-24 @md:py-32 max-w-3xl mx-auto">
             {headline("Discover Modern Living", "font-display text-3xl @md:text-5xl @lg:text-[3.25rem] font-medium text-text-0 leading-[1.15] tracking-tight mb-4")}
             {description("text-text-1 text-sm @md:text-base leading-relaxed max-w-xl")}
@@ -680,9 +695,9 @@ export function ProjectBannerBlock({ block }: { block: BlockConfig }) {
             // eslint-disable-next-line @next/next/no-img-element
             <img src={str(p.image)} alt="" className="absolute inset-0 w-full h-full object-cover" />
           ) : (
-            <div className="absolute inset-0 bg-gradient-to-br from-bg-3 to-bg-2" />
+            placeholder("absolute inset-0 bg-gradient-to-br from-bg-3 to-bg-2")
           )}
-          <div className="absolute inset-0 bg-black/45" />
+          {overlay}
           <div className="relative z-10 px-6 @md:px-12 py-20 max-w-3xl mx-auto flex flex-col items-center">
             {headline("Find your perfect investment properties", "font-display text-4xl @md:text-5xl @lg:text-[3.5rem] font-medium text-white leading-[1.12] mb-4")}
             {description("text-white/85 text-sm @md:text-base leading-relaxed mb-8 max-w-xl")}
@@ -709,8 +724,9 @@ export function ProjectBannerBlock({ block }: { block: BlockConfig }) {
             // eslint-disable-next-line @next/next/no-img-element
             <img src={str(p.image)} alt="" className="absolute inset-0 w-full h-full object-cover" />
           ) : (
-            <div className="absolute inset-0 bg-gradient-to-br from-bg-3 to-bg-2" />
+            placeholder("absolute inset-0 bg-gradient-to-br from-bg-3 to-bg-2")
           )}
+          {overlay}
         </div>
         <div className="flex flex-col justify-center px-8 @md:px-12 @lg:px-14 py-12 @lg:py-16 bg-white">
           {headline("4 BHK Luxury Flat", "font-display text-3xl @md:text-4xl @lg:text-[2.75rem] font-medium text-text-0 leading-[1.15] mb-8")}
@@ -747,9 +763,9 @@ export function ProjectBannerBlock({ block }: { block: BlockConfig }) {
         // eslint-disable-next-line @next/next/no-img-element
         <img src={str(p.image)} alt="" className="absolute inset-0 w-full h-full object-cover" />
       ) : (
-        <div className="absolute inset-0 bg-gradient-to-br from-green/20 to-bg-2" />
+        placeholder("absolute inset-0 bg-gradient-to-br from-green/20 to-bg-2")
       )}
-      <div className="absolute inset-0 bg-gradient-to-r from-black/70 via-black/45 to-black/20" />
+      {overlay}
       <div className="relative z-10 px-6 @md:px-12 py-24 max-w-3xl">
         <HeroCopy block={block} p={p} onPrimary={onPrimary} onSecondary={onSecondary} light stats={stats} />
       </div>

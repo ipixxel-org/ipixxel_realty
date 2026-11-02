@@ -3,7 +3,6 @@
 import { useMemo, useCallback, useState } from "react";
 import {
   DndContext,
-  closestCenter,
   KeyboardSensor,
   PointerSensor,
   useSensor,
@@ -24,11 +23,13 @@ import { useEditorStore } from "@/components/openpage/store/editorStore";
 import { CanvasEmpty } from "./CanvasEmpty";
 import { SortableBlock } from "./SortableBlock";
 import { RenderBlock } from "@/components/openpage/blocks/registry";
-import { resolveSiteTheme, siteBrandAttrs, siteThemeCSS } from "@/lib/openpage/theme-presets";
+import { resolveSiteTheme, siteBrandAttrs, siteThemeCSS, sitePageBackground } from "@/lib/openpage/theme-presets";
 import { useGoogleFonts } from "@/lib/openpage/useGoogleFonts";
 import { createBlockFromType, createBlockFromPresetId } from "@/lib/openpage/block-factory";
-import { findBlock, allAtRoot } from "@/lib/openpage/block-tree";
-import type { BlockConfig, BlockStyle } from "@/components/openpage/blocks/types";
+import { readDropPayload } from "@/lib/openpage/drag-payload";
+import { canvasCollision } from "@/lib/openpage/canvas-collision";
+import { findBlock, allAtRoot, findColumnList } from "@/lib/openpage/block-tree";
+import type { BlockConfig, BlockStyle, BlockType } from "@/components/openpage/blocks/types";
 import { ElementEditorContext } from "@/components/openpage/blocks/El";
 import { DeviceProvider } from "@/components/openpage/runtime/device";
 
@@ -66,18 +67,15 @@ function CanvasDropZone({
         e.preventDefault();
         setIsOver(false);
         useEditorStore.getState().setDraggedItem(null);
-        // Some browsers do not expose custom MIME types during a native
-        // drop. The sidebar also writes text/plain for this reason.
-        const raw =
-          e.dataTransfer.getData("application/x-openpage-drag") ||
-          e.dataTransfer.getData("text/plain");
-        if (!raw) return;
+        // Only Blocks-panel widgets (custom MIME, or text/plain for browsers
+        // that hide it). A dragged image / link / text is ignored.
+        const payload = readDropPayload(e.dataTransfer);
+        if (!payload) return;
         try {
-          const payload = JSON.parse(raw);
           let newBlock: BlockConfig | null = null;
           let label = "Block";
           if (payload.kind === "block") {
-            newBlock = createBlockFromType(payload.type);
+            newBlock = createBlockFromType(payload.type as BlockType);
             label = payload.label || payload.type;
           } else if (payload.kind === "preset") {
             newBlock = createBlockFromPresetId(payload.presetId);
@@ -297,6 +295,8 @@ export function Canvas() {
 
   const [activeId, setActiveId] = useState<string | null>(null);
   const activeBlock = useMemo(() => (activeId ? findBlock(blocks, activeId) : undefined), [blocks, activeId]);
+  // Container / Div columns under the pointer win, so blocks can be dropped into them.
+  const collisionDetection = useMemo(() => canvasCollision(() => blocks), [blocks]);
 
   // Root-level sections that are part of the current selection. Multi-drag
   // only kicks in when EVERY selected block is a root section — blocks inside
@@ -319,12 +319,9 @@ export function Canvas() {
     const activeData = active.data?.current as Record<string, unknown> | undefined;
     const overData = over.data?.current as Record<string, unknown> | undefined;
 
-    const getColumnBlocks = (sectionId: string | unknown, colIdx: unknown): BlockConfig[] | undefined => {
-      const sectionBlock = blocks.find((b) => b.id === String(sectionId));
-      if (!sectionBlock || sectionBlock.type !== "columns") return undefined;
-      const cols = sectionBlock.props.columns as Array<{ width: number; blocks: BlockConfig[] }> | undefined;
-      return cols?.[colIdx as number]?.blocks;
-    };
+    // Any depth, so containers nested inside other containers work too.
+    const getColumnBlocks = (sectionId: string | unknown, colIdx: unknown): BlockConfig[] | undefined =>
+      findColumnList(blocks, String(sectionId), colIdx as number)?.list;
 
     // ---- Elementor-style group move: dragging any selected root section
     //      moves the whole selection together ----
@@ -430,7 +427,8 @@ export function Canvas() {
           maxWidth: `${pxWidth}px`,
           ...cssVars,
           color: (cssVars as Record<string, string>)["--op-text"] || "var(--color-text-0)",
-          backgroundColor: (cssVars as Record<string, string>)["--op-bg"] || "#ffffff",
+          // Same page background as preview / live (see sitePageBackground).
+          backgroundColor: sitePageBackground(site),
           borderColor: "var(--color-border-default)",
           boxShadow: "0 1px 3px rgba(15, 23, 42, 0.06), 0 8px 24px rgba(15, 23, 42, 0.06)",
         } as React.CSSProperties}
@@ -442,7 +440,7 @@ export function Canvas() {
       >
       <DndContext
         sensors={sensors}
-        collisionDetection={closestCenter}
+        collisionDetection={collisionDetection}
         onDragStart={handleDragStart}
         onDragEnd={handleDragEnd}
         onDragCancel={() => {

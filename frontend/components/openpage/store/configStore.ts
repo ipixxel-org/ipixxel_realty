@@ -13,6 +13,7 @@ import {
   extractBlock,
   clampIndex,
   moveBlockGroup,
+  isSameOrInside,
   type BlockInsertTarget,
 } from "@/lib/openpage/block-tree";
 import { ITEM_ID_KEY } from "@/components/openpage/blocks/types";
@@ -88,6 +89,8 @@ interface ConfigState {
   updateColumnWidth: (sectionBlockId: string, colIndex: number, width: number) => void
   /** Phone-only column width (%); never touches the desktop/tablet `width`. */
   updateColumnMobileWidth: (sectionBlockId: string, colIndex: number, width: number) => void
+  /** Set (or clear with `undefined`) a column's Items layout: direction / justifyContent / alignItems. */
+  updateColumnLayout: (sectionBlockId: string, colIndex: number, patch: Partial<Record<'direction' | 'justifyContent' | 'alignItems', string | undefined>>) => void
   addColumn: (sectionBlockId: string) => void
   removeColumn: (sectionBlockId: string, colIndex: number) => void
   addPage: (name: string, path: string) => string
@@ -891,6 +894,27 @@ export const useConfigStore = create<ConfigState>()((set, get) => ({
           }),
         })),
 
+      updateColumnLayout: (sectionBlockId, colIndex, patch) =>
+        set((state) => ({
+          ...pushUndo(state, 'Update column layout'),
+          config: produce(withPages(state.config), (draft) => {
+            const page = draft.pages!.find((p) => p.id === state.activePageId)
+            if (!page) return
+            const section = findSectionBlock(page.blocks, sectionBlockId)
+            if (!section || section.type !== 'columns') return
+            const cols = section.props.columns as Array<Record<string, unknown>> | undefined
+            if (!cols || !cols[colIndex]) return
+            for (const key of ['direction', 'justifyContent', 'alignItems'] as const) {
+              if (!(key in patch)) continue
+              const value = patch[key]
+              // Unset = the default layout, so store nothing for it.
+              if (value) cols[colIndex][key] = value
+              else delete cols[colIndex][key]
+            }
+            draft.blocks = page.blocks
+          }),
+        })),
+
       addColumn: (sectionBlockId) =>
         set((state) => ({
           ...pushUndo(state, 'Add column'),
@@ -1037,6 +1061,10 @@ export const useConfigStore = create<ConfigState>()((set, get) => ({
             : state.config.blocks
           const located = findBlockLocation(source, blockId)
           if (!located) return state
+          // Never into itself: the block would be removed with nowhere to go.
+          if (target.kind === "column" && isSameOrInside(source, blockId, target.sectionId)) return state
+          // The target column must exist, or the block would be lost.
+          if (target.kind === "column" && !findColumnList(source, target.sectionId, target.colIndex)) return state
 
           const sameListMove =
             target.kind === "column"

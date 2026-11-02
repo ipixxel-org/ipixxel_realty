@@ -4,10 +4,17 @@ import { useEffect } from "react";
 import { toast } from "sonner";
 import { useEditorStore } from "@/components/openpage/store/editorStore";
 import { useConfigStore } from "@/components/openpage/store/configStore";
-import { findBlock, findBlockLocation } from "@/lib/openpage/block-tree";
+import { copyBlockToClipboard, hasClipboardBlock, pasteClipboardBlock } from "@/lib/openpage/block-clipboard";
+
+/** True while the user has text selected (Ctrl+C then copies that text). */
+function hasTextSelection(): boolean {
+  if (typeof window === "undefined") return false;
+  const sel = window.getSelection();
+  return Boolean(sel && !sel.isCollapsed && sel.toString().trim());
+}
 
 export function useOpenPageKeyboard() {
-  const { toggleJsonDrawer, toggleHistory, toggleShortcutsModal, togglePreview, toggleSpotlight, selectBlock, setClipboardStyle, setRightSidebarTab } = useEditorStore();
+  const { toggleJsonDrawer, toggleHistory, toggleShortcutsModal, togglePreview, toggleSpotlight, selectBlock, setRightSidebarTab } = useEditorStore();
   const { undo, redo, removeBlock, duplicateBlock, removeBlocks, duplicateBlocks } = useConfigStore();
 
   useEffect(() => {
@@ -22,6 +29,8 @@ export function useOpenPageKeyboard() {
 
       const tag = (e.target as HTMLElement).tagName;
       if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") return;
+      // Inline text editing: let the browser handle typing / copy / paste.
+      if ((e.target as HTMLElement).isContentEditable) return;
 
       if (e.key === "?" && !e.metaKey && !e.ctrlKey) {
         e.preventDefault();
@@ -119,41 +128,22 @@ export function useOpenPageKeyboard() {
         return;
       }
 
-      if ((e.metaKey || e.ctrlKey) && e.shiftKey && (e.key === "c" || e.key === "C")) {
-        e.preventDefault();
+      // Copy / paste whole blocks (Ctrl+C / Ctrl+V; Ctrl+Shift also works).
+      // Selected text on the page is left to the browser.
+      if ((e.metaKey || e.ctrlKey) && !e.altKey && e.key.toLowerCase() === "c") {
+        if (hasTextSelection()) return;
         const selectedId = useEditorStore.getState().selectedBlockId;
         if (!selectedId) return;
-        const blocks = useConfigStore.getState().getActivePageBlocks();
-        const block = findBlock(blocks, selectedId);
-        if (block) {
-          useEditorStore.getState().setClipboardBlock(block);
-          toast("Block copied");
-        }
+        e.preventDefault();
+        if (copyBlockToClipboard(selectedId)) toast("Block copied — press Ctrl+V to paste");
         return;
       }
 
-      if ((e.metaKey || e.ctrlKey) && e.shiftKey && (e.key === "v" || e.key === "V")) {
+      if ((e.metaKey || e.ctrlKey) && !e.altKey && e.key.toLowerCase() === "v") {
+        if (!hasClipboardBlock()) return;
         e.preventDefault();
-        const cb = useEditorStore.getState().clipboardBlock;
-        if (!cb) {
-          toast("No block in clipboard");
-          return;
-        }
-        const blocks = useConfigStore.getState().getActivePageBlocks();
         const selectedId = useEditorStore.getState().selectedBlockId;
-        if (selectedId) {
-          const loc = findBlockLocation(blocks, selectedId);
-          if (loc) {
-            const target = loc.sectionId == null
-              ? { kind: "root" as const, index: loc.index + 1 }
-              : { kind: "column" as const, sectionId: loc.sectionId, colIndex: loc.colIndex ?? 0, index: loc.index + 1 };
-            useConfigStore.getState().pasteBlockAt(target, cb);
-            toast("Block pasted");
-            return;
-          }
-        }
-        useConfigStore.getState().pasteBlockAt({ kind: "root", index: undefined }, cb);
-        toast("Block pasted at end");
+        if (pasteClipboardBlock("after", selectedId)) toast(selectedId ? "Block pasted" : "Block pasted at end");
         return;
       }
 
@@ -168,31 +158,9 @@ export function useOpenPageKeyboard() {
         redo();
       }
 
-      if ((e.metaKey || e.ctrlKey) && e.key === "c") {
-        const selectedId = useEditorStore.getState().selectedBlockId;
-        if (selectedId) {
-          const blocks = useConfigStore.getState().getActivePageBlocks();
-          const block = blocks.find((b) => b.id === selectedId);
-          if (block?.style) {
-            setClipboardStyle(block.style);
-            toast('Style copied');
-          }
-        }
-      }
-
-      if ((e.metaKey || e.ctrlKey) && e.key === "v") {
-        const selectedId = useEditorStore.getState().selectedBlockId;
-        if (selectedId) {
-          const pasted = useEditorStore.getState().clipboardStyle;
-          if (pasted) {
-            useConfigStore.getState().updateBlockStyle(selectedId, pasted);
-            toast('Style pasted');
-          }
-        }
-      }
     }
 
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [toggleJsonDrawer, toggleHistory, toggleShortcutsModal, togglePreview, toggleSpotlight, selectBlock, undo, redo, removeBlock, duplicateBlock, removeBlocks, duplicateBlocks, setClipboardStyle, setRightSidebarTab]);
+  }, [toggleJsonDrawer, toggleHistory, toggleShortcutsModal, togglePreview, toggleSpotlight, selectBlock, undo, redo, removeBlock, duplicateBlock, removeBlocks, duplicateBlocks, setRightSidebarTab]);
 }

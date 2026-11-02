@@ -8,14 +8,23 @@ import type { BlockConfig, BlockType } from "../types";
 import { RenderBlock } from "../registry";
 import { useConfigStore } from "@/components/openpage/store/configStore";
 import { useEditorStore } from "@/components/openpage/store/editorStore";
-import { createBlockFromType, createBlockFromPresetId } from "@/lib/openpage/block-factory";
+import { createBlockFromType, createBlockFromPresetId, isDivBlock } from "@/lib/openpage/block-factory";
 import { resolveBlockStyleForDevice, isHiddenOnViewport } from "@/lib/openpage/block-style";
-import { Plus, GripVertical, Type, Image as ImageIcon, Sparkles, EyeOff } from "lucide-react";
+import { Plus, GripVertical, Type, Image as ImageIcon, Sparkles, EyeOff, ClipboardPaste, Pencil, Palette } from "lucide-react";
+import { pasteClipboardBlock } from "@/lib/openpage/block-clipboard";
 import { toast } from "sonner";
 import { ColumnResizer } from "./ColumnResizer";
+import { useElementEditor } from "../El";
+import { readDropPayload, type DropPayload } from "@/lib/openpage/drag-payload";
+import { flexLayoutStyle, isVertical, readFlexLayout, type FlexLayout } from "@/lib/openpage/flex-layout";
 
-interface ColumnsProps {
-  columns?: Array<{ width: number; mobileWidth?: number; blocks: BlockConfig[] }>;
+/** One column ("div"): its width plus the optional layout of its widgets. */
+type ColumnData = { width: number; mobileWidth?: number; blocks: BlockConfig[] } & FlexLayout;
+
+interface ColumnsProps extends FlexLayout {
+  /** "boxed" (default) or "full" (edge to edge). */
+  contentWidth?: string;
+  columns?: ColumnData[];
   gap?: string;
 }
 
@@ -24,11 +33,6 @@ export function mobileColumnBasis(mobileWidth: number | undefined, gap: string):
   if (typeof mobileWidth !== "number" || !Number.isFinite(mobileWidth) || mobileWidth >= 100) return "100%";
   return `calc(${Math.max(10, mobileWidth)}% - ${gap})`;
 }
-
-type DropPayload =
-  | { kind: "block"; type: string; label?: string }
-  | { kind: "preset"; presetId: string; label?: string }
-  | { kind: "global"; globalWidgetId: string; name?: string };
 
 function buildBlockFromPayload(payload: DropPayload): { block: BlockConfig | null; label: string } {
   if (payload.kind === "block") {
@@ -53,7 +57,7 @@ function ColumnBlock({
   columnId: string;
   colIndex: number;
 }) {
-  const { selectedBlockId, selectBlock } = useEditorStore();
+  const { selectedBlockId, selectBlock, setRightSidebarTab } = useEditorStore();
   const { removeBlockFromColumn, duplicateBlockInColumn } = useConfigStore();
   const {
     attributes,
@@ -82,7 +86,7 @@ function ColumnBlock({
         e.stopPropagation();
         selectBlock(block.id);
       }}
-      className={`relative group/colblock my-1.5 rounded transition-all ${
+      className={`relative min-w-0 group/colblock my-1.5 rounded transition-all ${
         isSelected
           ? "outline outline-2 outline-dashed outline-blue-400"
           : "hover:outline hover:outline-1 hover:outline-dashed hover:outline-blue-400/50"
@@ -108,6 +112,29 @@ function ColumnBlock({
           title="Drag to reorder"
         >
           <GripVertical size={11} />
+        </button>
+        {/* Edit this inner block (not the outer container). */}
+        <button
+          type="button"
+          onClick={() => {
+            selectBlock(block.id);
+            setRightSidebarTab("properties");
+          }}
+          className="px-1.5 py-0.5 text-white/90 hover:bg-blue-600 flex items-center"
+          title="Edit content of this block"
+        >
+          <Pencil size={11} />
+        </button>
+        <button
+          type="button"
+          onClick={() => {
+            selectBlock(block.id);
+            setRightSidebarTab("style");
+          }}
+          className="px-1.5 py-0.5 text-white/90 hover:bg-blue-600 flex items-center"
+          title="Style this block (width, height, spacing…)"
+        >
+          <Palette size={11} />
         </button>
         <button
           type="button"
@@ -135,10 +162,13 @@ function ColumnDropSlot({
   sectionBlockId,
   colIndex,
   index,
+  horizontal = false,
 }: {
   sectionBlockId: string;
   colIndex: number;
   index: number;
+  /** The column lays its widgets out in a row: the slot is a thin vertical bar. */
+  horizontal?: boolean;
 }) {
   const [isOver, setIsOver] = useState(false);
   const draggedItem = useEditorStore((s) => s.draggedItem);
@@ -169,10 +199,10 @@ function ColumnDropSlot({
         e.stopPropagation();
         setIsOver(false);
         useEditorStore.getState().setDraggedItem(null);
-        const raw = e.dataTransfer.getData("application/x-openpage-drag") || e.dataTransfer.getData("text/plain");
-        if (!raw) return;
+        // Only Blocks-panel widgets; a dragged image / link / text is ignored.
+        const payload = readDropPayload(e.dataTransfer);
+        if (!payload) return;
         try {
-          const payload = JSON.parse(raw) as DropPayload;
           const { block, label } = buildBlockFromPayload(payload);
           if (block) {
             addBlockToColumn(sectionBlockId, colIndex, block, index);
@@ -184,18 +214,85 @@ function ColumnDropSlot({
         }
       }}
       className={`transition-all duration-200 relative flex items-center justify-center select-none rounded ${
-        isOver
+        horizontal
+          ? isOver
+            ? "w-10 self-stretch mx-1 shrink-0 bg-green-500/15 border border-dashed border-green z-30"
+            : draggedItem
+            ? "w-6 self-stretch mx-1 shrink-0 bg-green-500/5 border border-dashed border-green/40 hover:border-green hover:bg-green-500/15 z-20"
+            : "w-1.5 self-stretch shrink-0 hover:w-6 hover:bg-green-500/10 hover:border hover:border-dashed hover:border-green/40 z-10"
+          : isOver
           ? "h-10 my-1 bg-green-500/15 border border-dashed border-green scale-[1.01] shadow-[0_0_16px_rgba(34,197,94,0.25)] z-30"
           : draggedItem
           ? "h-6 my-1 bg-green-500/5 border border-dashed border-green/40 hover:border-green hover:bg-green-500/15 z-20"
           : "h-1.5 hover:h-6 hover:bg-green-500/10 hover:border hover:border-dashed hover:border-green/40 rounded z-10 transition-all"
       }`}
     >
-      {isOver && (
+      {isOver && !horizontal && (
         <span className="text-[10px] font-semibold text-green pointer-events-none">
           Drop {draggedItem?.label || "widget"} here
         </span>
       )}
+    </div>
+  );
+}
+
+/**
+ * A column's box: its width per device. Shared by the builder column and the
+ * live-page column so both lay out identically.
+ */
+function columnBox(col: ColumnData, gap: string, stacked: boolean): { className: string; style: CSSProperties } {
+  // Phone-width containers (< @md, 448px) use the column's mobile width
+  // (default 100%: one per row); wider ones use its desktop width. The two are
+  // stored separately, so neither overwrites the other. In a vertical
+  // container the columns stack, so the same widths are used as their width
+  // (aligned by the container's Align Items).
+  return {
+    className: stacked
+      ? "min-w-0 max-w-full relative flex flex-col justify-start grow-0 shrink-0 basis-auto w-[var(--op-col-w-sm)] @md:w-[var(--op-col-w)]"
+      : "min-w-0 relative flex flex-col justify-start grow-0 shrink-0 basis-[var(--op-col-basis-sm)] @md:basis-[var(--op-col-basis)]",
+    style: (stacked
+      ? { "--op-col-w": `${col.width}%`, "--op-col-w-sm": `${col.mobileWidth ?? 100}%` }
+      : {
+          "--op-col-basis": `calc(${col.width}% - ${gap})`,
+          "--op-col-basis-sm": mobileColumnBasis(col.mobileWidth, gap),
+        }) as Record<string, string> as CSSProperties,
+  };
+}
+
+/** The box around a column's widgets, laid out by the column's Items settings. */
+function itemsBox(col: ColumnData): { className: string; style: CSSProperties | undefined; inRow: boolean } {
+  const layout = readFlexLayout(col);
+  const inRow = !isVertical(layout.direction, "column");
+  const style = flexLayoutStyle(layout);
+  return {
+    // With a Justify Content set it fills the column's height so vertical
+    // alignment has room.
+    className: `flex ${layout.justifyContent ? "flex-1" : ""} ${inRow ? "flex-row flex-wrap" : "flex-col"}`,
+    style: Object.keys(style).length ? style : undefined,
+    inRow,
+  };
+}
+
+/**
+ * A column on the published page / preview: only its widgets. None of the
+ * builder's drop zones, placeholders, toolbars or "Drop or add widget".
+ */
+function StaticColumn({ col, gap, stacked }: { col: ColumnData; gap: string; stacked: boolean }) {
+  const blocks = (col.blocks || []).filter((b) => !b.id.includes("placeholder"));
+  const box = columnBox(col, gap, stacked);
+  const items = itemsBox(col);
+  return (
+    <div className={box.className} style={box.style}>
+      {blocks.length ? (
+        <div data-op-col-items="" className={items.className} style={items.style}>
+          {blocks.map((child) => (
+            // Same spacing as in the builder, so the page looks the same.
+            <div key={child.id} className="relative min-w-0 my-1.5">
+              <RenderBlock block={child} />
+            </div>
+          ))}
+        </div>
+      ) : null}
     </div>
   );
 }
@@ -205,11 +302,14 @@ function DroppableColumn({
   colIndex,
   col,
   gap,
+  stacked = false,
 }: {
   sectionBlockId: string;
   colIndex: number;
-  col: { width: number; mobileWidth?: number; blocks: BlockConfig[] };
+  col: ColumnData;
   gap: string;
+  /** The container's direction is vertical: columns use their width, not a flex-basis. */
+  stacked?: boolean;
 }) {
   const { addBlockToColumn } = useConfigStore();
   const selectBlock = useEditorStore((s) => s.selectBlock);
@@ -229,13 +329,18 @@ function DroppableColumn({
   );
 
   const realBlocks = (col.blocks || []).filter((b) => !b.id.includes("placeholder"));
+  const hasCopiedBlock = useEditorStore((s) => Boolean(s.clipboardBlock));
+  // The column's own "Items" layout for its widgets. Default: stacked
+  // top-to-bottom at full width, exactly as before.
+  const box = columnBox(col, gap, stacked);
+  const items = itemsBox(col);
+  const itemsInRow = items.inRow;
   const isOnlyPlaceholder = realBlocks.length === 0;
   const isHighlight = isOver || dndIsOver || Boolean(draggedItem);
 
-  const handleDropData = (rawData: string | null) => {
-    if (!rawData) return;
+  const handleDropData = (payload: DropPayload | null) => {
+    if (!payload) return;
     try {
-      const payload = JSON.parse(rawData) as DropPayload;
       const { block: newBlock, label } = buildBlockFromPayload(payload);
       if (newBlock) {
         addBlockToColumn(sectionBlockId, colIndex, newBlock);
@@ -250,16 +355,8 @@ function DroppableColumn({
   return (
     <div
       ref={combinedRef}
-      // Phone-width containers (< @md, 448px) use the column's mobile width
-      // (default 100%: one per row); wider ones use its desktop width. The
-      // two are stored separately, so neither overwrites the other.
-      className="min-w-0 relative flex flex-col justify-start grow-0 shrink-0 basis-[var(--op-col-basis-sm)] @md:basis-[var(--op-col-basis)]"
-      style={
-        {
-          "--op-col-basis": `calc(${col.width}% - ${gap})`,
-          "--op-col-basis-sm": mobileColumnBasis(col.mobileWidth, gap),
-        } as CSSProperties
-      }
+      className={box.className}
+      style={box.style}
       onDragOver={(e) => {
         e.preventDefault();
         e.stopPropagation();
@@ -283,8 +380,8 @@ function DroppableColumn({
         e.stopPropagation();
         setIsOver(false);
         useEditorStore.getState().setDraggedItem(null);
-        const raw = e.dataTransfer.getData("application/x-openpage-drag") || e.dataTransfer.getData("text/plain");
-        handleDropData(raw);
+        // Only Blocks-panel widgets; a dragged image / link / text is ignored.
+        handleDropData(readDropPayload(e.dataTransfer));
       }}
     >
       {isOnlyPlaceholder ? (
@@ -362,33 +459,50 @@ function DroppableColumn({
               >
                 <ImageIcon size={10} /> Image
               </button>
+              {hasCopiedBlock ? (
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (pasteClipboardBlock("inside", sectionBlockId, colIndex)) toast.success(`Pasted into Column ${colIndex + 1}`);
+                  }}
+                  className="px-2 py-1 rounded bg-bg-3 hover:bg-bg-4 text-[10px] text-text-1 hover:text-text-0 transition-colors flex items-center gap-1 border border-border-default shadow-xs"
+                  title="Paste the copied block here"
+                >
+                  <ClipboardPaste size={10} /> Paste
+                </button>
+              ) : null}
             </div>
           )}
         </div>
       ) : (
         <>
-          <SortableContext items={realBlocks.map((b) => b.id)} strategy={verticalListSortingStrategy}>
-            {realBlocks.map((childBlock, i) => (
-              <Fragment key={childBlock.id}>
-                <ColumnDropSlot
-                  sectionBlockId={sectionBlockId}
-                  colIndex={colIndex}
-                  index={i}
-                />
-                <ColumnBlock
-                  block={childBlock}
-                  columnId={sectionBlockId}
-                  colIndex={colIndex}
-                />
-              </Fragment>
-            ))}
-          </SortableContext>
+          {/* The widgets, laid out by the column's Items settings. */}
+          <div data-op-col-items="" className={items.className} style={items.style}>
+            <SortableContext items={realBlocks.map((b) => b.id)} strategy={verticalListSortingStrategy}>
+              {realBlocks.map((childBlock, i) => (
+                <Fragment key={childBlock.id}>
+                  <ColumnDropSlot
+                    sectionBlockId={sectionBlockId}
+                    colIndex={colIndex}
+                    index={i}
+                    horizontal={itemsInRow}
+                  />
+                  <ColumnBlock
+                    block={childBlock}
+                    columnId={sectionBlockId}
+                    colIndex={colIndex}
+                  />
+                </Fragment>
+              ))}
+            </SortableContext>
 
-          <ColumnDropSlot
-            sectionBlockId={sectionBlockId}
-            colIndex={colIndex}
-            index={realBlocks.length}
-          />
+            <ColumnDropSlot
+              sectionBlockId={sectionBlockId}
+              colIndex={colIndex}
+              index={realBlocks.length}
+              horizontal={itemsInRow}
+            />
+          </div>
 
           <button
             type="button"
@@ -420,6 +534,15 @@ export function ColumnsBlock({ block }: { block: BlockConfig }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const p = block.props as ColumnsProps;
   const gap = p.gap || "24px";
+  // The container's "Items" layout for its columns. Unset values keep the
+  // original row / start / stretch layout.
+  const layout = readFlexLayout(p);
+  const stacked = isVertical(layout.direction, "row");
+  // Drag-to-resize handles only make sense for a normal left-to-right row.
+  const showResizers = !layout.direction || layout.direction === "row";
+  // Only the builder canvas provides an editor scope. The published page and
+  // preview get plain columns with no editing controls.
+  const editing = useElementEditor()?.isEditing === true;
 
   const columns =
     p.columns && p.columns.length > 0
@@ -429,22 +552,37 @@ export function ColumnsBlock({ block }: { block: BlockConfig }) {
           { width: 50, blocks: [] },
         ];
 
+  // A Div is a plain box: no outer padding and no max width, so it fits
+  // wherever it is placed (spacing comes from its Style tab).
+  const div = isDivBlock(block);
+  // Content Width: "boxed" (default) centres the content at max ~1150px with
+  // side padding; "full" runs it edge to edge with no side padding.
+  const fullWidth = p.contentWidth === "full";
+  const outerCls = div ? "" : fullWidth ? "py-6" : "px-6 py-6";
+  const innerCls = div || fullWidth ? "w-full" : "max-w-6xl mx-auto";
+
   return (
-    <div className="px-6 py-6">
+    <div className={outerCls} data-op-div={div ? "" : undefined} data-op-width={fullWidth ? "full" : undefined}>
       <div
         ref={containerRef}
-        className="max-w-6xl mx-auto flex flex-wrap items-stretch"
-        style={{ gap }}
+        className={`${innerCls} flex flex-wrap items-stretch`}
+        style={{ gap, ...flexLayoutStyle(layout) }}
+        data-op-container=""
       >
         {columns.map((col, i) => (
           <Fragment key={i}>
+            {!editing ? (
+              <StaticColumn col={col} gap={gap} stacked={stacked} />
+            ) : (
             <DroppableColumn
               sectionBlockId={block.id}
               colIndex={i}
               col={col}
               gap={gap}
+              stacked={stacked}
             />
-            {i < columns.length - 1 && (
+            )}
+            {editing && showResizers && i < columns.length - 1 && (
               // No resize handles while stacked: widths apply to every device.
               <div className="hidden @md:contents">
                 <ColumnResizer

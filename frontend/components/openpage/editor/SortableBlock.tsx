@@ -7,6 +7,8 @@ import { CSS } from "@dnd-kit/utilities";
 import { useConfigStore } from "@/components/openpage/store/configStore";
 import { useEditorStore } from "@/components/openpage/store/editorStore";
 import type { BlockConfig } from "../blocks/types";
+import { isDivBlock } from "@/lib/openpage/block-factory";
+import { findBlock } from "@/lib/openpage/block-tree";
 import { isHiddenOnViewport, resolveBlockStyleForDevice } from "@/lib/openpage/block-style";
 import { FloatingBlockToolbar } from "./FloatingBlockToolbar";
 import { BlockContextMenu } from "./BlockContextMenu";
@@ -84,6 +86,13 @@ export function SortableBlock({ block, isSelected, isMultiSelected = false, froz
   const scrollRef = useRef<HTMLDivElement>(null);
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number } | null>(null);
   const [isHovered, setIsHovered] = useState(false);
+  // A block nested inside this one (e.g. a header inside a Container) is
+  // selected: this section's toolbar must step aside, or its Edit / Style
+  // buttons would silently re-select the outer container.
+  const nestedSelected = useMemo(
+    () => Boolean(selectedBlockId && selectedBlockId !== block.id && findBlock([block], selectedBlockId)),
+    [block, selectedBlockId],
+  );
 
   const {
     attributes,
@@ -232,11 +241,11 @@ export function SortableBlock({ block, isSelected, isMultiSelected = false, froz
         }`}
       >
         <GripVertical size={11} className="shrink-0" />
-        <span>{blockLabels[block.type] || block.type}</span>
+        <span>{isDivBlock(block) ? "Div" : blockLabels[block.type] || block.type}</span>
       </div>
 
       {/* Floating Toolbar (Elementor Pro style) */}
-      {(isSelected || isHovered) && (
+      {(isSelected || (isHovered && !nestedSelected)) && (
         <FloatingBlockToolbar
           block={block}
           index={index}

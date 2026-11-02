@@ -1,10 +1,12 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { MousePointer2, SlidersHorizontal, PanelRightClose, AlignLeft, Palette, Type, Settings2, Sparkles } from "lucide-react";
 import { useEditorStore, type RightSidebarTab } from "@/components/openpage/store/editorStore";
 import { useConfigStore } from "@/components/openpage/store/configStore";
 import { blockMetadata } from "@/lib/openpage/block-metadata";
+import { isDivBlock } from "@/lib/openpage/block-factory";
+import type { BlockConfig } from "@/components/openpage/blocks/types";
 import { findBlock, findBlockLocation } from "@/lib/openpage/block-tree";
 import { PropertiesPanel } from './PropertiesPanel'
 import { StylePanel } from './StylePanel'
@@ -21,7 +23,8 @@ const tabs: { id: RightSidebarTab; label: string; icon: typeof AlignLeft; color:
   { id: 'advanced', label: 'More', icon: Settings2, color: "#a78bfa" },
 ]
 
-function blockLabel(type: string): string {
+function blockLabel(block: BlockConfig): string {
+  const type = isDivBlock(block) ? "div" : block.type
   return blockMetadata.find((b) => b.type === type)?.label ?? type
 }
 
@@ -43,12 +46,8 @@ export function RightSidebar() {
   const selectedElementId = selectedElement?.elementId ?? null
   const [aiAssistantOpen, setAiAssistantOpen] = useState(false)
 
-  // Switching blocks should land on Content, but keep the Element tab while the
-  // user is working inside an element of the block they just selected.
-  useEffect(() => {
-    if (selectedElementId) return
-    if (selectedBlock) setRightSidebarTab('properties')
-  }, [selectedBlock?.id, selectedElementId]) // eslint-disable-line react-hooks/exhaustive-deps
+  // Switching blocks lands on Content: handled by editorStore.selectBlock, so
+  // "select this block and open Style" (toolbar buttons) is not overridden.
 
   return (
     <div data-tour="inspector" className="hidden md:flex w-[300px] h-full min-h-0 bg-bg-1 border-l border-border-default flex-col shrink-0 overflow-hidden">
@@ -62,7 +61,7 @@ export function RightSidebar() {
           {selectedBlock && (
             <>
               <span className="text-text-3">/</span>
-              <span className="text-[12px] font-medium text-text-1 truncate">{blockLabel(selectedBlock.type)}</span>
+              <span className="text-[12px] font-medium text-text-1 truncate">{blockLabel(selectedBlock)}</span>
             </>
           )}
         </div>

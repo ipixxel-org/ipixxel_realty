@@ -22,6 +22,7 @@ import { useConfigStore } from "@/components/openpage/store/configStore";
 import { useEditorStore } from "@/components/openpage/store/editorStore";
 import type { BlockConfig } from "../blocks/types";
 import { blockMetadata } from "@/lib/openpage/block-metadata";
+import { isDivBlock } from "@/lib/openpage/block-factory";
 import type { DraggableAttributes, DraggableSyntheticListeners } from "@dnd-kit/core";
 import { SectionAiAssistant } from "./SectionAiAssistant";
 
@@ -56,7 +57,8 @@ export function FloatingBlockToolbar({
   const hideKey = viewport === "tablet" ? "hideOnTablet" : viewport === "mobile" ? "hideOnMobile" : "hideOnDesktop";
   const isCurrentHidden = Boolean(block.style?.[hideKey]);
 
-  const meta = blockMetadata.find((b) => b.type === block.type);
+  // A Div is stored as a Container; show it (and its single layout) as Div.
+  const meta = blockMetadata.find((b) => b.type === (isDivBlock(block) ? "div" : block.type));
   const blockLabel = meta?.label || block.type;
   const variants = meta?.variants || [];
 

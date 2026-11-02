@@ -22,6 +22,17 @@ export const blockMetadata: BlockMeta[] = [
     defaultProps: { gap: '24px' },
   },
   {
+    // A plain box (no padding, no max width) that groups widgets anywhere,
+    // including inside another Container's column. Created as a `columns`
+    // block with `kind: 'div'`, so it has every Container feature.
+    type: 'div',
+    label: 'Div',
+    description: 'A plain box that groups widgets, like a container without spacing',
+    category: 'Core',
+    variants: ['1-col'],
+    defaultProps: { gap: '16px' },
+  },
+  {
     type: 'columns',
     label: 'Container / Columns',
     description: 'Single-column container that can expand into a grid',

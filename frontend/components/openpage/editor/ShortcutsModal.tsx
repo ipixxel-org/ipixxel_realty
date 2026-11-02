@@ -29,8 +29,8 @@ const shortcutGroups = [
     shortcuts: [
       { keys: ['D'], description: 'Duplicate selected block' },
       { keys: ['Del'], description: 'Delete selected block' },
-      { keys: ['\u2318', 'C'], description: 'Copy block style' },
-      { keys: ['\u2318', 'V'], description: 'Paste block style' },
+      { keys: ['\u2318', 'C'], description: 'Copy selected block' },
+      { keys: ['\u2318', 'V'], description: 'Paste block below the selected one' },
     ],
   },
   {
