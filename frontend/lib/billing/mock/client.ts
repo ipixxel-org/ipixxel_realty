@@ -426,6 +426,9 @@ export function createMockBillingClient(opts: { initial?: Partial<MockState>; pe
       return ok(deriveRetention(get(), today, target.id));
     },
 
+    // The mock has no plan versions: nothing to answer.
+    keepDefaultPicks: () => fail("There is no upcoming change to your plan to choose for."),
+
     // The sample org only: Super Admin's view is the same lists, never locked.
     getAdminRetentionChoices: (req) => ok({ ...deriveRetention(get(), today, req.targetPlanId), locked: false }),
     saveAdminRetentionChoices({ orgId: _orgId, ...req }) {

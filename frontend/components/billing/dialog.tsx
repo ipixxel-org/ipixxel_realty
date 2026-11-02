@@ -17,6 +17,7 @@ export function BillingDialog({
   footer,
   children,
   size = "sm",
+  dismissible = true,
 }: {
   open: boolean;
   onClose: () => void;
@@ -25,12 +26,14 @@ export function BillingDialog({
   footer?: ReactNode;
   children?: ReactNode;
   size?: "sm" | "md" | "lg";
+  /** false: must be answered — no close button, Escape and clicking outside do nothing. */
+  dismissible?: boolean;
 }) {
   const { inlineDialogs } = useBillingEnv();
   if (!open) return null;
   if (!inlineDialogs) {
     return (
-      <Modal open onClose={onClose} title={title} description={description} size={size} footer={footer}>
+      <Modal open onClose={onClose} title={title} description={description} size={size} footer={footer} closeDisabled={!dismissible} hideClose={!dismissible}>
         {children}
       </Modal>
     );
@@ -43,9 +46,11 @@ export function BillingDialog({
             <b>{title}</b>
             {description ? <div className="bl-muted" style={{ marginTop: 4 }}>{description}</div> : null}
           </div>
-          <button type="button" className="bl-inline-x" aria-label="Close" onClick={onClose}>
-            ×
-          </button>
+          {dismissible ? (
+            <button type="button" className="bl-inline-x" aria-label="Close" onClick={onClose}>
+              ×
+            </button>
+          ) : null}
         </div>
         {children ? <div className="bl-inline-dialog-b">{children}</div> : null}
         {footer}

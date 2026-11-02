@@ -106,9 +106,10 @@ describe("Plans & Pricing", () => {
                 ...p,
                 version: 3,
                 versions: [
-                  { version: 3, orgs: 12, orgNames: ["Acme Realty", "Bay Homes", "Coast Estates", "Delta Homes", "Elm Realty"] },
-                  { version: 2, orgs: 4, orgNames: ["Fern Homes", "Gate Realty", "Hill Estates", "Ivy Homes"] },
+                  { version: 3, orgs: 12 },
+                  { version: 2, orgs: 4 },
                 ],
+                olderOrgs: { orgs: 4, versions: [2], nextMoveOn: "2026-11-09" },
               }
             : p,
         ),
@@ -116,14 +117,23 @@ describe("Plans & Pricing", () => {
     await show(client, <AdminPlansEditor />);
     const card = screen.getAllByTestId("admin-plan-card").find((c) => within(c).queryByText("Growth"))!;
     expect(within(card).getByTestId("plan-version")).toHaveTextContent("v3");
-    // One version per line, newest first.
     // One row per version, newest first (marked Latest), with its org count.
     expect(within(card).getAllByTestId("plan-version-line").map((l) => l.textContent)).toEqual(["v3Latest12 orgs", "v24 orgs"]);
-    // The organisation names under each version (the first few, then "+N more").
-    expect(within(card).getAllByTestId("plan-version-orgs").map((l) => l.textContent)).toEqual([
-      "Acme Realty, Bay Homes, Coast Estates, Delta Homes, Elm Realty +7 more",
-      "Fern Homes, Gate Realty, Hill Estates, Ivy Homes",
-    ]);
+    // Who is still on an older version, and the next move — no name list.
+    expect(within(card).getByTestId("plan-version-older")).toHaveTextContent("4 orgs still on v2 · next move 9 Nov");
+    expect(within(card).queryByTestId("plan-version-orgs")).toBeNull();
+  });
+
+  it("everyone on the latest: nothing extra on the card", async () => {
+    const base = createMockBillingClient();
+    const plans = await base.listAdminPlans();
+    const client = {
+      ...base,
+      listAdminPlans: async () => plans.map((p) => (p.id === "growth" ? { ...p, version: 2, versions: [{ version: 2, orgs: 5 }], olderOrgs: null } : p)),
+    } as BillingClient;
+    await show(client, <AdminPlansEditor />);
+    const card = screen.getAllByTestId("admin-plan-card").find((c) => within(c).queryByText("Growth"))!;
+    expect(within(card).queryByTestId("plan-version-older")).toBeNull();
   });
 
   async function editForm(answer: PlanSavePreview) {

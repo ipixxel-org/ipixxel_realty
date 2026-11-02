@@ -90,6 +90,7 @@ export const httpBilling: Impl = {
   // Step 6 — choose what stays on a smaller plan
   getRetentionChoices: (req) => call(`/org/billing/retention${retentionQuery(req)}`),
   saveRetentionChoices: (req) => call("/org/billing/retention", put(req)),
+  keepDefaultPicks: () => call("/org/billing/retention/default", post({})),
 
   // Step 7 — invoices, payment history, Super Admin subscriptions and payments.
   // (Org lists are under /org/billing/v2/: /org/billing/invoices is the legacy list.)

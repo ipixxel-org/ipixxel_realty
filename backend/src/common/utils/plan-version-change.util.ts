@@ -12,6 +12,7 @@
  */
 import type { Plan, PlanVersion } from '@prisma/client';
 import { PLAN_CAPABILITY_CATALOG } from '../../modules/plans/plan-capabilities';
+import { usageOverLimits } from './plan-quota.util';
 import {
   latestPlanVersion,
   planVersionsApplied,
@@ -358,4 +359,40 @@ export function versionValues(v: {
       HISTORY_FEATURES.map((f) => [f.key, featureOn(v.capabilities, f.key)]),
     ),
   };
+}
+
+/** How an org answered "what stays" for a newer version of its own plan; null = not yet. */
+export type VersionAnswer = 'chosen' | 'default' | null;
+
+export async function versionAnswer(
+  db: {
+    retentionChoice: {
+      findUnique: (args: { where: { organisationId: string } }) => Promise<{
+        targetPlanId: string;
+        targetVersionId?: string | null;
+        defaultPicks?: boolean;
+      } | null>;
+    };
+  },
+  orgId: string,
+  planId: string,
+  versionId: string,
+): Promise<VersionAnswer> {
+  const row = await db.retentionChoice.findUnique({
+    where: { organisationId: orgId },
+  });
+  if (!row || row.targetPlanId !== planId || row.targetVersionId !== versionId)
+    return null;
+  return row.defaultPicks ? 'default' : 'chosen';
+}
+
+/** The limits (users, projects, live pages, templates) the org is over on a plan's terms. */
+export async function overLimitsFor(
+  db: Parameters<typeof usageOverLimits>[0],
+  orgId: string,
+  plan: { limits: unknown },
+): Promise<{ key: string; limit: number; used: number }[]> {
+  return (await usageOverLimits(db, orgId, plan))
+    .filter((o) => o.fixable)
+    .map((o) => ({ key: o.key, limit: o.limit, used: o.used }));
 }

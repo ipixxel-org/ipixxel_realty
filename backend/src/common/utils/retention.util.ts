@@ -331,7 +331,12 @@ export async function savedChoiceFor(
         users: row.userIds,
         projects: row.projectIds,
         landingPages: row.landingPageIds,
-        templates: row.templateIds.length ? row.templateIds : null,
+        // A choice saved before templates could be paused has none: the default
+        // picks apply. Once chosen, an empty list means keep none.
+        templates:
+          row.templatesChosen || row.templateIds.length
+            ? row.templateIds
+            : null,
       }
     : null;
 }

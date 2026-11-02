@@ -263,7 +263,8 @@ export type SubscriptionAction = "grace" | "offline" | "coupon" | "cancel";
 export function SubscriptionTimeline({ events }: { events: TimelineEvent[] }) {
   return (
     <ul className="bl-timeline">
-      {[...events].reverse().map((e, i) => (
+      {/* Oldest first, like the other timelines: each event in date order. */}
+      {[...events].sort((a, b) => a.at.localeCompare(b.at)).map((e, i) => (
         <li key={`${e.at}-${i}`}>
           <span className="bl-dot" style={{ background: TIMELINE_COLOR[e.kind] }} />
           <time>{formatDate(e.at)}</time>

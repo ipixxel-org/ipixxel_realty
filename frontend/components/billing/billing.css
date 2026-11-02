@@ -118,10 +118,6 @@
   padding: 2px 6px; border-radius: 6px; background: #ecfdf5; color: #047857; border: 1px solid #a7f3d0;
 }
 .bl-plan-versions-count { margin-left: auto; font-size: 12px; font-weight: 600; color: #334155; }
-.bl-plan-versions-orgs {
-  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
-  margin-top: 4px; font-size: 12px; line-height: 1.5; color: #64748b;
-}
 .bl-plan-card {
   position: relative;
   display: flex;
@@ -564,3 +560,7 @@
 .bl-banner--amber .bl-banner-x:hover { background: rgba(255, 255, 255, 0.4); }
 .bl-banner--amber .btn-ghost { background: #fff; border-color: rgba(66, 32, 6, 0.25); color: #422006; }
 .bl-banner--amber.bl-banner--strip > svg { color: #92400e; }
+.bl-plan-versions-older {
+  display: block; margin-top: 6px; padding-top: 6px; border-top: 1px dashed #e2e8f0;
+  font-size: 12px; font-weight: 600; color: #92400e;
+}

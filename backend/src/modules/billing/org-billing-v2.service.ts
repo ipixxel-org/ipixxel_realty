@@ -6,7 +6,9 @@ import {
 } from '../../common/utils/plan-version.util';
 import {
   describeChange,
+  overLimitsFor,
   upcomingVersion,
+  versionAnswer,
 } from '../../common/utils/plan-version-change.util';
 
 const isoDay = (d: Date) => d.toISOString().slice(0, 10);
@@ -234,6 +236,17 @@ export class OrgBillingV2Service {
               : null,
             changes: up.changes.map((c) => ({ ...c, text: describeChange(c) })),
             lower: up.lower,
+            overLimits: up.lower
+              ? await overLimitsFor(this.prisma, orgId, up.plan)
+              : [],
+            whatStays: up.lower
+              ? await versionAnswer(
+                  this.prisma,
+                  orgId,
+                  up.planId,
+                  up.toVersionId,
+                )
+              : null,
           }
         : null,
     };

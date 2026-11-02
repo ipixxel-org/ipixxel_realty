@@ -9,6 +9,7 @@ import {
   applyRetention,
   pickRetention,
   rankRetention,
+  savedChoiceFor,
   type RetentionTemplate,
 } from '../../common/utils/retention.util';
 import * as lifecycle from '../../common/utils/subscription-lifecycle.util';
@@ -241,6 +242,50 @@ describe('pausing templates on a smaller plan', () => {
       response: { code: 'retention_over_limit' },
     });
   });
+
+  it('keeping no templates stays "none" — saving it again does not bring the default pick back', async () => {
+    const { db, assigned } = setup('basic');
+    const retention = new BillingRetentionService(db as never);
+    const none = {
+      targetPlanId: 'basic',
+      userIds: ['u-admin'],
+      projectIds: [],
+      landingPageIds: [],
+      templateIds: [],
+    };
+    await retention.adminSaveChoices('org-1', 'admin-1', none);
+    expect(assigned('t-used').billingPausedAt).toBeInstanceOf(Date);
+    expect(assigned('t-spare').billingPausedAt).toBeInstanceOf(Date);
+    // Reopened: nothing ticked (not the default pick).
+    const c = await retention.adminGetChoices('org-1', 'basic');
+    expect(c.templates.filter((t) => t.selected)).toEqual([]);
+    // Saved again the same way: still none.
+    await retention.adminSaveChoices('org-1', 'admin-1', none);
+    expect((await retention.paused('org-1')).pausedTemplateIds.sort()).toEqual([
+      't-spare',
+      't-used',
+    ]);
+    expect(await savedChoiceFor(db as never, 'org-1', 'basic')).toMatchObject({
+      templates: [],
+    });
+  });
+
+  it('a choice saved before templates could be paused still uses the default pick', async () => {
+    const { db } = setup('basic');
+    db.retentionChoice.rows.push({
+      id: 'old',
+      organisationId: 'org-1',
+      targetPlanId: 'basic',
+      userIds: ['u-admin'],
+      projectIds: [],
+      landingPageIds: [],
+      templateIds: [],
+      templatesChosen: false,
+    });
+    expect(
+      (await savedChoiceFor(db as never, 'org-1', 'basic'))?.templates,
+    ).toBeNull();
+  });
 });
 
 describe('a template conflict goes through choose what stays (manual mode)', () => {
@@ -385,7 +430,9 @@ describe('a paused template can not be used for a new landing page', () => {
         update: jest.fn(),
       },
       auditLog: { create: jest.fn(async () => ({})) },
-      $transaction: jest.fn(async (ops: Promise<unknown>[]) => Promise.all(ops)),
+      $transaction: jest.fn(async (ops: Promise<unknown>[]) =>
+        Promise.all(ops),
+      ),
     };
     const service = new OrgLandingPagesService(
       prisma,
