@@ -45,7 +45,7 @@ export interface BillingPlanV2 {
    * version (newest first; the newest is always listed, older ones only while
    * an organisation is on them).
    */
-  versions?: { version: number; orgs: number }[];
+  versions?: { version: number; orgs: number; orgNames?: string[] }[];
 }
 
 /** One version in GET /admin/billing/plans/:id/versions. */

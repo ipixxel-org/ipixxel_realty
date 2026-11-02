@@ -100,13 +100,30 @@ describe("Plans & Pricing", () => {
     const client = {
       ...base,
       listAdminPlans: async () =>
-        plans.map((p) => (p.id === "growth" ? { ...p, version: 3, versions: [{ version: 3, orgs: 12 }, { version: 2, orgs: 4 }] } : p)),
+        plans.map((p) =>
+          p.id === "growth"
+            ? {
+                ...p,
+                version: 3,
+                versions: [
+                  { version: 3, orgs: 12, orgNames: ["Acme Realty", "Bay Homes", "Coast Estates", "Delta Homes", "Elm Realty"] },
+                  { version: 2, orgs: 4, orgNames: ["Fern Homes", "Gate Realty", "Hill Estates", "Ivy Homes"] },
+                ],
+              }
+            : p,
+        ),
     } as BillingClient;
     await show(client, <AdminPlansEditor />);
     const card = screen.getAllByTestId("admin-plan-card").find((c) => within(c).queryByText("Growth"))!;
     expect(within(card).getByTestId("plan-version")).toHaveTextContent("v3");
     // One version per line, newest first.
-    expect(within(card).getAllByTestId("plan-version-line").map((l) => l.textContent)).toEqual(["v3 · 12 orgs", "v2 · 4 orgs"]);
+    // One row per version, newest first (marked Latest), with its org count.
+    expect(within(card).getAllByTestId("plan-version-line").map((l) => l.textContent)).toEqual(["v3Latest12 orgs", "v24 orgs"]);
+    // The organisation names under each version (the first few, then "+N more").
+    expect(within(card).getAllByTestId("plan-version-orgs").map((l) => l.textContent)).toEqual([
+      "Acme Realty, Bay Homes, Coast Estates, Delta Homes, Elm Realty +7 more",
+      "Fern Homes, Gate Realty, Hill Estates, Ivy Homes",
+    ]);
   });
 
   async function editForm(answer: PlanSavePreview) {

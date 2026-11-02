@@ -38,6 +38,13 @@ export function yearlyHint(priceMonthly: number, priceYearly: number): string | 
 const orgsText = (n: number) => `${n.toLocaleString("en-IN")} ${n === 1 ? "org" : "orgs"}`;
 const organisations = (n: number) => `${n.toLocaleString("en-IN")} ${n === 1 ? "organisation" : "organisations"}`;
 
+/** "Acme Realty, Bay Homes +3 more" — the names on a version (the API sends the first few). */
+export function orgNamesText(v: PlanVersionCount): string {
+  const names = v.orgNames ?? [];
+  const more = v.orgs - names.length;
+  return `${names.join(", ")}${more > 0 ? ` +${more} more` : ""}`;
+}
+
 /** "v3 · 12 orgs, v2 · 4 orgs, v1 · 1 org" — organisations on each version, newest first. */
 export function versionCountsText(versions: PlanVersionCount[]): string {
   return versions.map((v) => `v${v.version} · ${orgsText(v.orgs)}`).join(", ");
@@ -193,15 +200,27 @@ export function AdminPlansEditor({ canDelete = false }: { canDelete?: boolean })
                 <button
                   type="button"
                   data-testid="plan-version-counts"
+                  className="bl-plan-versions"
                   onClick={() => setHistory(p)}
                   title="Version history: each version's prices, limits and features, and the organisations on it"
-                  style={{ display: "block", width: "100%", fontSize: 12, marginBottom: 12, background: "none", border: 0, padding: 0, cursor: "pointer", textAlign: "left" }}
                 >
-                  <span style={{ display: "block", fontWeight: 600, color: "var(--brand, #4f46e5)", marginBottom: 2 }}>Version history</span>
-                  {/* One version per line, newest first. */}
-                  {p.versions.map((v) => (
-                    <span key={v.version} data-testid="plan-version-line" style={{ display: "block", color: "#64748b", lineHeight: 1.6 }}>
-                      v{v.version} · {orgsText(v.orgs)}
+                  <span className="bl-plan-versions-head">
+                    <span className="bl-plan-versions-title">Version history</span>
+                    <span className="bl-plan-versions-open">View all →</span>
+                  </span>
+                  {/* One version per row, newest first. */}
+                  {p.versions.map((v, i) => (
+                    <span key={v.version} className="bl-plan-versions-row">
+                      <span data-testid="plan-version-line" className="bl-plan-versions-line">
+                        <span style={chip}>v{v.version}</span>
+                        {i === 0 ? <span className="bl-plan-versions-latest">Latest</span> : null}
+                        <span className="bl-plan-versions-count">{orgsText(v.orgs)}</span>
+                      </span>
+                      {v.orgNames?.length ? (
+                        <span data-testid="plan-version-orgs" className="bl-plan-versions-orgs" title={orgNamesText(v)}>
+                          {orgNamesText(v)}
+                        </span>
+                      ) : null}
                     </span>
                   ))}
                 </button>

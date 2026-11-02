@@ -657,7 +657,7 @@ describe('Super Admin: versions on plans and organisations', () => {
     return t;
   }
 
-  it('the plan list: newest version and organisations per version (none recorded = newest)', async () => {
+  it('the plan list: newest version, organisations per version (none recorded = newest) and their names', async () => {
     const t = await twoVersions();
     t.db.subscription.rows.push({
       id: 'sub-2',
@@ -666,29 +666,52 @@ describe('Super Admin: versions on plans and organisations', () => {
       planVersionId: null,
       status: 'active',
     });
-    t.db.subscription.groupBy = async () => {
-      const groups = new Map<string, any>();
-      for (const s of t.db.subscription.rows.filter(
-        (r: any) => r.status !== 'cancelled',
-      )) {
-        const key = `${s.planId}|${s.planVersionId}`;
-        const g = groups.get(key) ?? {
-          planId: s.planId,
-          planVersionId: s.planVersionId ?? null,
-          _count: { _all: 0 },
-        };
-        g._count._all++;
-        groups.set(key, g);
-      }
-      return [...groups.values()];
+    // The fake doesn't join organisations: give each row its org, as the select would.
+    const names: Record<string, string> = {
+      'org-1': 'Acme Realty',
+      'org-2': 'Bay Homes',
     };
+    const findMany = t.db.subscription.findMany;
+    t.db.subscription.findMany = async (args: any) =>
+      (await findMany(args)).map((s: any) => ({
+        ...s,
+        organisation: { name: names[s.orgId] },
+      }));
     const plans = await adminBilling(t.db).listPlans();
     const growth = plans.find((p) => p.id === 'growth')!;
     expect(growth.version).toBe(2);
     expect(growth.versions).toEqual([
-      { version: 2, orgs: 1 },
-      { version: 1, orgs: 1 },
+      { version: 2, orgs: 1, orgNames: ['Bay Homes'] },
+      { version: 1, orgs: 1, orgNames: ['Acme Realty'] },
     ]);
+  });
+
+  it('the plan list: at most 5 names per version, A–Z', async () => {
+    const t = await twoVersions();
+    const v1 = t.row().planVersionId;
+    for (const n of ['Zeta', 'Echo', 'Delta', 'Charlie', 'Bravo', 'Alpha']) {
+      t.db.subscription.rows.push({
+        id: `sub-${n}`,
+        orgId: n,
+        planId: 'growth',
+        planVersionId: v1,
+        status: 'active',
+      });
+    }
+    const findMany = t.db.subscription.findMany;
+    t.db.subscription.findMany = async (args: any) =>
+      (await findMany(args)).map((s: any) => ({
+        ...s,
+        organisation: { name: s.orgId === 'org-1' ? 'Acme Realty' : s.orgId },
+      }));
+    const growth = (await adminBilling(t.db).listPlans()).find(
+      (p) => p.id === 'growth',
+    )!;
+    expect(growth.versions![1]).toEqual({
+      version: 1,
+      orgs: 7,
+      orgNames: ['Acme Realty', 'Alpha', 'Bravo', 'Charlie', 'Delta'],
+    });
   });
 
   it('save preview (paid): a price change makes the next version; a name change does not', async () => {

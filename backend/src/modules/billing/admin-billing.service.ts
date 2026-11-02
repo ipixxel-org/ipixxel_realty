@@ -141,6 +141,9 @@ export function adminPlanTerms(
   };
 }
 
+/** Organisation names per version on a Plans & Pricing card (the rest: "+N more"). */
+export const PLAN_CARD_ORG_NAMES = 5;
+
 export function validateAdminPlan(
   input: SaveAdminPlanDto,
   stored: {
@@ -204,16 +207,17 @@ export class AdminBillingService {
   /** Every plan, inactive ones too (marked `isActive: false`), so they can be edited or deleted. */
   async listPlans(): Promise<BillingPlanV2[]> {
     type VersionRow = { id: string; planId: string; version: number };
-    type CountRow = {
+    type SubRow = {
+      orgId: string;
       planId: string;
       planVersionId: string | null;
-      _count: { _all: number };
+      organisation?: { name: string } | null;
     };
     // Old test mocks have only plan.findMany.
-    const [plans, versions, counts]: [
+    const [plans, versions, subs]: [
       Awaited<ReturnType<PrismaService['plan']['findMany']>>,
       VersionRow[],
-      CountRow[],
+      SubRow[],
     ] = await Promise.all([
       this.prisma.plan.findMany(),
       this.prisma.planVersion
@@ -222,12 +226,16 @@ export class AdminBillingService {
             orderBy: { version: 'desc' },
           })
         : Promise.resolve([]),
-      this.prisma.subscription?.groupBy
-        ? (this.prisma.subscription.groupBy({
-            by: ['planId', 'planVersionId'],
+      this.prisma.subscription?.findMany
+        ? this.prisma.subscription.findMany({
             where: { status: { not: 'cancelled' } },
-            _count: { _all: true },
-          }) as unknown as Promise<CountRow[]>)
+            select: {
+              orgId: true,
+              planId: true,
+              planVersionId: true,
+              organisation: { select: { name: true } },
+            },
+          })
         : Promise.resolve([]),
     ]);
     return toBillingPlans(plans).map((p) => {
@@ -236,21 +244,30 @@ export class AdminBillingService {
       const latest = mine[0];
       // Organisations currently subscribed, per version (none recorded = the newest).
       const orgsOn = (id: string) =>
-        counts
-          .filter(
-            (c) =>
-              c.planId === p.id &&
-              (c.planVersionId === id ||
-                (id === latest.id &&
-                  (c.planVersionId === null ||
-                    !mine.some((v) => v.id === c.planVersionId)))),
-          )
-          .reduce((n, c) => n + c._count._all, 0);
+        subs.filter(
+          (s) =>
+            s.planId === p.id &&
+            (s.planVersionId === id ||
+              (id === latest.id &&
+                (s.planVersionId === null ||
+                  !mine.some((v) => v.id === s.planVersionId)))),
+        );
       return {
         ...p,
         version: latest.version,
         versions: mine
-          .map((v) => ({ version: v.version, orgs: orgsOn(v.id) }))
+          .map((v) => {
+            const on = orgsOn(v.id);
+            return {
+              version: v.version,
+              orgs: on.length,
+              // The first few names, A–Z; the rest are in the version history.
+              orgNames: on
+                .map((s) => s.organisation?.name ?? s.orgId)
+                .sort((a, b) => a.localeCompare(b))
+                .slice(0, PLAN_CARD_ORG_NAMES),
+            };
+          })
           .filter((v) => v.version === latest.version || v.orgs > 0),
       };
     });

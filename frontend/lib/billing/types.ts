@@ -56,6 +56,8 @@ export interface BillingPlan {
 export interface PlanVersionCount {
   version: number;
   orgs: number;
+  /** The first few organisation names on it, A–Z (the rest: "+N more"). */
+  orgNames?: string[];
 }
 
 /** One version in the Super Admin version history (GET /admin/billing/plans/:id/versions). */

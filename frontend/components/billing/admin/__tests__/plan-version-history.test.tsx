@@ -190,7 +190,8 @@ describe("where it opens", () => {
     await show(c, <AdminPlansEditor />);
     const line = screen.getByTestId("plan-version-counts");
     expect(line).toHaveTextContent("Version history");
-    expect(within(line).getAllByTestId("plan-version-line").map((l) => l.textContent)).toEqual(["v2 · 0 orgs", "v1 · 2 orgs"]);
+    expect(line).toHaveTextContent("View all");
+    expect(within(line).getAllByTestId("plan-version-line").map((l) => l.textContent)).toEqual(["v2Latest0 orgs", "v12 orgs"]);
     // No underline.
     expect(line.style.textDecoration).toBe("");
     fireEvent.click(line);
