@@ -6,6 +6,8 @@ import { ArrowRight, Calculator, Filter, Search } from "lucide-react";
 import { useMemo, useState } from "react";
 import { El } from "../El";
 import { listElementId, subElementId } from "@/lib/openpage/element-style";
+import { useDevice } from "@/components/openpage/runtime/device";
+import { resolveBlockStyleForDevice } from "@/lib/openpage/block-style";
 
 function str(v: unknown, fallback = "") {
   return typeof v === "string" ? v : fallback;
@@ -99,10 +101,24 @@ export function TextBlock({ block }: { block: BlockConfig }) {
   );
 }
 
+/**
+ * Where the Button sits: the Style tab's Block Alignment for the current
+ * device wins (it only set text-align before, which a flex row ignores),
+ * then the Content tab's Alignment. "justify" makes the button full width.
+ */
+export function buttonAlignment(styleAlignment: unknown, propAlign: unknown): "left" | "center" | "right" | "justify" {
+  for (const v of [styleAlignment, propAlign]) {
+    if (v === "left" || v === "center" || v === "right" || v === "justify") return v;
+  }
+  return "center";
+}
+
 export function ButtonBlock({ block }: { block: BlockConfig }) {
   const p = block.props;
   const variant = block.variant || "solid";
-  const align = str(p.align, "center");
+  const device = useDevice();
+  const align = buttonAlignment(resolveBlockStyleForDevice(block.style, device)?.alignment, p.align);
+  const fullWidth = align === "justify";
   const alignCls = align === "left" ? "justify-start" : align === "right" ? "justify-end" : "justify-center";
 
   const btnBg = str(p.buttonColor) || str(p.bgColor) || undefined;
@@ -158,7 +174,7 @@ export function ButtonBlock({ block }: { block: BlockConfig }) {
           e.currentTarget.style.color = textColor || "";
         }}
         style={customStyle}
-        className={`inline-flex items-center gap-2 px-7 py-3 text-sm transition-all shadow-sm ${variantCls}`}
+        className={`inline-flex items-center gap-2 px-7 py-3 text-sm transition-all shadow-sm ${fullWidth ? "w-full justify-center" : ""} ${variantCls}`}
       >
         {str(p.label, "Enquire Now")}
         <ArrowRight size={16} />

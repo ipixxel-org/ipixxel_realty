@@ -10,7 +10,7 @@ import {
   Building2, MapPin, Home, Trees, FileText, Download, Mail, Save, Layers,
   ChevronDown, ChevronRight, Type, Box, Code2,
   LayoutTemplate, Blocks, Globe, PanelLeftClose, X, ClipboardList,
-  Sparkles, Square,
+  Sparkles, Square, SquareDashed,
 } from "lucide-react";
 import {
   DndContext,
@@ -37,13 +37,14 @@ import {
   createBlockFromPreset,
   type SectionPresetCategory,
 } from "@/lib/openpage/section-presets";
-import { createBlockFromType } from "@/lib/openpage/block-factory";
+import { createBlockFromType, isDivBlock } from "@/lib/openpage/block-factory";
 import type { BlockType, BlockConfig } from "@/components/openpage/blocks/types";
 import { EMPTY_GLOBAL_WIDGETS } from "./AdvancedPanel";
 import { FormBuilder } from "./FormBuilder";
 
 const blockIcons: Partial<Record<BlockType, typeof Layout>> = {
   section: Square,
+  div: SquareDashed,
   navbar: Layout,
   footer: PanelBottom,
   "project-banner": Home,
@@ -95,7 +96,7 @@ export const PICKER_GROUPS: { id: string; title: string; defaultOpen: boolean; t
     id: "core",
     title: "Core",
     defaultOpen: true,
-    types: ["heading", "text", "button", "columns", "image", "video", "icon", "icon-box", "divider", "spacer", "html-code"],
+    types: ["heading", "text", "button", "columns", "div", "image", "video", "icon", "icon-box", "divider", "spacer", "html-code"],
   },
   {
     id: "layout",
@@ -141,6 +142,7 @@ export const PICKER_GROUPS: { id: string; title: string; defaultOpen: boolean; t
 const GRID_LABELS: Partial<Record<BlockType, string>> = {
   section: "Section",
   columns: "Container",
+  div: "Div",
   heading: "Heading",
   text: "Text Editor",
   image: "Image",
@@ -209,6 +211,7 @@ const blockLabels: Partial<Record<BlockType, string>> = {
 const WIDGET_COLORS: Partial<Record<BlockType, string>> = {
   section: "#38bdf8",
   columns: "#38bdf8",
+  div: "#38bdf8",
   navbar: "#38bdf8",
   footer: "#38bdf8",
   divider: "#94a3b8",
@@ -277,8 +280,9 @@ function SortableLayer({ block, isSelected, onSelect, onDuplicate, onRemove, onH
   isHidden: boolean
 }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: block.id })
-  const Icon = blockIcons[block.type] || Layout
-  const layerLabel = blockLabels[block.type] || block.type
+  const div = isDivBlock(block)
+  const Icon = (div ? blockIcons.div : blockIcons[block.type]) || Layout
+  const layerLabel = div ? "Div" : blockLabels[block.type] || block.type
 
   const style = {
     transform: CSS.Transform.toString(transform),

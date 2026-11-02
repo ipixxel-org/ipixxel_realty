@@ -5,6 +5,7 @@ import {
   Pencil,
   Copy,
   Clipboard,
+  ClipboardPaste,
   Trash2,
   ChevronUp,
   ChevronDown,
@@ -19,6 +20,7 @@ import { useConfigStore } from "@/components/openpage/store/configStore";
 import { useEditorStore } from "@/components/openpage/store/editorStore";
 import type { BlockConfig } from "../blocks/types";
 import { blockMetadata } from "@/lib/openpage/block-metadata";
+import { pasteClipboardBlock } from "@/lib/openpage/block-clipboard";
 
 interface BlockContextMenuProps {
   block: BlockConfig;
@@ -52,6 +54,7 @@ export function BlockContextMenu({
     setClipboardStyle,
     clipboardStyle,
     setClipboardBlock,
+    clipboardBlock,
   } = useEditorStore();
 
   const isFirst = index === 0;
@@ -86,7 +89,7 @@ export function BlockContextMenu({
 
   // Adjust menu position so it doesn't overflow viewport edges
   const menuWidth = 210;
-  const menuHeight = 320;
+  const menuHeight = 400;
   const clampedX = Math.min(x, window.innerWidth - menuWidth - 10);
   const clampedY = Math.min(y, window.innerHeight - menuHeight - 10);
 
@@ -154,14 +157,50 @@ export function BlockContextMenu({
         type="button"
         onClick={() => {
           setClipboardBlock(JSON.parse(JSON.stringify(block)));
-          toast.success("Section copied to clipboard");
+          toast.success("Section copied — use Paste or Ctrl+V");
           onClose();
         }}
-        className="w-full text-left px-3 py-1.5 flex items-center gap-2.5 hover:bg-bg-3 hover:text-text-0 transition-colors"
+        className="w-full text-left px-3 py-1.5 flex items-center justify-between hover:bg-bg-3 hover:text-text-0 transition-colors"
       >
-        <Clipboard size={13} className="text-purple-400" />
-        <span>Copy Section</span>
+        <div className="flex items-center gap-2.5">
+          <Clipboard size={13} className="text-purple-400" />
+          <span>Copy Section</span>
+        </div>
+        <kbd className="text-[9px] text-text-3 font-mono">Ctrl+C</kbd>
       </button>
+
+      {/* Paste the copied block below this one */}
+      <button
+        type="button"
+        disabled={!clipboardBlock}
+        onClick={() => {
+          if (pasteClipboardBlock("after", block.id)) toast.success("Pasted below");
+          onClose();
+        }}
+        className="w-full text-left px-3 py-1.5 flex items-center justify-between hover:bg-bg-3 hover:text-text-0 disabled:opacity-35 disabled:pointer-events-none transition-colors"
+      >
+        <div className="flex items-center gap-2.5">
+          <ClipboardPaste size={13} className="text-purple-400" />
+          <span>Paste Below</span>
+        </div>
+        <kbd className="text-[9px] text-text-3 font-mono">Ctrl+V</kbd>
+      </button>
+
+      {/* Containers / Divs: paste into the first column */}
+      {block.type === "columns" ? (
+        <button
+          type="button"
+          disabled={!clipboardBlock}
+          onClick={() => {
+            if (pasteClipboardBlock("inside", block.id, 0)) toast.success("Pasted inside");
+            onClose();
+          }}
+          className="w-full text-left px-3 py-1.5 flex items-center gap-2.5 hover:bg-bg-3 hover:text-text-0 disabled:opacity-35 disabled:pointer-events-none transition-colors"
+        >
+          <ClipboardPaste size={13} className="text-purple-400" />
+          <span>Paste Inside</span>
+        </button>
+      ) : null}
 
       {/* Copy Style */}
       <button

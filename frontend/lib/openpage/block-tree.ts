@@ -233,3 +233,30 @@ export function moveBlockGroup(
 export function allAtRoot(blocks: BlockConfig[], ids: string[]): boolean {
   return ids.every((id) => blocks.some((b) => b.id === id));
 }
+/**
+ * True when `id` is `ancestorId` itself or sits anywhere inside it. Used to
+ * stop a container being moved into one of its own columns (which would
+ * remove it from the page with nowhere to put it back).
+ */
+export function isSameOrInside(blocks: BlockConfig[], ancestorId: string, id: string): boolean {
+  if (ancestorId === id) return true;
+  const ancestor = findBlock(blocks, ancestorId);
+  return Boolean(ancestor && findBlockLocation([ancestor], id));
+}
+
+/**
+ * Where a pasted block goes: right below the selected block in the same list
+ * (root or column), or at the end of the page when nothing is selected.
+ */
+export function pasteTargetAfter(blocks: BlockConfig[], selectedId: string | null | undefined): BlockInsertTarget {
+  const loc = selectedId ? findBlockLocation(blocks, selectedId) : null;
+  if (!loc) return { kind: "root", index: undefined };
+  return loc.sectionId == null
+    ? { kind: "root", index: loc.index + 1 }
+    : { kind: "column", sectionId: loc.sectionId, colIndex: loc.colIndex ?? 0, index: loc.index + 1 };
+}
+
+/** Paste target at the end of a container's column (default: its first column). */
+export function pasteTargetInside(blocks: BlockConfig[], containerId: string, colIndex = 0): BlockInsertTarget | null {
+  return findColumnList(blocks, containerId, colIndex) ? { kind: "column", sectionId: containerId, colIndex, index: undefined } : null;
+}

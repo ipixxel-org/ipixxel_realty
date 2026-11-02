@@ -10,7 +10,27 @@ export interface DragItemPayload {
   label?: string;
 }
 
+/** Marks a `columns` block created from the "Div" tile (no outer spacing). */
+export const DIV_KIND = "div";
+
+/** True for a Div: a Container that renders without padding or max width. */
+export function isDivBlock(block: Pick<BlockConfig, "type" | "props"> | null | undefined): boolean {
+  return block?.type === "columns" && block.props?.kind === DIV_KIND;
+}
+
 export function createBlockFromType(type: BlockType): BlockConfig | null {
+  // "Div" is a Blocks panel tile, not a stored type: a one-column Container
+  // flagged to render as a plain box.
+  if (type === "div") {
+    const container = createBlockFromType("columns");
+    if (!container) return null;
+    return {
+      ...container,
+      id: `block-div-${Date.now().toString(36)}`,
+      variant: "1-col",
+      props: { ...container.props, gap: "16px", kind: DIV_KIND, columns: [{ width: 100, blocks: [] }] },
+    };
+  }
   // "Section" is a Blocks panel tile, not a stored type: it is always a
   // single full-width column, whatever Container's defaults become.
   if (type === "section") {

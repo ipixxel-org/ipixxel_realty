@@ -14,6 +14,8 @@ import { type FormDefinition } from "@/lib/openpage/forms-store";
 import { useBuilderLeadForms } from "@/components/openpage/builder/forms-context";
 import { DynamicDataPicker } from "./DynamicDataPicker";
 import { CUSTOM_FIELDS_KEY, customFieldKeys } from "@/components/openpage/blocks/CustomFields";
+import { FlexItemsControls } from "./FlexItemsControls";
+import { readFlexLayout } from "@/lib/openpage/flex-layout";
 import {
   FLOOR_PLAN_FIELDS,
   AMENITY_FIELDS,
@@ -817,6 +819,9 @@ const blockFields: Partial<Record<BlockType, { sections: { title: string; fields
   columns: {
     sections: [
       { title: 'Layout', fields: [
+        // boxed (default): centred, max ~1150px with side padding.
+        // full: edge to edge, no side padding (add it in Style if needed).
+        { key: 'contentWidth', label: 'Content Width (default: boxed)', type: 'select', options: ['boxed', 'full'] },
         { key: 'gap', label: 'Gap', type: 'text' },
       ]},
     ],
@@ -922,7 +927,7 @@ const blockFields: Partial<Record<BlockType, { sections: { title: string; fields
         title: 'Style & Colors',
         fields: [
           { key: 'variant', label: 'Variant', type: 'select', options: ['solid', 'outline', 'pill', 'glass'] },
-          { key: 'align', label: 'Alignment', type: 'select', options: ['center', 'left', 'right'] },
+          { key: 'align', label: 'Alignment (Style tab alignment overrides)', type: 'select', options: ['center', 'left', 'right'] },
           { key: 'buttonColor', label: 'Button Color', type: 'color' },
           { key: 'textColor', label: 'Text Color', type: 'color' },
           { key: 'borderColor', label: 'Border Color', type: 'color' },
@@ -1513,6 +1518,7 @@ export function PropertiesPanel({ block }: { block: BlockConfig }) {
 
   const updateColumnWidth = useConfigStore((s) => s.updateColumnWidth)
   const updateColumnMobileWidth = useConfigStore((s) => s.updateColumnMobileWidth)
+  const updateColumnLayout = useConfigStore((s) => s.updateColumnLayout)
   const viewport = useEditorStore((s) => s.viewport)
   const addColumn = useConfigStore((s) => s.addColumn)
   const removeColumn = useConfigStore((s) => s.removeColumn)
@@ -1548,6 +1554,10 @@ export function PropertiesPanel({ block }: { block: BlockConfig }) {
     // Legacy footer string lists, superseded by the Menu & Social Links editors.
     if (block.type === "footer" && (key === "links" || key === "socials" || key === "columns")) continue
     if (key === "columns" && block.type === "columns") continue
+    // Edited by the container's "Items" controls below.
+    if (block.type === "columns" && (key === "direction" || key === "justifyContent" || key === "alignItems")) continue
+    // Internal marker for a Div (see isDivBlock); not user-editable.
+    if (block.type === "columns" && key === "kind") continue
 
     const val = propsObj[key]
     const lowerKey = key.toLowerCase()
@@ -1742,6 +1752,20 @@ export function PropertiesPanel({ block }: { block: BlockConfig }) {
 
       {/* Column Width Editor */}
       {block.type === "columns" && (
+        <Section title="Items">
+          {/* How the container lays out its columns. */}
+          <FlexItemsControls
+            value={readFlexLayout(block.props)}
+            defaultDirection="row"
+            onChange={(patch) => updateBlockProps(block.id, patch)}
+          />
+          <p className="text-[10px] text-text-3 leading-snug mt-2">
+            Justify Content shows when the columns don&apos;t fill the full width (e.g. two 30% columns).
+          </p>
+        </Section>
+      )}
+
+      {block.type === "columns" && (
         <Section title="Columns">
           <div className="space-y-2">
             {viewport === "mobile" ? (
@@ -1782,6 +1806,17 @@ export function PropertiesPanel({ block }: { block: BlockConfig }) {
                   className="w-full h-1.5 rounded-full appearance-none bg-slate-200 cursor-pointer accent-green"
                 />
                 <div className="text-[9px] text-text-3 mt-0.5">{col.blocks.length} widget(s) in this column</div>
+                {/* How this column lays out its own widgets. */}
+                <details className="mt-1.5 group/items" open={Boolean(readFlexLayout(col).direction || readFlexLayout(col).justifyContent || readFlexLayout(col).alignItems) || undefined}>
+                  <summary className="text-[10px] text-text-2 cursor-pointer select-none hover:text-text-0">Items in this column</summary>
+                  <div className="mt-2">
+                    <FlexItemsControls
+                      value={readFlexLayout(col)}
+                      defaultDirection="column"
+                      onChange={(patch) => updateColumnLayout(block.id, i, patch)}
+                    />
+                  </div>
+                </details>
               </div>
             ))}
             {columns.length < 6 && (

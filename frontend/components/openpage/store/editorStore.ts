@@ -115,7 +115,15 @@ export const useEditorStore = create<EditorState>()((set) => ({
   openAiModal: () => set({ aiModalOpen: true }),
   closeAiModal: () => set({ aiModalOpen: false }),
   toggleAiModal: () => set((s) => ({ aiModalOpen: !s.aiModalOpen })),
-  selectBlock: (id) => set({ selectedBlockId: id, selectedBlockIds: id ? [id] : [], selectedElement: null }),
+  // Switching to another block lands on Content. Done here (not in an effect)
+  // so a caller can open another tab right after, e.g. "select + Style".
+  selectBlock: (id) =>
+    set((s) => ({
+      selectedBlockId: id,
+      selectedBlockIds: id ? [id] : [],
+      selectedElement: null,
+      rightSidebarTab: id && id !== s.selectedBlockId ? 'properties' : s.rightSidebarTab,
+    })),
   selectElement: (blockId, elementId) =>
     set({ selectedBlockId: blockId, selectedBlockIds: [blockId], selectedElement: { blockId, elementId }, rightSidebarTab: 'element' }),
   clearElementSelection: () => set({ selectedElement: null }),

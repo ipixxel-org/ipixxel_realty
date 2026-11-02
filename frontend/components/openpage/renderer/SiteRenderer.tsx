@@ -3,7 +3,7 @@
 import { useMemo } from "react";
 import type { SiteConfig, BlockConfig } from "@/components/openpage/blocks/types";
 import { RenderBlock } from "@/components/openpage/blocks/registry";
-import { resolveSiteTheme, siteBrandAttrs, siteThemeCSS } from "@/lib/openpage/theme-presets";
+import { resolveSiteTheme, siteBrandAttrs, siteThemeCSS, sitePageBackground } from "@/lib/openpage/theme-presets";
 import { useGoogleFonts } from "@/lib/openpage/useGoogleFonts";
 import { DeviceProvider } from "@/components/openpage/runtime/device";
 import { OpenPageRuntimeProvider } from "@/components/openpage/runtime/OpenPageRuntime";
@@ -86,7 +86,8 @@ export function SiteRenderer({
       <div
         {...brandAttrs}
         className="op-site @container min-h-screen w-full"
-        style={{ ...cssVars, color: "var(--color-text-0)", backgroundColor: "var(--color-bg-1)" } as React.CSSProperties}
+        // Same page background as the builder canvas (see sitePageBackground).
+        style={{ ...cssVars, color: "var(--color-text-0)", backgroundColor: sitePageBackground(resolvedSite) } as React.CSSProperties}
       >
         {resolvedSite.settings ? <PageSettingsChrome settings={resolvedSite.settings} /> : null}
         <DeviceProvider device="auto">

@@ -6,7 +6,8 @@ import { toast } from "sonner";
 import { useConfigStore } from "@/components/openpage/store/configStore";
 import { useEditorStore } from "@/components/openpage/store/editorStore";
 import { createBlockFromType, createBlockFromPresetId } from "@/lib/openpage/block-factory";
-import type { BlockConfig } from "@/components/openpage/blocks/types";
+import { readDropPayload } from "@/lib/openpage/drag-payload";
+import type { BlockConfig, BlockType } from "@/components/openpage/blocks/types";
 
 export function CanvasEmpty() {
   const [isOver, setIsOver] = useState(false);
@@ -33,14 +34,14 @@ export function CanvasEmpty() {
         e.preventDefault();
         setIsOver(false);
         useEditorStore.getState().setDraggedItem(null);
-        const raw = e.dataTransfer.getData("application/x-openpage-drag");
-        if (!raw) return;
+        // Only Blocks-panel widgets; a dragged image / link / text is ignored.
+        const payload = readDropPayload(e.dataTransfer);
+        if (!payload) return;
         try {
-          const payload = JSON.parse(raw);
           let newBlock: BlockConfig | null = null;
           let label = "Block";
           if (payload.kind === "block") {
-            newBlock = createBlockFromType(payload.type);
+            newBlock = createBlockFromType(payload.type as BlockType);
             label = payload.label || payload.type;
           } else if (payload.kind === "preset") {
             newBlock = createBlockFromPresetId(payload.presetId);
