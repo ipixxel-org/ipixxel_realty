@@ -1,6 +1,7 @@
 import type { BlockConfig } from '../types'
 import { ArrowRight, Sparkles } from 'lucide-react'
 import { El } from "../El"
+import { heroLayoutStyle } from "@/lib/openpage/hero-layout"
 
 interface HeroProps {
   block: BlockConfig
@@ -29,6 +30,16 @@ interface HeroProps {
   secondaryCtaHoverTextColor?: string
   secondaryCtaBorderColor?: string
   secondaryCtaRadius?: number | string
+  contentWidth?: "boxed" | "full"
+  display?: string
+  direction?: string
+  justifyContent?: string
+  alignItems?: string
+  wrap?: string
+  alignContent?: string
+  gridColumns?: number
+  gridRows?: number
+  itemsGap?: string
 }
 
 function HeroButton({ props, secondary = false }: { props: HeroProps; secondary?: boolean }) {
@@ -91,7 +102,7 @@ function getBadgeStyle(props: HeroProps): React.CSSProperties {
 
 function HeroCentered({ props }: { props: HeroProps }) {
   return (
-    <section className="px-6 @md:px-10 py-20 @md:py-28 text-center">
+    <section style={heroLayoutStyle(props)} className="px-6 @md:px-10 py-20 @md:py-28 text-center">
       {/* Badge */}
       {props.badge && (
         <div
@@ -124,7 +135,7 @@ function HeroCentered({ props }: { props: HeroProps }) {
 
 function HeroSplit({ props }: { props: HeroProps }) {
   return (
-    <section className="px-6 @md:px-10 py-16 @md:py-24 flex flex-col @2xl:flex-row items-center gap-10">
+    <section style={heroLayoutStyle(props)} className="px-6 @md:px-10 py-16 @md:py-24 flex flex-col @2xl:flex-row items-center gap-10">
       {/* Text side */}
       <div className="flex-1">
         {props.badge && (
@@ -163,7 +174,7 @@ function HeroSplit({ props }: { props: HeroProps }) {
 
 function HeroGradient({ props }: { props: HeroProps }) {
   return (
-    <section className="px-6 @md:px-10 py-20 @md:py-32 text-center relative overflow-hidden">
+    <section style={heroLayoutStyle(props)} className="px-6 @md:px-10 py-20 @md:py-32 text-center relative overflow-hidden">
       {/* Gradient background */}
       <div className="absolute inset-0 bg-gradient-to-b from-green/5 via-transparent to-transparent pointer-events-none" />
       <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[600px] h-[300px] bg-green/8 rounded-full blur-[100px] pointer-events-none" />
@@ -198,7 +209,7 @@ function HeroGradient({ props }: { props: HeroProps }) {
 
 function HeroMinimal({ props }: { props: HeroProps }) {
   return (
-    <section className="px-6 @md:px-10 py-24 @md:py-36 text-center">
+    <section style={heroLayoutStyle(props)} className="px-6 @md:px-10 py-24 @md:py-36 text-center">
       <El block={props.block} id="hero:title" as="h1" className="reveal-fade-up reveal-d1 text-5xl @md:text-7xl font-bold tracking-tighter leading-[1.05] mb-6 max-w-4xl mx-auto">
         {props.headline}
       </El>

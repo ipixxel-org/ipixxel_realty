@@ -14,6 +14,7 @@ import { Bullet, isBulletStyle } from "../Bullet";
 import { ImageSlideshow, slideIntervalMs, type Slide } from "../ImageSlideshow";
 import { useDevice } from "@/components/openpage/runtime/device";
 import { overlayLayer, resolveBlockStyleForDevice } from "@/lib/openpage/block-style";
+import { heroLayoutStyle } from "@/lib/openpage/hero-layout";
 
 function resolveRuntimeForms(runtimeForms: ReturnType<typeof useOpenPageRuntime>["forms"]) {
   const library = typeof window !== "undefined" ? loadFormLibrary() : [];
@@ -79,7 +80,7 @@ function SectionShell({ children, className = "", id }: { children: React.ReactN
   const cleanClass = className
     .replace(/\bbg-bg-[0-5]\b/g, "bg-white")
     .replace(/\bbg-black\b/g, "bg-white");
-  return <section id={id} className={`px-6 @md:px-10 py-16 @md:py-20 bg-white text-text-0 ${cleanClass}`}>{children}</section>;
+  return <section id={id} className={`py-16 @md:py-20 bg-white text-text-0 ${cleanClass}`}>{children}</section>;
 }
 
 /**
@@ -389,6 +390,7 @@ export function ProjectBannerBlock({ block }: { block: BlockConfig }) {
   const resolvedStyle = resolveBlockStyleForDevice(block.style, device);
   const overlayBg = overlayLayer(resolvedStyle?.overlayColor, resolvedStyle?.overlayOpacity);
   const contentWidth = heroContentWidth(p.contentWidth);
+  const layoutStyle = heroLayoutStyle(p);
   // A Style background (image or colour) shows through the section, so the
   // "no cover image" placeholder must not cover it; and its overlay is
   // already part of that background, so it is not drawn twice.
@@ -417,7 +419,7 @@ export function ProjectBannerBlock({ block }: { block: BlockConfig }) {
 
   if (block.variant === "split-form") {
     return (
-      <section className="relative min-h-[640px] @lg:min-h-[720px] overflow-hidden">
+      <section style={layoutStyle} className="relative min-h-[640px] @lg:min-h-[720px] overflow-hidden">
         {str(p.image) ? (
           // eslint-disable-next-line @next/next/no-img-element
           <img src={str(p.image)} alt="" className="absolute inset-0 w-full h-full object-cover" />
@@ -459,7 +461,7 @@ export function ProjectBannerBlock({ block }: { block: BlockConfig }) {
 
   if (block.variant === "centered") {
     return (
-      <section className="relative min-h-[520px] @md:min-h-[620px] flex items-center justify-center overflow-hidden text-center">
+      <section style={layoutStyle} className="relative min-h-[520px] @md:min-h-[620px] flex items-center justify-center overflow-hidden text-center">
         {str(p.image) ? (
           // eslint-disable-next-line @next/next/no-img-element
           <img src={str(p.image)} alt="" className="absolute inset-0 w-full h-full object-cover" />
@@ -476,7 +478,7 @@ export function ProjectBannerBlock({ block }: { block: BlockConfig }) {
 
   if (block.variant === "stats") {
     return (
-      <section className="relative min-h-[600px] flex flex-col justify-end overflow-hidden">
+      <section style={layoutStyle} className="relative min-h-[600px] flex flex-col justify-end overflow-hidden">
         {str(p.image) ? (
           // eslint-disable-next-line @next/next/no-img-element
           <img src={str(p.image)} alt="" className="absolute inset-0 w-full h-full object-cover" />
@@ -511,7 +513,7 @@ export function ProjectBannerBlock({ block }: { block: BlockConfig }) {
   if (block.variant === "editorial") {
     const onImage = Boolean(str(p.image));
     return (
-      <section className="relative min-h-[88vh] flex flex-col overflow-hidden bg-white">
+      <section style={layoutStyle} className="relative min-h-[88vh] flex flex-col overflow-hidden bg-white">
         {onImage ? (
           // eslint-disable-next-line @next/next/no-img-element
           <img src={str(p.image)} alt="" className="absolute inset-0 w-full h-full object-cover" />
@@ -564,7 +566,7 @@ export function ProjectBannerBlock({ block }: { block: BlockConfig }) {
   /* PDF 3 — Framed rounded hero with glass 2×2 stats */
   if (block.variant === "framed") {
     return (
-      <section className="bg-white px-3 @md:px-5 pt-3 @md:pt-4 pb-10">
+      <section style={layoutStyle} className="bg-white px-3 @md:px-5 pt-3 @md:pt-4 pb-10">
         <div className="relative min-h-[560px] @md:min-h-[640px] rounded-[28px] @md:rounded-[36px] overflow-hidden">
           {str(p.image) ? (
             // eslint-disable-next-line @next/next/no-img-element
@@ -602,7 +604,7 @@ export function ProjectBannerBlock({ block }: { block: BlockConfig }) {
   /* PDF 5 — Asymmetric: headline + floating stats card over photo */
   if (block.variant === "asymmetric") {
     return (
-      <section className="bg-white px-6 @md:px-10 @lg:px-14 pt-10 @md:pt-14 pb-16">
+      <section style={layoutStyle} className="bg-white px-6 @md:px-10 @lg:px-14 pt-10 @md:pt-14 pb-16">
         <div className="max-w-6xl mx-auto grid @lg:grid-cols-[1.15fr_0.85fr] gap-8 @lg:gap-10 items-start">
           <div className="relative order-2 @lg:order-1">
             <div className="relative rounded-[28px] overflow-hidden aspect-[4/3] @lg:aspect-[5/4] bg-bg-2">
@@ -656,7 +658,7 @@ export function ProjectBannerBlock({ block }: { block: BlockConfig }) {
   /* PDF 6 — Centered over image + overlapping info bar */
   if (block.variant === "info-bar") {
     return (
-      <section className="relative pb-24 @md:pb-28 bg-white">
+      <section style={layoutStyle} className="relative pb-24 @md:pb-28 bg-white">
         <div className="relative min-h-[520px] @md:min-h-[600px] overflow-hidden">
           {str(p.image) ? (
             // eslint-disable-next-line @next/next/no-img-element
@@ -700,7 +702,7 @@ export function ProjectBannerBlock({ block }: { block: BlockConfig }) {
   /* PDF 1 — Centered copy inside large rounded framed hero */
   if (block.variant === "framed-center") {
     return (
-      <section className="bg-white px-4 @md:px-8 pt-3 @md:pt-5 pb-10">
+      <section style={layoutStyle} className="bg-white px-4 @md:px-8 pt-3 @md:pt-5 pb-10">
         <div className="relative min-h-[520px] @md:min-h-[620px] rounded-[28px] @md:rounded-[36px] overflow-hidden flex items-center justify-center text-center">
           {str(p.image) ? (
             // eslint-disable-next-line @next/next/no-img-element
@@ -729,7 +731,7 @@ export function ProjectBannerBlock({ block }: { block: BlockConfig }) {
   /* PDF 2 — Split curve: photo left with large bottom-right radius, cream stats panel */
   if (block.variant === "split-curve") {
     return (
-      <section className="bg-white grid @lg:grid-cols-2 min-h-[560px] @lg:min-h-[640px]">
+      <section style={layoutStyle} className="bg-white grid @lg:grid-cols-2 min-h-[560px] @lg:min-h-[640px]">
         <div className="relative min-h-[360px] @lg:min-h-full overflow-hidden rounded-br-[120px] @lg:rounded-br-[180px]">
           {str(p.image) ? (
             // eslint-disable-next-line @next/next/no-img-element
@@ -769,7 +771,7 @@ export function ProjectBannerBlock({ block }: { block: BlockConfig }) {
   }
 
   return (
-    <section className="relative min-h-[560px] @md:min-h-[680px] flex items-center overflow-hidden">
+    <section style={layoutStyle} className="relative min-h-[560px] @md:min-h-[680px] flex items-center overflow-hidden">
       {str(p.image) ? (
         // eslint-disable-next-line @next/next/no-img-element
         <img src={str(p.image)} alt="" className="absolute inset-0 w-full h-full object-cover" />
