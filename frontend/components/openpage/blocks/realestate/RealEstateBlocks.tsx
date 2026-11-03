@@ -364,6 +364,16 @@ function HeroCopy({
   );
 }
 
+/**
+ * Hero "Content width": a CSS width (e.g. "1200px") that keeps the hero's
+ * text in a centred box of that width while the background runs full width.
+ * Empty / invalid = the original layout.
+ */
+export function heroContentWidth(v: unknown): string | undefined {
+  const s = str(v).trim();
+  return /^\d+(\.\d+)?(px|rem|em|%|vw)$/.test(s) ? s : undefined;
+}
+
 export function ProjectBannerBlock({ block }: { block: BlockConfig }) {
   const runtime = useOpenPageRuntime();
   const p = block.props;
@@ -378,6 +388,7 @@ export function ProjectBannerBlock({ block }: { block: BlockConfig }) {
   const device = useDevice();
   const resolvedStyle = resolveBlockStyleForDevice(block.style, device);
   const overlayBg = overlayLayer(resolvedStyle?.overlayColor, resolvedStyle?.overlayOpacity);
+  const contentWidth = heroContentWidth(p.contentWidth);
   // A Style background (image or colour) shows through the section, so the
   // "no cover image" placeholder must not cover it; and its overlay is
   // already part of that background, so it is not drawn twice.
@@ -766,9 +777,18 @@ export function ProjectBannerBlock({ block }: { block: BlockConfig }) {
         placeholder("absolute inset-0 bg-gradient-to-br from-green/20 to-bg-2")
       )}
       {overlay}
-      <div className="relative z-10 px-6 @md:px-12 py-24 max-w-3xl">
-        <HeroCopy block={block} p={p} onPrimary={onPrimary} onSecondary={onSecondary} light stats={stats} />
-      </div>
+      {contentWidth ? (
+        // Full-width background, content in a centred box (Content width).
+        <div data-op-hero-content="" className="relative z-10 w-full mx-auto" style={{ maxWidth: contentWidth }}>
+          <div className="px-6 @md:px-12 py-24 max-w-3xl">
+            <HeroCopy block={block} p={p} onPrimary={onPrimary} onSecondary={onSecondary} light stats={stats} />
+          </div>
+        </div>
+      ) : (
+        <div className="relative z-10 px-6 @md:px-12 py-24 max-w-3xl">
+          <HeroCopy block={block} p={p} onPrimary={onPrimary} onSecondary={onSecondary} light stats={stats} />
+        </div>
+      )}
     </section>
   );
 }

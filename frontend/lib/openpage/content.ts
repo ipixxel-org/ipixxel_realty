@@ -15,7 +15,24 @@ const FORM_BLOCK_TYPES = new Set([
   "download-brochure",
   "cta",
   "floor-plans",
+  "off-canvas",
 ]);
+
+/** Every block, including widgets nested inside containers / Divs. */
+function allBlocks(blocks: BlockConfig[]): BlockConfig[] {
+  const out: BlockConfig[] = [];
+  const walk = (list: unknown) => {
+    if (!Array.isArray(list)) return;
+    for (const b of list as BlockConfig[]) {
+      if (!b || typeof b !== "object") continue;
+      out.push(b);
+      const cols = (b.props as Record<string, unknown> | undefined)?.columns;
+      if (b.type === "columns" && Array.isArray(cols)) for (const c of cols) walk((c as { blocks?: unknown })?.blocks);
+    }
+  };
+  walk(blocks);
+  return out;
+}
 
 function siteBlocks(site: SiteConfig): BlockConfig[] {
   if (Array.isArray(site.blocks) && site.blocks.length) return site.blocks;
@@ -36,7 +53,9 @@ export function ensureSiteForms(site: SiteConfig): SiteConfig {
   const catalog = mergeFormLibraries(pageForms, library);
 
   const needed = new Set<string>();
-  for (const block of blocks) {
+  // Nested widgets count too (e.g. a form or Off-Canvas inside a container),
+  // or their form would be missing on the live page.
+  for (const block of allBlocks(blocks)) {
     const fid = block.props?.formId;
     if (typeof fid === "string" && fid.trim()) needed.add(fid.trim());
   }

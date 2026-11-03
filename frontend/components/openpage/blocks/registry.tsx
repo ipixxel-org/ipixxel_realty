@@ -71,6 +71,10 @@ import {
   SiteVisitBlock,
   UnitConfigBlock,
 } from "./realestate/RealEstateBlocks";
+import { AlertBlock, AnimatedHeadlineBlock, IconListBlock } from "./elements/TextWidgets";
+import { CounterBlock, FlipBoxBlock, HotspotBlock, PriceListBlock, ProgressBarBlock, StarRatingBlock } from "./elements/HighlightWidgets";
+import { BreadcrumbsBlock, OffCanvasBlock, PageTitleBlock, SiteLogoBlock, SiteTitleBlock, TableOfContentsBlock } from "./elements/SiteWidgets";
+import { PortfolioBlock, PostsBlock, PropertyCarouselBlock, ReviewsBlock } from "./elements/ListingWidgets";
 
 class BlockErrorBoundary extends Component<
   { blockType: string; children: ReactNode },
@@ -162,6 +166,25 @@ const blockRenderers: Record<string, React.ComponentType<{ block: BlockConfig }>
   "download-brochure": DownloadBrochureBlock,
   "site-visit": SiteVisitBlock,
   "custom-section": CustomSectionBlock,
+  "icon-list": IconListBlock,
+  alert: AlertBlock,
+  "animated-headline": AnimatedHeadlineBlock,
+  counter: CounterBlock,
+  "star-rating": StarRatingBlock,
+  "progress-bar": ProgressBarBlock,
+  "price-list": PriceListBlock,
+  "flip-box": FlipBoxBlock,
+  hotspot: HotspotBlock,
+  "site-logo": SiteLogoBlock,
+  "site-title": SiteTitleBlock,
+  "page-title": PageTitleBlock,
+  breadcrumbs: BreadcrumbsBlock,
+  "table-of-contents": TableOfContentsBlock,
+  "off-canvas": OffCanvasBlock,
+  "property-carousel": PropertyCarouselBlock,
+  posts: PostsBlock,
+  portfolio: PortfolioBlock,
+  reviews: ReviewsBlock,
 };
 
 export function RenderBlock({ block }: { block: BlockConfig }): ReactNode {

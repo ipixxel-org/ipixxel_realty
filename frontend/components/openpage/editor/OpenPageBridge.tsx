@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef } from "react";
-import { useConfigStore } from "@/components/openpage/store/configStore";
+import { isUnloadedConfig, useConfigStore } from "@/components/openpage/store/configStore";
 import { landingPageFromSite, siteFromLandingPage } from "@/lib/openpage/content";
 import type { LandingPageData } from "@/lib/openpage/types";
 
@@ -34,6 +34,18 @@ export function OpenPageBridge({
     return useConfigStore.subscribe((state, prev) => {
       if (skip.current) return;
       if (state.config === prev.config) return;
+      // The store was reset to its starter page (dev hot reload) and then
+      // changed: those edits are on the starter page, not this page. Reload
+      // this page into the builder instead of saving the starter over it.
+      if (isUnloadedConfig(prev.config)) {
+        skip.current = true;
+        useConfigStore.getState().setConfig(siteFromLandingPage(pageRef.current));
+        setTimeout(() => {
+          skip.current = false;
+        }, 50);
+        return;
+      }
+      if (isUnloadedConfig(state.config)) return;
       onPersist(landingPageFromSite(pageRef.current, state.config));
     });
   }, [onPersist]);

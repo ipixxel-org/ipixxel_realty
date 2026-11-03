@@ -26,7 +26,7 @@ import { EditorLayout } from "@/components/openpage/editor/EditorLayout";
 import { OpenPageBridge } from "@/components/openpage/editor/OpenPageBridge";
 import { SiteRenderer } from "@/components/openpage/renderer/SiteRenderer";
 import { PageSettingsModule } from "@/components/openpage/modules/page-settings";
-import { useConfigStore } from "@/components/openpage/store/configStore";
+import { siteToSave, useConfigStore } from "@/components/openpage/store/configStore";
 import { useEditorStore } from "@/components/openpage/store/editorStore";
 import { landingPageFromSite, siteFromLandingPage } from "@/lib/openpage/content";
 
@@ -295,7 +295,7 @@ export function OpenPageStudio({ resource = "template" }: { resource?: Resource 
   // the only caller).
   const publishPage = useCallback(() => {
     if (!activePage) return;
-    const next = landingPageFromSite(activePage, useConfigStore.getState().config);
+    const next = landingPageFromSite(activePage, siteToSave(() => siteFromLandingPage(activePage)));
     setActivePage(next);
     saveTemplateNow(next, "landing-page")
       .then(() => publishLandingPage(activePage.id))
@@ -350,7 +350,7 @@ export function OpenPageStudio({ resource = "template" }: { resource?: Resource 
     if (!activePage || isSwitchingCompanion) return;
     setIsSwitchingCompanion(true);
     try {
-      const next = landingPageFromSite(activePage, useConfigStore.getState().config);
+      const next = landingPageFromSite(activePage, siteToSave(() => siteFromLandingPage(activePage)));
       await saveTemplateNow(next, resource);
 
       let targetId: string | null = null;
@@ -399,7 +399,7 @@ export function OpenPageStudio({ resource = "template" }: { resource?: Resource 
     (pageId?: string) => {
       const page = !pageId || pageId === activePage?.id ? activePage : null;
       if (!page) return;
-      const next = landingPageFromSite(page, useConfigStore.getState().config);
+      const next = landingPageFromSite(page, siteToSave(() => siteFromLandingPage(page)));
       setActivePage(next);
       saveTemplateNow(next, resource)
         .then(() => {
@@ -421,7 +421,7 @@ export function OpenPageStudio({ resource = "template" }: { resource?: Resource 
       save: async () => {
         if (!activePage) return;
         const revision = ++saveRevision.current;
-        const next = landingPageFromSite(activePage, useConfigStore.getState().config);
+        const next = landingPageFromSite(activePage, siteToSave(() => siteFromLandingPage(activePage)));
         setActivePage(next);
         setHasUnsaved(true);
         setIsSaving(true);
@@ -450,7 +450,7 @@ export function OpenPageStudio({ resource = "template" }: { resource?: Resource 
       publish: () => {
         if (!activePage) return;
         const next = {
-          ...landingPageFromSite(activePage, useConfigStore.getState().config),
+          ...landingPageFromSite(activePage, siteToSave(() => siteFromLandingPage(activePage))),
           status: "published" as const,
         };
         setActivePage(next);
@@ -464,7 +464,7 @@ export function OpenPageStudio({ resource = "template" }: { resource?: Resource 
       unpublish: () => {
         if (!activePage) return;
         persistOpenPage({
-          ...landingPageFromSite(activePage, useConfigStore.getState().config),
+          ...landingPageFromSite(activePage, siteToSave(() => siteFromLandingPage(activePage))),
           status: "unpublished",
         });
         toast("Unpublished");

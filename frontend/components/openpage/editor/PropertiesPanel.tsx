@@ -15,7 +15,8 @@ import { useBuilderLeadForms } from "@/components/openpage/builder/forms-context
 import { DynamicDataPicker } from "./DynamicDataPicker";
 import { CUSTOM_FIELDS_KEY, customFieldKeys } from "@/components/openpage/blocks/CustomFields";
 import { FlexItemsControls } from "./FlexItemsControls";
-import { readFlexLayout } from "@/lib/openpage/flex-layout";
+import { FLEX_LAYOUT_KEYS, readFlexLayout } from "@/lib/openpage/flex-layout";
+import { isDivBlock } from "@/lib/openpage/block-factory";
 import {
   FLOOR_PLAN_FIELDS,
   AMENITY_FIELDS,
@@ -31,6 +32,7 @@ import {
   FOOTER_COLUMN_FIELDS,
   type ItemFieldDef,
 } from "./field-helpers";
+import { ELEMENT_ITEM_FIELDS, ELEMENT_ITEM_SUB_ELEMENTS, ELEMENT_ITEM_TEMPLATES } from "./element-fields";
 
 /** Explicit item fields for a block's list, keyed `${blockType}.${propKey}`. */
 const ITEM_FIELDS: Record<string, ItemFieldDef[]> = {
@@ -46,6 +48,7 @@ const ITEM_FIELDS: Record<string, ItemFieldDef[]> = {
   'footer.menuLinks': FOOTER_LINK_FIELDS,
   'footer.socialLinks': FOOTER_SOCIAL_FIELDS,
   'footer.linkColumns': FOOTER_COLUMN_FIELDS,
+  ...ELEMENT_ITEM_FIELDS,
 }
 
 interface FieldDef {
@@ -61,6 +64,7 @@ interface FieldDef {
  * block's renderer uses for that part.
  */
 const ITEM_SUB_ELEMENTS: Partial<Record<string, Record<string, Array<{ key: string; label: string }>>>> = {
+  ...ELEMENT_ITEM_SUB_ELEMENTS,
   features: { items: [{ key: 'icon', label: 'Icon' }, { key: 'bullet', label: 'Bullet' }, { key: 'title', label: 'Title' }, { key: 'description', label: 'Description' }, { key: 'image', label: 'Image' }] },
   faq: { items: [{ key: 'question', label: 'Question' }, { key: 'answer', label: 'Answer' }] },
   amenities: { items: [{ key: 'icon', label: 'Icon' }, { key: 'title', label: 'Title' }, { key: 'description', label: 'Description' }] },
@@ -505,6 +509,8 @@ const blockFields: Partial<Record<BlockType, { sections: { title: string; fields
     sections: [
       { title: 'Layout', fields: [
         { key: 'variant', label: 'Template', type: 'select', options: ['split-form', 'overlay', 'centered', 'stats', 'editorial', 'framed', 'asymmetric', 'info-bar', 'framed-center', 'split-curve'] },
+        // Overlay template: background full width, text in a centred box.
+        { key: 'contentWidth', label: 'Content width (overlay; e.g. 1200px, empty = default)', type: 'text' },
       ]},
       { title: 'Content', fields: [
         { key: 'badge', label: 'Badge', type: 'text' },
@@ -753,8 +759,7 @@ const blockFields: Partial<Record<BlockType, { sections: { title: string; fields
     sections: [
       { title: 'Content', fields: [
         { key: 'title', label: 'Title', type: 'text' },
-        { key: 'targetDate', label: 'Target Date (ISO)', type: 'text' },
-        { key: 'deadline', label: 'Deadline (ISO)', type: 'text' },
+        { key: 'targetDate', label: 'End date & time (e.g. 2026-12-31T18:00)', type: 'text' },
         { key: 'expiredText', label: 'Expired Text', type: 'text' },
       ]},
       { title: 'Display', fields: [
@@ -940,6 +945,294 @@ const blockFields: Partial<Record<BlockType, { sections: { title: string; fields
       },
     ],
   },
+  // --- Elementor-style elements (components/openpage/blocks/elements) ---
+  'icon-list': {
+    sections: [
+      { title: 'Content', fields: [
+        { key: 'items', label: 'List items', type: 'array-items' },
+        { key: 'icon', label: 'Default icon (when an item has none)', type: 'icon' },
+      ]},
+      { title: 'Layout', fields: [
+        { key: 'layout', label: 'Layout', type: 'select', options: ['vertical', 'inline'] },
+        { key: 'align', label: 'Alignment', type: 'select', options: ['left', 'center', 'right'] },
+        { key: 'divider', label: 'Divider between items (vertical)', type: 'toggle' },
+      ]},
+      { title: 'Style', fields: [
+        { key: 'iconSize', label: 'Icon size (px)', type: 'number' },
+        { key: 'iconColor', label: 'Icon colour', type: 'color' },
+        { key: 'textColor', label: 'Text colour', type: 'color' },
+      ]},
+    ],
+  },
+  alert: {
+    sections: [
+      { title: 'Content', fields: [
+        { key: 'alertType', label: 'Type', type: 'select', options: ['info', 'success', 'warning', 'danger'] },
+        { key: 'title', label: 'Title', type: 'text' },
+        { key: 'description', label: 'Description', type: 'textarea' },
+        { key: 'icon', label: 'Custom icon (optional)', type: 'icon' },
+        { key: 'showIcon', label: 'Show icon', type: 'toggle' },
+        { key: 'dismissible', label: 'Visitors can close it', type: 'toggle' },
+      ]},
+      { title: 'Style', fields: [
+        { key: 'bgColor', label: 'Background colour', type: 'color' },
+        { key: 'borderColor', label: 'Border colour', type: 'color' },
+      ]},
+    ],
+  },
+  'animated-headline': {
+    sections: [
+      { title: 'Content', fields: [
+        { key: 'before', label: 'Before text', type: 'text' },
+        { key: 'words', label: 'Animated words', type: 'array-strings' },
+        { key: 'after', label: 'After text', type: 'text' },
+        { key: 'tag', label: 'HTML tag', type: 'select', options: ['h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'p'] },
+      ]},
+      { title: 'Animation', fields: [
+        { key: 'animation', label: 'Animation', type: 'select', options: ['typing', 'fade', 'slide', 'highlight'] },
+        { key: 'duration', label: 'Time per word (ms)', type: 'number' },
+      ]},
+      { title: 'Style', fields: [
+        { key: 'align', label: 'Alignment', type: 'select', options: ['center', 'left', 'right'] },
+        { key: 'highlightColor', label: 'Animated text colour', type: 'color' },
+      ]},
+    ],
+  },
+  hotspot: {
+    sections: [
+      { title: 'Content', fields: [
+        { key: 'title', label: 'Title', type: 'text' },
+        { key: 'image', label: 'Site plan / floor plan image', type: 'image' },
+        { key: 'imageAlt', label: 'Image alt text', type: 'text' },
+        { key: 'items', label: 'Markers (position in % from left / top)', type: 'array-items' },
+      ]},
+      { title: 'Settings', fields: [
+        { key: 'trigger', label: 'Show tooltip on', type: 'select', options: ['hover', 'click'] },
+        { key: 'showLegend', label: 'Show legend under the image', type: 'toggle' },
+        { key: 'markerSize', label: 'Marker size (px)', type: 'number' },
+        { key: 'markerColor', label: 'Marker colour', type: 'color' },
+      ]},
+    ],
+  },
+  counter: {
+    sections: [
+      { title: 'Content', fields: [
+        { key: 'start', label: 'Starting number', type: 'number' },
+        { key: 'end', label: 'Ending number', type: 'text' },
+        { key: 'prefix', label: 'Prefix', type: 'text' },
+        { key: 'suffix', label: 'Suffix', type: 'text' },
+        { key: 'title', label: 'Title', type: 'text' },
+      ]},
+      { title: 'Settings', fields: [
+        { key: 'duration', label: 'Animation duration (ms)', type: 'number' },
+        { key: 'separator', label: 'Thousands separator', type: 'toggle' },
+        { key: 'align', label: 'Alignment', type: 'select', options: ['center', 'left', 'right'] },
+        { key: 'numberColor', label: 'Number colour', type: 'color' },
+      ]},
+    ],
+  },
+  'star-rating': {
+    sections: [
+      { title: 'Content', fields: [
+        { key: 'rating', label: 'Rating', type: 'number' },
+        { key: 'scale', label: 'Scale', type: 'select', options: ['5', '10'] },
+        { key: 'label', label: 'Label', type: 'text' },
+        { key: 'showValue', label: 'Show value (e.g. 4.5/5)', type: 'toggle' },
+      ]},
+      { title: 'Style', fields: [
+        { key: 'size', label: 'Star size (px)', type: 'number' },
+        { key: 'starColor', label: 'Star colour', type: 'color' },
+        { key: 'align', label: 'Alignment', type: 'select', options: ['center', 'left', 'right'] },
+      ]},
+    ],
+  },
+  'progress-bar': {
+    sections: [
+      { title: 'Content', fields: [
+        { key: 'title', label: 'Title', type: 'text' },
+        { key: 'items', label: 'Bars', type: 'array-items' },
+        { key: 'showPercent', label: 'Show percentage', type: 'toggle' },
+      ]},
+      { title: 'Style', fields: [
+        { key: 'height', label: 'Bar height (px)', type: 'number' },
+        { key: 'barColor', label: 'Bar colour', type: 'color' },
+        { key: 'trackColor', label: 'Track colour', type: 'color' },
+      ]},
+    ],
+  },
+  'price-list': {
+    sections: [
+      { title: 'Content', fields: [
+        { key: 'title', label: 'Title', type: 'text' },
+        { key: 'items', label: 'Items', type: 'array-items' },
+      ]},
+      { title: 'Style', fields: [
+        { key: 'separator', label: 'Separator', type: 'select', options: ['dotted', 'dashed', 'solid', 'none'] },
+        { key: 'priceColor', label: 'Price colour', type: 'color' },
+      ]},
+    ],
+  },
+  'flip-box': {
+    sections: [
+      { title: 'Front', fields: [
+        { key: 'frontTitle', label: 'Title', type: 'text' },
+        { key: 'frontDescription', label: 'Description', type: 'textarea' },
+        { key: 'frontIcon', label: 'Icon (optional)', type: 'icon' },
+        { key: 'frontImage', label: 'Background image (optional)', type: 'image' },
+        { key: 'frontBg', label: 'Background colour', type: 'color' },
+      ]},
+      { title: 'Back', fields: [
+        { key: 'backTitle', label: 'Title', type: 'text' },
+        { key: 'backDescription', label: 'Description', type: 'textarea' },
+        { key: 'buttonText', label: 'Button text (empty hides it)', type: 'text' },
+        { key: 'buttonUrl', label: 'Button link', type: 'text' },
+        { key: 'backBg', label: 'Background colour', type: 'color' },
+        { key: 'backTextColor', label: 'Text colour', type: 'color' },
+      ]},
+      { title: 'Settings', fields: [
+        { key: 'direction', label: 'Flip direction', type: 'select', options: ['right', 'left', 'up', 'down'] },
+        { key: 'height', label: 'Height (px)', type: 'number' },
+      ]},
+    ],
+  },
+  'off-canvas': {
+    sections: [
+      { title: 'Button', fields: [
+        { key: 'buttonText', label: 'Button text', type: 'text' },
+        { key: 'align', label: 'Alignment', type: 'select', options: ['center', 'left', 'right'] },
+        { key: 'buttonColor', label: 'Button colour', type: 'color' },
+        { key: 'buttonTextColor', label: 'Button text colour', type: 'color' },
+      ]},
+      { title: 'Panel', fields: [
+        { key: 'panelTitle', label: 'Panel title', type: 'text' },
+        { key: 'body', label: 'Text', type: 'textarea' },
+        { key: 'showForm', label: 'Show a form', type: 'toggle' },
+        { key: 'formId', label: 'Form', type: 'form-select' },
+        { key: 'position', label: 'Slides in from', type: 'select', options: ['right', 'left'] },
+        { key: 'width', label: 'Panel width (px)', type: 'number' },
+        { key: 'panelBg', label: 'Panel background', type: 'color' },
+      ]},
+    ],
+  },
+  'property-carousel': {
+    sections: [
+      { title: 'Content', fields: [
+        { key: 'title', label: 'Title', type: 'text' },
+        { key: 'subtitle', label: 'Subtitle', type: 'text' },
+        { key: 'items', label: 'Properties', type: 'array-items' },
+        { key: 'buttonText', label: 'Card link text', type: 'text' },
+      ]},
+      { title: 'Carousel', fields: [
+        { key: 'slidesPerView', label: 'Cards per view (desktop)', type: 'select', options: ['1', '2', '3', '4'] },
+        { key: 'autoplay', label: 'Autoplay', type: 'toggle' },
+        { key: 'interval', label: 'Autoplay interval (ms)', type: 'number' },
+        { key: 'priceColor', label: 'Price colour', type: 'color' },
+      ]},
+    ],
+  },
+  posts: {
+    sections: [
+      { title: 'Content', fields: [
+        { key: 'title', label: 'Title', type: 'text' },
+        { key: 'subtitle', label: 'Subtitle', type: 'text' },
+        { key: 'items', label: 'Posts / updates', type: 'array-items' },
+      ]},
+      { title: 'Layout', fields: [
+        { key: 'variant', label: 'Layout', type: 'select', options: ['grid', 'list'] },
+        { key: 'columns', label: 'Columns (grid)', type: 'select', options: ['1', '2', '3', '4'] },
+        { key: 'showExcerpt', label: 'Show summary', type: 'toggle' },
+        { key: 'readMoreText', label: 'Read more text (empty hides it)', type: 'text' },
+      ]},
+    ],
+  },
+  portfolio: {
+    sections: [
+      { title: 'Content', fields: [
+        { key: 'title', label: 'Title', type: 'text' },
+        { key: 'subtitle', label: 'Subtitle', type: 'text' },
+        { key: 'items', label: 'Projects', type: 'array-items' },
+      ]},
+      { title: 'Layout', fields: [
+        { key: 'columns', label: 'Columns', type: 'select', options: ['1', '2', '3', '4'] },
+        { key: 'showFilter', label: 'Show category filter', type: 'toggle' },
+        { key: 'allLabel', label: '"All" filter label', type: 'text' },
+      ]},
+    ],
+  },
+  reviews: {
+    sections: [
+      { title: 'Content', fields: [
+        { key: 'title', label: 'Title', type: 'text' },
+        { key: 'subtitle', label: 'Subtitle', type: 'text' },
+        { key: 'items', label: 'Reviews', type: 'array-items' },
+      ]},
+      { title: 'Summary', fields: [
+        { key: 'showSummary', label: 'Show average rating', type: 'toggle' },
+        { key: 'averageRating', label: 'Average rating (empty = from the reviews)', type: 'number' },
+        { key: 'totalReviews', label: 'Total reviews (empty = number listed)', type: 'number' },
+        { key: 'starColor', label: 'Star colour', type: 'color' },
+      ]},
+    ],
+  },
+  'site-logo': {
+    sections: [
+      { title: 'Content', fields: [
+        { key: 'image', label: 'Logo (empty shows the project name)', type: 'image' },
+        { key: 'alt', label: 'Alt text', type: 'text' },
+        { key: 'link', label: 'Link', type: 'text' },
+      ]},
+      { title: 'Style', fields: [
+        { key: 'width', label: 'Width (px)', type: 'number' },
+        { key: 'align', label: 'Alignment', type: 'select', options: ['left', 'center', 'right'] },
+      ]},
+    ],
+  },
+  'site-title': {
+    sections: [
+      { title: 'Content', fields: [
+        { key: 'text', label: 'Title (empty uses the project name)', type: 'text' },
+        { key: 'tag', label: 'HTML tag', type: 'select', options: ['p', 'div', 'span', 'h1', 'h2', 'h3'] },
+        { key: 'link', label: 'Link', type: 'text' },
+        { key: 'align', label: 'Alignment', type: 'select', options: ['left', 'center', 'right'] },
+      ]},
+    ],
+  },
+  'page-title': {
+    sections: [
+      { title: 'Content', fields: [
+        { key: 'text', label: 'Title (empty uses the project name)', type: 'text' },
+        { key: 'subtitle', label: 'Subtitle', type: 'text' },
+        { key: 'tag', label: 'HTML tag', type: 'select', options: ['h1', 'h2', 'h3', 'div'] },
+        { key: 'align', label: 'Alignment', type: 'select', options: ['center', 'left', 'right'] },
+      ]},
+    ],
+  },
+  breadcrumbs: {
+    sections: [
+      { title: 'Content', fields: [
+        { key: 'showHome', label: 'Show home link', type: 'toggle' },
+        { key: 'homeLabel', label: 'Home label', type: 'text' },
+        { key: 'homeUrl', label: 'Home link', type: 'text' },
+        { key: 'items', label: 'Path (last item = current page)', type: 'array-items' },
+      ]},
+      { title: 'Style', fields: [
+        { key: 'separator', label: 'Separator', type: 'select', options: ['›', '/', '»', '•', '|', '→'] },
+        { key: 'separatorColor', label: 'Separator colour', type: 'color' },
+        { key: 'align', label: 'Alignment', type: 'select', options: ['left', 'center', 'right'] },
+      ]},
+    ],
+  },
+  'table-of-contents': {
+    sections: [
+      { title: 'Content', fields: [
+        { key: 'title', label: 'Title', type: 'text' },
+        { key: 'headings', label: 'Headings to include', type: 'select', options: ['h2', 'h2-h3', 'h2-h4'] },
+        { key: 'numbered', label: 'Numbered list', type: 'toggle' },
+        { key: 'collapsible', label: 'Can be collapsed', type: 'toggle' },
+        { key: 'startCollapsed', label: 'Start collapsed', type: 'toggle' },
+      ]},
+    ],
+  },
 }
 
 const TYPE_ALIASES: Record<string, BlockType> = {
@@ -992,6 +1285,7 @@ const KNOWN_VARIANTS: Record<string, string[]> = {
   'icon-box': ['card', 'horizontal', 'minimal', 'centered'],
   'button': ['solid', 'outline', 'pill', 'glass'],
   'footer': ['simple', 'multi-column', 'minimal', 'premium', 'contact'],
+  'posts': ['grid', 'list'],
 };
 
 /** Content fields whose element id differs from `${blockType}:${fieldKey}`. */
@@ -1468,7 +1762,7 @@ function PropertyField({ field, block }: { field: FieldDef; block: BlockConfig }
             linkColumns: { title: '', links: '' },
           },
         }
-        const defaults = blockTemplates[block.type]?.[field.key]
+        const defaults = blockTemplates[block.type]?.[field.key] ?? ELEMENT_ITEM_TEMPLATES[block.type]?.[field.key]
         if (items.length > 0) {
           // Mirror the existing items' shape, blanked, but keep per-item
           // defaults such as a price card's "Enquire" button text — a blank
@@ -1555,7 +1849,7 @@ export function PropertiesPanel({ block }: { block: BlockConfig }) {
     if (block.type === "footer" && (key === "links" || key === "socials" || key === "columns")) continue
     if (key === "columns" && block.type === "columns") continue
     // Edited by the container's "Items" controls below.
-    if (block.type === "columns" && (key === "direction" || key === "justifyContent" || key === "alignItems")) continue
+    if (block.type === "columns" && (FLEX_LAYOUT_KEYS as readonly string[]).includes(key)) continue
     // Internal marker for a Div (see isDivBlock); not user-editable.
     if (block.type === "columns" && key === "kind") continue
 
@@ -1600,6 +1894,8 @@ export function PropertiesPanel({ block }: { block: BlockConfig }) {
   const columns = block.type === "columns"
     ? ((block.props.columns as Array<{ width: number; mobileWidth?: number; blocks: BlockConfig[] }>) ?? [])
     : []
+  // A one-column Div lays out its widgets directly (like an Elementor Div).
+  const divWidgets = isDivBlock(block) && columns.length === 1
 
   const handleAddCustomProperty = () => {
     const cleanKey = newPropKey.trim().replace(/\s+/g, "_")
@@ -1751,7 +2047,20 @@ export function PropertiesPanel({ block }: { block: BlockConfig }) {
       )}
 
       {/* Column Width Editor */}
-      {block.type === "columns" && (
+      {block.type === "columns" && divWidgets ? (
+        <Section title="Items">
+          {/* A one-column Div: lay out the widgets inside it. */}
+          <FlexItemsControls
+            value={readFlexLayout(columns[0])}
+            defaultDirection="column"
+            showGap
+            onChange={(patch) => updateColumnLayout(block.id, 0, patch)}
+          />
+          <p className="text-[10px] text-text-3 leading-snug mt-2">
+            Lays out the widgets inside this Div.
+          </p>
+        </Section>
+      ) : block.type === "columns" ? (
         <Section title="Items">
           {/* How the container lays out its columns. */}
           <FlexItemsControls
@@ -1763,7 +2072,7 @@ export function PropertiesPanel({ block }: { block: BlockConfig }) {
             Justify Content shows when the columns don&apos;t fill the full width (e.g. two 30% columns).
           </p>
         </Section>
-      )}
+      ) : null}
 
       {block.type === "columns" && (
         <Section title="Columns">
@@ -1807,16 +2116,19 @@ export function PropertiesPanel({ block }: { block: BlockConfig }) {
                 />
                 <div className="text-[9px] text-text-3 mt-0.5">{col.blocks.length} widget(s) in this column</div>
                 {/* How this column lays out its own widgets. */}
-                <details className="mt-1.5 group/items" open={Boolean(readFlexLayout(col).direction || readFlexLayout(col).justifyContent || readFlexLayout(col).alignItems) || undefined}>
+                {!divWidgets && (
+                <details className="mt-1.5 group/items" open={Object.values(readFlexLayout(col)).some((v) => v !== undefined) || undefined}>
                   <summary className="text-[10px] text-text-2 cursor-pointer select-none hover:text-text-0">Items in this column</summary>
                   <div className="mt-2">
                     <FlexItemsControls
                       value={readFlexLayout(col)}
                       defaultDirection="column"
+                      showGap
                       onChange={(patch) => updateColumnLayout(block.id, i, patch)}
                     />
                   </div>
                 </details>
+                )}
               </div>
             ))}
             {columns.length < 6 && (
