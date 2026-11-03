@@ -1,21 +1,22 @@
 "use client";
 
-import { Fragment, useCallback, useState, useRef, type CSSProperties } from "react";
+import { Fragment, useCallback, useState, useRef, type CSSProperties, type ElementType } from "react";
 import { useDroppable } from "@dnd-kit/core";
 import { SortableContext, verticalListSortingStrategy, useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import type { BlockConfig, BlockType } from "../types";
+import type { BlockConfig } from "../types";
 import { RenderBlock } from "../registry";
 import { useConfigStore } from "@/components/openpage/store/configStore";
 import { useEditorStore } from "@/components/openpage/store/editorStore";
-import { createBlockFromType, createBlockFromPresetId, isDivBlock } from "@/lib/openpage/block-factory";
+import { createBlockFromType, isDivBlock } from "@/lib/openpage/block-factory";
 import { resolveBlockStyleForDevice, isHiddenOnViewport } from "@/lib/openpage/block-style";
 import { Plus, GripVertical, Type, Image as ImageIcon, Sparkles, EyeOff, ClipboardPaste, Pencil, Palette } from "lucide-react";
 import { pasteClipboardBlock } from "@/lib/openpage/block-clipboard";
 import { toast } from "sonner";
 import { ColumnResizer } from "./ColumnResizer";
 import { useElementEditor } from "../El";
-import { readDropPayload, type DropPayload } from "@/lib/openpage/drag-payload";
+import { readDropPayload, readDraggedBlockId, buildBlockFromPayload, type DropPayload } from "@/lib/openpage/drag-payload";
+import { isSameOrInside } from "@/lib/openpage/block-tree";
 import {
   flexLayoutStyle,
   isBlockDisplay,
@@ -34,26 +35,13 @@ interface ColumnsProps extends FlexLayout {
   contentWidth?: string;
   columns?: ColumnData[];
   gap?: string;
+  htmlTag?: "div" | "section" | "article" | "main" | "aside" | "header" | "footer" | "nav";
 }
 
 /** Phone-width flex-basis: the column's own mobile width, else full width. */
 export function mobileColumnBasis(mobileWidth: number | undefined, gap: string): string {
   if (typeof mobileWidth !== "number" || !Number.isFinite(mobileWidth) || mobileWidth >= 100) return "100%";
   return `calc(${Math.max(10, mobileWidth)}% - ${gap})`;
-}
-
-function buildBlockFromPayload(payload: DropPayload): { block: BlockConfig | null; label: string } {
-  if (payload.kind === "block") {
-    return { block: createBlockFromType(payload.type as BlockType), label: payload.label || payload.type };
-  }
-  if (payload.kind === "preset") {
-    return { block: createBlockFromPresetId(payload.presetId), label: payload.label || "Section" };
-  }
-  const gw = useConfigStore.getState().config.globalWidgets?.find((w) => w.id === payload.globalWidgetId);
-  if (gw) {
-    return { block: { ...JSON.parse(JSON.stringify(gw.block)), id: `block-${Date.now()}` }, label: gw.name };
-  }
-  return { block: null, label: "Block" };
 }
 
 function ColumnBlock({
@@ -94,11 +82,10 @@ function ColumnBlock({
         e.stopPropagation();
         selectBlock(block.id);
       }}
-      className={`relative min-w-0 group/colblock my-1.5 rounded transition-all ${
-        isSelected
+      className={`relative min-w-0 group/colblock my-1.5 rounded transition-all ${isSelected
           ? "outline outline-2 outline-dashed outline-blue-400"
           : "hover:outline hover:outline-1 hover:outline-dashed hover:outline-blue-400/50"
-      }`}
+        }`}
     >
       {isHidden && (
         <span className="absolute top-1 left-1 z-10 text-[9px] font-semibold uppercase tracking-wider text-yellow-500 bg-yellow-500/10 px-1.5 py-0.5 rounded flex items-center gap-1">
@@ -107,9 +94,8 @@ function ColumnBlock({
         </span>
       )}
       <div
-        className={`absolute -top-6 right-0 z-20 flex items-center rounded overflow-hidden text-[9px] bg-blue-500 shadow-sm ${
-          isSelected ? "opacity-100" : "opacity-0 group-hover/colblock:opacity-100"
-        }`}
+        className={`absolute -top-6 right-0 z-20 flex items-center rounded overflow-hidden text-[9px] bg-blue-500 shadow-sm ${isSelected ? "opacity-100" : "opacity-0 group-hover/colblock:opacity-100"
+          }`}
         onClick={(e) => e.stopPropagation()}
       >
         <button
@@ -183,11 +169,18 @@ function ColumnDropSlot({
 }) {
   const [isOver, setIsOver] = useState(false);
   const draggedItem = useEditorStore((s) => s.draggedItem);
+  const canvasDragging = useEditorStore((s) => s.isDragging);
   const selectBlock = useEditorStore((s) => s.selectBlock);
   const addBlockToColumn = useConfigStore((s) => s.addBlockToColumn);
+  const { setNodeRef } = useDroppable({
+    id: `column-slot-${sectionBlockId}-${colIndex}-${index}`,
+    data: { type: "column-slot", sectionBlockId, colIndex, index },
+  });
+  const isDragging = Boolean(draggedItem) || canvasDragging;
 
   return (
     <div
+      ref={setNodeRef}
       onDragOver={(e) => {
         e.preventDefault();
         e.stopPropagation();
@@ -210,11 +203,32 @@ function ColumnDropSlot({
         e.stopPropagation();
         setIsOver(false);
         useEditorStore.getState().setDraggedItem(null);
-        // Only Blocks-panel widgets; a dragged image / link / text is ignored.
+
+        // 1. Check if an existing block from the Navigator was dragged
+        const existingId = readDraggedBlockId(e.dataTransfer);
+        if (existingId) {
+          const source = useConfigStore.getState().getActivePageBlocks();
+          if (isSameOrInside(source, existingId, sectionBlockId)) {
+            toast.error("Cannot move a container into itself");
+            return;
+          }
+          useConfigStore.getState().moveBlockTo(existingId, {
+            kind: "column",
+            sectionId: sectionBlockId,
+            colIndex,
+            index,
+          });
+          selectBlock(existingId);
+          toast.success(`Moved into Column ${colIndex + 1}`);
+          return;
+        }
+
+        // 2. Only Blocks-panel widgets; a dragged image / link / text is ignored.
         const payload = readDropPayload(e.dataTransfer);
         if (!payload) return;
         try {
-          const { block, label } = buildBlockFromPayload(payload);
+          const globalWidgets = useConfigStore.getState().config.globalWidgets;
+          const { block, label } = buildBlockFromPayload(payload, globalWidgets);
           if (block) {
             addBlockToColumn(sectionBlockId, colIndex, block, index);
             selectBlock(block.id);
@@ -225,19 +239,18 @@ function ColumnDropSlot({
         }
       }}
       style={fullRow ? { gridColumn: "1 / -1" } : undefined}
-      className={`transition-all duration-200 relative flex items-center justify-center select-none rounded ${
-        horizontal
+      className={`transition-all duration-200 relative flex items-center justify-center select-none rounded ${horizontal
           ? isOver
             ? "w-10 self-stretch mx-1 shrink-0 bg-green-500/15 border border-dashed border-green z-30"
-            : draggedItem
-            ? "w-6 self-stretch mx-1 shrink-0 bg-green-500/5 border border-dashed border-green/40 hover:border-green hover:bg-green-500/15 z-20"
-            : "w-1.5 self-stretch shrink-0 hover:w-6 hover:bg-green-500/10 hover:border hover:border-dashed hover:border-green/40 z-10"
+            : isDragging
+              ? "w-6 self-stretch mx-1 shrink-0 bg-green-500/5 border border-dashed border-green/40 hover:border-green hover:bg-green-500/15 z-20"
+              : "w-1.5 self-stretch shrink-0 hover:w-6 hover:bg-green-500/10 hover:border hover:border-dashed hover:border-green/40 z-10"
           : isOver
-          ? "h-10 my-1 bg-green-500/15 border border-dashed border-green scale-[1.01] shadow-[0_0_16px_rgba(34,197,94,0.25)] z-30"
-          : draggedItem
-          ? "h-6 my-1 bg-green-500/5 border border-dashed border-green/40 hover:border-green hover:bg-green-500/15 z-20"
-          : "h-1.5 hover:h-6 hover:bg-green-500/10 hover:border hover:border-dashed hover:border-green/40 rounded z-10 transition-all"
-      }`}
+            ? "h-10 my-1 bg-green-500/15 border border-dashed border-green scale-[1.01] shadow-[0_0_16px_rgba(34,197,94,0.25)] z-30"
+            : isDragging
+              ? "h-6 my-1 bg-green-500/5 border border-dashed border-green/40 hover:border-green hover:bg-green-500/15 z-20"
+              : "h-1.5 hover:h-6 hover:bg-green-500/10 hover:border hover:border-dashed hover:border-green/40 rounded z-10 transition-all"
+        }`}
     >
       {isOver && !horizontal && (
         <span className="text-[10px] font-semibold text-green pointer-events-none">
@@ -265,9 +278,9 @@ function columnBox(col: ColumnData, gap: string, stacked: boolean): { className:
     style: (stacked
       ? { "--op-col-w": `${col.width}%`, "--op-col-w-sm": `${col.mobileWidth ?? 100}%` }
       : {
-          "--op-col-basis": `calc(${col.width}% - ${gap})`,
-          "--op-col-basis-sm": mobileColumnBasis(col.mobileWidth, gap),
-        }) as Record<string, string> as CSSProperties,
+        "--op-col-basis": `calc(${col.width}% - ${gap})`,
+        "--op-col-basis-sm": mobileColumnBasis(col.mobileWidth, gap),
+      }) as Record<string, string> as CSSProperties,
   };
 }
 
@@ -354,7 +367,8 @@ function DroppableColumn({
   const handleDropData = (payload: DropPayload | null) => {
     if (!payload) return;
     try {
-      const { block: newBlock, label } = buildBlockFromPayload(payload);
+      const globalWidgets = useConfigStore.getState().config.globalWidgets;
+      const { block: newBlock, label } = buildBlockFromPayload(payload, globalWidgets);
       if (newBlock) {
         addBlockToColumn(sectionBlockId, colIndex, newBlock);
         selectBlock(newBlock.id);
@@ -393,28 +407,46 @@ function DroppableColumn({
         e.stopPropagation();
         setIsOver(false);
         useEditorStore.getState().setDraggedItem(null);
-        // Only Blocks-panel widgets; a dragged image / link / text is ignored.
+
+        // 1. Check if an existing block from the Navigator was dragged
+        const existingId = readDraggedBlockId(e.dataTransfer);
+        if (existingId) {
+          const source = useConfigStore.getState().getActivePageBlocks();
+          if (isSameOrInside(source, existingId, sectionBlockId)) {
+            toast.error("Cannot move a container into itself");
+            return;
+          }
+          useConfigStore.getState().moveBlockTo(existingId, {
+            kind: "column",
+            sectionId: sectionBlockId,
+            colIndex,
+            index: undefined,
+          });
+          selectBlock(existingId);
+          toast.success(`Moved into Column ${colIndex + 1}`);
+          return;
+        }
+
+        // 2. Only Blocks-panel widgets; a dragged image / link / text is ignored.
         handleDropData(readDropPayload(e.dataTransfer));
       }}
     >
       {isOnlyPlaceholder ? (
         <div
-          className={`flex flex-col items-center justify-center p-6 min-h-[180px] rounded-xl border-2 border-dashed transition-all duration-200 select-none ${
-            isOver
+          className={`flex flex-col items-center justify-center p-6 min-h-[180px] rounded-xl border-2 border-dashed transition-all duration-200 select-none ${isOver
               ? "border-green bg-green-500/15 scale-[1.01] shadow-[0_0_24px_rgba(34,197,94,0.3)]"
               : isHighlight
-              ? "border-green/50 bg-green-500/5"
-              : "border-border-default hover:border-border-hover bg-bg-2/40"
-          }`}
+                ? "border-green/50 bg-green-500/5"
+                : "border-border-default hover:border-border-hover bg-bg-2/40"
+            }`}
         >
           <div
-            className={`w-10 h-10 rounded-xl flex items-center justify-center mb-2.5 transition-transform duration-200 ${
-              isOver
+            className={`w-10 h-10 rounded-xl flex items-center justify-center mb-2.5 transition-transform duration-200 ${isOver
                 ? "bg-green text-black scale-110 shadow-md"
                 : isHighlight
-                ? "bg-green-glow text-green animate-bounce"
-                : "bg-bg-3 text-text-3"
-            }`}
+                  ? "bg-green-glow text-green animate-bounce"
+                  : "bg-bg-3 text-text-3"
+              }`}
           >
             {isOver ? <Plus size={20} className="stroke-[2.5]" /> : isHighlight ? <Sparkles size={18} /> : <Plus size={18} />}
           </div>
@@ -531,13 +563,12 @@ function DroppableColumn({
                 selectBlock(block.id);
               }
             }}
-            className={`w-full mt-2 py-2 rounded-lg border-2 border-dashed text-[11px] font-medium transition-all flex items-center justify-center gap-1.5 ${
-              isOver
+            className={`w-full mt-2 py-2 rounded-lg border-2 border-dashed text-[11px] font-medium transition-all flex items-center justify-center gap-1.5 ${isOver
                 ? "border-green bg-green-500/15 text-green scale-[1.01]"
                 : isHighlight
-                ? "border-green/50 bg-green-500/5 text-green/90"
-                : "border-border-default text-text-3 hover:border-green/40 hover:text-text-1 hover:bg-bg-3"
-            }`}
+                  ? "border-green/50 bg-green-500/5 text-green/90"
+                  : "border-border-default text-text-3 hover:border-green/40 hover:text-text-1 hover:bg-bg-3"
+              }`}
           >
             <Plus size={12} className={isOver ? "stroke-[2.5]" : ""} />
             <span>{isOver ? `Drop ${draggedItem?.label || "widget"} here` : "Drop or add widget"}</span>
@@ -569,9 +600,9 @@ export function ColumnsBlock({ block }: { block: BlockConfig }) {
     p.columns && p.columns.length > 0
       ? p.columns
       : [
-          { width: 50, blocks: [] },
-          { width: 50, blocks: [] },
-        ];
+        { width: 50, blocks: [] },
+        { width: 50, blocks: [] },
+      ];
 
   // A Div is a plain box: no outer padding and no max width, so it fits
   // wherever it is placed (spacing comes from its Style tab).
@@ -581,9 +612,11 @@ export function ColumnsBlock({ block }: { block: BlockConfig }) {
   const fullWidth = p.contentWidth === "full";
   const outerCls = div ? "" : fullWidth ? "py-6" : "px-6 py-6";
   const innerCls = div || fullWidth ? "w-full" : "max-w-6xl mx-auto";
+  const validTags = new Set(["div", "section", "article", "main", "aside", "header", "footer", "nav"]);
+  const TagName: ElementType = p.htmlTag && validTags.has(p.htmlTag) ? p.htmlTag : "div";
 
   return (
-    <div className={outerCls} data-op-div={div ? "" : undefined} data-op-width={fullWidth ? "full" : undefined}>
+    <TagName className={outerCls} data-op-div={div ? "" : undefined} data-op-width={fullWidth ? "full" : undefined}>
       <div
         ref={containerRef}
         className={`${innerCls} flex flex-wrap items-stretch`}
@@ -595,13 +628,13 @@ export function ColumnsBlock({ block }: { block: BlockConfig }) {
             {!editing ? (
               <StaticColumn col={col} gap={gap} stacked={stacked} />
             ) : (
-            <DroppableColumn
-              sectionBlockId={block.id}
-              colIndex={i}
-              col={col}
-              gap={gap}
-              stacked={stacked}
-            />
+              <DroppableColumn
+                sectionBlockId={block.id}
+                colIndex={i}
+                col={col}
+                gap={gap}
+                stacked={stacked}
+              />
             )}
             {editing && showResizers && i < columns.length - 1 && (
               // No resize handles while stacked: widths apply to every device.
@@ -618,6 +651,6 @@ export function ColumnsBlock({ block }: { block: BlockConfig }) {
           </Fragment>
         ))}
       </div>
-    </div>
+    </TagName>
   );
 }

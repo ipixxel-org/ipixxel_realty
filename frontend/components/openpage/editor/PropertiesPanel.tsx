@@ -837,6 +837,7 @@ const blockFields: Partial<Record<BlockType, { sections: { title: string; fields
         // full: edge to edge, no side padding (add it in Style if needed).
         { key: 'contentWidth', label: 'Content Width (default: boxed)', type: 'select', options: ['boxed', 'full'] },
         { key: 'gap', label: 'Gap', type: 'text' },
+        { key: 'htmlTag', label: 'HTML Tag', type: 'select', options: ['div', 'section', 'article', 'main', 'aside', 'header', 'footer', 'nav'] },
       ]},
     ],
   },

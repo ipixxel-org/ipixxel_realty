@@ -963,7 +963,13 @@ export const useConfigStore = create<ConfigState>()((set, get) => ({
             if (!section || section.type !== 'columns') return
             const cols = section.props.columns as Array<{ width: number; blocks: BlockConfig[] }> | undefined
             if (!cols || cols.length <= 1) return
-            cols.splice(colIndex, 1)
+            const [removed] = cols.splice(colIndex, 1)
+            if (removed?.blocks?.length) {
+              const targetCol = cols[Math.min(colIndex, cols.length - 1)]
+              if (targetCol) {
+                targetCol.blocks = [...(targetCol.blocks || []), ...removed.blocks]
+              }
+            }
             const newWidth = Math.floor(100 / cols.length)
             cols.forEach((c) => { c.width = newWidth })
             draft.blocks = page.blocks

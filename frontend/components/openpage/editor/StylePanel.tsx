@@ -1,6 +1,5 @@
 "use client";
 
-import { useState } from "react";
 import {
   Copy,
   Clipboard,
@@ -16,22 +15,16 @@ import {
   Maximize2,
   Box,
   Sparkles,
-  Sliders,
   Eye,
   Code,
   Layers,
-  ArrowUp,
-  ArrowDown,
-  ArrowLeft,
-  ArrowRight,
-  Maximize,
 } from "lucide-react";
 import { toast } from "sonner";
 import type { BlockConfig, BlockStyle } from "@/components/openpage/blocks/types";
 import { useConfigStore } from "@/components/openpage/store/configStore";
 import { useEditorStore } from "@/components/openpage/store/editorStore";
 import { resolveBlockStyleForDevice } from "@/lib/openpage/block-style";
-import { Section, ColorInput } from "./shared-components";
+import { Section } from "./shared-components";
 import { BoxModelWidget } from "./BoxModelWidget";
 import { BackgroundControls } from "./BackgroundControls";
 import { EffectsControls } from "./EffectsControls";
@@ -118,116 +111,6 @@ function DimensionField({
   );
 }
 
-function SpacingControl({
-  title,
-  top,
-  right,
-  bottom,
-  left,
-  onChange,
-}: {
-  title: string;
-  top?: string;
-  right?: string;
-  bottom?: string;
-  left?: string;
-  onChange: (values: { top?: string; right?: string; bottom?: string; left?: string }) => void;
-}) {
-  const [mode, setMode] = useState<"individual" | "unified">("individual");
-  const quickPresets = ["0px", "16px", "24px", "48px", "80px", "auto"];
-
-  return (
-    <div className="space-y-2">
-      <div className="flex items-center justify-between">
-        <span className="text-[10px] font-semibold uppercase tracking-wider text-text-3">{title}</span>
-        <button
-          type="button"
-          onClick={() => setMode(mode === "individual" ? "unified" : "individual")}
-          className="text-[9.5px] text-text-3 hover:text-green transition-colors font-medium"
-        >
-          {mode === "individual" ? "Switch to Unified" : "Switch to 4-Way"}
-        </button>
-      </div>
-
-      {mode === "unified" ? (
-        <div className="space-y-1.5">
-          <input
-            type="text"
-            value={top || ""}
-            onChange={(e) => {
-              const v = e.target.value;
-              onChange({ top: v, right: v, bottom: v, left: v });
-            }}
-            placeholder="e.g. 24px or auto"
-            className="w-full px-2.5 py-1.5 rounded-lg border border-border-default bg-bg-2/80 text-text-0 text-[11px] font-mono outline-none transition-all hover:border-border-hover focus:border-green focus:bg-bg-2 focus:shadow-[0_0_0_3px_rgba(34,197,94,0.12)]"
-          />
-        </div>
-      ) : (
-        <div className="grid grid-cols-2 gap-1.5">
-          <div className="flex items-center gap-1.5 px-2 py-1 rounded-lg border border-border-default bg-bg-2/60">
-            <ArrowUp size={11} className="text-text-3 shrink-0" />
-            <span className="text-[10px] text-text-3 w-3">T</span>
-            <input
-              type="text"
-              value={top || ""}
-              onChange={(e) => onChange({ top: e.target.value, right, bottom, left })}
-              placeholder="0px"
-              className="w-full bg-transparent text-text-0 text-[11px] font-mono outline-none"
-            />
-          </div>
-          <div className="flex items-center gap-1.5 px-2 py-1 rounded-lg border border-border-default bg-bg-2/60">
-            <ArrowRight size={11} className="text-text-3 shrink-0" />
-            <span className="text-[10px] text-text-3 w-3">R</span>
-            <input
-              type="text"
-              value={right || ""}
-              onChange={(e) => onChange({ top, right: e.target.value, bottom, left })}
-              placeholder="auto"
-              className="w-full bg-transparent text-text-0 text-[11px] font-mono outline-none"
-            />
-          </div>
-          <div className="flex items-center gap-1.5 px-2 py-1 rounded-lg border border-border-default bg-bg-2/60">
-            <ArrowDown size={11} className="text-text-3 shrink-0" />
-            <span className="text-[10px] text-text-3 w-3">B</span>
-            <input
-              type="text"
-              value={bottom || ""}
-              onChange={(e) => onChange({ top, right, bottom: e.target.value, left })}
-              placeholder="0px"
-              className="w-full bg-transparent text-text-0 text-[11px] font-mono outline-none"
-            />
-          </div>
-          <div className="flex items-center gap-1.5 px-2 py-1 rounded-lg border border-border-default bg-bg-2/60">
-            <ArrowLeft size={11} className="text-text-3 shrink-0" />
-            <span className="text-[10px] text-text-3 w-3">L</span>
-            <input
-              type="text"
-              value={left || ""}
-              onChange={(e) => onChange({ top, right, bottom, left: e.target.value })}
-              placeholder="auto"
-              className="w-full bg-transparent text-text-0 text-[11px] font-mono outline-none"
-            />
-          </div>
-        </div>
-      )}
-
-      {/* Quick Presets */}
-      <div className="flex items-center gap-1 pt-0.5 overflow-x-auto scrollbar-none">
-        {quickPresets.map((p) => (
-          <button
-            key={p}
-            type="button"
-            onClick={() => onChange({ top: p, right: p === "auto" ? p : undefined, bottom: p, left: p === "auto" ? p : undefined })}
-            className="text-[9px] px-1.5 py-0.5 rounded border border-border-subtle bg-bg-2/40 text-text-3 hover:text-text-1 hover:border-border-hover transition-all"
-          >
-            {p}
-          </button>
-        ))}
-      </div>
-    </div>
-  );
-}
-
 export function StylePanel({ block }: { block: BlockConfig }) {
   const setBlockStyleForDevice = useConfigStore((s) => s.setBlockStyleForDevice);
   const resetBlockStyle = useConfigStore((s) => s.resetBlockStyle);
@@ -244,22 +127,6 @@ export function StylePanel({ block }: { block: BlockConfig }) {
     { value: "desktop" as const, icon: <Monitor size={12} />, label: "Desktop" },
     { value: "tablet" as const, icon: <Tablet size={12} />, label: "Tablet" },
     { value: "mobile" as const, icon: <Smartphone size={12} />, label: "Mobile" },
-  ];
-
-  const radiusPresets = [
-    { label: "0", value: "0px" },
-    { label: "4px", value: "4px" },
-    { label: "8px", value: "8px" },
-    { label: "16px", value: "16px" },
-    { label: "24px", value: "24px" },
-    { label: "Full", value: "9999px" },
-  ];
-
-  const shadowPresets = [
-    { label: "None", value: "none" },
-    { label: "Soft", value: "0 2px 8px rgba(0,0,0,0.08)" },
-    { label: "Medium", value: "0 8px 24px rgba(0,0,0,0.15)" },
-    { label: "Dark Glow", value: "0 10px 30px rgba(0,0,0,0.5)" },
   ];
 
   return (
@@ -373,6 +240,110 @@ export function StylePanel({ block }: { block: BlockConfig }) {
               onChange={(v) => set({ minHeight: v })}
               presets={["auto", "400px", "100vh"]}
             />
+
+            {/* Position */}
+            <div className="pt-2 border-t border-border-subtle space-y-2">
+              <div className="flex items-center justify-between">
+                <label className="text-[10px] font-semibold uppercase tracking-wider text-text-3">
+                  Position
+                </label>
+                <select
+                  value={effectiveStyle.position || ""}
+                  onChange={(e) => set({ position: e.target.value || undefined })}
+                  className="px-2 py-1 rounded-md border border-border-default bg-bg-2 text-text-0 text-[10.5px] outline-none focus:border-green"
+                >
+                  <option value="">Default (Static)</option>
+                  <option value="relative">Relative</option>
+                  <option value="absolute">Absolute</option>
+                  <option value="fixed">Fixed</option>
+                  <option value="sticky">Sticky</option>
+                </select>
+              </div>
+
+              {effectiveStyle.position && effectiveStyle.position !== "static" && (
+                <div className="grid grid-cols-2 gap-2">
+                  <DimensionField
+                    label="Top"
+                    value={effectiveStyle.top}
+                    onChange={(v) => set({ top: v })}
+                    presets={["0px", "10px", "auto"]}
+                  />
+                  <DimensionField
+                    label="Right"
+                    value={effectiveStyle.right}
+                    onChange={(v) => set({ right: v })}
+                    presets={["0px", "10px", "auto"]}
+                  />
+                  <DimensionField
+                    label="Bottom"
+                    value={effectiveStyle.bottom}
+                    onChange={(v) => set({ bottom: v })}
+                    presets={["0px", "10px", "auto"]}
+                  />
+                  <DimensionField
+                    label="Left"
+                    value={effectiveStyle.left}
+                    onChange={(v) => set({ left: v })}
+                    presets={["0px", "10px", "auto"]}
+                  />
+                </div>
+              )}
+            </div>
+
+            {/* Flex Item Properties */}
+            <div className="pt-2 border-t border-border-subtle space-y-2">
+              <label className="block text-[10px] font-semibold uppercase tracking-wider text-text-3">
+                Flex / Grid Item
+              </label>
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="block text-[9.5px] text-text-3 mb-1">Align Self</label>
+                  <select
+                    value={effectiveStyle.alignSelf || ""}
+                    onChange={(e) => set({ alignSelf: e.target.value || undefined })}
+                    className="w-full px-2 py-1.5 rounded-lg border border-border-default bg-bg-2 text-text-0 text-[10.5px] outline-none focus:border-green"
+                  >
+                    <option value="">Default</option>
+                    <option value="auto">Auto</option>
+                    <option value="flex-start">Start</option>
+                    <option value="center">Center</option>
+                    <option value="flex-end">End</option>
+                    <option value="stretch">Stretch</option>
+                  </select>
+                </div>
+                <DimensionField
+                  label="Order"
+                  value={effectiveStyle.order !== undefined ? String(effectiveStyle.order) : ""}
+                  onChange={(v) => set({ order: v })}
+                  presets={["0", "1", "-1"]}
+                  placeholder="0"
+                />
+              </div>
+
+              <div className="grid grid-cols-3 gap-1.5">
+                <DimensionField
+                  label="Grow"
+                  value={effectiveStyle.flexGrow !== undefined ? String(effectiveStyle.flexGrow) : ""}
+                  onChange={(v) => set({ flexGrow: v })}
+                  presets={["0", "1"]}
+                  placeholder="0"
+                />
+                <DimensionField
+                  label="Shrink"
+                  value={effectiveStyle.flexShrink !== undefined ? String(effectiveStyle.flexShrink) : ""}
+                  onChange={(v) => set({ flexShrink: v })}
+                  presets={["0", "1"]}
+                  placeholder="1"
+                />
+                <DimensionField
+                  label="Basis"
+                  value={effectiveStyle.flexBasis || ""}
+                  onChange={(v) => set({ flexBasis: v })}
+                  presets={["auto", "100%"]}
+                  placeholder="auto"
+                />
+              </div>
+            </div>
           </div>
         </Section>
 

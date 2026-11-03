@@ -1,5 +1,11 @@
+import { createBlockFromType, createBlockFromPresetId } from "@/lib/openpage/block-factory";
+import type { BlockConfig, BlockType } from "@/components/openpage/blocks/types";
+
 /** MIME type the Blocks panel writes when a widget, section or global widget is dragged. */
 export const OPENPAGE_DRAG_MIME = "application/x-openpage-drag";
+
+/** MIME type used when an existing block in the tree (e.g. from Navigator) is dragged. */
+export const OPENPAGE_BLOCK_ID_MIME = "application/x-openpage-block-id";
 
 export type DropPayload =
   | { kind: "block"; type: string; label?: string }
@@ -35,4 +41,41 @@ export function readDropPayload(dataTransfer: Pick<DataTransfer, "getData"> | nu
   // Some browsers hide custom MIME types on drop, so the Blocks panel also
   // writes text/plain; both are checked.
   return parseDropPayload(dataTransfer.getData(OPENPAGE_DRAG_MIME)) ?? parseDropPayload(dataTransfer.getData("text/plain"));
+}
+
+/** Read an existing block id carried by a drag (e.g. from the Navigator tree). */
+export function readDraggedBlockId(dataTransfer: Pick<DataTransfer, "getData"> | null | undefined): string | null {
+  if (!dataTransfer) return null;
+  const id = dataTransfer.getData(OPENPAGE_BLOCK_ID_MIME);
+  if (id && typeof id === "string" && id.trim().length > 0) return id.trim();
+  return null;
+}
+
+/** Build a new block from a parsed drop payload (block, preset, or global). */
+export function buildBlockFromPayload(
+  payload: DropPayload,
+  globalWidgets?: Array<{ id: string; name: string; block: BlockConfig }>,
+): { block: BlockConfig | null; label: string } {
+  if (payload.kind === "block") {
+    return {
+      block: createBlockFromType(payload.type as BlockType),
+      label: payload.label || payload.type,
+    };
+  }
+  if (payload.kind === "preset") {
+    return {
+      block: createBlockFromPresetId(payload.presetId),
+      label: payload.label || "Section",
+    };
+  }
+  if (payload.kind === "global") {
+    const gw = globalWidgets?.find((w) => w.id === payload.globalWidgetId);
+    if (gw) {
+      return {
+        block: { ...JSON.parse(JSON.stringify(gw.block)), id: `block-${Date.now()}` },
+        label: gw.name || payload.label || "Global Widget",
+      };
+    }
+  }
+  return { block: null, label: "Block" };
 }

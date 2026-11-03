@@ -18,12 +18,19 @@ import {
   Type,
   X,
 } from "lucide-react";
+import { toast } from "sonner";
 import type { BlockConfig, BlockType } from "@/components/openpage/blocks/types";
 import { useConfigStore } from "@/components/openpage/store/configStore";
 import { useEditorStore } from "@/components/openpage/store/editorStore";
 import { blockMetadata } from "@/lib/openpage/block-metadata";
-import { createBlockFromType, isDivBlock } from "@/lib/openpage/block-factory";
+import { isDivBlock } from "@/lib/openpage/block-factory";
 import { findBlockLocation, isSameOrInside } from "@/lib/openpage/block-tree";
+import {
+  OPENPAGE_BLOCK_ID_MIME,
+  readDropPayload,
+  readDraggedBlockId,
+  buildBlockFromPayload,
+} from "@/lib/openpage/drag-payload";
 
 const INPUT_CLS =
   "w-full px-2.5 py-1.5 rounded-lg border border-border-default bg-bg-2 text-text-0 text-[11.5px] placeholder:text-text-3 outline-none hover:border-border-hover focus:border-green";
@@ -87,10 +94,12 @@ function TreeNode({
   const updateBlockProps = useConfigStore((s) => s.updateBlockProps);
   const moveBlockTo = useConfigStore((s) => s.moveBlockTo);
   const addBlockToColumn = useConfigStore((s) => s.addBlockToColumn);
+  const addBlock = useConfigStore((s) => s.addBlock);
 
   const [renaming, setRenaming] = useState(false);
   const [draft, setDraft] = useState(labelFor(block));
-  const [dropInside, setDropInside] = useState(false);
+  const [dropInsideCol, setDropInsideCol] = useState<number | null>(null);
+  const [dropPos, setDropPos] = useState<"before" | "after" | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
   const children = childrenOf(block);
@@ -99,57 +108,100 @@ function TreeNode({
   const hidden = !!block.style?.hideOnDesktop || !!block.style?.hideOnTablet || !!block.style?.hideOnMobile;
   const selected = selectedBlockId === block.id;
 
+  const cols = Array.isArray(block.props?.columns)
+    ? (block.props.columns as Array<{ width: number; blocks?: BlockConfig[] }>)
+    : [];
+
   const commitRename = () => {
     setRenaming(false);
     const next = draft.trim();
     updateBlockProps(block.id, { __label: next || undefined });
   };
 
-  const resolveTargetAfter = (target: BlockConfig) => {
+  const resolveTarget = (target: BlockConfig, pos: "before" | "after") => {
     const source = useConfigStore.getState().getActivePageBlocks();
     const loc = findBlockLocation(source, target.id);
     if (!loc) return null;
-    if (loc.sectionId == null) return { kind: "root" as const, index: loc.index + 1 };
+    const index = loc.index + (pos === "after" ? 1 : 0);
+    if (loc.sectionId == null) return { kind: "root" as const, index };
     return {
       kind: "column" as const,
       sectionId: loc.sectionId,
       colIndex: loc.colIndex ?? 0,
-      index: loc.index + 1,
+      index,
     };
   };
 
-  const handleDropAfter = (event: React.DragEvent) => {
+  const handleDropOnRow = (event: React.DragEvent) => {
     event.preventDefault();
     event.stopPropagation();
-    const dragged = event.dataTransfer.getData("application/x-openpage-block-id");
-    if (!dragged || dragged === block.id) return;
-    const source = useConfigStore.getState().getActivePageBlocks();
-    if (isSameOrInside(source, dragged, block.id)) return;
-    const target = resolveTargetAfter(block);
-    if (target) moveBlockTo(dragged, target);
-  };
+    const pos = dropPos ?? "after";
+    setDropPos(null);
+    useEditorStore.getState().setDraggedItem(null);
 
-  const handleDropInside = (event: React.DragEvent) => {
-    event.preventDefault();
-    event.stopPropagation();
-    setDropInside(false);
-    const dragged = event.dataTransfer.getData("application/x-openpage-block-id");
+    // 1. Existing block reorder (dragged from Navigator)
+    const dragged = readDraggedBlockId(event.dataTransfer);
     if (dragged) {
       if (dragged === block.id) return;
       const source = useConfigStore.getState().getActivePageBlocks();
       if (isSameOrInside(source, dragged, block.id)) return;
-      moveBlockTo(dragged, { kind: "column", sectionId: block.id, colIndex: 0, index: undefined });
+      const target = resolveTarget(block, pos);
+      if (target) {
+        moveBlockTo(dragged, target);
+        selectBlock(dragged);
+      }
       return;
     }
-    const payload = event.dataTransfer.getData("application/x-openpage-drag");
+
+    // 2. New block / preset / global dragged from Blocks panel
+    const payload = readDropPayload(event.dataTransfer);
     if (!payload) return;
     try {
-      const parsed = JSON.parse(payload) as { kind?: string; type?: BlockType };
-      if (parsed.kind !== "block" || !parsed.type) return;
-      const created = createBlockFromType(parsed.type);
+      const globalWidgets = useConfigStore.getState().config.globalWidgets;
+      const { block: created, label } = buildBlockFromPayload(payload, globalWidgets);
       if (!created) return;
-      addBlockToColumn(block.id, 0, created);
+      const target = resolveTarget(block, pos);
+      if (target) {
+        if (target.kind === "root") {
+          addBlock(created, target.index ?? undefined);
+        } else {
+          addBlockToColumn(target.sectionId, target.colIndex, created, target.index ?? undefined);
+        }
+        selectBlock(created.id);
+        toast.success(`${label} inserted`);
+      }
+    } catch {
+      return;
+    }
+  };
+
+  const handleDropInside = (event: React.DragEvent, colIndex = 0) => {
+    event.preventDefault();
+    event.stopPropagation();
+    setDropInsideCol(null);
+    useEditorStore.getState().setDraggedItem(null);
+
+    // 1. Existing block moved inside container column
+    const dragged = readDraggedBlockId(event.dataTransfer);
+    if (dragged) {
+      if (dragged === block.id) return;
+      const source = useConfigStore.getState().getActivePageBlocks();
+      if (isSameOrInside(source, dragged, block.id)) return;
+      moveBlockTo(dragged, { kind: "column", sectionId: block.id, colIndex, index: undefined });
+      selectBlock(dragged);
+      return;
+    }
+
+    // 2. New block / preset / global dragged from Blocks panel
+    const payload = readDropPayload(event.dataTransfer);
+    if (!payload) return;
+    try {
+      const globalWidgets = useConfigStore.getState().config.globalWidgets;
+      const { block: created, label } = buildBlockFromPayload(payload, globalWidgets);
+      if (!created) return;
+      addBlockToColumn(block.id, colIndex, created);
       selectBlock(created.id);
+      toast.success(cols.length > 1 ? `${label} added to Column ${colIndex + 1}` : `${label} added`);
     } catch {
       return;
     }
@@ -160,11 +212,28 @@ function TreeNode({
       <div
         draggable={!renaming}
         onDragStart={(e) => {
+          e.dataTransfer.setData(OPENPAGE_BLOCK_ID_MIME, block.id);
           e.dataTransfer.setData("application/x-openpage-block-id", block.id);
+          e.dataTransfer.setData("text/plain", block.id);
           e.dataTransfer.effectAllowed = "move";
+          useEditorStore.getState().setDraggedItem({
+            kind: "block",
+            type: block.type as BlockType,
+            label: labelFor(block),
+          });
         }}
-        onDragOver={(e) => e.preventDefault()}
-        onDrop={handleDropAfter}
+        onDragEnd={() => {
+          useEditorStore.getState().setDraggedItem(null);
+        }}
+        onDragOver={(e) => {
+          e.preventDefault();
+          const rect = e.currentTarget.getBoundingClientRect();
+          setDropPos(e.clientY < rect.top + rect.height / 2 ? "before" : "after");
+        }}
+        onDragLeave={(e) => {
+          if (!e.currentTarget.contains(e.relatedTarget as Node)) setDropPos(null);
+        }}
+        onDrop={handleDropOnRow}
         onClick={() => selectBlock(block.id)}
         onDoubleClick={() => {
           setDraft(labelFor(block));
@@ -182,6 +251,11 @@ function TreeNode({
         } ${hidden ? "opacity-40" : ""}`}
         style={{ paddingLeft: 6 + depth * 14 }}
       >
+        {dropPos ? (
+          <span
+            className={`pointer-events-none absolute left-0 right-0 h-0.5 bg-green rounded ${dropPos === "before" ? "top-0" : "bottom-0"}`}
+          />
+        ) : null}
         <button
           type="button"
           onClick={(e) => {
@@ -284,20 +358,45 @@ function TreeNode({
       ) : null}
 
       {expanded && isContainer(block) ? (
-        <div
-          onDragOver={(e) => {
-            e.preventDefault();
-            setDropInside(true);
-          }}
-          onDragLeave={() => setDropInside(false)}
-          onDrop={handleDropInside}
-          className={`mx-2 my-0.5 rounded border border-dashed text-[9.5px] text-center transition-colors ${
-            dropInside ? "border-green bg-green/10 text-green py-1.5" : "border-transparent text-text-3/70 py-0.5 hover:border-border-hover"
-          }`}
-          style={{ marginLeft: 20 + depth * 14 }}
-        >
-          Drop inside
-        </div>
+        cols.length <= 1 ? (
+          <div
+            onDragOver={(e) => {
+              e.preventDefault();
+              setDropInsideCol(0);
+            }}
+            onDragLeave={() => setDropInsideCol(null)}
+            onDrop={(e) => handleDropInside(e, 0)}
+            className={`mx-2 my-0.5 rounded border border-dashed text-[9.5px] text-center transition-colors ${
+              dropInsideCol === 0
+                ? "border-green bg-green/10 text-green py-1.5"
+                : "border-transparent text-text-3/70 py-0.5 hover:border-border-hover"
+            }`}
+            style={{ marginLeft: 20 + depth * 14 }}
+          >
+            Drop inside
+          </div>
+        ) : (
+          <div className="flex flex-col gap-0.5 my-0.5" style={{ marginLeft: 20 + depth * 14 }}>
+            {cols.map((_, cIdx) => (
+              <div
+                key={cIdx}
+                onDragOver={(e) => {
+                  e.preventDefault();
+                  setDropInsideCol(cIdx);
+                }}
+                onDragLeave={() => setDropInsideCol(null)}
+                onDrop={(e) => handleDropInside(e, cIdx)}
+                className={`mx-2 rounded border border-dashed text-[9.5px] text-center transition-colors ${
+                  dropInsideCol === cIdx
+                    ? "border-green bg-green/10 text-green py-1"
+                    : "border-border-default/40 text-text-3/70 py-0.5 hover:border-border-hover"
+                }`}
+              >
+                Drop inside Column {cIdx + 1}
+              </div>
+            ))}
+          </div>
+        )
       ) : null}
     </li>
   );
@@ -323,20 +422,26 @@ export function NavigatorTree() {
   const handleRootDrop = (event: React.DragEvent) => {
     event.preventDefault();
     setRootDrop(false);
-    const dragged = event.dataTransfer.getData("application/x-openpage-block-id");
+    useEditorStore.getState().setDraggedItem(null);
+
+    // 1. Existing block moved to end of root
+    const dragged = readDraggedBlockId(event.dataTransfer);
     if (dragged) {
       moveBlockTo(dragged, { kind: "root", index: undefined });
+      selectBlock(dragged);
       return;
     }
-    const payload = event.dataTransfer.getData("application/x-openpage-drag");
+
+    // 2. New block / preset / global from Blocks panel
+    const payload = readDropPayload(event.dataTransfer);
     if (!payload) return;
     try {
-      const parsed = JSON.parse(payload) as { kind?: string; type?: BlockType };
-      if (parsed.kind !== "block" || !parsed.type) return;
-      const created = createBlockFromType(parsed.type);
+      const globalWidgets = useConfigStore.getState().config.globalWidgets;
+      const { block: created, label } = buildBlockFromPayload(payload, globalWidgets);
       if (!created) return;
       addBlock(created);
       selectBlock(created.id);
+      toast.success(`${label} added`);
     } catch {
       return;
     }

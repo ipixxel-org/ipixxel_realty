@@ -183,6 +183,10 @@ export interface BlockStyle {
   flexDirection?: string;
   flexWrap?: string;
   flex?: string;
+  flexGrow?: string | number;
+  flexShrink?: string | number;
+  flexBasis?: string;
+  order?: string | number;
   justifyContent?: string;
   alignItems?: string;
   alignSelf?: string;

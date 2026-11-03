@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
-import { Plus, Undo2, Redo2 } from "lucide-react";
+import { Plus, Undo2, Redo2, Search, Layers, History, Grid } from "lucide-react";
 import { useConfigStore } from "@/components/openpage/store/configStore";
 import { useEditorStore } from "@/components/openpage/store/editorStore";
 import type { PageConfig } from "@/components/openpage/blocks/types";
@@ -154,6 +154,13 @@ export function CanvasToolbar() {
 
   const spotlightOpen = useEditorStore((s) => s.spotlightOpen);
   const toggleSpotlight = useEditorStore((s) => s.toggleSpotlight);
+  const openLeftTab = useEditorStore((s) => s.openLeftTab);
+  const leftTab = useEditorStore((s) => s.leftTab);
+  const leftSidebarOpen = useEditorStore((s) => s.leftSidebarOpen);
+  const toggleHistory = useEditorStore((s) => s.toggleHistory);
+  const historyOpen = useEditorStore((s) => s.historyOpen);
+  const showGrid = useEditorStore((s) => s.showGrid);
+  const toggleShowGrid = useEditorStore((s) => s.toggleShowGrid);
 
   return (
     <div className="h-11 bg-bg-1 border-b border-border-default flex items-center px-3 gap-2 justify-between">
@@ -191,6 +198,62 @@ export function CanvasToolbar() {
       {/* Right controls: Undo / Redo. Device preview lives in the top
           header; Ctrl+K still opens the command palette. */}
       <div className="flex items-center gap-1.5 shrink-0">
+        {/* Navigator shortcut */}
+        <button
+          type="button"
+          onClick={() => openLeftTab("layers")}
+          className={`px-2 py-1.5 rounded-lg border text-[11px] font-medium transition-colors flex items-center gap-1 ${
+            leftSidebarOpen && leftTab === "layers"
+              ? "bg-[#6d5dfc]/15 text-[#6d5dfc] border-[#6d5dfc]/30"
+              : "border-border-default bg-bg-2 text-text-3 hover:text-text-1 hover:bg-bg-3"
+          }`}
+          title="Element Hierarchy & Navigator"
+        >
+          <Layers size={13} />
+          <span className="hidden sm:inline">Navigator</span>
+        </button>
+
+        {/* Finder (Spotlight) */}
+        <button
+          type="button"
+          onClick={toggleSpotlight}
+          className="px-2 py-1.5 rounded-lg border border-border-default bg-bg-2 text-text-3 hover:text-text-1 hover:bg-bg-3 transition-colors flex items-center gap-1 text-[11px]"
+          title="Finder / Command Palette (Ctrl+K)"
+        >
+          <Search size={13} />
+          <span className="hidden sm:inline">Finder</span>
+        </button>
+
+        {/* Grid overlay toggle */}
+        <button
+          type="button"
+          onClick={toggleShowGrid}
+          className={`p-1.5 rounded-lg border transition-colors ${
+            showGrid
+              ? "bg-green/15 text-green border-green/30"
+              : "border-border-default bg-bg-2 text-text-3 hover:text-text-1 hover:bg-bg-3"
+          }`}
+          title="Toggle alignment grid"
+        >
+          <Grid size={13} />
+        </button>
+
+        {/* Revision History */}
+        <button
+          type="button"
+          onClick={toggleHistory}
+          className={`p-1.5 rounded-lg border transition-colors ${
+            historyOpen
+              ? "bg-[#6d5dfc]/15 text-[#6d5dfc] border-[#6d5dfc]/30"
+              : "border-border-default bg-bg-2 text-text-3 hover:text-text-1 hover:bg-bg-3"
+          }`}
+          title="Revision History"
+        >
+          <History size={13} />
+        </button>
+
+        <div className="w-[1px] h-4 bg-border-default mx-0.5" />
+
         {/* Undo / Redo */}
         <button
           type="button"

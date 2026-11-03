@@ -7,6 +7,7 @@ import {
   PointerSensor,
   useSensor,
   useSensors,
+  useDroppable,
   DragOverlay,
   type DragEndEvent,
   type DragStartEvent,
@@ -26,11 +27,10 @@ import { RenderBlock } from "@/components/openpage/blocks/registry";
 import { resolveSiteTheme, siteBrandAttrs, siteThemeCSS, sitePageBackground } from "@/lib/openpage/theme-presets";
 import { useGoogleFonts } from "@/lib/openpage/useGoogleFonts";
 import { blockFontFamilies } from "@/lib/openpage/block-fonts";
-import { createBlockFromType, createBlockFromPresetId } from "@/lib/openpage/block-factory";
-import { readDropPayload } from "@/lib/openpage/drag-payload";
+import { readDropPayload, readDraggedBlockId, buildBlockFromPayload } from "@/lib/openpage/drag-payload";
 import { canvasCollision } from "@/lib/openpage/canvas-collision";
 import { findBlock, allAtRoot, findColumnList } from "@/lib/openpage/block-tree";
-import type { BlockConfig, BlockType } from "@/components/openpage/blocks/types";
+import type { BlockConfig } from "@/components/openpage/blocks/types";
 import { ElementEditorContext } from "@/components/openpage/blocks/El";
 import { DeviceProvider } from "@/components/openpage/runtime/device";
 
@@ -47,13 +47,20 @@ function CanvasDropZone({
 }) {
   const [isOver, setIsOver] = useState(false);
   const draggedItem = useEditorStore((s) => s.draggedItem);
+  const canvasDragging = useEditorStore((s) => s.isDragging);
   const addBlock = useConfigStore((s) => s.addBlock);
+  const moveBlockTo = useConfigStore((s) => s.moveBlockTo);
   const selectBlock = useEditorStore((s) => s.selectBlock);
+  const { setNodeRef } = useDroppable({
+    id: `canvas-slot-${index}`,
+    data: { type: "canvas-slot", index },
+  });
 
-  const isDragging = Boolean(draggedItem);
+  const isDragging = Boolean(draggedItem) || canvasDragging;
 
   return (
     <div
+      ref={setNodeRef}
       onDragOver={(e) => {
         e.preventDefault();
         e.dataTransfer.dropEffect = "copy";
@@ -68,26 +75,23 @@ function CanvasDropZone({
         e.preventDefault();
         setIsOver(false);
         useEditorStore.getState().setDraggedItem(null);
-        // Only Blocks-panel widgets (custom MIME, or text/plain for browsers
+
+        // 1. Check if an existing block from the Navigator was dragged
+        const existingId = readDraggedBlockId(e.dataTransfer);
+        if (existingId) {
+          moveBlockTo(existingId, { kind: "root", index });
+          selectBlock(existingId);
+          toast.success("Section moved");
+          return;
+        }
+
+        // 2. Only Blocks-panel widgets (custom MIME, or text/plain for browsers
         // that hide it). A dragged image / link / text is ignored.
         const payload = readDropPayload(e.dataTransfer);
         if (!payload) return;
         try {
-          let newBlock: BlockConfig | null = null;
-          let label = "Block";
-          if (payload.kind === "block") {
-            newBlock = createBlockFromType(payload.type as BlockType);
-            label = payload.label || payload.type;
-          } else if (payload.kind === "preset") {
-            newBlock = createBlockFromPresetId(payload.presetId);
-            label = payload.label || "Section";
-          } else if (payload.kind === "global") {
-            const gw = useConfigStore.getState().config.globalWidgets?.find((w) => w.id === payload.globalWidgetId);
-            if (gw) {
-              newBlock = { ...JSON.parse(JSON.stringify(gw.block)), id: `block-${Date.now()}` };
-              label = gw.name;
-            }
-          }
+          const globalWidgets = useConfigStore.getState().config.globalWidgets;
+          const { block: newBlock, label } = buildBlockFromPayload(payload, globalWidgets);
           if (newBlock) {
             addBlock(newBlock, index);
             selectBlock(newBlock.id);
@@ -97,29 +101,27 @@ function CanvasDropZone({
           console.error("Drop in canvas failed", err);
         }
       }}
-      className={`transition-all duration-200 relative flex items-center justify-center select-none ${
-        isOver
+      className={`transition-all duration-200 relative flex items-center justify-center select-none ${isOver
           ? "h-12 my-1 bg-green-500/15 border-2 border-dashed border-green rounded-xl scale-[1.01] shadow-[0_0_20px_rgba(34,197,94,0.25)] z-30"
           : isDragging
-          ? "h-8 my-1 bg-green-500/5 border border-dashed border-green/40 hover:border-green hover:bg-green-500/15 rounded-lg z-20"
-          : "h-2 opacity-0 hover:opacity-100 hover:h-8 hover:bg-green-500/10 hover:border hover:border-dashed hover:border-green/40 rounded z-10"
-      }`}
+            ? "h-8 my-1 bg-green-500/5 border border-dashed border-green/40 hover:border-green hover:bg-green-500/15 rounded-lg z-20"
+            : "h-2 opacity-0 hover:opacity-100 hover:h-8 hover:bg-green-500/10 hover:border hover:border-dashed hover:border-green/40 rounded z-10"
+        }`}
     >
       {(isOver || isDragging) && (
         <div
-          className={`flex items-center gap-1.5 text-[11px] font-semibold tracking-wide pointer-events-none transition-all ${
-            isOver ? "text-green scale-105" : "text-green/80"
-          }`}
+          className={`flex items-center gap-1.5 text-[11px] font-semibold tracking-wide pointer-events-none transition-all ${isOver ? "text-green scale-105" : "text-green/80"
+            }`}
         >
           <Plus size={13} className={isOver ? "stroke-[2.5]" : ""} />
           <span>
             {isOver
               ? `Drop to insert ${draggedItem?.label || "block"} here`
               : isFirst
-              ? "Drop here (Top)"
-              : isLast
-              ? "Drop here (Bottom)"
-              : "Drop here"}
+                ? "Drop here (Top)"
+                : isLast
+                  ? "Drop here (Bottom)"
+                  : "Drop here"}
           </span>
         </div>
       )}
@@ -305,6 +307,39 @@ export function Canvas() {
     // ---- Elementor-style group move: dragging any selected root section
     //      moves the whole selection together ----
     if (activeData?.type !== "column-block" && selectedRootIds.length > 1 && selectedRootIds.includes(String(active.id))) {
+      if (overData?.type === "canvas-slot") {
+        moveBlocks(selectedRootIds, Number(overData.index));
+        return;
+      }
+      if (overData?.type === "column" || overData?.type === "column-slot" || overData?.type === "column-block") {
+        const targetSectionId = overData.type === "column"
+          ? overData.sectionBlockId
+          : overData.type === "column-slot"
+            ? overData.sectionBlockId
+            : overData.columnId;
+        const targetColIndex = overData.colIndex as number;
+        // Never into one of the selected blocks themselves
+        if (selectedRootIds.includes(String(targetSectionId))) return;
+        let targetIndex: number | undefined;
+        if (overData.type === "column-block") {
+          const targetBlocks = getColumnBlocks(targetSectionId, targetColIndex);
+          const idx = targetBlocks?.findIndex((b) => b.id === over.id) ?? -1;
+          if (idx >= 0) targetIndex = idx;
+        } else if (overData.type === "column-slot") {
+          targetIndex = Number(overData.index);
+        }
+        for (let i = 0; i < selectedRootIds.length; i++) {
+          const bId = selectedRootIds[i];
+          const insertIdx = targetIndex != null ? targetIndex + i : undefined;
+          moveBlockTo(bId, {
+            kind: "column",
+            sectionId: String(targetSectionId),
+            colIndex: targetColIndex,
+            index: insertIdx,
+          });
+        }
+        return;
+      }
       const overIndex = blocks.findIndex((b) => b.id === over.id);
       if (overIndex !== -1) moveBlocks(selectedRootIds, overIndex);
       return;
@@ -314,6 +349,22 @@ export function Canvas() {
     if (activeData?.type === "column-block") {
       const activeSecId = String(activeData.columnId);
       const activeColIdx = activeData.colIndex as number;
+
+      // 0) Dropped on an exact insertion gap: same column, another column,
+      //    or back out at the root level.
+      if (overData?.type === "column-slot") {
+        moveBlockTo(String(active.id), {
+          kind: "column",
+          sectionId: String(overData.sectionBlockId),
+          colIndex: Number(overData.colIndex),
+          index: Number(overData.index),
+        });
+        return;
+      }
+      if (overData?.type === "canvas-slot") {
+        moveBlockTo(String(active.id), { kind: "root", index: Number(overData.index) });
+        return;
+      }
 
       // 1) Reorder within the same column
       if (
@@ -335,7 +386,11 @@ export function Canvas() {
       if (!findBlock(blocks, String(active.id))) return;
 
       // 2) Move into a different column (at exact position or the end)
-      if (overData?.type === "column-block" && overData.columnId !== activeSecId) {
+      // Handles moving to a different section OR different column in the same section!
+      if (
+        overData?.type === "column-block" &&
+        (overData.columnId !== activeSecId || overData.colIndex !== activeColIdx)
+      ) {
         const targetBlocks = getColumnBlocks(overData.columnId, overData.colIndex);
         const overIndex = targetBlocks?.findIndex((b) => b.id === over.id) ?? -1;
         moveBlockTo(String(active.id), {
@@ -363,17 +418,27 @@ export function Canvas() {
       return;
     }
 
+    // ---- Root-level block dropped on an exact root insertion gap ----
+    if (overData?.type === "canvas-slot") {
+      moveBlockTo(String(active.id), { kind: "root", index: Number(overData.index) });
+      return;
+    }
+
     // ---- Root-level blocks being dropped into a column ----
-    if (overData?.type === "column" || overData?.type === "column-block") {
+    if (overData?.type === "column" || overData?.type === "column-block" || overData?.type === "column-slot") {
       const targetSectionId = overData.type === "column"
         ? overData.sectionBlockId
-        : overData.columnId;
+        : overData.type === "column-slot"
+          ? overData.sectionBlockId
+          : overData.columnId;
       const targetColIndex = overData.colIndex as number;
       let targetIndex: number | undefined;
       if (overData.type === "column-block") {
         const targetBlocks = getColumnBlocks(targetSectionId, targetColIndex);
         const idx = targetBlocks?.findIndex((b) => b.id === over.id) ?? -1;
         if (idx >= 0) targetIndex = idx;
+      } else if (overData.type === "column-slot") {
+        targetIndex = Number(overData.index);
       }
       moveBlockTo(String(active.id), {
         kind: "column",
@@ -417,75 +482,75 @@ export function Canvas() {
         role="region"
         aria-label={`Site preview, ${blocks.length} blocks, ${viewport} viewport`}
       >
-      <DndContext
-        sensors={sensors}
-        collisionDetection={collisionDetection}
-        onDragStart={handleDragStart}
-        onDragEnd={handleDragEnd}
-        onDragCancel={() => {
-          setActiveId(null);
-          setIsDragging(false);
-        }}
-      >
-        {/* During a group drag the non-grabbed selected sections are frozen in
+        <DndContext
+          sensors={sensors}
+          collisionDetection={collisionDetection}
+          onDragStart={handleDragStart}
+          onDragEnd={handleDragEnd}
+          onDragCancel={() => {
+            setActiveId(null);
+            setIsDragging(false);
+          }}
+        >
+          {/* During a group drag the non-grabbed selected sections are frozen in
             place: keep them out of the sortable context so they neither shuffle
             nor act as drop targets. */}
-        <SortableContext
-          items={blocks
-            .map((b) => b.id)
-            .filter((id) => !(isGroupDrag && selectedRootIds.includes(id) && id !== activeId))}
-          strategy={verticalListSortingStrategy}
-        >
-          {allSelectedAtRoot && <MultiSelectBar blocks={blocks} selectedIds={selectedRootIds} />}
-          <CanvasDropZone index={0} isFirst />
-          {blocks.map((block, idx) => (
-            <div key={block.id} className="relative">
-              <SortableBlock
-                block={block}
-                isSelected={selectedBlockId === block.id}
-                isMultiSelected={selectedBlockIds.includes(block.id)}
-                frozen={isGroupDrag && selectedRootIds.includes(block.id) && block.id !== activeId}
-                onSelect={() => selectBlock(block.id)}
-              >
-                <ElementEditorContext.Provider value={{ blockId: block.id, isEditing: true }}>
-                  <RenderBlock block={block} />
-                </ElementEditorContext.Provider>
-              </SortableBlock>
-              <CanvasDropZone index={idx + 1} isLast={idx === blocks.length - 1} />
-            </div>
-          ))}
-        </SortableContext>
-        <DragOverlay dropAnimation={null}>
-          {activeBlock ? (
-            <div className="opacity-95 border-2 border-[#5b9cff] shadow-2xl rounded-xl overflow-hidden pointer-events-none bg-bg-1 scale-[0.99] max-w-4xl">
-              <div className="bg-[#5b9cff] text-white text-[10px] font-semibold px-3 py-1.5 flex items-center gap-1.5 shadow-sm">
-                <GripVertical size={12} />
-                <span>
-                  {isGroupDrag ? `Moving ${selectedRootIds.length} sections` : `Moving section: ${activeBlock.type}`}
-                </span>
+          <SortableContext
+            items={blocks
+              .map((b) => b.id)
+              .filter((id) => !(isGroupDrag && selectedRootIds.includes(id) && id !== activeId))}
+            strategy={verticalListSortingStrategy}
+          >
+            {allSelectedAtRoot && <MultiSelectBar blocks={blocks} selectedIds={selectedRootIds} />}
+            <CanvasDropZone index={0} isFirst />
+            {blocks.map((block, idx) => (
+              <div key={block.id} className="relative">
+                <SortableBlock
+                  block={block}
+                  isSelected={selectedBlockId === block.id}
+                  isMultiSelected={selectedBlockIds.includes(block.id)}
+                  frozen={isGroupDrag && selectedRootIds.includes(block.id) && block.id !== activeId}
+                  onSelect={() => selectBlock(block.id)}
+                >
+                  <ElementEditorContext.Provider value={{ blockId: block.id, isEditing: true }}>
+                    <RenderBlock block={block} />
+                  </ElementEditorContext.Provider>
+                </SortableBlock>
+                <CanvasDropZone index={idx + 1} isLast={idx === blocks.length - 1} />
               </div>
-              {isGroupDrag && selectedRootIds.length > 1 && (
-                <div className="bg-blue-700/90 text-white text-[10px] font-semibold px-3 py-1 flex items-center gap-1.5 border-t border-white/20">
-                  <Layers size={11} />
+            ))}
+          </SortableContext>
+          <DragOverlay dropAnimation={null}>
+            {activeBlock ? (
+              <div className="opacity-95 border-2 border-[#5b9cff] shadow-2xl rounded-xl overflow-hidden pointer-events-none bg-bg-1 scale-[0.99] max-w-4xl">
+                <div className="bg-[#5b9cff] text-white text-[10px] font-semibold px-3 py-1.5 flex items-center gap-1.5 shadow-sm">
+                  <GripVertical size={12} />
                   <span>
-                    {selectedRootIds
-                      .map((id) => findBlock(blocks, id)?.type ?? id)
-                      .filter((t, i, arr) => arr.indexOf(t) === i)
-                      .slice(0, 3)
-                      .join(", ")}
-                    {selectedRootIds.length > 3 ? ` +${selectedRootIds.length - 3} more` : ""}
+                    {isGroupDrag ? `Moving ${selectedRootIds.length} sections` : `Moving section: ${activeBlock.type}`}
                   </span>
                 </div>
-              )}
-              <div className="pointer-events-none opacity-80 max-h-[260px] overflow-hidden">
-                <ElementEditorContext.Provider value={{ blockId: activeBlock.id, isEditing: false }}>
-                  <RenderBlock block={activeBlock} />
-                </ElementEditorContext.Provider>
+                {isGroupDrag && selectedRootIds.length > 1 && (
+                  <div className="bg-blue-700/90 text-white text-[10px] font-semibold px-3 py-1 flex items-center gap-1.5 border-t border-white/20">
+                    <Layers size={11} />
+                    <span>
+                      {selectedRootIds
+                        .map((id) => findBlock(blocks, id)?.type ?? id)
+                        .filter((t, i, arr) => arr.indexOf(t) === i)
+                        .slice(0, 3)
+                        .join(", ")}
+                      {selectedRootIds.length > 3 ? ` +${selectedRootIds.length - 3} more` : ""}
+                    </span>
+                  </div>
+                )}
+                <div className="pointer-events-none opacity-80 max-h-[260px] overflow-hidden">
+                  <ElementEditorContext.Provider value={{ blockId: activeBlock.id, isEditing: false }}>
+                    <RenderBlock block={activeBlock} />
+                  </ElementEditorContext.Provider>
+                </div>
               </div>
-            </div>
-          ) : null}
-        </DragOverlay>
-      </DndContext>
+            ) : null}
+          </DragOverlay>
+        </DndContext>
       </div>
     </DeviceProvider>
   );
