@@ -4,6 +4,7 @@ import {
   DEFAULT_ATTRIBUTION_LABELS,
   DEFAULT_MARKETING_PLATFORMS,
 } from '../src/common/utils/lead-attribution.util';
+import { seedVisualBuilderTemplates } from './seed-visual-builder-templates';
 
 // Place this at: prisma/seed.ts
 // Run with: npx prisma db seed
@@ -63,7 +64,12 @@ async function seedRoles() {
     },
     { key: 'manager', name: 'Manager', scope: 'team' as const, sortOrder: 2 },
     { key: 'sales', name: 'Sales', scope: 'team' as const, sortOrder: 3 },
-    { key: 'telecaller', name: 'Telecaller', scope: 'team' as const, sortOrder: 4 },
+    {
+      key: 'telecaller',
+      name: 'Telecaller',
+      scope: 'team' as const,
+      sortOrder: 4,
+    },
   ];
 
   for (const role of roles) {
@@ -216,7 +222,9 @@ async function seedDemoOrg() {
     select: { id: true },
   });
   if (legacyBuilder) {
-    await prisma.organisationTemplate.deleteMany({ where: { templateId: legacyBuilder.id } });
+    await prisma.organisationTemplate.deleteMany({
+      where: { templateId: legacyBuilder.id },
+    });
     await prisma.landingPage.updateMany({
       where: { sourceTemplateId: legacyBuilder.id },
       data: { sourceTemplateId: null },
@@ -462,13 +470,23 @@ async function seedMarketingDemo(ctx?: {
         accessToken: DEMO_TOKEN,
         connectedBy: managerId || null,
         lastSyncAt: now,
-        metadata: { demo: true, seed: true, via: 'prisma_seed', mirroredFrom: 'meta' },
+        metadata: {
+          demo: true,
+          seed: true,
+          via: 'prisma_seed',
+          mirroredFrom: 'meta',
+        },
       },
       update: {
         status: 'connected',
         lastSyncAt: now,
         lastError: null,
-        metadata: { demo: true, seed: true, via: 'prisma_seed', mirroredFrom: 'meta' },
+        metadata: {
+          demo: true,
+          seed: true,
+          via: 'prisma_seed',
+          mirroredFrom: 'meta',
+        },
       },
     });
   }
@@ -903,7 +921,8 @@ async function seedMarketingDemo(ctx?: {
       firstTouchSource: 'Google Ads',
       lastTouchSource: 'Google Ads',
       gclid: 'demo_gclid_sahil',
-      landingPageUrl: 'https://skylinedev.example/green-vista?utm_source=google',
+      landingPageUrl:
+        'https://skylinedev.example/green-vista?utm_source=google',
       data: {
         fullName: 'Sahil Khan',
         name: 'Sahil Khan',
@@ -1036,14 +1055,30 @@ async function seedEmailTables() {
       updated_at TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP
     );
   `);
-  await prisma.$executeRawUnsafe(`ALTER TABLE identity.email_configs ADD COLUMN IF NOT EXISTS invite_subject TEXT;`);
-  await prisma.$executeRawUnsafe(`ALTER TABLE identity.email_configs ADD COLUMN IF NOT EXISTS invite_body TEXT;`);
-  await prisma.$executeRawUnsafe(`ALTER TABLE identity.email_configs ADD COLUMN IF NOT EXISTS reset_subject TEXT;`);
-  await prisma.$executeRawUnsafe(`ALTER TABLE identity.email_configs ADD COLUMN IF NOT EXISTS reset_body TEXT;`);
-  await prisma.$executeRawUnsafe(`ALTER TABLE identity.email_configs ADD COLUMN IF NOT EXISTS account_activated_subject TEXT;`);
-  await prisma.$executeRawUnsafe(`ALTER TABLE identity.email_configs ADD COLUMN IF NOT EXISTS account_activated_body TEXT;`);
-  await prisma.$executeRawUnsafe(`ALTER TABLE identity.email_configs ADD COLUMN IF NOT EXISTS account_deactivated_subject TEXT;`);
-  await prisma.$executeRawUnsafe(`ALTER TABLE identity.email_configs ADD COLUMN IF NOT EXISTS account_deactivated_body TEXT;`);
+  await prisma.$executeRawUnsafe(
+    `ALTER TABLE identity.email_configs ADD COLUMN IF NOT EXISTS invite_subject TEXT;`,
+  );
+  await prisma.$executeRawUnsafe(
+    `ALTER TABLE identity.email_configs ADD COLUMN IF NOT EXISTS invite_body TEXT;`,
+  );
+  await prisma.$executeRawUnsafe(
+    `ALTER TABLE identity.email_configs ADD COLUMN IF NOT EXISTS reset_subject TEXT;`,
+  );
+  await prisma.$executeRawUnsafe(
+    `ALTER TABLE identity.email_configs ADD COLUMN IF NOT EXISTS reset_body TEXT;`,
+  );
+  await prisma.$executeRawUnsafe(
+    `ALTER TABLE identity.email_configs ADD COLUMN IF NOT EXISTS account_activated_subject TEXT;`,
+  );
+  await prisma.$executeRawUnsafe(
+    `ALTER TABLE identity.email_configs ADD COLUMN IF NOT EXISTS account_activated_body TEXT;`,
+  );
+  await prisma.$executeRawUnsafe(
+    `ALTER TABLE identity.email_configs ADD COLUMN IF NOT EXISTS account_deactivated_subject TEXT;`,
+  );
+  await prisma.$executeRawUnsafe(
+    `ALTER TABLE identity.email_configs ADD COLUMN IF NOT EXISTS account_deactivated_body TEXT;`,
+  );
   await prisma.$executeRawUnsafe(`
     CREATE TABLE IF NOT EXISTS audit.email_logs (
       id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
@@ -1056,14 +1091,24 @@ async function seedEmailTables() {
       sent_at TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP
     );
   `);
-  await prisma.$executeRawUnsafe(`CREATE INDEX IF NOT EXISTS email_logs_to_idx ON audit.email_logs("to");`);
-  await prisma.$executeRawUnsafe(`CREATE INDEX IF NOT EXISTS email_logs_status_idx ON audit.email_logs(status);`);
-  await prisma.$executeRawUnsafe(`CREATE INDEX IF NOT EXISTS email_logs_sent_at_idx ON audit.email_logs(sent_at);`);
-  console.log('Email configuration & audit log tables initialized successfully.');
+  await prisma.$executeRawUnsafe(
+    `CREATE INDEX IF NOT EXISTS email_logs_to_idx ON audit.email_logs("to");`,
+  );
+  await prisma.$executeRawUnsafe(
+    `CREATE INDEX IF NOT EXISTS email_logs_status_idx ON audit.email_logs(status);`,
+  );
+  await prisma.$executeRawUnsafe(
+    `CREATE INDEX IF NOT EXISTS email_logs_sent_at_idx ON audit.email_logs(sent_at);`,
+  );
+  console.log(
+    'Email configuration & audit log tables initialized successfully.',
+  );
 }
 
 async function seedDemoPlanAndSubscription() {
-  const org = await prisma.organisation.findUnique({ where: { slug: 'skylinedev' } });
+  const org = await prisma.organisation.findUnique({
+    where: { slug: 'skylinedev' },
+  });
   if (!org) return;
 
   const plan = await prisma.plan.upsert({
@@ -1072,7 +1117,8 @@ async function seedDemoPlanAndSubscription() {
     create: {
       name: 'Starter',
       slug: 'starter',
-      description: 'For small teams getting started — 5 landing pages, 1 project, 10 users.',
+      description:
+        'For small teams getting started — 5 landing pages, 1 project, 10 users.',
       priceMonthly: 999,
       priceYearly: 9990,
       features: [
@@ -1136,7 +1182,8 @@ async function seedBasicPlan() {
     create: {
       name: 'Basic',
       slug: 'basic',
-      description: 'The default plan for every new workspace — enough to create a project, add units and start capturing leads.',
+      description:
+        'The default plan for every new workspace — enough to create a project, add units and start capturing leads.',
       priceMonthly: 0,
       priceYearly: 0,
       features: [
@@ -1166,6 +1213,7 @@ async function main() {
   await seedEmailTables();
   await seedDemoPlanAndSubscription();
   await seedBasicPlan();
+  await seedVisualBuilderTemplates(prisma);
 }
 
 main()
