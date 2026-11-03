@@ -3,7 +3,7 @@
 import { Icon } from "@/components/icons";
 import { formatDate, formatINR } from "@/lib/billing/pricing";
 import type { OrgCoupon, OrgCouponStatus } from "@/lib/billing/types";
-import { useBillingQuery } from "./context";
+import { useBillingEnv, useBillingQuery } from "./context";
 import { BLink, Empty, ErrorNote, Loading, Section } from "./ui";
 
 const STATUS: Record<OrgCouponStatus, { label: string; badge: string }> = {
@@ -23,6 +23,8 @@ const intervalLabel = (c: OrgCoupon) => (c.interval === "any" ? "Monthly & yearl
 /** Org Settings → Billing → Coupons: codes reserved for the org and public ones Super Admin listed. */
 export function OrgCouponsScreen() {
   const { data, error } = useBillingQuery((c) => c.listOrgCoupons(), []);
+  // "Use at checkout" only for people who can buy (billing:edit).
+  const { canEdit } = useBillingEnv();
   if (error) return <ErrorNote message={error} />;
   if (!data) return <Loading what="coupons" />;
   return (
@@ -77,7 +79,7 @@ export function OrgCouponsScreen() {
                     ) : null}
                   </td>
                   <td style={{ whiteSpace: "nowrap" }}>
-                    {c.status === "available" ? (
+                    {c.status === "available" && canEdit ? (
                       <BLink to="plans" params={{ coupon: c.code, interval: c.interval === "any" ? undefined : c.interval }} className="btn btn-ghost btn-sm">
                         <Icon name="tag" size={13} /> Use at checkout
                       </BLink>

@@ -162,6 +162,9 @@ export function OrgPackageRequests({ orgId, onChanged }: { orgId: string; onChan
   const { toast } = useToast();
   const canApprove = hasPermission("admin_subscriptions", "approve");
   const canReject = hasPermission("admin_subscriptions", "delete");
+  // PUT …/payment and …/coupon (edit); DELETE …/payment and …/coupon (delete).
+  const canMarkPaid = hasPermission("admin_subscriptions", "edit");
+  const canClear = canReject;
   const [rows, setRows] = useState<PackageChangeRequestRow[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [approving, setApproving] = useState<PackageChangeRequestRow | null>(null);
@@ -416,7 +419,7 @@ export function OrgPackageRequests({ orgId, onChanged }: { orgId: string; onChan
                       <td>
                         {r.status === "pending" ? (
                           <div className="bl-row" style={{ gap: 6, justifyContent: "flex-end", flexWrap: "nowrap" }}>
-                            {canApprove && requestTotal(r) != null ? (
+                            {canMarkPaid && requestTotal(r) != null ? (
                               <button
                                 type="button"
                                 className="btn btn-ghost btn-sm"
@@ -523,9 +526,9 @@ export function OrgPackageRequests({ orgId, onChanged }: { orgId: string; onChan
           error={payError}
           couponError={couponError}
           onSave={(v) => void savePayment(v)}
-          onClear={() => void clearPayment()}
+          onClear={canClear ? () => void clearPayment() : undefined}
           onApplyCoupon={(code) => void changeCoupon(code)}
-          onRemoveCoupon={() => void changeCoupon(null)}
+          onRemoveCoupon={canClear ? () => void changeCoupon(null) : undefined}
           onClose={() => setPaying(null)}
         />
       ) : null}

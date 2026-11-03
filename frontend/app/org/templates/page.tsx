@@ -37,7 +37,7 @@ import { useAuth } from "@/lib/auth-context";
 import { apiFetch } from "@/lib/api";
 import { Reveal } from "@/components/superadmin/reveal";
 import { PlanLockBadge, usePlanLocks } from "@/components/billing/locked";
-import { PLAN_LOCK_COPY } from "@/lib/plan-lock";
+import { ASK_ADMIN_UPGRADE, UpgradeOrAsk, useCanManageBilling, usePlanLockCopy } from "@/components/billing/limit-prompt";
 import { TemplateCover, TierBadge } from "@/components/superadmin/templates/shared";
 import { SiteRenderer } from "@/components/openpage/renderer/SiteRenderer";
 import { siteFromLandingPage } from "@/lib/openpage/content";
@@ -64,6 +64,9 @@ const LIMIT = 10;
 export default function OrgTemplatesPage() {
   const { accessToken, hasPermission } = useAuth();
   const router = useRouter();
+  // Billing editors keep the Upgrade buttons; everyone else is told to ask their organisation admin.
+  const canManageBilling = useCanManageBilling();
+  const lockCopy = usePlanLockCopy();
 
   // One flag per Templates pill (named after the button it unlocks) —
   // enforced for the org admin too, whose access Super Admin sets. "Use"
@@ -502,14 +505,16 @@ export default function OrgTemplatesPage() {
                     >
                       <span style={{ fontSize: 18 }}>⚠️</span>
                       <div style={{ flex: 1, minWidth: 220 }}>
-                        Your {availableData.planName} plan allows{" "}
-                        <b>{availableData.maxAllowed}</b> template{availableData.maxAllowed === 1 ? "" : "s"} in your
-                        workspace and you have <b>{availableData.assignedCount}</b>. Remove a template or upgrade your
-                        plan to add more.
+                        Your organisation&apos;s {availableData.planName} plan allows{" "}
+                        <b>{availableData.maxAllowed}</b> template{availableData.maxAllowed === 1 ? "" : "s"} in its
+                        workspace and it has <b>{availableData.assignedCount}</b>.{" "}
+                        {canManageBilling ? "Remove a template or upgrade your plan to add more." : "Remove a template to add another."}
                       </div>
-                      <Link href="/org/settings?section=billing" className="btn btn-soft btn-sm">
-                        Upgrade plan
-                      </Link>
+                      <UpgradeOrAsk>
+                        <Link href="/org/settings?section=billing" className="btn btn-soft btn-sm">
+                          Upgrade plan
+                        </Link>
+                      </UpgradeOrAsk>
                     </div>
                   ) : null}
 
@@ -667,7 +672,7 @@ export default function OrgTemplatesPage() {
                                     fontWeight: 700,
                                   }}
                                 >
-                                  <Lock size={13} /> Upgrade to Unlock
+                                  <Lock size={13} /> {canManageBilling ? "Upgrade to Unlock" : "Not on your plan"}
                                 </button>
                               ) : isAssigned ? (
                                 <span
@@ -1059,7 +1064,7 @@ export default function OrgTemplatesPage() {
             }}
           >
             <option value="all">All Statuses</option>
-            <option value="paused">{PLAN_LOCK_COPY.template_paused.badge}</option>
+            <option value="paused">{lockCopy.template_paused.badge}</option>
           </select>
         ) : null}
 
@@ -1299,7 +1304,7 @@ export default function OrgTemplatesPage() {
                           style={{ height: 30, padding: "0 12px" }}
                           onClick={() => handleCardUse(tmpl)}
                           disabled={isPaused(tmpl)}
-                          title={isPaused(tmpl) ? PLAN_LOCK_COPY.template_paused.tooltip : undefined}
+                          title={isPaused(tmpl) ? lockCopy.template_paused.tooltip : undefined}
                         >
                           <Plus size={12} /> Use
                         </button>
@@ -1420,7 +1425,7 @@ export default function OrgTemplatesPage() {
                     type="button"
                     className="btn btn-primary btn-sm"
                     disabled={previewedIsPaused}
-                    title={previewedIsPaused ? PLAN_LOCK_COPY.template_paused.tooltip : undefined}
+                    title={previewedIsPaused ? lockCopy.template_paused.tooltip : undefined}
                     onClick={() => {
                       const id = previewId;
                       const name = previewData?.name ?? previewedTmpl?.name ?? "Landing Page";
@@ -1538,19 +1543,21 @@ export default function OrgTemplatesPage() {
         footer={
           <>
             <button className="btn btn-ghost" type="button" onClick={() => setUpgradePrompt(null)}>
-              Close
+              {canManageBilling ? "Close" : "OK"}
             </button>
-            <button
-              className="btn btn-primary"
-              type="button"
-              onClick={() => {
-                setUpgradePrompt(null);
-                router.push("/org/settings?section=billing");
-              }}
-              style={{ fontWeight: 700 }}
-            >
-              View Subscription Plans →
-            </button>
+            {canManageBilling ? (
+              <button
+                className="btn btn-primary"
+                type="button"
+                onClick={() => {
+                  setUpgradePrompt(null);
+                  router.push("/org/settings?section=billing");
+                }}
+                style={{ fontWeight: 700 }}
+              >
+                View Subscription Plans →
+              </button>
+            ) : null}
           </>
         }
       >
@@ -1574,6 +1581,7 @@ export default function OrgTemplatesPage() {
             <p style={{ margin: 0, fontSize: 13.5, color: "var(--ink-2)", lineHeight: 1.6 }}>
               {upgradePrompt?.body}
             </p>
+            {canManageBilling ? null : <p style={{ margin: "8px 0 0", fontSize: 13.5, color: "var(--ink-2)" }}>{ASK_ADMIN_UPGRADE}</p>}
           </div>
         </div>
       </Modal>
@@ -1745,6 +1753,7 @@ function TplCard({
   canRemove: boolean;
 }) {
   const [menuOpen, setMenuOpen] = useState(false);
+  const lockCopy = usePlanLockCopy();
   const meta = getTemplateMeta(tmpl.name, tmpl.thumbnail, tmpl.category);
   const isFree = (tmpl.tier ?? "free") === "free";
 
@@ -1808,7 +1817,7 @@ function TplCard({
                 className="tpl-btn-use"
                 onClick={onUse}
                 disabled={paused}
-                title={paused ? PLAN_LOCK_COPY.template_paused.tooltip : undefined}
+                title={paused ? lockCopy.template_paused.tooltip : undefined}
               >
                 <Plus size={13} />
                 <span>Use Template</span>

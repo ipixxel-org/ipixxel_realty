@@ -6,6 +6,7 @@
  */
 import type {
   AccessStatus,
+  BillingNotice,
   AdminCheckoutRow,
   CheckoutStatus,
   AdminCancelRequest,
@@ -102,6 +103,8 @@ export interface BillingClient {
   keepDefaultPicks(): Promise<RetentionChoices>;
   /** GET /org/billing/access — what's paused / view-only / offline, plus limits and modules. */
   getAccessStatus(): Promise<AccessStatus>;
+  /** GET /org/billing/notice — the banner for every member (no amounts; no billing permission needed). */
+  getBillingNotice(): Promise<BillingNotice>;
   /** GET /org/billing/invoices */
   listInvoices(req: PageRequest): Promise<Paged<Invoice>>;
   /** GET /org/billing/payments */
@@ -116,6 +119,8 @@ export interface BillingClient {
   /* ---------------- Super Admin (admin_subscriptions) ---------------- */
   /** GET /admin/billing/plans */
   listAdminPlans(): Promise<BillingPlan[]>;
+  /** GET /admin/billing/coupon-plans — the same plans, for the coupon form (Coupons permission). */
+  listCouponPlans(): Promise<BillingPlan[]>;
   /** GET /admin/billing/plans/:id/versions — version history: values, who / when, orgs per version. */
   getPlanVersions(planId: string): Promise<PlanVersionHistory>;
   /** GET /admin/billing/plans/:id/versions/:versionId/orgs — the organisations on a version (paged). */

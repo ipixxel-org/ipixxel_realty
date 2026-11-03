@@ -61,6 +61,35 @@ export const SETTINGS_ACTIONS = {
  */
 const VIEW_INDEPENDENT_COLUMNS: Record<string, readonly string[]> = {
   settings: ["canAdd", "canDeactivate"], // My profile: View / Edit
+  // Billing's hidden switches (see SHOWN_COLUMNS) keep their stored value when View goes off.
+  billing: ["canAdd", "canDelete", "canApprove"],
+};
+
+/**
+ * Role editors show only these switches for a module; the rest are hidden but
+ * stored values are kept and sent back unchanged. Billing: the backend checks
+ * only View and Edit (Add / Delete / Approve grant nothing for billing).
+ */
+const SHOWN_COLUMNS: Record<string, readonly string[]> = {
+  billing: ["canView", "canEdit"],
+};
+
+/** A switch the role editors don't show for this module (its stored value is kept). */
+export function isHiddenColumn(moduleKey: string, column: string): boolean {
+  const shown = SHOWN_COLUMNS[moduleKey];
+  return !!shown && !shown.includes(column);
+}
+
+/** Editor copy that overrides the catalog's: a module description, pill labels and tooltips. */
+export const ROLE_EDITOR_COPY: Record<string, { description?: string; labels?: Record<string, string>; tips?: Record<string, string> }> = {
+  billing: {
+    description: "Plan, usage, invoices, payments, requests and coupons",
+    labels: { canView: "View", canEdit: "Manage" },
+    tips: {
+      canView: "See the plan, usage, invoices, payments, requests and coupons",
+      canEdit: "Pay, renew, change plan, move to Basic, keep the current plan, choose what stays, withdraw requests",
+    },
+  },
 };
 const REQUIRED_COLUMN: Record<string, Record<string, string>> = {
   settings: { canDeactivate: "canAdd" }, // My profile: Edit needs My profile: View

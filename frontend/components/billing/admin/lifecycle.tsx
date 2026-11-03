@@ -128,12 +128,12 @@ function Editor({ initial }: { initial: LifecycleSettings }) {
     }
   }
 
-  const actions = (
+  const actions = !canEdit ? null : (
     <div className={formPageStyles.actions}>
       <button className={formPageStyles.btn} type="button" onClick={() => setS(saved)}>
         Discard
       </button>
-      <button className={formPageStyles.btnPrimary} type="button" onClick={() => void save()} disabled={busy || !canEdit}>
+      <button className={formPageStyles.btnPrimary} type="button" onClick={() => void save()} disabled={busy}>
         {busy ? "Saving…" : "Save"}
       </button>
     </div>

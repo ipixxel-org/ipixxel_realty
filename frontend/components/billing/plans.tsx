@@ -8,8 +8,8 @@ import { isOverdue, planChangeRoute } from "@/lib/billing/direction";
 import { planChangeBlock } from "@/lib/billing/requests";
 import type { BillingInterval, BillingPlan } from "@/lib/billing/types";
 import { renewalOpen, RenewPlanButton } from "./banners";
-import { useBillingQuery, useOrgBilling } from "./context";
-import { BLink, countLabel, ErrorNote, Loading, PlanPrice, Section, planFeatureRows, useCheckoutLive } from "./ui";
+import { useBillingEnv, useBillingQuery, useOrgBilling } from "./context";
+import { BLink, countLabel, ErrorNote, Loading, ManageBillingNote, MANAGE_BILLING_TEXT, PlanPrice, Section, planFeatureRows, useCheckoutLive } from "./ui";
 
 function Yes({ on, children }: { on: boolean; children?: ReactNode }) {
   return on ? <span className="bl-yes">✓ {children}</span> : <span className="bl-no">—</span>;
@@ -51,6 +51,7 @@ export function PlansScreen({
   const { data: plans, error } = useBillingQuery((c) => c.listPlans(), []);
   const [own, setOwn] = useState<BillingInterval | null>(null);
   const live = useCheckoutLive(overview);
+  const { canEdit } = useBillingEnv();
   if (error) return <ErrorNote message={error} />;
   if (!plans || !overview) return <Loading what="plans" />;
   const interval = controlled ?? own ?? initialInterval ?? overview.interval;
@@ -67,9 +68,10 @@ export function PlansScreen({
   // Renewal window, grace or expired: the current plan's button is Renew (manual: Request renewal).
   const renewing = renewalOpen(overview);
   /** A plan action link — disabled, with the reason, while plan changes are blocked. */
+  // Without billing:edit every plan button is disabled (the card says why).
   const go = (to: "checkout" | "downgrade", params: Record<string, string | undefined>, className: string, children: ReactNode) =>
-    block ? (
-      <span title={block.message} data-testid="plan-action-blocked" style={{ display: "flex", width: "100%" }}>
+    block || !canEdit ? (
+      <span title={block?.message ?? MANAGE_BILLING_TEXT} data-testid="plan-action-blocked" style={{ display: "flex", width: "100%" }}>
         <button type="button" className={className} disabled style={{ width: "100%", justifyContent: "center", opacity: 0.65, cursor: "not-allowed" }}>
           {children}
         </button>
@@ -79,6 +81,11 @@ export function PlansScreen({
         {children}
       </BLink>
     );
+  /** The card has a plan button (not just "✓ Current plan"). */
+  function hasAction(p: BillingPlan): boolean {
+    if (renewing && p.id === current.id && interval === overview!.interval) return true;
+    return !!planChangeRoute(overview!, p, interval);
+  }
   function action(p: BillingPlan) {
     if (renewing && p.id === current.id && interval === overview!.interval) {
       return <RenewPlanButton overview={overview!} style={{ width: "100%", justifyContent: "center" }} />;
@@ -156,6 +163,7 @@ export function PlansScreen({
                 ))}
               </ul>
               {action(p)}
+              {!canEdit && hasAction(p) ? <ManageBillingNote /> : null}
             </div>
           );
         })}

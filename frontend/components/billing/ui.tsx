@@ -7,6 +7,7 @@ import { formatINR, packagePriceText, renewalPriceNote, renewalPriceText } from 
 import type { BillingFunction } from "@/lib/billing/client";
 import type { BillingInterval, BillingOverview, BillingPlan, SubscriptionStatus } from "@/lib/billing/types";
 import { useBillingEnv, type BillingRoute, type RouteParams } from "./context";
+import { useAuthOrNull } from "./limit-prompt";
 
 export const STATUS_META: Record<SubscriptionStatus, { label: string; badge: string }> = {
   free: { label: "Free plan", badge: "b-gray" },
@@ -475,6 +476,17 @@ export function useRenewalLive(overview: BillingOverview | null): boolean {
 
 /* ------------------------------------------------ What stays (locked) */
 
+/** Visible under actions people with billing:view (but not billing:edit) can't use. */
+export const MANAGE_BILLING_TEXT = "Only people who can manage billing can do this. Ask your organisation admin.";
+
+export function ManageBillingNote({ style }: { style?: CSSProperties }) {
+  return (
+    <div className="bl-muted bl-small" data-testid="manage-billing-note" style={{ marginTop: 6, ...style }}>
+      {MANAGE_BILLING_TEXT}
+    </div>
+  );
+}
+
 export const WHAT_STAYS_LOCKED_TEXT = "To change what stays, contact our support team";
 
 /**
@@ -482,12 +494,17 @@ export const WHAT_STAYS_LOCKED_TEXT = "To change what stays, contact our support
  * effect: only our team can change it then (API code what_stays_locked).
  */
 export function WhatStaysLockedNote({ compact = false }: { compact?: boolean }) {
+  // The Support link only for people who can open Support (support:view).
+  const auth = useAuthOrNull();
+  const canSupport = auth ? auth.hasPermission("support", "view") : true;
   return (
     <span className="bl-row" data-testid="what-stays-locked" style={{ gap: 8, alignItems: "center", flexWrap: "wrap" }}>
       <span className={compact ? "bl-muted bl-small" : "bl-muted"}>{WHAT_STAYS_LOCKED_TEXT}</span>
-      <Link href="/org/support" className="btn btn-ghost btn-sm">
-        <Icon name="mail" size={14} /> Support
-      </Link>
+      {canSupport ? (
+        <Link href="/org/support" className="btn btn-ghost btn-sm">
+          <Icon name="mail" size={14} /> Support
+        </Link>
+      ) : null}
     </span>
   );
 }

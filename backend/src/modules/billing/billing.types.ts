@@ -1,5 +1,6 @@
 import type { OnlinePaymentViewV2 } from './online-rows';
 import type { WhatStays } from '../../common/utils/retention.util';
+import type { OrgUsageSummary } from '../org-billing/org-usage';
 
 /**
  * Billing v2 response shapes. These mirror frontend/lib/billing/types.ts
@@ -323,6 +324,54 @@ export interface AccessStatusV2 {
   offlineLandingPageIds: string[];
   /** Assigned templates that can't be used for new landing pages. */
   pausedTemplateIds: string[];
+  /** Used vs allowed — same numbers as GET /org/billing's `usage`; for limit prompts. */
+  usage: OrgUsageSummary;
+}
+
+/**
+ * GET /org/billing/notice — the billing banner for every member of the org,
+ * whatever their permissions. Dates, days and counts only: no amounts,
+ * invoices, coupons or payment details.
+ */
+export interface BillingNoticeV2 {
+  status: SubscriptionStatusV2;
+  orgName: string;
+  ownerName: string;
+  /** The paid plan the banner is about (renewing, in grace, ended). */
+  planName: string;
+  /** The plan the org is on right now (Basic after a move). */
+  currentPlanName: string;
+  periodEnd: string | null;
+  daysLeftInPeriod: number;
+  dueDate: string | null;
+  graceEndsAt: string | null;
+  graceDays: number;
+  graceExtraDays: number;
+  graceDay: number;
+  graceDaysLeft: number;
+  movedToBasicAt: string | null;
+  cancelAt: string | null;
+  downgradeAt: string | null;
+  downgradeToName: string | null;
+  locked: {
+    users: number;
+    projects: number;
+    landingPages: number;
+    templates: number;
+  };
+  /**
+   * The plan's newer version, only when it lowers a limit or switches a
+   * feature off (a price rise alone isn't a member's business).
+   */
+  nextVersion: {
+    planName: string;
+    at: string;
+    reason: 'renewal' | 'basic';
+    /** The org uses more than a new limit allows. */
+    overLimit: boolean;
+    /** What stays has been answered for this change. */
+    answered: boolean;
+  } | null;
 }
 
 export type AfterGraceBehavior = 'fall_back_to_basic' | 'restrict' | 'cancel';

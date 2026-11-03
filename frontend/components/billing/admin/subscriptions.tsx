@@ -8,6 +8,7 @@ import { useToast } from "@/components/ui/toast";
 import { addDays, describeCoupon, formatDate, formatINR } from "@/lib/billing/pricing";
 import type { SubscriptionDetail, SubscriptionRow, SubscriptionStatus, TimelineEvent } from "@/lib/billing/types";
 import { useBillingEnv, useBillingQuery } from "../context";
+import { useAdminBillingAccess } from "./admin-env";
 import { BillingDialog, DialogActions } from "../dialog";
 import { BLink, Empty, ErrorNote, Kv, Loading, PAYMENT_STATUS_META, Section, STATUS_META } from "../ui";
 import { OrderIdCell, PaymentDocuments } from "./payment-cells";
@@ -486,7 +487,8 @@ export function SubscriptionDetailView({
   actions?: (d: SubscriptionDetail) => ReactNode;
   children?: ReactNode;
 }) {
-  const { canEdit } = useBillingEnv();
+  // Extend grace, Mark paid offline, Apply coupon, Move to Basic are POSTs: the Subscriptions "Add" switch.
+  const { post: canAct, couponsView: canSeeCoupons } = useAdminBillingAccess();
   const { toast } = useToast();
   const { data, error } = useBillingQuery((c) => c.getSubscription(orgId), [orgId, version]);
   // An action's result, until the next reload.
@@ -502,7 +504,7 @@ export function SubscriptionDetailView({
   // requests → Mark as paid), so those two actions aren't offered here.
   const viaRequest = (a: SubscriptionAction) => d.paymentMode === "manual" && (a === "offline" || a === "coupon");
   // Why each action is unavailable (null = available). Shown as the hover text.
-  const noEdit = canEdit ? null : "You don't have permission to change billing";
+  const noEdit = null;
   const onBasic = `Not available on ${d.plan.name} — the organisation isn't on a paid plan`;
   const blocked: Record<SubscriptionAction, string | null> = {
     grace: noEdit ?? (inGrace ? null : "Only for an organisation in its grace period (payment due after the renewal date)"),
@@ -511,7 +513,7 @@ export function SubscriptionDetailView({
     cancel: noEdit ?? (!paid ? onBasic : d.status === "cancellation_scheduled" ? "A move to Basic is already scheduled" : null),
   };
   const actionButton = (a: SubscriptionAction, className: string, label: React.ReactNode) =>
-    viaRequest(a) ? null : (
+    viaRequest(a) || !canAct ? null : (
       // The wrapper carries the hover text: browsers don't reliably show a disabled button's title.
       <span title={blocked[a] ?? undefined} style={{ display: "inline-flex" }}>
         <button type="button" className={className} disabled={blocked[a] !== null} onClick={() => setAction(a)}>
@@ -611,9 +613,11 @@ export function SubscriptionDetailView({
             <div style={{ display: "grid", gap: 6 }}>
               <div className="bl-row" style={{ gap: 8 }}>
                 <span className="badge b-violet bl-mono">{d.coupon.coupon.code}</span>
-                <BLink to="adminCoupon" params={{ code: d.coupon.coupon.code }} className="bl-muted">
-                  Usage →
-                </BLink>
+                {canSeeCoupons ? (
+                  <BLink to="adminCoupon" params={{ code: d.coupon.coupon.code }} className="bl-muted">
+                    Usage →
+                  </BLink>
+                ) : null}
               </div>
               <div style={{ fontSize: 13 }}>{describeCoupon(d.coupon.coupon)}</div>
               <div className="bl-muted">{d.coupon.coupon.description}</div>

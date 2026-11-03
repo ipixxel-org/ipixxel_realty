@@ -749,6 +749,51 @@ export interface AccessStatus {
   offlineLandingPageIds: string[];
   /** Assigned templates that can't be used for new landing pages. */
   pausedTemplateIds?: string[];
+  /** Used vs allowed (same numbers as GET /org/billing's `usage`), for the limit prompts. Missing on the mock. */
+  usage?: OrgUsage;
+}
+
+/** `*Limit: null` = unlimited (or no plan). */
+export interface OrgUsage {
+  templatesUsed: number;
+  templatesLimit: number | null;
+  projectsUsed: number;
+  projectsLimit: number | null;
+  usersUsed: number;
+  usersLimit: number | null;
+  landingPagesUsed: number;
+  landingPagesLimit: number | null;
+  landingPagesCreateUsed: number;
+  landingPagesCreateLimit: number | null;
+}
+
+/**
+ * GET /org/billing/notice — the billing banner for every member, whatever
+ * their permissions: dates, days and counts, never amounts.
+ */
+export interface BillingNotice {
+  status: SubscriptionStatus;
+  orgName: string;
+  ownerName: string;
+  /** The paid plan the banner is about (renewing, in grace, ended). */
+  planName: string;
+  /** The plan the org is on now (Basic after a move). */
+  currentPlanName: string;
+  periodEnd: string | null;
+  daysLeftInPeriod: number;
+  dueDate: string | null;
+  graceEndsAt: string | null;
+  graceDays: number;
+  graceExtraDays: number;
+  graceDay: number;
+  graceDaysLeft: number;
+  movedToBasicAt: string | null;
+  cancelAt: string | null;
+  downgradeAt: string | null;
+  downgradeToName: string | null;
+  locked: { users: number; projects: number; landingPages: number; templates: number };
+  /** The plan's newer version, only when it lowers a limit or switches a feature off. */
+  nextVersion: { planName: string; at: string; reason: "renewal" | "basic"; overLimit: boolean; answered: boolean } | null;
 }
 
 /* ----------------------------------------------------- Invoices & payments */

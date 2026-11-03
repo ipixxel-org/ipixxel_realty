@@ -9,7 +9,7 @@ import { Icon } from "@/components/icons";
 import { ConfirmModal } from "@/components/ui/confirm-modal";
 import type { DynamicRole } from "@/lib/types";
 import { useFlash } from "@/lib/flash";
-import { applyPermissionToggle } from "@/lib/permissions";
+import { applyPermissionToggle, isHiddenColumn, ROLE_EDITOR_COPY } from "@/lib/permissions";
 import { ListPager, usePagedRows } from "@/components/ui/list-pager";
 import { ROLES_FLASH_KEY, ROLES_PATH, roleInUseMessage } from "./role-shared";
 
@@ -43,11 +43,24 @@ function supportsAction(row: { actions?: string[] }, column: PermissionColumn) {
   return actions.includes(columnAction(column));
 }
 
-/** Every column set to `enabled` where the module supports it, else false. */
-function setColumns(row: { actions?: string[] }, enabled: (col: PermissionColumn) => boolean) {
+/**
+ * Every column set to `enabled` where the module supports it, else false.
+ * Switches the editor doesn't show (Billing's Add / Delete / Approve) keep their stored value.
+ */
+function setColumns(
+  row: { moduleKey: string; actions?: string[] } & Partial<Record<PermissionColumn, boolean>>,
+  enabled: (col: PermissionColumn) => boolean,
+) {
   const out = {} as Record<PermissionColumn, boolean>;
-  for (const col of PERMISSION_COLUMNS) out[col] = supportsAction(row, col) && enabled(col);
+  for (const col of PERMISSION_COLUMNS) {
+    out[col] = isHiddenColumn(row.moduleKey, col) ? row[col] === true : supportsAction(row, col) && enabled(col);
+  }
   return out;
+}
+
+/** Pill text: the editor's own label (Billing: Manage), the catalog's, or the column name. */
+function pillText(moduleKey: string, column: PermissionColumn, actionLabels?: Record<string, string>) {
+  return ROLE_EDITOR_COPY[moduleKey]?.labels?.[column] ?? actionLabels?.[columnAction(column)] ?? column.replace("can", "");
 }
 
 function StatCardWithSparkline({
@@ -352,7 +365,7 @@ export default function SuperAdminRolesPage() {
     });
     const moduleRow = permissionsData.find((item) => item.moduleKey === moduleKey);
     const moduleLabel = moduleRow?.label ?? "module";
-    const pillLabel = moduleRow?.actionLabels?.[columnAction(action)] ?? action.replace("can", "");
+    const pillLabel = pillText(moduleKey, action, moduleRow?.actionLabels);
     const nextValue = nextRows.find((item) => item.moduleKey === moduleKey)?.[action] ?? false;
     void savePermissionRows(nextRows, `${moduleKey}:${action}`, `${pillLabel} permission ${nextValue ? "enabled" : "removed"} for ${moduleLabel}`);
   };
@@ -595,13 +608,12 @@ export default function SuperAdminRolesPage() {
                       <div className="platform-permission-row" key={item.moduleKey}>
                         <div className="platform-permission-module">
                           <div style={{ fontWeight: 700, fontSize: 13.5 }}>{item.label}</div>
-                          <div className="muted" style={{ fontSize: 12 }}>{item.description}</div>
+                          <div className="muted" style={{ fontSize: 12 }}>{ROLE_EDITOR_COPY[item.moduleKey]?.description ?? item.description}</div>
                         </div>
                         <div className="platform-permission-actions">
-                          {PERMISSION_COLUMNS.filter((action) => supportsAction(item, action)).map((action) => {
+                          {PERMISSION_COLUMNS.filter((action) => supportsAction(item, action) && !isHiddenColumn(item.moduleKey, action)).map((action) => {
                             const enabled = permissionsModalRole.key === "super_admin" || item[action];
-                            const actionKey = columnAction(action);
-                            const label = item.actionLabels?.[actionKey] ?? action.replace("can", "");
+                            const label = pillText(item.moduleKey, action, item.actionLabels);
                             return (
                               <button
                                 className={`platform-permission-pill${enabled ? " is-enabled" : ""}`}
@@ -609,6 +621,7 @@ export default function SuperAdminRolesPage() {
                                 type="button"
                                 disabled={savingPermission !== null || permissionsModalRole.key === "super_admin"}
                                 onClick={() => togglePerm(item.moduleKey, action)}
+                                title={ROLE_EDITOR_COPY[item.moduleKey]?.tips?.[action]}
                                 aria-pressed={enabled}
                                 aria-label={`${label} permission for ${item.label}`}
                               >

@@ -3,10 +3,11 @@
 import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
 import Link from "next/link";
 import { Icon, type IconName } from "@/components/icons";
-import { PLAN_LOCK_COPY, type PlanLockKind } from "@/lib/plan-lock";
+import type { PlanLockKind } from "@/lib/plan-lock";
 import type { AccessStatus, BillingPlan } from "@/lib/billing/types";
 import { useOptionalBillingEnv, useOptionalOrgBilling } from "./context";
 import { BillingDialog, DialogActions } from "./dialog";
+import { memberLimitText, useCanContactSupport, useCanManageBilling, usePlanLockCopy } from "./limit-prompt";
 import { Banner, BLink, WHAT_STAYS_LOCKED_TEXT } from "./ui";
 
 /* ------------------------------------------------------------ Access status */
@@ -74,7 +75,7 @@ const LOCK_ICON: Record<PlanLockKind, IconName> = {
  * tooltip on every list, grid and detail page.
  */
 export function PlanLockBadge({ kind, style }: { kind: PlanLockKind; style?: React.CSSProperties }) {
-  const copy = PLAN_LOCK_COPY[kind];
+  const copy = usePlanLockCopy()[kind];
   return (
     <span className="badge b-amber" style={{ display: "inline-flex", alignItems: "center", gap: 4, ...style }} title={copy.tooltip} data-plan-lock={kind}>
       <Icon name={LOCK_ICON[kind]} size={12} /> {copy.badge}
@@ -84,17 +85,24 @@ export function PlanLockBadge({ kind, style }: { kind: PlanLockKind; style?: Rea
 
 /** "This project is view-only…" with the ways out, for a locked project's pages. */
 export function PlanLockNotice({ kind }: { kind: PlanLockKind }) {
+  const canManage = useCanManageBilling();
+  const canSupport = useCanContactSupport();
+  const copy = usePlanLockCopy();
   return (
     <div className="form-alert" role="status" style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap", marginBottom: 14 }}>
       <Icon name="lock" size={15} />
-      <span style={{ flex: 1, minWidth: 220 }}>{PLAN_LOCK_COPY[kind].error}</span>
-      <Link href="/org/settings/billing/plans" className="btn btn-primary btn-sm">
-        Upgrade
-      </Link>
+      <span style={{ flex: 1, minWidth: 220 }}>{copy[kind].error}</span>
+      {canManage ? (
+        <Link href="/org/settings/billing/plans" className="btn btn-primary btn-sm">
+          Upgrade
+        </Link>
+      ) : null}
       {/* What's paused on the current plan can only be changed by our team now. */}
-      <Link href="/org/support" className="btn btn-ghost btn-sm" title={WHAT_STAYS_LOCKED_TEXT}>
-        Contact support
-      </Link>
+      {canSupport ? (
+        <Link href="/org/support" className="btn btn-ghost btn-sm" title={WHAT_STAYS_LOCKED_TEXT}>
+          Contact support
+        </Link>
+      ) : null}
     </div>
   );
 }
@@ -161,18 +169,23 @@ export function OfflinePagePreview({ orgName }: { orgName: string }) {
 /* --------------------------------------------------------------- Team chat */
 
 export function TeamChatReadOnlyNotice({ planName }: { planName: string }) {
+  const canManage = useCanManageBilling();
   return (
     <Banner
       tone="amber"
       icon="lock"
       title={`Team chat isn't included in ${planName}`}
       actions={
-        <BLink to="plans" className="btn btn-primary btn-sm">
-          Upgrade to chat
-        </BLink>
+        canManage ? (
+          <BLink to="plans" className="btn btn-primary btn-sm">
+            Upgrade to chat
+          </BLink>
+        ) : undefined
       }
     >
-      Your chat history stays here to read. Upgrade to send messages again.
+      {canManage
+        ? "Your chat history stays here to read. Upgrade to send messages again."
+        : "Your chat history stays here to read. Ask your organisation admin to upgrade to send messages again."}
     </Banner>
   );
 }
@@ -194,6 +207,27 @@ export function LimitReachedDialog({
   planName: string;
   nextPlan: Pick<BillingPlan, "id" | "name" | "limits"> | null;
 }) {
+  const canManage = useCanManageBilling();
+  if (!canManage) {
+    return (
+      <BillingDialog
+        open={open}
+        onClose={onClose}
+        title="User limit reached"
+        footer={
+          <DialogActions>
+            <button type="button" className="btn btn-primary btn-sm" onClick={onClose} data-testid="limit-prompt-ok">
+              OK
+            </button>
+          </DialogActions>
+        }
+      >
+        <div style={{ fontSize: 13.5, lineHeight: 1.55 }} data-testid="limit-prompt-text">
+          {memberLimitText(limit, used)}
+        </div>
+      </BillingDialog>
+    );
+  }
   return (
     <BillingDialog
       open={open}
@@ -240,10 +274,12 @@ export function LeadsKeepComingNote() {
 export function useSeatLimitGate(used: number) {
   const env = useOptionalBillingEnv();
   const access = useBillingAccess();
+  // The next plan is only offered to billing editors; listPlans needs billing:view.
+  const canManage = useCanManageBilling();
   const [plans, setPlans] = useState<BillingPlan[] | null>(null);
   const [open, setOpen] = useState(false);
   useEffect(() => {
-    if (!env) return;
+    if (!env || !canManage) return;
     let live = true;
     env.client
       .listPlans()
@@ -252,7 +288,7 @@ export function useSeatLimitGate(used: number) {
     return () => {
       live = false;
     };
-  }, [env]);
+  }, [env, canManage]);
   const current = plans?.find((p) => p.id === access?.planId);
   const next = current ? (plans ?? []).filter((p) => p.rank > current.rank).sort((a, b) => a.rank - b.rank)[0] ?? null : null;
   return {

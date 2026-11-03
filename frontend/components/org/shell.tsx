@@ -9,6 +9,7 @@ import { dashboardPathFor } from "@/lib/mock/sessions";
 import { Icon, type IconName } from "@/components/icons";
 import { BuildingLogoIcon } from "@/components/brand-logo";
 import {
+  apiFetch,
   getOrgBilling,
   getOrgNotifications,
   getOrgUnreadNotifications,
@@ -18,6 +19,7 @@ import {
 } from "@/lib/api";
 import { ORG_BRANDING_CHANGE_EVENT, type OrgBrandingChangeDetail } from "@/lib/org-profile";
 import type { OrgBillingSummary, OrgNotification, PermissionAction } from "@/lib/types";
+import type { AccessStatus } from "@/lib/billing/types";
 import { useToast } from "@/components/ui/toast";
 import { BillingV2Root } from "@/components/billing/shell-integration";
 import { BILLING_V2 } from "@/lib/billing/flag";
@@ -484,8 +486,21 @@ export function OrgAdminShell({ children }: { children: ReactNode }) {
   const dismissedExpiryRef = useRef<Set<string>>(new Set());
   const [currentPlanName, setCurrentPlanName] = useState<string | null>(null);
 
+  // GET /org/billing needs billing:view; without it the call would only answer 403.
+  const canViewBilling = hasPermission("billing", "view");
   const pollBilling = useCallback(async () => {
     if (!accessToken) return;
+    if (!canViewBilling) {
+      // Everyone else: the sidebar's plan name from GET /org/billing/access
+      // (open to every member). No expiry banner for them here.
+      try {
+        const access = await apiFetch<AccessStatus>("/org/billing/access");
+        setCurrentPlanName(access.planName ?? null);
+      } catch {
+        // Best-effort: the sidebar keeps its last known plan name.
+      }
+      return;
+    }
     try {
       const billing = await getOrgBilling();
       const next = expiryBannerFromBilling(billing);
@@ -501,7 +516,7 @@ export function OrgAdminShell({ children }: { children: ReactNode }) {
       // the banner or the sidebar plan name; their bell notifications still
       // surface the popup.
     }
-  }, [accessToken]);
+  }, [accessToken, canViewBilling]);
 
   useEffect(() => {
     if (!accessToken) return;
@@ -1036,7 +1051,7 @@ export function OrgAdminShell({ children }: { children: ReactNode }) {
         ) : null}
         <div className="page">
           <LeadStagesProvider>
-            <BillingV2Root canEdit={hasPermission("billing", "edit")} viewerId={user?.id ?? null} canEditOrgProfile={hasPermission("settings", SETTINGS_ACTIONS.editProfile)}>{children}</BillingV2Root>
+            <BillingV2Root canEdit={hasPermission("billing", "edit")} canView={hasPermission("billing", "view")} viewerId={user?.id ?? null} canEditOrgProfile={hasPermission("settings", SETTINGS_ACTIONS.editProfile)}>{children}</BillingV2Root>
           </LeadStagesProvider>
         </div>
 

@@ -36,6 +36,19 @@ describe('SaveAdminPlanDto', () => {
     expect(errors).toEqual([]);
   });
 
+  it('accepts the version fields of the plans list (orgs still on an older version)', async () => {
+    const errors = await validate(
+      plainToInstance(SaveAdminPlanDto, {
+        ...loaded,
+        version: 3,
+        versions: [{ version: 3 }, { version: 2 }],
+        olderOrgs: { orgs: 4, versions: [2], nextMoveOn: '2026-11-26' },
+      }),
+      { whitelist: true, forbidNonWhitelisted: true },
+    );
+    expect(errors).toEqual([]);
+  });
+
   it('accepts the half rank of a plan that is not offered (inactive Demo)', async () => {
     const errors = await validate(
       plainToInstance(SaveAdminPlanDto, {

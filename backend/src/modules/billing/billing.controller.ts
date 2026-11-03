@@ -163,10 +163,17 @@ export class OrgBillingV2Controller {
     return this.service.listPlans();
   }
 
-  @RequirePermission('billing', 'view')
+  // Any member of the org (no billing permission): limits, usage and what's
+  // paused, for the lock badges and limit prompts. No money in it.
   @Get('access')
   access(@CurrentUser() user: JwtPayload) {
     return this.service.getAccess(user.orgId as string);
+  }
+
+  // Any member of the org: the billing banner without amounts (BillingNoticeV2).
+  @Get('notice')
+  notice(@CurrentUser() user: JwtPayload) {
+    return this.service.getNotice(user.orgId as string);
   }
 
   // A read: anyone who can view billing can see a price.
@@ -352,6 +359,16 @@ export class AdminBillingController {
     @Body() dto: SaveCouponDto,
   ) {
     return this.coupons.save(dto.coupon, false, user.sub, code);
+  }
+
+  /**
+   * Plans for the coupon form's plan picker — the same list as GET
+   * /admin/billing/plans, under Coupons (admin_coupons) so a coupons-only
+   * role can fill in the form.
+   */
+  @Get('coupon-plans')
+  couponPlans() {
+    return this.service.listPlans();
   }
 
   /** Organisations for the coupon form's "only these organisations" picker. */

@@ -15,7 +15,11 @@ export const REAL_FUNCTIONS: Record<BillingFunction, boolean> = {
   getBillingOverview: true,
   listPlans: true,
   getAccessStatus: true,
+  // Billing permissions step 1: the banner for members without billing access.
+  getBillingNotice: true,
   listAdminPlans: true,
+  // Coupons permission: the coupon form's plan picker.
+  listCouponPlans: true,
   // Plan versions: the save confirm (a new version? who it affects).
   previewAdminPlanSave: true,
   // Plan versions: version history and the orgs on a version.

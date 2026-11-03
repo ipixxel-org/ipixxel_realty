@@ -48,7 +48,9 @@ export const httpBilling: Impl = {
   getBillingOverview: () => call("/org/billing/v2"),
   listPlans: () => call("/org/billing/plans"),
   getAccessStatus: () => call("/org/billing/access"),
+  getBillingNotice: () => call("/org/billing/notice"),
   listAdminPlans: () => call("/admin/billing/plans"),
+  listCouponPlans: () => call("/admin/billing/coupon-plans"),
   getPlanVersions: (planId) => call(`/admin/billing/plans/${encodeURIComponent(planId)}/versions`),
   listPlanVersionOrgs: ({ planId, versionId, page = 1, pageSize = 20 }) =>
     call(`/admin/billing/plans/${encodeURIComponent(planId)}/versions/${encodeURIComponent(versionId)}/orgs?page=${page}&pageSize=${pageSize}`),

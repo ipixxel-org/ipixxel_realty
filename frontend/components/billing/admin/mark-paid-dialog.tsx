@@ -136,9 +136,11 @@ export function MarkPaidDialog({
             <div className="bl-row" style={{ gap: 8 }}>
               <span className="badge b-violet bl-mono">{quote.couponCode}</span>
               <span className="bl-muted bl-small">−{formatINR(quote.couponDiscount)} before GST</span>
-              <button type="button" className="btn btn-ghost btn-sm" style={{ marginLeft: "auto" }} disabled={busy || !!confirming} onClick={() => change({ kind: "remove" })}>
-                Remove
-              </button>
+              {onRemoveCoupon ? (
+                <button type="button" className="btn btn-ghost btn-sm" style={{ marginLeft: "auto" }} disabled={busy || !!confirming} onClick={() => change({ kind: "remove" })}>
+                  Remove
+                </button>
+              ) : null}
             </div>
           ) : (
             <>

@@ -15,7 +15,7 @@ type PermissionColumn = "canView" | "canAdd" | "canEdit" | "canDelete" | "canApp
 // module's column — used to nest "Upgrade subscription" under Organisations
 // while keeping it stored independently of Organisations' own Edit bit (see
 // admin_org_upgrade_subscription below).
-type PermissionPill = { key: string; moduleKey?: string; permission: PermissionColumn; label: string };
+type PermissionPill = { key: string; moduleKey?: string; permission: PermissionColumn; label: string; title?: string };
 
 const DEFAULT_PERMISSION_PILLS: PermissionPill[] = [
   { key: "canView", permission: "canView", label: "View" },
@@ -79,16 +79,52 @@ const MODULE_PERMISSION_PILLS: Record<string, PermissionPill[]> = {
     { key: "canDelete", permission: "canDelete", label: "Delete" },
     { key: "disable", permission: "canApprove", label: "Disable" },
   ],
+  // Billing v2: the backend picks the switch from the request method (POST =
+  // Add, PUT = Edit, DELETE = Delete), so the tooltips list what each one
+  // really allows. "Assign plan" and "Change" (old Subscriptions screens) are
+  // gone: they were the same stored switches as Create plan and Edit.
   admin_subscriptions: [
-    { key: "canView", permission: "canView", label: "View" },
-    { key: "createPlan", permission: "canAdd", label: "Create plan" },
-    { key: "canEdit", permission: "canEdit", label: "Edit" },
-    { key: "canDelete", permission: "canDelete", label: "Delete" },
-    { key: "assignPlan", permission: "canAdd", label: "Assign plan" },
-    { key: "changePlan", permission: "canEdit", label: "Change" },
-    { key: "approve", permission: "canApprove", label: "Approve" },
-    { key: "reject", permission: "canDelete", label: "Reject" },
+    {
+      key: "canView",
+      permission: "canView",
+      label: "View",
+      title:
+        "See plans, version history, organisation subscriptions, package requests, payments and the Razorpay key status; Open an organisation's billing page from Package requests and Organisation subscriptions.",
+    },
+    {
+      key: "createPlan",
+      permission: "canAdd",
+      label: "Create plan",
+      title:
+        "Extend grace, Move to Basic, Mark resolved, apply a coupon to a subscription, and the save preview when editing a plan (Edit plan needs this and Edit).",
+    },
+    {
+      key: "canEdit",
+      permission: "canEdit",
+      label: "Edit",
+      title: "Save a plan (with Create plan), Choose what stays, Mark as paid / Edit payment, a coupon on a request.",
+    },
+    {
+      key: "canDelete",
+      permission: "canDelete",
+      label: "Delete",
+      title: "Delete a plan, Clear payment, remove a request's coupon. Same switch as Reject.",
+    },
+    { key: "approve", permission: "canApprove", label: "Approve", title: "Approve a package request (one with a price needs Mark as paid first, which needs Edit)." },
+    { key: "reject", permission: "canDelete", label: "Reject", title: "Reject a package request. Same switch as Delete." },
   ],
+  // Coupons have no delete or approve step.
+  admin_coupons: [
+    { key: "canView", permission: "canView", label: "View", title: "See coupons, their usage, and the coupon in use on an organisation's billing page." },
+    { key: "canAdd", permission: "canAdd", label: "Create", title: "Create a new coupon." },
+    { key: "canEdit", permission: "canEdit", label: "Edit", title: "Change a coupon or switch it off." },
+  ],
+};
+
+/** Notes added to a module's description (what no switch can grant). */
+const MODULE_NOTES: Record<string, string> = {
+  admin_subscriptions: "Changing the Razorpay keys is Super Admin only.",
+  admin_settings: "Expiry & grace policy and Company & tax details live here. \"Run lifecycle check now\" is Super Admin only.",
 };
 
 function permissionPillsFor(moduleKey: string): PermissionPill[] {
@@ -339,10 +375,13 @@ export function PlatformRolesPanel({
                   >
                     <div className="platform-permission-module">
                       <div style={{ fontWeight: 700 }}>{item.label}</div>
-                      <div className="muted" style={{ fontSize: 12 }}>{item.description}</div>
+                      <div className="muted" style={{ fontSize: 12 }}>
+                        {item.description}
+                        {MODULE_NOTES[item.moduleKey] ? `${/[.!?]$/.test(item.description.trim()) ? "" : "."} ${MODULE_NOTES[item.moduleKey]}` : ""}
+                      </div>
                     </div>
                     <div className="platform-permission-actions">
-                      {permissionPillsFor(item.moduleKey).map(({ key, moduleKey: pillModuleKey, permission, label }) => {
+                      {permissionPillsFor(item.moduleKey).map(({ key, moduleKey: pillModuleKey, permission, label, title }) => {
                         // A pill can be stored on a different module than the
                         // row it's displayed under (see "Upgrade subscription"
                         // on Organisations) — resolve its own row for state.
@@ -355,6 +394,7 @@ export function PlatformRolesPanel({
                             type="button"
                             disabled={locked || savingPermission !== null}
                             onClick={() => void togglePerm(pillModuleKey ?? item.moduleKey, permission as "canView" | "canAdd" | "canEdit" | "canDelete" | "canApprove")}
+                            title={title}
                             aria-pressed={Boolean(enabled)}
                             aria-label={`${label} permission for ${item.label}`}
                           >

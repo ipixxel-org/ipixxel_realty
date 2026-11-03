@@ -257,6 +257,16 @@ export const PLATFORM_PERMISSION_MODULES: ModuleDefinition[] = [
   { key: 'admin_leads', label: 'Leads', description: 'View leads captured across all organisations' },
   { key: 'admin_domains', label: 'Domains', description: 'Platform domains and organisation domain requests' },
   { key: 'admin_subscriptions', label: 'Subscriptions', description: 'Plans, organisation subscriptions and package requests' },
+  // Discount coupons, separate from Subscriptions so promotions can be run
+  // without billing actions (and the reverse). Using a coupon on an
+  // organisation (subscription or package request) stays under Subscriptions.
+  {
+    key: 'admin_coupons',
+    label: 'Coupons',
+    description: 'Discount coupons: create, edit and see where they are used',
+    actions: ['view', 'add', 'edit'],
+    actionLabels: { add: 'Create' },
+  },
   { key: 'admin_email', label: 'Email & SMTP', description: 'Platform email delivery and logs' },
   { key: 'admin_audit_logs', label: 'Audit logs', description: 'Platform audit history' },
   { key: 'admin_settings', label: 'Settings', description: 'Platform configuration' },
@@ -327,6 +337,11 @@ export const PLATFORM_ROUTE_MODULES: Array<{ prefix: string; module: string }> =
   { prefix: '/admin/billing/lifecycle', module: 'admin_settings' },
   { prefix: '/admin/billing/online-payments', module: 'admin_settings' },
   { prefix: '/admin/billing/company', module: 'admin_settings' },
+  // Coupons: the list, one coupon, create / edit, and the coupon form's
+  // organisation and plan pickers.
+  { prefix: '/admin/billing/coupons', module: 'admin_coupons' },
+  { prefix: '/admin/billing/org-options', module: 'admin_coupons' },
+  { prefix: '/admin/billing/coupon-plans', module: 'admin_coupons' },
   // Plans & Pricing: plans, save preview, version history and the orgs on a version.
   { prefix: '/admin/billing/plans', module: 'admin_subscriptions' },
   { prefix: '/admin/billing', module: 'admin_subscriptions' },

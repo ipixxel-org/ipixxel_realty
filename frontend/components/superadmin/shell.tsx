@@ -38,7 +38,7 @@ export const NAV_MODULE: Record<string, string> = {
   "/admin-console/leads": "admin_leads",
   "/admin-console/org-domains": "admin_domains",
   "/admin-console/subscriptions": "admin_subscriptions",
-  "/admin-console/coupons": "admin_subscriptions",
+  "/admin-console/coupons": "admin_coupons",
   // "/admin-console/integrations" has no single module — see canAccessAdminNavItem.
   "/admin-console/marketing": "admin_settings",
   "/admin-console/attribution": "admin_settings",

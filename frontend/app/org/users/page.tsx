@@ -9,13 +9,12 @@ import { Icon } from "@/components/icons";
 import Link from "next/link";
 // import { useTeamsList } from "@/components/org/team-fields"; // [DISABLED-TEAMS]
 import type {
-  OrgBillingSummary,
   OrgUser,
   OrgUsersListResponse,
 } from "@/lib/types";
 import { USERS_FLASH_KEY, USERS_PATH } from "./user-form";
 import { PlanLockBadge, usePlanLocks, useSeatLimitGate } from "@/components/billing/locked";
-import { PLAN_LOCK_COPY } from "@/lib/plan-lock";
+import { atLimit, UpgradeOrAsk, useCanManageBilling, useMemberLimitPrompt, useOrgUsage, usePlanLockCopy } from "@/components/billing/limit-prompt";
 import "./users.css";
 
 const PAGE_SIZE = 10;
@@ -82,6 +81,7 @@ export default function OrgUsersPage() {
   // "paused" (billing v2) is its own filter: paused by the plan, not deactivated.
   const [statusFilter, setStatusFilter] = useState<"active" | "disabled" | "pending" | "paused" | "">("");
   const locks = usePlanLocks();
+  const lockCopy = usePlanLockCopy();
   // [DISABLED-TEAMS] The team filter never reached the users query anyway.
   // const [teamFilter, setTeamFilter] = useState<string>("");
   const [page, setPage] = useState(1);
@@ -110,12 +110,6 @@ export default function OrgUsersPage() {
   const [rowError, setRowError] = useState<{ id: string; message: string } | null>(null);
   const [resentId, setResentId] = useState<string | null>(null);
 
-  // Quota
-  const [seatQuota, setSeatQuota] = useState<{
-    used: number;
-    limit: number | null;
-    planName: string | null;
-  } | null>(null);
 
   // Success message left by the create / edit page before redirecting here.
   // Read in a deferred callback and cleared only when it fires, so a
@@ -196,27 +190,18 @@ export default function OrgUsersPage() {
       .finally(() => setLoading(false));
   }, [accessToken, canView, page, pageSize, search, roleFilter, statusFilter, reloadTick]);
 
-  // Fetch billing quota
-  useEffect(() => {
-    if (!accessToken) return;
-    apiFetch<OrgBillingSummary>("/org/billing", {
-      headers: { Authorization: `Bearer ${accessToken}` },
-    })
-      .then((b) =>
-        setSeatQuota({
-          used: b.usage.usersUsed,
-          limit: b.usage.usersLimit,
-          planName: b.plan?.name ?? null,
-        }),
-      )
-      .catch(() => setSeatQuota(null));
-  }, [accessToken, reloadTick]);
+  // Seat quota from GET /org/billing/access (every member can read it).
+  const { usage, planName: quotaPlanName } = useOrgUsage(reloadTick);
+  const seatQuota = usage ? { used: usage.usersUsed, limit: usage.usersLimit, planName: quotaPlanName } : null;
+  const seatsFull = atLimit(seatQuota?.used, seatQuota?.limit);
+  // Billing editors keep today's flow; everyone else gets "ask your admin" + OK.
+  const canManageBilling = useCanManageBilling();
+  const memberPrompt = useMemberLimitPrompt();
 
   // Billing v2: at the new plan's user limit, "Create user" opens the upgrade
   // dialog. Inactive with the flag off — then the existing seat check applies.
   const seatGate = useSeatLimitGate(seatQuota?.used ?? 0);
-  const atSeatLimit =
-    !seatGate.active && seatQuota != null && seatQuota.limit != null && seatQuota.used >= seatQuota.limit;
+  const atSeatLimit = canManageBilling && !seatGate.active && seatsFull;
 
   function reload() {
     setReloadTick((t) => t + 1);
@@ -322,7 +307,13 @@ export default function OrgUsersPage() {
             <button
               type="button"
               className="usr-btn-create"
-              onClick={() => (seatGate.atLimit ? seatGate.open() : router.push(`${USERS_PATH}/new`))}
+              onClick={() =>
+                !canManageBilling && seatsFull
+                  ? memberPrompt.show({ thing: "User", limit: seatQuota?.limit, used: seatQuota?.used })
+                  : seatGate.atLimit
+                    ? seatGate.open()
+                    : router.push(`${USERS_PATH}/new`)
+              }
               disabled={atSeatLimit}
               title={atSeatLimit ? "You've reached your plan's user limit" : undefined}
               style={atSeatLimit ? { opacity: 0.45, cursor: "not-allowed" } : undefined}
@@ -334,19 +325,22 @@ export default function OrgUsersPage() {
         </div>
       </Reveal>
       {seatGate.dialog}
+      {memberPrompt.dialog}
 
-      {canAdd && atSeatLimit ? (
+      {canAdd && !seatGate.active && seatsFull ? (
         <div
           className="card reveal in"
           style={{ marginBottom: 16, borderColor: "var(--amber, #f59e0b)", padding: "12px 16px", display: "flex", gap: 12, alignItems: "center", flexWrap: "wrap" }}
         >
           <Icon name="alert" size={20} />
           <div style={{ flex: 1, minWidth: 220, fontSize: 13.5 }}>
-            Your{seatQuota?.planName ? ` ${seatQuota.planName}` : ""} plan allows{" "}
-            <b>{seatQuota?.limit}</b> user{seatQuota?.limit === 1 ? "" : "s"} and you have{" "}
-            <b>{seatQuota?.used}</b>. Upgrade your plan to add more.
+            Your organisation&apos;s{seatQuota?.planName ? ` ${seatQuota.planName}` : ""} plan allows{" "}
+            <b>{seatQuota?.limit}</b> user{seatQuota?.limit === 1 ? "" : "s"} and it has{" "}
+            <b>{seatQuota?.used}</b>. {canManageBilling ? "Upgrade your plan to add more." : ""}
           </div>
-          <Link href="/org/settings?section=billing" className="btn btn-soft btn-sm">Upgrade plan</Link>
+          <UpgradeOrAsk>
+            <Link href="/org/settings?section=billing" className="btn btn-soft btn-sm">Upgrade plan</Link>
+          </UpgradeOrAsk>
         </div>
       ) : null}
 
@@ -467,7 +461,7 @@ export default function OrgUsersPage() {
               <option value="active">Active</option>
               <option value="disabled">Disabled</option>
               <option value="pending">Pending</option>
-              {locks.active ? <option value="paused">{PLAN_LOCK_COPY.user_paused.badge}</option> : null}
+              {locks.active ? <option value="paused">{lockCopy.user_paused.badge}</option> : null}
             </select>
 
             {/* [DISABLED-TEAMS] Team Filter
@@ -765,7 +759,7 @@ export default function OrgUsersPage() {
                                     href="/org/support"
                                     className="btn btn-ghost btn-sm"
                                     style={{ justifyContent: "flex-start", width: "100%" }}
-                                    title={PLAN_LOCK_COPY.user_paused.tooltip}
+                                    title={lockCopy.user_paused.tooltip}
                                   >
                                     Contact support
                                   </Link>

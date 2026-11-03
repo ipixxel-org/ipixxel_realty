@@ -487,8 +487,11 @@ describe("billing v2 flag", () => {
         // step 1
         "getAccessStatus",
         "getBillingOverview",
+        // billing permissions step 1: the banner for members without billing access
+        "getBillingNotice",
         "getLifecycleSettings",
         "listAdminPlans",
+        "listCouponPlans",
         "listPlans",
         "saveAdminPlan",
         "saveLifecycleSettings",

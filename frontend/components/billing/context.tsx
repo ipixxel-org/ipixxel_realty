@@ -188,22 +188,32 @@ interface OrgBillingValue {
 const OverviewContext = createContext<OrgBillingValue | null>(null);
 
 /** Loads the org's billing overview once and shares it (banners + billing pages stay in step). */
-export function OrgBillingProvider({ initial, children }: { initial?: BillingOverview; children: ReactNode }) {
+export function OrgBillingProvider({
+  initial,
+  enabled = true,
+  children,
+}: {
+  initial?: BillingOverview;
+  /** False when the viewer can't view billing: no overview call (it would answer 403); overview stays null. */
+  enabled?: boolean;
+  children: ReactNode;
+}) {
   const { client } = useBillingEnv();
   const [overview, setOverview] = useState<BillingOverview | null>(initial ?? null);
   const [error, setError] = useState<string | null>(null);
 
   const refresh = useCallback(async () => {
+    if (!enabled) return;
     try {
       setOverview(await client.getBillingOverview());
       setError(null);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Couldn't load billing.");
     }
-  }, [client]);
+  }, [client, enabled]);
 
   useEffect(() => {
-    if (initial) return;
+    if (initial || !enabled) return;
     let live = true;
     client
       .getBillingOverview()
@@ -212,7 +222,7 @@ export function OrgBillingProvider({ initial, children }: { initial?: BillingOve
     return () => {
       live = false;
     };
-  }, [client, initial]);
+  }, [client, initial, enabled]);
 
   const value = useMemo(() => ({ overview, error, refresh, setOverview }), [overview, error, refresh]);
   return <OverviewContext.Provider value={value}>{children}</OverviewContext.Provider>;
