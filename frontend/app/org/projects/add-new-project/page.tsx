@@ -1095,8 +1095,8 @@ export default function AddNewProjectPage() {
         <div style={{ marginBottom: 8 }}><Icon name="lock" size={32} /></div>
         <h2 style={{ margin: "0 0 8px" }}>You&apos;ve reached your project limit</h2>
         <p className="muted" style={{ margin: "0 0 18px", fontSize: 14 }}>
-          Your{projectQuota?.planName ? ` ${projectQuota.planName}` : ""} plan allows{" "}
-          <b>{projectQuota?.limit}</b> project{projectQuota?.limit === 1 ? "" : "s"} and you already have{" "}
+          Your organisation&apos;s{projectQuota?.planName ? ` ${projectQuota.planName}` : ""} plan allows{" "}
+          <b>{projectQuota?.limit}</b> project{projectQuota?.limit === 1 ? "" : "s"} and it already has{" "}
           <b>{projectQuota?.used}</b>. {canManageBilling ? "Upgrade your plan to create another." : ASK_ADMIN_UPGRADE}
         </p>
         <div className="row gap-10" style={{ justifyContent: "center" }}>

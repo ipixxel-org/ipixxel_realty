@@ -1010,8 +1010,8 @@ export default function OrgLandingPagesPage() {
         >
           <span style={{ fontSize: 20 }}>⚠️</span>
           <div style={{ flex: 1, minWidth: 220, fontSize: 13.5 }}>
-            Your{landingPageQuota?.planName ? ` ${landingPageQuota.planName}` : ""} plan allows creating up to{" "}
-            <b>{landingPageQuota?.limit}</b> landing page{landingPageQuota?.limit === 1 ? "" : "s"} and you have{" "}
+            Your organisation&apos;s{landingPageQuota?.planName ? ` ${landingPageQuota.planName}` : ""} plan allows creating up to{" "}
+            <b>{landingPageQuota?.limit}</b> landing page{landingPageQuota?.limit === 1 ? "" : "s"} and it has{" "}
             <b>{landingPageQuota?.used}</b>. {canManageBilling ? "Upgrade your plan to create more." : ""}
           </div>
           <UpgradeOrAsk>
@@ -1036,8 +1036,8 @@ export default function OrgLandingPagesPage() {
         >
           <span style={{ fontSize: 20 }}>⚠️</span>
           <div style={{ flex: 1, minWidth: 220, fontSize: 13.5 }}>
-            Your{publishQuota?.planName ? ` ${publishQuota.planName}` : ""} plan allows up to{" "}
-            <b>{publishQuota?.limit}</b> published landing page{publishQuota?.limit === 1 ? "" : "s"} and you have{" "}
+            Your organisation&apos;s{publishQuota?.planName ? ` ${publishQuota.planName}` : ""} plan allows up to{" "}
+            <b>{publishQuota?.limit}</b> published landing page{publishQuota?.limit === 1 ? "" : "s"} and it has{" "}
             <b>{publishQuota?.used}</b>. {canManageBilling ? "Unpublish a page or upgrade your plan to publish more." : "Unpublish a page to publish another."}
           </div>
           <UpgradeOrAsk>

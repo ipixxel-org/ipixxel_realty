@@ -280,8 +280,8 @@ export default function OrgProjectsPage() {
         >
           <Icon name="alert" size={20} />
           <div style={{ flex: 1, minWidth: 220, fontSize: 13.5 }}>
-            Your{projectQuota?.planName ? ` ${projectQuota.planName}` : ""} plan allows{" "}
-            <b>{projectQuota?.limit}</b> project{projectQuota?.limit === 1 ? "" : "s"} and you have{" "}
+            Your organisation&apos;s{projectQuota?.planName ? ` ${projectQuota.planName}` : ""} plan allows{" "}
+            <b>{projectQuota?.limit}</b> project{projectQuota?.limit === 1 ? "" : "s"} and it has{" "}
             <b>{projectQuota?.used}</b>. {canManageBilling ? "Upgrade your plan to add more." : ""}
           </div>
           <UpgradeOrAsk>

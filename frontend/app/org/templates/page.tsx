@@ -505,9 +505,9 @@ export default function OrgTemplatesPage() {
                     >
                       <span style={{ fontSize: 18 }}>⚠️</span>
                       <div style={{ flex: 1, minWidth: 220 }}>
-                        Your {availableData.planName} plan allows{" "}
-                        <b>{availableData.maxAllowed}</b> template{availableData.maxAllowed === 1 ? "" : "s"} in your
-                        workspace and you have <b>{availableData.assignedCount}</b>.{" "}
+                        Your organisation&apos;s {availableData.planName} plan allows{" "}
+                        <b>{availableData.maxAllowed}</b> template{availableData.maxAllowed === 1 ? "" : "s"} in its
+                        workspace and it has <b>{availableData.assignedCount}</b>.{" "}
                         {canManageBilling ? "Remove a template or upgrade your plan to add more." : "Remove a template to add another."}
                       </div>
                       <UpgradeOrAsk>

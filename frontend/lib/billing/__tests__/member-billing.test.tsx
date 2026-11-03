@@ -274,6 +274,10 @@ describe("limit prompts appear before a form opens", () => {
     expect(paths).toContain("/org/billing/access");
     expect(paths).not.toContain("/org/billing");
     expect(screen.queryByRole("link", { name: "Upgrade plan" })).toBeNull();
+    // The count is the whole organisation's, which a member may not see in the list.
+    expect(screen.getByText(/Your organisation's Pro plan allows/).textContent).toMatch(
+      /Your organisation's Pro plan allows 3 projects and it has 3\./,
+    );
     expect(screen.getAllByTestId("ask-admin-upgrade")[0]).toHaveTextContent("Ask your organisation admin to upgrade the plan.");
 
     fireEvent.click(screen.getByRole("button", { name: /New project/ }));
