@@ -4,13 +4,15 @@ import { type ReactNode, useRef, useEffect, useMemo, useState } from "react";
 import { GripVertical, EyeOff } from "lucide-react";
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
+import { toast } from "sonner";
 import { useConfigStore } from "@/components/openpage/store/configStore";
 import { useEditorStore } from "@/components/openpage/store/editorStore";
 import type { BlockConfig } from "../blocks/types";
 import { isDivBlock } from "@/lib/openpage/block-factory";
 import { blockMetadata } from "@/lib/openpage/block-metadata";
-import { findBlock } from "@/lib/openpage/block-tree";
+import { findBlock, isSameOrInside } from "@/lib/openpage/block-tree";
 import { isHiddenOnViewport, resolveBlockStyleForDevice } from "@/lib/openpage/block-style";
+import { readDropPayload, readDraggedBlockId, buildBlockFromPayload } from "@/lib/openpage/drag-payload";
 import { FloatingBlockToolbar } from "./FloatingBlockToolbar";
 import { BlockContextMenu } from "./BlockContextMenu";
 import { InlineTextEditor } from "./InlineTextEditor";
@@ -223,12 +225,56 @@ export function SortableBlock({ block, isSelected, isMultiSelected = false, froz
       } ${animationName ? `op-animate-${animationName}` : ""}`}
       role="button"
       aria-label={`${block.type} block${isMultiSelected ? ", selected" : ""}`}
-      aria-selected={isMultiSelected}
+      aria-pressed={isMultiSelected}
       tabIndex={0}
       onKeyDown={(e) => {
         if (e.key === "Enter" || e.key === " ") {
           e.preventDefault();
           onSelect();
+        }
+      }}
+      onDragOver={(e) => {
+        if (
+          !e.dataTransfer.types.includes("application/x-openpage-drag") &&
+          !e.dataTransfer.types.includes("application/x-openpage-block-id") &&
+          !e.dataTransfer.types.includes("text/plain")
+        ) {
+          return;
+        }
+        e.preventDefault();
+        e.dataTransfer.dropEffect = "copy";
+      }}
+      onDrop={(e) => {
+        if (e.defaultPrevented) return;
+
+        const existingId = readDraggedBlockId(e.dataTransfer);
+        if (existingId) {
+          e.preventDefault();
+          useEditorStore.getState().setDraggedItem(null);
+          if (existingId === block.id) return;
+          const source = useConfigStore.getState().getActivePageBlocks();
+          if (isSameOrInside(source, existingId, block.id)) return;
+          const rect = e.currentTarget.getBoundingClientRect();
+          const targetIndex = e.clientY < rect.top + rect.height / 2 ? index : index + 1;
+          useConfigStore.getState().moveBlockTo(existingId, { kind: "root", index: targetIndex });
+          useEditorStore.getState().selectBlock(existingId);
+          toast.success("Section moved");
+          return;
+        }
+
+        const payload = readDropPayload(e.dataTransfer);
+        if (payload) {
+          e.preventDefault();
+          useEditorStore.getState().setDraggedItem(null);
+          const globalWidgets = useConfigStore.getState().config.globalWidgets;
+          const { block: newBlock, label } = buildBlockFromPayload(payload, globalWidgets);
+          if (newBlock) {
+            const rect = e.currentTarget.getBoundingClientRect();
+            const targetIndex = e.clientY < rect.top + rect.height / 2 ? index : index + 1;
+            useConfigStore.getState().addBlock(newBlock, targetIndex);
+            useEditorStore.getState().selectBlock(newBlock.id);
+            toast.success(`${label} inserted`);
+          }
         }
       }}
     >

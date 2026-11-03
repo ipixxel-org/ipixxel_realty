@@ -5,14 +5,13 @@ import { LayoutTemplate, Plus, Sparkles } from "lucide-react";
 import { toast } from "sonner";
 import { useConfigStore } from "@/components/openpage/store/configStore";
 import { useEditorStore } from "@/components/openpage/store/editorStore";
-import { createBlockFromType, createBlockFromPresetId } from "@/lib/openpage/block-factory";
-import { readDropPayload } from "@/lib/openpage/drag-payload";
-import type { BlockConfig, BlockType } from "@/components/openpage/blocks/types";
+import { readDropPayload, readDraggedBlockId, buildBlockFromPayload } from "@/lib/openpage/drag-payload";
 
 export function CanvasEmpty() {
   const [isOver, setIsOver] = useState(false);
   const draggedItem = useEditorStore((s) => s.draggedItem);
   const addBlock = useConfigStore((s) => s.addBlock);
+  const moveBlockTo = useConfigStore((s) => s.moveBlockTo);
   const selectBlock = useEditorStore((s) => s.selectBlock);
 
   const isDragging = Boolean(draggedItem);
@@ -34,25 +33,22 @@ export function CanvasEmpty() {
         e.preventDefault();
         setIsOver(false);
         useEditorStore.getState().setDraggedItem(null);
-        // Only Blocks-panel widgets; a dragged image / link / text is ignored.
+
+        // 1. Check if an existing block from the Navigator was dragged
+        const existingId = readDraggedBlockId(e.dataTransfer);
+        if (existingId) {
+          moveBlockTo(existingId, { kind: "root", index: 0 });
+          selectBlock(existingId);
+          toast.success("Section moved to canvas");
+          return;
+        }
+
+        // 2. Otherwise check for a widget, preset or global payload from the Blocks panel
         const payload = readDropPayload(e.dataTransfer);
         if (!payload) return;
         try {
-          let newBlock: BlockConfig | null = null;
-          let label = "Block";
-          if (payload.kind === "block") {
-            newBlock = createBlockFromType(payload.type as BlockType);
-            label = payload.label || payload.type;
-          } else if (payload.kind === "preset") {
-            newBlock = createBlockFromPresetId(payload.presetId);
-            label = payload.label || "Section";
-          } else if (payload.kind === "global") {
-            const gw = useConfigStore.getState().config.globalWidgets?.find((w) => w.id === payload.globalWidgetId);
-            if (gw) {
-              newBlock = { ...JSON.parse(JSON.stringify(gw.block)), id: `block-${Date.now()}` };
-              label = gw.name;
-            }
-          }
+          const globalWidgets = useConfigStore.getState().config.globalWidgets;
+          const { block: newBlock, label } = buildBlockFromPayload(payload, globalWidgets);
           if (newBlock) {
             addBlock(newBlock, 0);
             selectBlock(newBlock.id);
@@ -98,37 +94,21 @@ export function CanvasEmpty() {
       </div>
 
       {!isDragging && (
-        <div className="flex flex-col items-center gap-3">
-          <div className="flex flex-wrap items-center justify-center gap-2">
-            <button
-              type="button"
-              onClick={() => useEditorStore.getState().openAiModal()}
-              className="flex items-center gap-1.5 px-4 py-2 rounded-lg bg-gradient-to-r from-[#6d5dfc] to-[#ec4899] text-white text-[12px] font-semibold shadow-md shadow-[#6d5dfc]/25 hover:opacity-95 transition-all"
-            >
-              <Sparkles size={14} />
-              Generate with AI
-            </button>
-            <button
-              type="button"
-              onClick={() => useEditorStore.getState().openLeftTab("templates")}
-              className="flex items-center gap-1.5 px-3.5 py-2 rounded-lg bg-green text-bg-0 text-[12px] font-semibold hover:bg-green/90 transition-colors"
-            >
-              <LayoutTemplate size={14} />
-              Browse section templates
-            </button>
-            <button
-              type="button"
-              onClick={() => useEditorStore.getState().openLeftTab("components")}
-              className="flex items-center gap-1.5 px-3.5 py-2 rounded-lg border border-border-default bg-bg-2 text-text-1 text-[12px] font-semibold hover:bg-bg-3 hover:text-text-0 transition-colors"
-            >
-              <Plus size={14} />
-              Add a block
-            </button>
-          </div>
-          <div className="flex items-center gap-2 text-[11px] text-text-3 border border-border-subtle rounded-full px-3 py-1 bg-bg-3/60">
-            <span className="inline-block w-2 h-2 rounded-full bg-green animate-ping" />
-            Drag widgets from the left, or press Ctrl+K to search everything
-          </div>
+        <div className="flex items-center gap-2 mt-2">
+          <button
+            type="button"
+            onClick={() => useEditorStore.getState().openLeftTab("components")}
+            className="px-3.5 py-1.5 rounded-lg bg-green text-black font-semibold text-[12px] hover:bg-green-hover transition-colors flex items-center gap-1.5 shadow-sm"
+          >
+            <Plus size={14} /> Add block
+          </button>
+          <button
+            type="button"
+            onClick={() => useEditorStore.getState().openLeftTab("templates")}
+            className="px-3.5 py-1.5 rounded-lg border border-border-default bg-bg-2 text-text-0 font-medium text-[12px] hover:border-border-hover transition-colors flex items-center gap-1.5"
+          >
+            <LayoutTemplate size={14} /> Browse templates
+          </button>
         </div>
       )}
     </div>

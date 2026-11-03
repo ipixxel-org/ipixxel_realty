@@ -92,6 +92,10 @@ export function applyBlockStyle(style?: BlockStyle): CSSProperties {
   if (style.flexDirection) s.flexDirection = style.flexDirection as CSSProperties["flexDirection"];
   if (style.flexWrap) s.flexWrap = style.flexWrap as CSSProperties["flexWrap"];
   if (style.flex) s.flex = style.flex;
+  if (style.flexGrow !== undefined && style.flexGrow !== "") s.flexGrow = Number(style.flexGrow);
+  if (style.flexShrink !== undefined && style.flexShrink !== "") s.flexShrink = Number(style.flexShrink);
+  if (style.flexBasis) s.flexBasis = formatUnit(style.flexBasis);
+  if (style.order !== undefined && style.order !== "") s.order = Number(style.order);
   if (style.justifyContent) s.justifyContent = style.justifyContent as CSSProperties["justifyContent"];
   if (style.alignItems) s.alignItems = style.alignItems as CSSProperties["alignItems"];
   if (style.alignSelf) s.alignSelf = style.alignSelf as CSSProperties["alignSelf"];
