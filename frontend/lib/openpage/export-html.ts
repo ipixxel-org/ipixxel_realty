@@ -1176,6 +1176,148 @@ ${logosHtml}
 }
 
 // ---------------------------------------------------------------------------
+// Modern widgets
+// ---------------------------------------------------------------------------
+
+function renderAccordion(block: BlockConfig): string {
+  const items = prop<Array<Record<string, unknown>>>(block.props, 'items', [])
+  const openFirst = prop<boolean>(block.props, 'openFirst', true)
+  const rows = items
+    .map((item, index) => {
+      const title = escapeHtml(String(item.title ?? ''))
+      const content = escapeHtml(String(item.content ?? ''))
+      const open = openFirst && index === 0
+      return `    <details class="rounded-xl border border-border-default bg-bg-1 overflow-hidden"${open ? ' open' : ''}>
+      <summary class="px-4 py-3.5 text-[15px] font-semibold text-text-0 cursor-pointer">${title}</summary>
+      <div class="px-4 pb-4 text-sm text-text-2 whitespace-pre-line">${content}</div>
+    </details>`
+    })
+    .join('\n')
+  return `  <section class="px-6 md:px-10 py-12">
+    <div class="max-w-3xl mx-auto">
+      <h2 class="font-display font-semibold text-3xl md:text-4xl tracking-tight text-center mb-8">${escapeHtml(String(block.props.title ?? 'Frequently Asked Questions'))}</h2>
+      <div class="space-y-2">
+${rows}
+      </div>
+    </div>
+  </section>`
+}
+
+function renderVideoGallery(block: BlockConfig): string {
+  const items = prop<Array<Record<string, unknown>>>(block.props, 'items', [])
+  const columns = Math.min(4, Math.max(1, Number(prop(block.props, 'columns', 3)) || 3))
+  const cards = items
+    .map((item) => {
+      const title = escapeHtml(String(item.title ?? ''))
+      const url = String(item.url ?? '').trim()
+      const thumb = String(item.thumbnail ?? '').trim()
+      const media = thumb
+        ? `<img src="${escapeHtml(thumb)}" alt="${title}" class="w-full h-full object-cover" />`
+        : '<div class="w-full h-full bg-bg-3 flex items-center justify-center text-text-3 text-xs">Video</div>'
+      return `      <a href="${escapeHtml(url || '#')}" class="group block rounded-xl overflow-hidden border border-border-default bg-bg-1">
+        <div class="aspect-video">${media}</div>
+        <div class="px-3 py-2.5 text-sm font-semibold text-text-0">${title}</div>
+      </a>`
+    })
+    .join('\n')
+  return `  <section class="px-6 md:px-10 py-12">
+    <div class="max-w-5xl mx-auto">
+      <h2 class="font-display font-semibold text-3xl md:text-4xl tracking-tight text-center mb-8">${escapeHtml(String(block.props.title ?? 'Video Gallery'))}</h2>
+      <div class="grid gap-4" style="grid-template-columns: repeat(${columns}, minmax(0, 1fr));">
+${cards}
+      </div>
+    </div>
+  </section>`
+}
+
+function renderImageComparison(block: BlockConfig): string {
+  const before = String(block.props.beforeImage ?? '').trim()
+  const after = String(block.props.afterImage ?? '').trim()
+  const beforeLabel = escapeHtml(String(block.props.beforeLabel ?? 'Before'))
+  const afterLabel = escapeHtml(String(block.props.afterLabel ?? 'After'))
+  const pane = (src: string, label: string, empty: string) =>
+    src
+      ? `<div class="relative"><img src="${escapeHtml(src)}" alt="${label}" class="w-full aspect-[16/10] object-cover" /><span class="absolute top-3 left-3 rounded-full bg-black/60 px-2.5 py-1 text-[11px] font-semibold text-white">${label}</span></div>`
+      : `<div class="relative aspect-[16/10] ${empty}"><span class="absolute top-3 left-3 rounded-full bg-black/60 px-2.5 py-1 text-[11px] font-semibold text-white">${label}</span></div>`
+  return `  <section class="px-6 md:px-10 py-12">
+    <div class="max-w-5xl mx-auto">
+      <h2 class="font-display font-semibold text-3xl md:text-4xl tracking-tight text-center mb-8">${escapeHtml(String(block.props.title ?? 'Before & After'))}</h2>
+      <div class="grid grid-cols-2 gap-1 rounded-xl overflow-hidden border border-border-default">
+        ${pane(before, beforeLabel, 'bg-slate-400')}
+        ${pane(after, afterLabel, 'bg-emerald-300')}
+      </div>
+    </div>
+  </section>`
+}
+
+const SHARE_URLS: Record<string, (url: string, title: string) => string> = {
+  facebook: (url) => `https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(url)}`,
+  x: (url, title) => `https://twitter.com/intent/tweet?url=${encodeURIComponent(url)}&text=${encodeURIComponent(title)}`,
+  linkedin: (url) => `https://www.linkedin.com/sharing/share-offsite/?url=${encodeURIComponent(url)}`,
+  whatsapp: (url, title) => `https://wa.me/?text=${encodeURIComponent(`${title} ${url}`.trim())}`,
+  email: (url, title) => `mailto:?subject=${encodeURIComponent(title)}&body=${encodeURIComponent(url)}`,
+}
+
+function renderSocialShare(block: BlockConfig): string {
+  const networks = prop<unknown>(block.props, 'networks', [])
+  const keys = Array.isArray(networks)
+    ? networks.map(String)
+    : String(networks ?? '').split(/[\s,]+/).filter(Boolean)
+  const url = String(block.props.url ?? '').trim()
+  const title = escapeHtml(String(block.props.title ?? block.props.label ?? ''))
+  const links = keys
+    .map((key) => {
+      const build = SHARE_URLS[key.toLowerCase()]
+      if (!build) return ''
+      return `      <a href="${escapeHtml(build(url, title))}" target="_blank" rel="noopener noreferrer" class="rounded-full border border-border-default bg-bg-1 px-3 py-1.5 text-xs font-medium text-text-1 hover:border-green hover:text-green">${escapeHtml(key)}</a>`
+    })
+    .filter(Boolean)
+    .join('\n')
+  return `  <section class="px-6 md:px-10 py-6">
+    <div class="flex flex-wrap items-center gap-2 max-w-5xl mx-auto">
+      <span class="text-sm font-medium text-text-2 mr-1">${escapeHtml(String(block.props.label ?? 'Share'))}</span>
+${links}
+    </div>
+  </section>`
+}
+
+function renderPopupTrigger(block: BlockConfig): string {
+  const label = escapeHtml(String(block.props.label ?? 'Get in touch'))
+  const url = String(block.props.url ?? '').trim()
+  const mode = String(block.props.mode ?? 'popup')
+  const color = escapeHtml(String(block.props.buttonColor ?? '#111827'))
+  const text = escapeHtml(String(block.props.textColor ?? '#ffffff'))
+  const radius = Math.max(0, Number(prop(block.props, 'radius', 8)) || 0)
+  const style = `background-color:${color};color:${text};border-radius:${radius}px`
+  if (mode === 'link' && url) {
+    return `  <section class="px-6 md:px-10 py-4">
+    <a href="${escapeHtml(url)}" class="inline-flex items-center justify-center px-5 py-2.5 text-sm font-semibold" style="${style}">${label}</a>
+  </section>`
+  }
+  const title = escapeHtml(String(block.props.popupTitle ?? label))
+  const content = escapeHtml(String(block.props.popupContent ?? ''))
+  return `  <section class="px-6 md:px-10 py-4">
+    <button type="button" onclick="document.getElementById('popup-${escapeHtml(block.id)}').showModal()" class="inline-flex items-center justify-center px-5 py-2.5 text-sm font-semibold" style="${style}">${label}</button>
+    <dialog id="popup-${escapeHtml(block.id)}" class="rounded-2xl border border-border-default bg-bg-1 p-6 max-w-lg w-full">
+      <h3 class="font-display text-xl font-semibold text-text-0">${title}</h3>
+      <p class="mt-2 text-sm text-text-2 whitespace-pre-line">${content}</p>
+      <form method="dialog" class="mt-4"><button class="rounded-lg border border-border-default px-3 py-1.5 text-sm text-text-1">Close</button></form>
+    </dialog>
+  </section>`
+}
+
+function renderSiteSearch(block: BlockConfig): string {
+  const action = String(block.props.targetPath ?? '/search').trim() || '/search'
+  const param = String(block.props.queryParam ?? 'q').trim() || 'q'
+  return `  <section class="px-6 md:px-10 py-4">
+    <form role="search" action="${escapeHtml(action)}" method="get" class="flex w-full max-w-xl mx-auto items-center gap-2">
+      <input type="search" name="${escapeHtml(param)}" placeholder="${escapeHtml(String(block.props.placeholder ?? 'Search…'))}" class="flex-1 rounded-lg border border-border-default bg-bg-1 px-3 py-2 text-sm text-text-0" />
+      <button type="submit" class="rounded-lg bg-green px-4 py-2 text-sm font-semibold text-black">${escapeHtml(String(block.props.buttonLabel ?? 'Search'))}</button>
+    </form>
+  </section>`
+}
+
+// ---------------------------------------------------------------------------
 // Block dispatcher
 // ---------------------------------------------------------------------------
 
@@ -1207,6 +1349,18 @@ function renderBlock(block: BlockConfig): string {
       return renderNewsletter(block)
     case 'logocloud':
       return renderLogoCloud(block)
+    case 'accordion':
+      return renderAccordion(block)
+    case 'video-gallery':
+      return renderVideoGallery(block)
+    case 'image-comparison':
+      return renderImageComparison(block)
+    case 'social-share':
+      return renderSocialShare(block)
+    case 'popup-trigger':
+      return renderPopupTrigger(block)
+    case 'site-search':
+      return renderSiteSearch(block)
     default:
       return `  <!-- Unknown block type: ${escapeHtml(block.type)} -->`
   }

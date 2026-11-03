@@ -3,6 +3,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import type { BlockConfig, BlockType } from "@/components/openpage/blocks/types";
 import { RenderBlock } from "@/components/openpage/blocks/registry";
 import { blockMetadata } from "@/lib/openpage/block-metadata";
+import { exportSiteToHTML } from "@/lib/openpage/export-html";
 import { createBlockFromType } from "@/lib/openpage/block-factory";
 import { PICKER_GROUPS } from "@/components/openpage/editor/LayersPanel";
 import { ElementEditorContext } from "@/components/openpage/blocks/El";
@@ -19,6 +20,7 @@ const NEW_TYPES: BlockType[] = [
   "site-logo", "site-title", "page-title", "breadcrumbs", "table-of-contents",
   "hotspot", "counter", "star-rating", "progress-bar", "price-list", "pricing", "flip-box",
   "countdown", "off-canvas", "property-carousel", "portfolio", "posts", "reviews",
+  "accordion", "video-gallery", "image-comparison", "social-share", "popup-trigger", "site-search",
 ];
 
 const make = (type: BlockType, props: Record<string, unknown> = {}, variant = "default"): BlockConfig => ({
@@ -199,6 +201,55 @@ describe("widgets", () => {
     render(<RenderBlock block={make("property-carousel")} />);
     expect(screen.getAllByText("Property name")).toHaveLength(3);
     expect(screen.getByLabelText("Next")).toBeTruthy();
+  });
+});
+
+describe("additional widgets", () => {
+  it("Accordion opens the first item and keeps the others closed", () => {
+    render(<RenderBlock block={make("accordion")} />);
+    expect(screen.getByText("What is included?").closest("button")?.getAttribute("aria-expanded")).toBe("true");
+    expect(screen.getByText("How do I get started?").closest("button")?.getAttribute("aria-expanded")).toBe("false");
+  });
+
+  it("Image Comparison labels both images", () => {
+    render(
+      <RenderBlock
+        block={make("image-comparison", {
+          beforeImage: "/before.jpg",
+          afterImage: "/after.jpg",
+        })}
+      />,
+    );
+    expect(screen.getByText("Before")).toBeTruthy();
+    expect(screen.getByText("After")).toBeTruthy();
+  });
+
+  it("Site Search submits to the configured results page", () => {
+    const { container } = render(<RenderBlock block={make("site-search", { targetPath: "/listings" })} />);
+    const form = container.querySelector("form");
+    expect(form?.getAttribute("action")).toBe("/listings");
+    expect(container.querySelector('input[name="q"]')).toBeTruthy();
+  });
+
+  it("Popup Trigger opens its popup on click in the live page", () => {
+    render(<RenderBlock block={make("popup-trigger", { popupTitle: "Talk to us" })} />);
+    fireEvent.click(screen.getByRole("button", { name: /get in touch/i }));
+    expect(screen.getByRole("dialog")).toBeTruthy();
+    expect(screen.getByText("Talk to us")).toBeTruthy();
+  });
+
+  it("exports all six additional widgets to HTML instead of comments", () => {
+    const blocks = [
+      "accordion", "video-gallery", "image-comparison", "social-share", "popup-trigger", "site-search",
+    ].map((type) => make(type as BlockType));
+    const html = exportSiteToHTML({ name: "Export test", blocks });
+    expect(html).not.toMatch(/Unknown block type/);
+    expect(html).toContain("Frequently Asked Questions");
+    expect(html).toContain("Video Gallery");
+    expect(html).toContain("Before &amp; After");
+    expect(html).toContain("Share");
+    expect(html).toContain("Get in touch");
+    expect(html).toContain('role="search"');
   });
 });
 

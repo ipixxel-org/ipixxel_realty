@@ -2,10 +2,12 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { Search, Users } from "lucide-react";
+import { Search } from "lucide-react";
 import { Reveal } from "@/components/superadmin/reveal";
 import { CountUp } from "@/components/superadmin/count-up";
 import { Icon } from "@/components/icons";
+import { LeadStatusPill } from "@/components/superadmin/lead-status-pill";
+import { LIST_PAGE_SIZE, ListPager } from "@/components/ui/list-pager";
 import { getAdminLeads, getAdminLeadsMeta } from "@/lib/api";
 import {
   leadDisplayEmail,
@@ -14,49 +16,29 @@ import {
   leadDisplaySource,
 } from "@/lib/lead-display";
 import {
-  DEFAULT_LEAD_STAGES,
-  LEAD_STAGE_ORDER,
-  stageTint,
-} from "@/lib/lead-stages";
+  ADMIN_LEAD_STATUS_META,
+  ADMIN_LEAD_STATUS_ORDER,
+  adminLeadStatusTint,
+  formatAdminLeadDate,
+} from "@/lib/admin-leads";
 import type {
   AdminLead,
   AdminLeadOrganisation,
+  AdminLeadStatus,
   AdminLeadsMeta,
-  CrmLeadStatus,
 } from "@/lib/types";
 
-const PAGE_SIZE = 10;
-
-function formatDateTime(value: string): string {
-  const d = new Date(value);
-  if (Number.isNaN(d.getTime())) return value;
-  const day = String(d.getDate()).padStart(2, "0");
-  const months = [
-    "Jan", "Feb", "Mar", "Apr", "May", "Jun",
-    "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
-  ];
-  const hh = String(d.getHours()).padStart(2, "0");
-  const mm = String(d.getMinutes()).padStart(2, "0");
-  return `${day} ${months[d.getMonth()]} ${d.getFullYear()}, ${hh}:${mm}`;
-}
-
-function StatusPill({ status }: { status: CrmLeadStatus }) {
-  const stage = DEFAULT_LEAD_STAGES[status] ?? { label: status, color: "#94a3b8" };
-  return (
-    <span
-      className="badge"
-      style={{ background: stageTint(stage.color), color: stage.color }}
-    >
-      {stage.label}
-    </span>
-  );
-}
+const EMPTY_STATUS_COUNTS = Object.fromEntries(
+  ADMIN_LEAD_STATUS_ORDER.map((status) => [status, 0]),
+) as Record<AdminLeadStatus, number>;
 
 function sourceBadgeClass(source: string | null): string {
   switch ((source || "").toLowerCase()) {
     case "meta":
+    case "facebook":
       return "b-indigo";
     case "google":
+    case "google_ads":
       return "b-sky";
     case "whatsapp":
       return "b-green";
@@ -69,11 +51,13 @@ export default function AdminLeadsPage() {
   const [leads, setLeads] = useState<AdminLead[] | null>(null);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
-  const [kpi, setKpi] = useState({
+  const [andStats, setStats] = useState({
     total: 0,
     unassigned: 0,
-    new: 0,
-    won: 0,
+    followUpsDue: 0,
+    today: 0,
+    conversionRate: 0,
+    byStatus: EMPTY_STATUS_COUNTS,
   });
   const [meta, setMeta] = useState<AdminLeadsMeta | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -81,18 +65,20 @@ export default function AdminLeadsPage() {
 
   const [searchInput, setSearchInput] = useState("");
   const [search, setSearch] = useState("");
-  const [statusFilter, setStatusFilter] = useState<"" | CrmLeadStatus>("");
+  const [statusFilter, setStatusFilter] = useState<"" | AdminLeadStatus>("");
   const [orgFilter, setOrgFilter] = useState("");
+  const [projectFilter, setProjectFilter] = useState("");
   const [sourceFilter, setSourceFilter] = useState("");
+  const [sortBy, setSortBy] = useState("createdAt");
+  const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
 
   useEffect(() => {
-    const t = setTimeout(() => setSearch(searchInput.trim()), 250);
+    const t = setTimeout(() => {
+      setSearch(searchInput.trim());
+      setPage(1);
+    }, 250);
     return () => clearTimeout(t);
   }, [searchInput]);
-
-  useEffect(() => {
-    setPage(1);
-  }, [search, statusFilter, orgFilter, sourceFilter]);
 
   useEffect(() => {
     let cancelled = false;
@@ -101,7 +87,9 @@ export default function AdminLeadsPage() {
         if (!cancelled) setMeta(m);
       })
       .catch(() => {
-        if (!cancelled) setMeta({ organisations: [], sources: [], statuses: LEAD_STAGE_ORDER });
+        if (!cancelled) {
+          setMeta({ organisations: [], projects: [], sources: [], statuses: [...ADMIN_LEAD_STATUS_ORDER] });
+        }
       });
     return () => {
       cancelled = true;
@@ -114,87 +102,172 @@ export default function AdminLeadsPage() {
     try {
       const res = await getAdminLeads({
         page,
-        limit: PAGE_SIZE,
+        limit: LIST_PAGE_SIZE,
         search: search || undefined,
         status: statusFilter || undefined,
         orgId: orgFilter || undefined,
+        projectId: projectFilter || undefined,
         source: sourceFilter || undefined,
+        sortBy: sortBy as "createdAt" | "status" | "source" | "formName",
+        sortDir,
       });
       setLeads(res.data);
       setTotal(res.total);
-      setKpi({
-        total: res.stats?.total ?? res.total,
-        unassigned: res.stats?.unassigned ?? 0,
-        new: res.stats?.new ?? 0,
-        won: res.stats?.won ?? 0,
-      });
+      setStats(res.stats);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to load leads.");
       setLeads([]);
     } finally {
       setLoading(false);
     }
-  }, [page, search, statusFilter, orgFilter, sourceFilter]);
+  }, [
+    page,
+    search,
+    statusFilter,
+    orgFilter,
+    projectFilter,
+    sourceFilter,
+    sortBy,
+    sortDir,
+  ]);
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- load() owns its async loading state
     void load();
   }, [load]);
 
-  const pageCount = Math.max(1, Math.ceil(total / PAGE_SIZE));
   const orgs: AdminLeadOrganisation[] = meta?.organisations ?? [];
+  const projects = meta?.projects ?? [];
 
-  const STAT_TILES = useMemo(
+  const statTiles = useMemo(
     () => [
-      { label: "Total leads", value: kpi.total, ic: "ic-indigo" },
-      { label: "Unassigned", value: kpi.unassigned, ic: "ic-amber" },
-      { label: "New", value: kpi.new, ic: "ic-sky" },
-      { label: "Won", value: kpi.won, ic: "ic-green" },
+      { label: "Total leads", value: andStats.total, ic: "ic-indigo", icon: "users" },
+      { label: "New", value: andStats.byStatus.new, ic: "ic-sky", icon: "sparkles" },
+      { label: "Follow-ups due", value: andStats.followUpsDue, ic: "ic-amber", icon: "clock" },
+      { label: "Conversion rate", value: andStats.conversionRate, suffix: "%", ic: "ic-green", icon: "trending" },
     ],
-    [kpi],
+    [andStats],
   );
+
+  const activeStatusCount = statusFilter ? andStats.byStatus[statusFilter] : andStats.total;
 
   return (
     <>
       <div className="page-head reveal in">
         <div>
           <div className="eyebrow">
-            <Users size={13} /> Product
+            <Icon name="target" size={13} /> Lead Management
           </div>
-          <h1>All Leads</h1>
+          <h1>Super Admin Leads</h1>
           <div className="sub">
-            Platform-wide view of leads captured from every organisation. Read-only — manage assignment and stages in each org&apos;s Lead Center.
+            Every lead captured by the iframe forms and connected channels. Update stages, add remarks and schedule follow-ups from one place.
           </div>
+        </div>
+        <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+          <span className="badge b-green">{andStats.today} captured today</span>
+          {andStats.unassigned > 0 ? (
+            <span className="badge b-amber">{andStats.unassigned} unassigned</span>
+          ) : null}
         </div>
       </div>
 
       <Reveal delay={1} className="grid g4">
-        {STAT_TILES.map((s) => (
+        {statTiles.map((s) => (
           <div key={s.label} className="stat">
             <div className="top">
               <span className="label">{s.label}</span>
               <span className={`ic ${s.ic}`}>
-                <Icon name="users" size={14} />
+                <Icon name={s.icon as never} size={18} />
               </span>
             </div>
             <div className="value">
-              {loading && leads === null ? "—" : <CountUp value={s.value} />}
+              {leads === null && loading ? (
+                "—"
+              ) : (
+                <>
+                  <CountUp value={s.value} />
+                  {s.suffix}
+                </>
+              )}
             </div>
           </div>
         ))}
       </Reveal>
 
       <Reveal delay={2}>
-        <div className="card" style={{ marginTop: 18 }}>
+        <div className="card" style={{ marginTop: 18, marginBottom: 18 }}>
+          <div className="card-h">
+            <span className="t">Pipeline</span>
+            <span className="x">{activeStatusCount.toLocaleString()} in view</span>
+          </div>
+          <div className="card-b" style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+            <button
+              type="button"
+              className="btn btn-sm"
+              onClick={() => {
+                setStatusFilter("");
+                setPage(1);
+              }}
+              style={{
+                border: statusFilter === "" ? "1px solid #2563eb" : undefined,
+                background: statusFilter === "" ? "#eff6ff" : undefined,
+                color: statusFilter === "" ? "#1d4ed8" : undefined,
+              }}
+            >
+              All
+              <span className="muted" style={{ marginLeft: 6 }}>
+                {andStats.total}
+              </span>
+            </button>
+            {ADMIN_LEAD_STATUS_ORDER.map((status) => {
+              const stage = ADMIN_LEAD_STATUS_META[status];
+              const active = statusFilter === status;
+              return (
+                <button
+                  key={status}
+                  type="button"
+                  className="btn btn-sm"
+                  onClick={() => {
+                    setStatusFilter(active ? "" : status);
+                    setPage(1);
+                  }}
+                  style={{
+                    border: `1px solid ${active ? stage.color : "transparent"}`,
+                    background: active ? adminLeadStatusTint(stage.color) : "#f8fafc",
+                    color: active ? stage.color : "#475569",
+                  }}
+                >
+                  {stage.label}
+                  <span style={{ marginLeft: 6, opacity: 0.75 }}>
+                    {andStats.byStatus[status]}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      </Reveal>
+
+      <Reveal delay={2}>
+        <div className="card">
+          <div className="card-h">
+            <span className="t">Leads</span>
+            <span className="x">
+              {loading ? "Loading…" : `${total.toLocaleString()} matching lead${total === 1 ? "" : "s"}`}
+            </span>
+          </div>
+
           <div
             style={{
               display: "flex",
               gap: 10,
               flexWrap: "wrap",
               alignItems: "center",
-              marginBottom: 14,
+              padding: "14px 16px",
+              borderBottom: "1px solid #eef2f6",
             }}
           >
-            <div style={{ position: "relative", flex: 1, minWidth: 200, maxWidth: 320 }}>
+            <div style={{ position: "relative", flex: 1, minWidth: 220, maxWidth: 340 }}>
               <Search
                 size={15}
                 style={{
@@ -207,7 +280,7 @@ export default function AdminLeadsPage() {
               />
               <input
                 className="inp"
-                placeholder="Search name, phone, email…"
+                placeholder="Search name, phone, email, city…"
                 style={{ paddingLeft: 36 }}
                 value={searchInput}
                 onChange={(e) => setSearchInput(e.target.value)}
@@ -215,22 +288,13 @@ export default function AdminLeadsPage() {
             </div>
             <select
               className="inp"
-              style={{ width: "auto", minWidth: 140 }}
-              value={statusFilter}
-              onChange={(e) => setStatusFilter((e.target.value || "") as "" | CrmLeadStatus)}
-            >
-              <option value="">All statuses</option>
-              {LEAD_STAGE_ORDER.map((s) => (
-                <option key={s} value={s}>
-                  {DEFAULT_LEAD_STAGES[s].label}
-                </option>
-              ))}
-            </select>
-            <select
-              className="inp"
-              style={{ width: "auto", minWidth: 180 }}
+              style={{ width: "auto", minWidth: 170 }}
               value={orgFilter}
-              onChange={(e) => setOrgFilter(e.target.value)}
+              onChange={(e) => {
+                setOrgFilter(e.target.value);
+                setProjectFilter("");
+                setPage(1);
+              }}
             >
               <option value="">All organisations</option>
               {orgs.map((o) => (
@@ -241,9 +305,28 @@ export default function AdminLeadsPage() {
             </select>
             <select
               className="inp"
+              style={{ width: "auto", minWidth: 160 }}
+              value={projectFilter}
+              onChange={(e) => {
+                setProjectFilter(e.target.value);
+                setPage(1);
+              }}
+            >
+              <option value="">All projects</option>
+              {projects.map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.name}
+                </option>
+              ))}
+            </select>
+            <select
+              className="inp"
               style={{ width: "auto", minWidth: 140 }}
               value={sourceFilter}
-              onChange={(e) => setSourceFilter(e.target.value)}
+              onChange={(e) => {
+                setSourceFilter(e.target.value);
+                setPage(1);
+              }}
             >
               <option value="">All sources</option>
               {(meta?.sources ?? []).map((s) => (
@@ -252,13 +335,44 @@ export default function AdminLeadsPage() {
                 </option>
               ))}
             </select>
-            <span className="muted" style={{ fontSize: 12.5, marginLeft: "auto" }}>
-              {total} lead{total !== 1 ? "s" : ""}
-            </span>
+            <select
+              className="inp"
+              style={{ width: "auto", minWidth: 150 }}
+              value={`${sortBy}:${sortDir}`}
+              onChange={(e) => {
+                const [nextBy, nextDir] = e.target.value.split(":");
+                setSortBy(nextBy);
+                setSortDir(nextDir as "asc" | "desc");
+                setPage(1);
+              }}
+            >
+              <option value="createdAt:desc">Newest first</option>
+              <option value="createdAt:asc">Oldest first</option>
+              <option value="status:asc">Status A–Z</option>
+              <option value="source:asc">Source A–Z</option>
+              <option value="formName:asc">Form A–Z</option>
+            </select>
+            {(search || statusFilter || orgFilter || projectFilter || sourceFilter) ? (
+              <button
+                type="button"
+                className="btn btn-ghost btn-sm"
+                onClick={() => {
+                  setSearchInput("");
+                  setSearch("");
+                  setStatusFilter("");
+                  setOrgFilter("");
+                  setProjectFilter("");
+                  setSourceFilter("");
+                  setPage(1);
+                }}
+              >
+                Clear filters
+              </button>
+            ) : null}
           </div>
 
           {error ? (
-            <div className="muted" style={{ padding: "24px 0", textAlign: "center", color: "var(--rose, #e11d48)" }}>
+            <div className="form-alert" style={{ margin: 16 }}>
               {error}
             </div>
           ) : null}
@@ -272,20 +386,21 @@ export default function AdminLeadsPage() {
                   <th>Project</th>
                   <th>Source</th>
                   <th>Status</th>
-                  <th>Assigned</th>
+                  <th>Next follow-up</th>
                   <th>Created</th>
+                  <th />
                 </tr>
               </thead>
               <tbody>
                 {loading && !leads ? (
                   <tr>
-                    <td colSpan={7} className="muted" style={{ textAlign: "center", padding: 32 }}>
+                    <td colSpan={8} className="muted" style={{ textAlign: "center", padding: 32 }}>
                       Loading leads…
                     </td>
                   </tr>
                 ) : !leads?.length ? (
                   <tr>
-                    <td colSpan={7} className="muted" style={{ textAlign: "center", padding: 32 }}>
+                    <td colSpan={8} className="muted" style={{ textAlign: "center", padding: 32 }}>
                       No leads match these filters.
                     </td>
                   </tr>
@@ -298,7 +413,12 @@ export default function AdminLeadsPage() {
                     return (
                       <tr key={lead.id}>
                         <td>
-                          <div style={{ fontWeight: 600 }}>{name || "—"}</div>
+                          <Link
+                            href={`/admin-console/leads/${lead.id}`}
+                            style={{ fontWeight: 600, color: "var(--ink)" }}
+                          >
+                            {name}
+                          </Link>
                           <div className="muted" style={{ fontSize: 12 }}>
                             {[phone, email].filter(Boolean).join(" · ") || "—"}
                           </div>
@@ -324,15 +444,27 @@ export default function AdminLeadsPage() {
                           </span>
                         </td>
                         <td>
-                          <StatusPill status={lead.status} />
+                          <LeadStatusPill status={lead.status} />
                         </td>
-                        <td>
-                          {lead.assignedTo?.name || (
-                            <span className="muted">Unassigned</span>
+                        <td style={{ whiteSpace: "nowrap", fontSize: 12.5 }}>
+                          {lead.nextAction ? (
+                            <span style={{ color: lead.nextAction.overdue ? "var(--rose)" : undefined }}>
+                              {formatAdminLeadDate(lead.nextAction.scheduledAt)}
+                            </span>
+                          ) : (
+                            <span className="muted">Not scheduled</span>
                           )}
                         </td>
                         <td className="muted" style={{ whiteSpace: "nowrap", fontSize: 12.5 }}>
-                          {formatDateTime(lead.createdAt)}
+                          {formatAdminLeadDate(lead.createdAt)}
+                        </td>
+                        <td>
+                          <Link
+                            href={`/admin-console/leads/${lead.id}`}
+                            className="btn btn-ghost btn-sm"
+                          >
+                            Manage
+                          </Link>
                         </td>
                       </tr>
                     );
@@ -342,39 +474,14 @@ export default function AdminLeadsPage() {
             </table>
           </div>
 
-          {pageCount > 1 ? (
-            <div
-              style={{
-                display: "flex",
-                justifyContent: "space-between",
-                alignItems: "center",
-                marginTop: 14,
-                gap: 12,
-              }}
-            >
-              <span className="muted" style={{ fontSize: 12.5 }}>
-                Page {page} of {pageCount}
-              </span>
-              <div style={{ display: "flex", gap: 8 }}>
-                <button
-                  type="button"
-                  className="btn btn-ghost"
-                  disabled={page <= 1 || loading}
-                  onClick={() => setPage((p) => Math.max(1, p - 1))}
-                >
-                  Previous
-                </button>
-                <button
-                  type="button"
-                  className="btn btn-ghost"
-                  disabled={page >= pageCount || loading}
-                  onClick={() => setPage((p) => Math.min(pageCount, p + 1))}
-                >
-                  Next
-                </button>
-              </div>
-            </div>
-          ) : null}
+          <ListPager
+            page={page}
+            total={total}
+            pageSize={LIST_PAGE_SIZE}
+            onPageChange={setPage}
+            loading={loading}
+            noun="leads"
+          />
         </div>
       </Reveal>
     </>

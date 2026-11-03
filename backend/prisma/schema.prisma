@@ -2351,7 +2351,13 @@ enum ProjectStatus {
 enum LeadStatus {
   new
   contacted
+  connected
   follow_up
+  interested
+  not_interested
+  converted
+  // Legacy CRM stages kept for org-level Lead Center compatibility. Super Admin
+  // Lead Management normalises these to follow_up / interested / converted.
   site_visit
   negotiation
   won

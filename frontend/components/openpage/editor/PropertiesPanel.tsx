@@ -91,6 +91,8 @@ const ITEM_SUB_ELEMENTS: Partial<Record<string, Record<string, Array<{ key: stri
   'lead-form': { benefits: [{ key: 'title', label: 'Title' }, { key: 'description', label: 'Description' }] },
   gallery: { images: [{ key: 'image', label: 'Image' }, { key: 'caption', label: 'Caption' }, { key: 'meta', label: 'Meta' }] },
   'icon-box': { items: [{ key: 'icon', label: 'Icon' }, { key: 'title', label: 'Title' }, { key: 'description', label: 'Description' }] },
+  accordion: { items: [{ key: 'title', label: 'Question' }, { key: 'content', label: 'Answer' }] },
+  'video-gallery': { items: [{ key: 'title', label: 'Title' }] },
 }
 
 /** Item template keys whose default carries over to every newly added item. */
@@ -1174,6 +1176,84 @@ const blockFields: Partial<Record<BlockType, { sections: { title: string; fields
       ]},
     ],
   },
+  accordion: {
+    sections: [
+      { title: 'Content', fields: [
+        { key: 'title', label: 'Title', type: 'text' },
+        { key: 'subtitle', label: 'Subtitle', type: 'text' },
+        { key: 'items', label: 'Accordion items', type: 'array-items' },
+      ]},
+      { title: 'Behaviour', fields: [
+        { key: 'openFirst', label: 'Open first item', type: 'toggle' },
+        { key: 'allowMultiple', label: 'Allow multiple open', type: 'toggle' },
+      ]},
+    ],
+  },
+  'video-gallery': {
+    sections: [
+      { title: 'Content', fields: [
+        { key: 'title', label: 'Title', type: 'text' },
+        { key: 'subtitle', label: 'Subtitle', type: 'text' },
+        { key: 'items', label: 'Videos', type: 'array-items' },
+      ]},
+      { title: 'Layout', fields: [
+        { key: 'columns', label: 'Columns', type: 'select', options: ['1', '2', '3', '4'] },
+      ]},
+    ],
+  },
+  'image-comparison': {
+    sections: [
+      { title: 'Content', fields: [
+        { key: 'title', label: 'Title', type: 'text' },
+        { key: 'subtitle', label: 'Subtitle', type: 'text' },
+        { key: 'beforeImage', label: 'Before image', type: 'image' },
+        { key: 'afterImage', label: 'After image', type: 'image' },
+        { key: 'beforeLabel', label: 'Before label', type: 'text' },
+        { key: 'afterLabel', label: 'After label', type: 'text' },
+        { key: 'startPercent', label: 'Starting position (%)', type: 'number' },
+      ]},
+    ],
+  },
+  'social-share': {
+    sections: [
+      { title: 'Content', fields: [
+        { key: 'label', label: 'Label', type: 'text' },
+        { key: 'url', label: 'URL (empty uses this page)', type: 'text' },
+        { key: 'networks', label: 'Networks (facebook, x, linkedin, whatsapp, email)', type: 'array-strings' },
+      ]},
+      { title: 'Style', fields: [
+        { key: 'showCopy', label: 'Show copy link button', type: 'toggle' },
+      ]},
+    ],
+  },
+  'popup-trigger': {
+    sections: [
+      { title: 'Content', fields: [
+        { key: 'label', label: 'Button text', type: 'text' },
+        { key: 'mode', label: 'Action', type: 'select', options: ['popup', 'link'] },
+        { key: 'url', label: 'Link URL (when Action = link)', type: 'text' },
+        { key: 'popupTitle', label: 'Popup title', type: 'text' },
+        { key: 'popupContent', label: 'Popup content', type: 'textarea' },
+        { key: 'popupCtaLabel', label: 'Popup button text', type: 'text' },
+        { key: 'popupCtaUrl', label: 'Popup button URL', type: 'text' },
+      ]},
+      { title: 'Style', fields: [
+        { key: 'buttonColor', label: 'Button background', type: 'color' },
+        { key: 'textColor', label: 'Button text colour', type: 'color' },
+        { key: 'radius', label: 'Corner radius (px)', type: 'number' },
+      ]},
+    ],
+  },
+  'site-search': {
+    sections: [
+      { title: 'Content', fields: [
+        { key: 'placeholder', label: 'Placeholder', type: 'text' },
+        { key: 'buttonLabel', label: 'Button label', type: 'text' },
+        { key: 'targetPath', label: 'Results page', type: 'text' },
+        { key: 'queryParam', label: 'Query parameter', type: 'text' },
+      ]},
+    ],
+  },
   'site-logo': {
     sections: [
       { title: 'Content', fields: [
@@ -1761,6 +1841,8 @@ function PropertyField({ field, block }: { field: FieldDef; block: BlockConfig }
             socialLinks: { label: '', url: '', icon: '' },
             linkColumns: { title: '', links: '' },
           },
+          accordion: { items: { title: '', content: '', items: [] } },
+          'video-gallery': { items: { title: '', url: '', thumbnail: '' } },
         }
         const defaults = blockTemplates[block.type]?.[field.key] ?? ELEMENT_ITEM_TEMPLATES[block.type]?.[field.key]
         if (items.length > 0) {

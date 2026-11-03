@@ -5,8 +5,8 @@ import { toast } from "sonner";
 import {
   Layout, Grid3X3, DollarSign, Megaphone, PanelBottom,
   MessageSquare, HelpCircle, Image,
-  Copy, Trash2, GripVertical, Plus, Search, Minus, Flag,
-  ImageIcon, Play, GalleryHorizontalEnd, Eye, EyeOff,
+  Plus, Search, Minus, Flag,
+  ImageIcon, Play, GalleryHorizontalEnd,
   Building2, MapPin, Home, Trees, FileText, Download, Mail, Save, Layers,
   ChevronDown, ChevronRight, Type, Box, Code2,
   LayoutTemplate, Blocks, Globe, PanelLeftClose, X, ClipboardList,
@@ -16,22 +16,6 @@ import {
   ChevronsRight, ListTree, LayoutGrid, Newspaper, Briefcase, MessageSquareQuote,
   GalleryHorizontal,
 } from "lucide-react";
-import {
-  DndContext,
-  closestCenter,
-  KeyboardSensor,
-  PointerSensor,
-  useSensor,
-  useSensors,
-  type DragEndEvent,
-} from '@dnd-kit/core'
-import {
-  SortableContext,
-  sortableKeyboardCoordinates,
-  useSortable,
-  verticalListSortingStrategy,
-} from '@dnd-kit/sortable'
-import { CSS } from '@dnd-kit/utilities'
 import { useConfigStore } from "@/components/openpage/store/configStore";
 import { useEditorStore } from "@/components/openpage/store/editorStore";
 import { blockMetadata } from "@/lib/openpage/block-metadata";
@@ -41,10 +25,11 @@ import {
   createBlockFromPreset,
   type SectionPresetCategory,
 } from "@/lib/openpage/section-presets";
-import { createBlockFromType, isDivBlock } from "@/lib/openpage/block-factory";
-import type { BlockType, BlockConfig } from "@/components/openpage/blocks/types";
+import { createBlockFromType } from "@/lib/openpage/block-factory";
+import type { BlockType } from "@/components/openpage/blocks/types";
 import { EMPTY_GLOBAL_WIDGETS } from "./AdvancedPanel";
 import { FormBuilder } from "./FormBuilder";
+import { NavigatorTree } from "./NavigatorTree";
 
 const blockIcons: Partial<Record<BlockType, typeof Layout>> = {
   section: Square,
@@ -68,6 +53,12 @@ const blockIcons: Partial<Record<BlockType, typeof Layout>> = {
   posts: Newspaper,
   reviews: MessageSquareQuote,
   "social-icons": Share2,
+  accordion: ChevronDown,
+  "video-gallery": Play,
+  "image-comparison": GalleryHorizontalEnd,
+  "social-share": Share2,
+  "popup-trigger": MessageSquare,
+  "site-search": Search,
   tabs: PanelTop,
   "site-logo": Bookmark,
   "site-title": Type,
@@ -131,7 +122,7 @@ export const PICKER_GROUPS: { id: string; title: string; defaultOpen: boolean; t
     id: "basic",
     title: "Basic Elements",
     defaultOpen: true,
-    types: ["grid", "icon-list", "animated-headline", "alert", "tabs", "social-icons"],
+    types: ["grid", "icon-list", "animated-headline", "alert", "accordion", "tabs", "social-icons"],
   },
   {
     id: "layout",
@@ -152,7 +143,7 @@ export const PICKER_GROUPS: { id: string; title: string; defaultOpen: boolean; t
     title: "Media",
     defaultOpen: false,
     // Image / Video live in Core.
-    types: ["gallery", "image-box", "slider", "hotspot"],
+    types: ["gallery", "image-box", "slider", "video-gallery", "image-comparison", "hotspot"],
   },
   {
     id: "re",
@@ -176,13 +167,13 @@ export const PICKER_GROUPS: { id: string; title: string; defaultOpen: boolean; t
     id: "forms",
     title: "Lead & Forms",
     defaultOpen: true,
-    types: ["lead-form", "site-visit", "newsletter", "download-brochure", "off-canvas", "countdown"],
+    types: ["lead-form", "site-visit", "newsletter", "download-brochure", "off-canvas", "countdown", "social-share", "popup-trigger"],
   },
   {
     id: "chrome",
     title: "Header / Footer & Site",
     defaultOpen: false,
-    types: ["navbar", "footer", "site-logo", "site-title", "page-title", "breadcrumbs", "table-of-contents"],
+    types: ["navbar", "footer", "site-logo", "site-title", "page-title", "breadcrumbs", "table-of-contents", "site-search"],
   },
 ]
 
@@ -210,9 +201,15 @@ const GRID_LABELS: Partial<Record<BlockType, string>> = {
   gallery: "Gallery",
   testimonials: "Testimonial",
   "lead-form": "Contact Form",
+  accordion: "Accordion",
+  "video-gallery": "Video Gallery",
+  "image-comparison": "Before / After",
+  "social-share": "Social Share",
+  "popup-trigger": "Popup Trigger",
+  "site-search": "Site Search",
 }
 
-const blockLabels: Partial<Record<BlockType, string>> = {
+export const blockLabels: Partial<Record<BlockType, string>> = {
   'icon-list': 'Icon list',
   alert: 'Alert',
   'animated-headline': 'Animated headline',
@@ -231,6 +228,12 @@ const blockLabels: Partial<Record<BlockType, string>> = {
   posts: 'Updates / blog',
   reviews: 'Reviews',
   'social-icons': 'Social icons',
+  accordion: 'Accordion',
+  'video-gallery': 'Video gallery',
+  'image-comparison': 'Before / after',
+  'social-share': 'Social share',
+  'popup-trigger': 'Popup trigger',
+  'site-search': 'Site search',
   tabs: 'Tabs',
   'site-logo': 'Site logo',
   'site-title': 'Site title',
@@ -297,6 +300,12 @@ const WIDGET_COLORS: Partial<Record<BlockType, string>> = {
   portfolio: "#a78bfa",
   posts: "#a78bfa",
   reviews: "#34d399",
+  accordion: "#a78bfa",
+  "video-gallery": "#f43f5e",
+  "image-comparison": "#34d399",
+  "social-share": "#38bdf8",
+  "popup-trigger": "#f472b6",
+  "site-search": "#38bdf8",
   "site-logo": "#38bdf8",
   "site-title": "#38bdf8",
   "page-title": "#38bdf8",
@@ -356,88 +365,12 @@ const WIDGET_COLORS: Partial<Record<BlockType, string>> = {
   "project-highlights": "#22d3ee",
 }
 
-function widgetColor(type: BlockType): string {
+export function widgetColor(type: BlockType): string {
   return WIDGET_COLORS[type] ?? "#8b8b96"
 }
 
 const INPUT_CLS =
   "w-full px-2.5 py-1.5 rounded-lg border border-border-default bg-bg-2 text-text-0 text-[11.5px] placeholder:text-text-3 outline-none transition-[border,box-shadow,background-color] hover:border-border-hover focus:border-green focus:shadow-[0_0_0_3px_rgba(34,197,94,0.12)]"
-
-function SortableLayer({ block, isSelected, onSelect, onDuplicate, onRemove, onHide, isHidden }: {
-  block: BlockConfig
-  isSelected: boolean
-  onSelect: () => void
-  onDuplicate: () => void
-  onRemove: () => void
-  onHide: () => void
-  isHidden: boolean
-}) {
-  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: block.id })
-  const div = isDivBlock(block)
-  const Icon = (div ? blockIcons.div : blockIcons[block.type]) || Layout
-  const layerLabel = div ? "Div" : blockLabels[block.type] || block.type
-
-  const style = {
-    transform: CSS.Transform.toString(transform),
-    transition,
-    opacity: isDragging ? 0.5 : 1,
-  }
-
-  return (
-    <div
-      ref={setNodeRef}
-      style={style}
-      onClick={onSelect}
-      className={`group px-2.5 py-2 my-1 rounded-xl text-[12px] flex items-center gap-2 transition-all cursor-pointer select-none relative border ${isSelected
-          ? 'bg-green/10 text-green border-green/40 shadow-sm'
-          : 'border-border-subtle/60 bg-bg-2/40 text-text-1 hover:bg-bg-3/80 hover:text-text-0 hover:border-border-hover'
-        } ${isHidden ? 'opacity-40' : ''}`}
-    >
-      <div
-        {...attributes}
-        {...listeners}
-        className="opacity-0 group-hover:opacity-100 transition-opacity text-text-3 cursor-grab active:cursor-grabbing shrink-0"
-        aria-label={`Drag to reorder ${layerLabel}`}
-      >
-        <GripVertical size={11} />
-      </div>
-
-      <div
-        className={`w-[22px] h-[22px] rounded flex items-center justify-center text-[10px] shrink-0 border transition-colors ${isSelected ? 'border-green/30 bg-green-glow' : 'bg-bg-3'
-          }`}
-        style={{ color: widgetColor(block.type), borderColor: `${widgetColor(block.type)}${isSelected ? "66" : "40"}`, backgroundColor: `${widgetColor(block.type)}${isSelected ? "1f" : "14"}` }}
-      >
-        <Icon size={11} strokeWidth={2} />
-      </div>
-
-      <span className="font-medium flex-1 truncate">{layerLabel}</span>
-
-      <div className="flex gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
-        <button
-          onClick={(e) => { e.stopPropagation(); onHide() }}
-          className="w-[20px] h-[20px] rounded flex items-center justify-center text-text-3 hover:bg-bg-4 hover:text-text-0 transition-all"
-          title={isHidden ? 'Show' : 'Hide'}
-        >
-          {isHidden ? <EyeOff size={10} /> : <Eye size={10} />}
-        </button>
-        <button
-          onClick={(e) => { e.stopPropagation(); onDuplicate() }}
-          className="w-[20px] h-[20px] rounded flex items-center justify-center text-text-3 hover:bg-bg-4 hover:text-text-0 transition-all"
-          title="Duplicate"
-        >
-          <Copy size={10} />
-        </button>
-        <button
-          onClick={(e) => { e.stopPropagation(); onRemove() }}
-          className="w-[20px] h-[20px] rounded flex items-center justify-center text-text-3 hover:bg-status-red/10 hover:text-status-red transition-all"
-          title="Delete"
-        >
-          <Trash2 size={10} />
-        </button>
-      </div>
-    </div>
-  )
-}
 
 function widgetLabel(type: BlockType) {
   const meta = blockMetadata.find((b) => b.type === type)
@@ -747,27 +680,12 @@ export function LayersPanel() {
     const page = pages.find((p) => p.id === s.activePageId) ?? pages[0]
     return page.blocks
   })
-  const { duplicateBlock, removeBlock, moveBlock, addBlock, updateBlockStyle } = useConfigStore()
-  const { selectedBlockId, selectBlock, toggleLeftSidebar } = useEditorStore()
+  const { addBlock } = useConfigStore()
+  const { selectBlock, toggleLeftSidebar } = useEditorStore()
   const [showPopover, setShowPopover] = useState(false)
   const tab = useEditorStore((s) => s.leftTab)
   const setTab = useEditorStore((s) => s.setLeftTab)
   const activeDef = TAB_DEFS.find((t) => t.id === tab) ?? TAB_DEFS.find((t) => t.id === 'components')!
-
-  const sensors = useSensors(
-    useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
-    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
-  )
-
-  function handleDragEnd(event: DragEndEvent) {
-    const { active, over } = event
-    if (!over || active.id === over.id) return
-    const oldIndex = blocks.findIndex((b) => b.id === active.id)
-    const newIndex = blocks.findIndex((b) => b.id === over.id)
-    if (oldIndex !== -1 && newIndex !== -1) {
-      moveBlock(oldIndex, newIndex)
-    }
-  }
 
   function handleAddBlock(type: BlockType) {
     const meta = blockMetadata.find((b) => b.type === type)
@@ -837,64 +755,7 @@ export function LayersPanel() {
 
         {tab === 'layers' ? (
           <>
-            <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain p-2">
-              <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
-                <SortableContext items={blocks.map((b) => b.id)} strategy={verticalListSortingStrategy}>
-                  {blocks.length === 0 ? (
-                    <div className="px-2 py-6 text-center">
-                      <Layers size={18} className="text-text-3 mx-auto mb-2" />
-                      <p className="text-[11px] text-text-2 font-medium">Canvas is empty</p>
-                      <p className="text-[10px] text-text-3 mt-0.5 mb-2.5">Add a block or template to start</p>
-                      <div className="flex flex-col gap-1.5">
-                        <button
-                          type="button"
-                          onClick={() => setTab('templates')}
-                          className="w-full py-1.5 rounded-lg bg-green/15 border border-green/30 text-green text-[11px] font-semibold hover:bg-green/20 transition-colors"
-                        >
-                          Browse templates
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => setTab('components')}
-                          className="w-full py-1.5 rounded-lg border border-border-default text-text-2 text-[11px] font-semibold hover:bg-bg-3 hover:text-text-0 transition-colors"
-                        >
-                          Add a block
-                        </button>
-                      </div>
-                    </div>
-                  ) : (
-                    blocks.map((block) => (
-                      <SortableLayer
-                        key={block.id}
-                        block={block}
-                        isSelected={selectedBlockId === block.id}
-                        onSelect={() => selectBlock(block.id)}
-                        onDuplicate={() => { duplicateBlock(block.id); toast('Block duplicated') }}
-                        onRemove={() => {
-                          if (selectedBlockId === block.id) selectBlock(null)
-                          removeBlock(block.id)
-                          toast('Block removed', {
-                            action: {
-                              label: 'Undo',
-                              onClick: () => {
-                                useConfigStore.getState().undo()
-                                toast('Block restored')
-                              },
-                            },
-                            duration: 3000,
-                          })
-                        }}
-                        onHide={() => {
-                          const key = `hideOn${viewportKey()}`
-                          updateBlockStyle(block.id, { [key]: !(block.style?.[key as keyof typeof block.style]) })
-                        }}
-                        isHidden={!!block.style?.hideOnDesktop || !!block.style?.hideOnTablet || !!block.style?.hideOnMobile}
-                      />
-                    ))
-                  )}
-                </SortableContext>
-              </DndContext>
-            </div>
+            <NavigatorTree />
 
             <div className="p-2 border-t border-border-subtle relative">
               <button
@@ -925,11 +786,6 @@ export function LayersPanel() {
       </div>
     </div>
   )
-}
-
-function viewportKey() {
-  const vp = useEditorStore.getState().viewport
-  return vp.charAt(0).toUpperCase() + vp.slice(1) as 'Desktop' | 'Tablet' | 'Mobile'
 }
 
 function ComponentsPanel() {

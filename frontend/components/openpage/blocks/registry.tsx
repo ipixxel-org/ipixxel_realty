@@ -75,6 +75,14 @@ import { AlertBlock, AnimatedHeadlineBlock, IconListBlock } from "./elements/Tex
 import { CounterBlock, FlipBoxBlock, HotspotBlock, PriceListBlock, ProgressBarBlock, StarRatingBlock } from "./elements/HighlightWidgets";
 import { BreadcrumbsBlock, OffCanvasBlock, PageTitleBlock, SiteLogoBlock, SiteTitleBlock, TableOfContentsBlock } from "./elements/SiteWidgets";
 import { PortfolioBlock, PostsBlock, PropertyCarouselBlock, ReviewsBlock } from "./elements/ListingWidgets";
+import {
+  AccordionBlock,
+  ImageComparisonBlock,
+  PopupTriggerBlock,
+  SiteSearchBlock,
+  SocialShareBlock,
+  VideoGalleryBlock,
+} from "./elements/AdditionalWidgets";
 
 class BlockErrorBoundary extends Component<
   { blockType: string; children: ReactNode },
@@ -185,6 +193,12 @@ const blockRenderers: Record<string, React.ComponentType<{ block: BlockConfig }>
   posts: PostsBlock,
   portfolio: PortfolioBlock,
   reviews: ReviewsBlock,
+  accordion: AccordionBlock,
+  "video-gallery": VideoGalleryBlock,
+  "image-comparison": ImageComparisonBlock,
+  "social-share": SocialShareBlock,
+  "popup-trigger": PopupTriggerBlock,
+  "site-search": SiteSearchBlock,
 };
 
 export function RenderBlock({ block }: { block: BlockConfig }): ReactNode {

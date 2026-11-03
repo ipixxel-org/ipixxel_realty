@@ -62,7 +62,13 @@ export type GenericBlockType =
   | "off-canvas"
   | "posts"
   | "portfolio"
-  | "reviews";
+  | "reviews"
+  | "accordion"
+  | "video-gallery"
+  | "image-comparison"
+  | "social-share"
+  | "popup-trigger"
+  | "site-search";
 
 export type RealEstateBlockType =
   | "project-banner"

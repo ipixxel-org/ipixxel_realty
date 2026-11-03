@@ -31,7 +31,11 @@ export const DEFAULT_LEAD_STAGE_DISPLAY: Record<
 > = {
   new: { label: 'New', color: '#94a3b8' },
   contacted: { label: 'Contacted', color: '#0ea5e9' },
+  connected: { label: 'Connected', color: '#06b6d4' },
   follow_up: { label: 'Follow-up', color: '#f59e0b' },
+  interested: { label: 'Interested', color: '#8b5cf6' },
+  not_interested: { label: 'Not Interested', color: '#64748b' },
+  converted: { label: 'Converted', color: '#15803d' },
   site_visit: { label: 'Site Visit', color: '#6366f1' },
   negotiation: { label: 'Negotiation', color: '#7c3aed' },
   won: { label: 'Won', color: '#16a34a' },

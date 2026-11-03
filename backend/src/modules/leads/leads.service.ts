@@ -94,6 +94,13 @@ type ResolvedPublicPage = {
   publishedContent?: unknown;
 };
 
+type ResolvedEmbedForm = {
+  id: string;
+  orgId: string | null;
+  name: string;
+  content: unknown;
+};
+
 /** Fields needed to render an activity/call actor. */
 const ACTOR_SELECT = {
   select: { id: true, firstName: true, lastName: true, email: true },
@@ -236,34 +243,46 @@ export class LeadsService implements OnModuleInit {
 
     let resolvedLandingPageId = dto.landingPageId ?? null;
 
-    const pageRef = dto.landingPageId || dto.slug;
-    if (pageRef) {
-      const page = await this.resolvePublicLandingPage(pageRef, dto.slug);
-      if (page) {
-        orgId = page.orgId;
-        resolvedLandingPageId = page.id;
+    // Standalone Form Builder embeds post a synthetic `embed_<embedId>` page
+    // reference. Resolve the form (and therefore its owning org) from the form
+    // definition instead of requiring a landing page.
+    const embedForm = dto.landingPageId?.startsWith('embed_')
+      ? await this.resolveEmbedForm(dto.landingPageId)
+      : null;
+    if (embedForm) {
+      orgId = embedForm.orgId;
+      resolvedLandingPageId = null;
+      if (!dto.formName?.trim()) dto.formName = embedForm.name;
+    } else {
+      const pageRef = dto.landingPageId || dto.slug;
+      if (pageRef) {
+        const page = await this.resolvePublicLandingPage(pageRef, dto.slug);
+        if (page) {
+          orgId = page.orgId;
+          resolvedLandingPageId = page.id;
 
-        // Auto-extract propertyBinding from the landing page if not explicitly supplied
-        // A live page's binding comes from the version visitors see.
-        const pageContent = (page.status === 'published' && page.publishedContent
-          ? page.publishedContent
-          : page.content) as {
-          config?: {
-            propertyBinding?: {
-              kind?: string;
-              projectId?: string;
-              unitId?: string;
+          // Auto-extract propertyBinding from the landing page if not explicitly supplied
+          // A live page's binding comes from the version visitors see.
+          const pageContent = (page.status === 'published' && page.publishedContent
+            ? page.publishedContent
+            : page.content) as {
+            config?: {
+              propertyBinding?: {
+                kind?: string;
+                projectId?: string;
+                unitId?: string;
+              };
             };
-          };
-        } | null;
-        const binding = pageContent?.config?.propertyBinding;
-        if (binding?.kind === "project" && binding.projectId && !dto.projectId) {
-          dto.projectId = binding.projectId;
-        } else if (binding?.kind === "unit" && binding.unitId && !dto.unitId) {
-          dto.unitId = binding.unitId;
+          } | null;
+          const binding = pageContent?.config?.propertyBinding;
+          if (binding?.kind === "project" && binding.projectId && !dto.projectId) {
+            dto.projectId = binding.projectId;
+          } else if (binding?.kind === "unit" && binding.unitId && !dto.unitId) {
+            dto.unitId = binding.unitId;
+          }
+        } else if (!dto.projectId && !dto.unitId) {
+          throw new NotFoundException('Landing page not found');
         }
-      } else if (!dto.projectId && !dto.unitId) {
-        throw new NotFoundException('Landing page not found');
       }
     }
 
@@ -788,6 +807,23 @@ export class LeadsService implements OnModuleInit {
     }
 
     return null;
+  }
+
+  /** Resolve a standalone Form Builder embed (`embed_<embedId>` page reference). */
+  private async resolveEmbedForm(ref: string): Promise<ResolvedEmbedForm | null> {
+    const embedId = ref.trim().replace(/^embed_/, '');
+    if (!embedId) return null;
+
+    return this.prisma.leadForm.findFirst({
+      where: {
+        OR: [
+          { content: { path: ['embed', 'id'], equals: embedId } },
+          { content: { path: ['id'], equals: embedId } },
+        ],
+      },
+      select: { id: true, orgId: true, name: true, content: true },
+      orderBy: { updatedAt: 'desc' },
+    });
   }
 
   /** Map a captured lead onto a project via linked landing page or form data. */

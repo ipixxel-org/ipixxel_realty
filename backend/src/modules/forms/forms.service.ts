@@ -77,6 +77,25 @@ export class FormsService {
     return row;
   }
 
+  /** Resolve a saved form by its public embed id (no auth). */
+  async getPublicByEmbed(embedId: string) {
+    const id = embedId.trim();
+    if (!id) throw new NotFoundException('Form not found');
+
+    const row = await this.prisma.leadForm.findFirst({
+      where: {
+        OR: [
+          { content: { path: ['embed', 'id'], equals: id } },
+          { content: { path: ['id'], equals: id } },
+        ],
+      },
+      select: FORM_SELECT,
+      orderBy: { updatedAt: 'desc' },
+    });
+    if (!row) throw new NotFoundException('Form not found');
+    return row;
+  }
+
   create(owner: string | null, dto: CreateFormDto) {
     if (!dto.content || typeof dto.content !== 'object' || Array.isArray(dto.content)) {
       throw new BadRequestException('content must be a form definition object');
