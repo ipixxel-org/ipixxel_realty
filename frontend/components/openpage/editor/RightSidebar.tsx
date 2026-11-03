@@ -15,12 +15,10 @@ import { AdvancedPanel } from './AdvancedPanel'
 import { ElementStylePanel } from './ElementStylePanel'
 import { SectionAiAssistant } from './SectionAiAssistant'
 
-const tabs: { id: RightSidebarTab; label: string; icon: typeof AlignLeft; color: string }[] = [
+const ELEMENTOR_TABS: { id: 'properties' | 'style' | 'advanced'; label: string; icon: typeof AlignLeft; color: string }[] = [
   { id: 'properties', label: 'Content', icon: AlignLeft, color: "#38bdf8" },
   { id: 'style', label: 'Style', icon: Palette, color: "#e879f9" },
-  { id: 'typography', label: 'Type', icon: Type, color: "#f59e0b" },
-  { id: 'element', label: 'Element', icon: MousePointer2, color: "#22d3ee" },
-  { id: 'advanced', label: 'More', icon: Settings2, color: "#a78bfa" },
+  { id: 'advanced', label: 'Advanced', icon: Settings2, color: "#a78bfa" },
 ]
 
 function blockLabel(block: BlockConfig): string {
@@ -45,6 +43,7 @@ export function RightSidebar() {
   const selectedElement = useEditorStore((s) => s.selectedElement)
   const selectedElementId = selectedElement?.elementId ?? null
   const [aiAssistantOpen, setAiAssistantOpen] = useState(false)
+  const [styleMode, setStyleMode] = useState<'design' | 'typography'>('design')
 
   // Switching blocks lands on Content: handled by editorStore.selectBlock, so
   // "select this block and open Style" (toolbar buttons) is not overridden.
@@ -96,29 +95,100 @@ export function RightSidebar() {
         />
       )}
 
-      {/* Icon tabs */}
-      <div className="px-3 pb-3 border-b border-border-default shrink-0">
-        <div className="grid grid-cols-5 gap-0.5 p-0.5 rounded-lg bg-bg-3" role="tablist" aria-label="Inspector sections">
-          {tabs.map(({ id, label, icon: Icon }) => {
-            const isActive = rightSidebarTab === id
+      {/* Elementor 3-Tab Header (Content | Style | Advanced) */}
+      <div className="px-3 pb-2.5 border-b border-border-default shrink-0 space-y-2">
+        <div className="grid grid-cols-3 gap-1 p-1 rounded-xl bg-bg-3" role="tablist" aria-label="Elementor sections">
+          {ELEMENTOR_TABS.map(({ id, label, icon: Icon, color }) => {
+            const isActive =
+              id === 'style'
+                ? rightSidebarTab === 'style' || rightSidebarTab === 'typography' || rightSidebarTab === 'element'
+                : rightSidebarTab === id
             return (
               <button
                 key={id}
                 type="button"
                 role="tab"
                 aria-selected={isActive}
-                onClick={() => setRightSidebarTab(id)}
-                className={`flex flex-col items-center gap-0.5 py-1.5 rounded-md transition-colors duration-150 ${
-                  isActive ? 'bg-bg-1 text-[#6d5dfc] shadow-[0_1px_3px_rgba(15,23,42,0.1)]' : 'text-text-2 hover:text-text-0'
+                onClick={() => {
+                  if (id === 'style') {
+                    if (selectedElementId) {
+                      setRightSidebarTab('element')
+                    } else if (styleMode === 'typography') {
+                      setRightSidebarTab('typography')
+                    } else {
+                      setRightSidebarTab('style')
+                    }
+                  } else {
+                    setRightSidebarTab(id)
+                  }
+                }}
+                className={`flex items-center justify-center gap-1.5 py-1.5 rounded-lg text-[11px] font-semibold transition-all duration-150 ${
+                  isActive
+                    ? 'bg-bg-1 text-text-0 shadow-[0_1px_4px_rgba(0,0,0,0.12)]'
+                    : 'text-text-3 hover:text-text-1 hover:bg-bg-2'
                 }`}
                 title={label}
               >
-                <Icon size={13} strokeWidth={isActive ? 2.2 : 1.8} />
-                <span className="text-[10px] font-semibold leading-none">{label}</span>
+                <Icon size={13} style={{ color: isActive ? color : undefined }} strokeWidth={isActive ? 2.2 : 1.8} />
+                <span>{label}</span>
               </button>
             )
           })}
         </div>
+
+        {/* Element Selection Pill */}
+        {selectedElementId && (
+          <div className="flex items-center justify-between px-2.5 py-1 rounded-md bg-[#22d3ee]/10 border border-[#22d3ee]/30 text-[11px]">
+            <div className="flex items-center gap-1 text-[#22d3ee] font-medium truncate">
+              <MousePointer2 size={11} className="shrink-0" />
+              <span className="truncate">Element: <code>{selectedElementId}</code></span>
+            </div>
+            <button
+              type="button"
+              onClick={() => useEditorStore.getState().selectBlock(selectedBlockId)}
+              className="text-text-3 hover:text-text-1 text-[10px] ml-2 hover:underline"
+              title="Return to section styles"
+            >
+              ✕ Section
+            </button>
+          </div>
+        )}
+
+        {/* Style Sub-Tabs (Design & Box Model vs Typography) */}
+        {(rightSidebarTab === 'style' || rightSidebarTab === 'typography') && !selectedElementId && (
+          <div className="grid grid-cols-2 gap-1 p-0.5 rounded-lg bg-bg-2 border border-border-default">
+            <button
+              type="button"
+              onClick={() => {
+                setStyleMode('design')
+                setRightSidebarTab('style')
+              }}
+              className={`py-1 text-[10.5px] font-medium rounded flex items-center justify-center gap-1 transition-all ${
+                styleMode === 'design' && rightSidebarTab === 'style'
+                  ? 'bg-bg-1 text-[#e879f9] font-semibold shadow-xs'
+                  : 'text-text-3 hover:text-text-1'
+              }`}
+            >
+              <Palette size={11} />
+              Design &amp; Spacing
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setStyleMode('typography')
+                setRightSidebarTab('typography')
+              }}
+              className={`py-1 text-[10.5px] font-medium rounded flex items-center justify-center gap-1 transition-all ${
+                styleMode === 'typography' || rightSidebarTab === 'typography'
+                  ? 'bg-bg-1 text-[#f59e0b] font-semibold shadow-xs'
+                  : 'text-text-3 hover:text-text-1'
+              }`}
+            >
+              <Type size={11} />
+              Typography
+            </button>
+          </div>
+        )}
       </div>
 
       {/* Content */}
@@ -141,18 +211,7 @@ export function RightSidebar() {
           selectedElementId ? (
             <ElementStylePanel block={selectedBlock} elementId={selectedElementId} />
           ) : (
-            <div className="flex flex-col items-center justify-center text-center px-6 py-16 gap-3">
-              <div className="w-11 h-11 rounded-xl bg-[#6d5dfc]/10 flex items-center justify-center">
-                <MousePointer2 size={18} className="text-[#6d5dfc]" />
-              </div>
-              <div>
-                <p className="text-text-1 text-[12px] font-medium">No element selected</p>
-                <p className="text-text-3 text-[11px] mt-1">
-                  Click any element on the canvas — a heading, paragraph, button, image or list card — to style it
-                  independently of the section.
-                </p>
-              </div>
-            </div>
+            <StylePanel block={selectedBlock} />
           )
         ) : rightSidebarTab === 'advanced' ? (
           <AdvancedPanel block={selectedBlock} />
