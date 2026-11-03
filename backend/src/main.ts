@@ -21,6 +21,7 @@ async function bootstrap() {
       crossOriginResourcePolicy: { policy: 'cross-origin' },
       crossOriginOpenerPolicy: { policy: 'same-origin-allow-popups' },
       contentSecurityPolicy: false,
+      frameguard: false,
     }),
   );
   app.disable('x-powered-by');

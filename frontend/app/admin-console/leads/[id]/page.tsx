@@ -226,7 +226,7 @@ export default function AdminLeadDetailPage() {
             <Link href="/admin-console/leads" style={{ color: "inherit", textDecoration: "none" }}>
               <Icon name="target" size={14} /> Lead Management
             </Link>{" "}
-            · {lead.organisation?.name ?? "Platform"}
+            · {lead.formName || "Lead Forms Builder"}
           </div>
           <h1>
             {name} <LeadStatusPill status={lead.status} style={{ verticalAlign: "middle" }} />
@@ -278,9 +278,11 @@ export default function AdminLeadDetailPage() {
                     <DetailRow label="City" value={lead.details.city} />
                   </div>
                   <div>
-                    <DetailRow label="Organisation" value={lead.organisation?.name} />
-                    <DetailRow label="Project" value={lead.project?.name} />
-                    <DetailRow label="Form" value={lead.formName} />
+                    <DetailRow label="Form" value={lead.formName || "—"} />
+                    <DetailRow
+                      label="Embed ID"
+                      value={lead.landingPageId ? lead.landingPageId.replace(/^embed_/, "") : "—"}
+                    />
                     <DetailRow label="Source" value={source} />
                     <DetailRow label="Assigned to" value={lead.assignedTo?.name} />
                     <DetailRow

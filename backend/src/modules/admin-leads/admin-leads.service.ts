@@ -1,4 +1,8 @@
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import type { LeadStatus, Prisma } from '@prisma/client';
 import { PrismaService } from '../../database/prisma.service';
 import { normalizeLeadData } from '../../common/utils/lead-data.util';
@@ -63,7 +67,7 @@ type ActorRow = {
   email: string;
 } | null;
 
-function normalizeStatus(status: LeadStatus | string): AdminLeadStatus {
+function normalizeStatus(status: string): AdminLeadStatus {
   if (ADMIN_LEAD_STATUSES.includes(status as AdminLeadStatus)) {
     return status as AdminLeadStatus;
   }
@@ -74,7 +78,8 @@ function toActor(user: ActorRow) {
   if (!user) return null;
   return {
     id: user.id,
-    name: [user.firstName, user.lastName].filter(Boolean).join(' ') || user.email,
+    name:
+      [user.firstName, user.lastName].filter(Boolean).join(' ') || user.email,
   };
 }
 
@@ -98,13 +103,49 @@ function toActivity(row: {
 export class AdminLeadsService {
   constructor(private readonly prisma: PrismaService) {}
 
-  private buildWhere(query: ListAdminLeadsQueryDto): Prisma.LeadWhereInput {
+  private async buildWhere(
+    query: ListAdminLeadsQueryDto,
+  ): Promise<Prisma.LeadWhereInput> {
     const and: Prisma.LeadWhereInput[] = [];
 
+    // Super Admin Lead Management only displays leads captured via Lead Forms builder
+    // (platform LeadForms / embed forms / platform-owned captures), NOT internal tenant CRM / marketing leads.
+    const platformForms = await this.prisma.leadForm.findMany({
+      where: { orgId: null },
+      select: { name: true, content: true },
+    });
+    const platformFormNames = platformForms.map((f) => f.name).filter(Boolean);
+    const platformEmbedIds = platformForms
+      .map(
+        (f) =>
+          (f.content as Record<string, unknown> | null)?.embed as
+            { id?: string } | undefined,
+      )
+      .map((e) => e?.id)
+      .filter((id): id is string => Boolean(id));
+
+    const formBuilderOr: Prisma.LeadWhereInput[] = [
+      { landingPageId: { startsWith: 'embed_' } },
+      { orgId: 'platform' },
+      { source: { in: ['embed', 'form_builder', 'iframe', 'Form Builder'] } },
+    ];
+    if (platformFormNames.length) {
+      formBuilderOr.push({ formName: { in: platformFormNames } });
+    }
+    for (const emb of platformEmbedIds) {
+      formBuilderOr.push({ landingPageId: `embed_${emb}` });
+    }
+    and.push({ OR: formBuilderOr });
+
+    if (query.formName?.trim()) {
+      and.push({ formName: query.formName.trim() });
+    }
     if (query.orgId) and.push({ orgId: query.orgId });
     if (query.projectId) and.push({ projectId: query.projectId });
     if (query.status) {
-      and.push({ status: { in: STATUS_ALIASES[normalizeStatus(query.status)] } });
+      and.push({
+        status: { in: STATUS_ALIASES[normalizeStatus(query.status)] },
+      });
     }
     if (query.source?.trim()) and.push({ source: query.source.trim() });
 
@@ -135,7 +176,9 @@ export class AdminLeadsService {
     return and.length ? { AND: and } : {};
   }
 
-  private orderBy(query: ListAdminLeadsQueryDto): Prisma.LeadOrderByWithRelationInput {
+  private orderBy(
+    query: ListAdminLeadsQueryDto,
+  ): Prisma.LeadOrderByWithRelationInput {
     const direction = query.sortDir ?? 'desc';
     switch (query.sortBy) {
       case 'status':
@@ -150,7 +193,7 @@ export class AdminLeadsService {
   }
 
   async list(query: ListAdminLeadsQueryDto) {
-    const where = this.buildWhere(query);
+    const where = await this.buildWhere(query);
     const page = query.page ?? 1;
     const limit = Math.min(query.limit ?? 20, 100);
     const skip = (page - 1) * limit;
@@ -159,7 +202,7 @@ export class AdminLeadsService {
     today.setHours(0, 0, 0, 0);
 
     const kpiWhere = query.status
-      ? this.buildWhere({ ...query, status: undefined })
+      ? await this.buildWhere({ ...query, status: undefined })
       : where;
 
     const [
@@ -201,7 +244,9 @@ export class AdminLeadsService {
           AND: [
             kpiWhere,
             { nextActionAt: { lte: now } },
-            { status: { notIn: ['converted', 'won', 'lost', 'not_interested'] } },
+            {
+              status: { notIn: ['converted', 'won', 'lost', 'not_interested'] },
+            },
           ],
         },
       }),
@@ -239,8 +284,10 @@ export class AdminLeadsService {
     return {
       data: leads.map((lead) => {
         const data =
-          lead.data && typeof lead.data === 'object' && !Array.isArray(lead.data)
-            ? normalizeLeadData(lead.data as Record<string, unknown>)
+          lead.data &&
+          typeof lead.data === 'object' &&
+          !Array.isArray(lead.data)
+            ? normalizeLeadData(lead.data)
             : lead.data;
         const org = orgById.get(lead.orgId) ?? null;
         const status = normalizeStatus(lead.status);
@@ -250,7 +297,11 @@ export class AdminLeadsService {
           organisation: org
             ? { id: org.id, name: org.name, slug: org.slug }
             : lead.orgId === 'platform'
-              ? { id: 'platform', name: 'Platform (Super Admin)', slug: 'platform' }
+              ? {
+                  id: 'platform',
+                  name: 'Platform (Super Admin)',
+                  slug: 'platform',
+                }
               : null,
           landingPageId: lead.landingPageId ?? null,
           projectId: lead.projectId ?? null,
@@ -297,7 +348,10 @@ export class AdminLeadsService {
         byStatus: statusCounts,
         topSources: bySource
           .filter((row) => row.source)
-          .map((row) => ({ source: row.source as string, count: row._count._all }))
+          .map((row) => ({
+            source: row.source as string,
+            count: row._count._all,
+          }))
           .sort((a, b) => b.count - a.count)
           .slice(0, 5),
       },
@@ -305,24 +359,30 @@ export class AdminLeadsService {
   }
 
   async meta() {
-    const [orgIdRows, sourceRows, projectIdRows] = await Promise.all([
-      this.prisma.lead.findMany({
-        distinct: ['orgId'],
-        select: { orgId: true },
-      }),
-      this.prisma.lead.findMany({
-        distinct: ['source'],
-        where: { source: { not: null } },
-        select: { source: true },
-        orderBy: { source: 'asc' },
-        take: 50,
-      }),
-      this.prisma.lead.findMany({
-        distinct: ['projectId'],
-        where: { projectId: { not: null } },
-        select: { projectId: true },
-      }),
-    ]);
+    const [orgIdRows, sourceRows, projectIdRows, platformForms] =
+      await Promise.all([
+        this.prisma.lead.findMany({
+          distinct: ['orgId'],
+          select: { orgId: true },
+        }),
+        this.prisma.lead.findMany({
+          distinct: ['source'],
+          where: { source: { not: null } },
+          select: { source: true },
+          orderBy: { source: 'asc' },
+          take: 50,
+        }),
+        this.prisma.lead.findMany({
+          distinct: ['projectId'],
+          where: { projectId: { not: null } },
+          select: { projectId: true },
+        }),
+        this.prisma.leadForm.findMany({
+          where: { orgId: null },
+          select: { id: true, name: true },
+          orderBy: { name: 'asc' },
+        }),
+      ]);
 
     const orgIds = orgIdRows.map((r) => r.orgId).filter(Boolean);
     const projectIds = projectIdRows
@@ -350,10 +410,17 @@ export class AdminLeadsService {
       organisations: [
         ...orgs,
         ...(orgIds.includes('platform')
-          ? [{ id: 'platform', name: 'Platform (Super Admin)', slug: 'platform' }]
+          ? [
+              {
+                id: 'platform',
+                name: 'Platform (Super Admin)',
+                slug: 'platform',
+              },
+            ]
           : []),
       ],
       projects,
+      forms: platformForms.map((f) => ({ id: f.id, name: f.name })),
       sources: sourceRows
         .map((r) => r.source)
         .filter((s): s is string => Boolean(s)),
@@ -397,7 +464,7 @@ export class AdminLeadsService {
     const status = normalizeStatus(lead.status);
     const data =
       lead.data && typeof lead.data === 'object' && !Array.isArray(lead.data)
-        ? normalizeLeadData(lead.data as Record<string, unknown>)
+        ? normalizeLeadData(lead.data)
         : lead.data;
 
     return {
@@ -491,7 +558,11 @@ export class AdminLeadsService {
     };
   }
 
-  async updateStatus(id: string, dto: UpdateAdminLeadStatusDto, actorId: string) {
+  async updateStatus(
+    id: string,
+    dto: UpdateAdminLeadStatusDto,
+    actorId: string,
+  ) {
     const lead = await this.prisma.lead.findUnique({
       where: { id },
       select: { id: true, orgId: true, status: true },
