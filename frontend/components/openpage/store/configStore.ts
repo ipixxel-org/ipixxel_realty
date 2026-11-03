@@ -20,6 +20,7 @@ import { ITEM_ID_KEY } from "@/components/openpage/blocks/types";
 import type { Device } from "@/lib/openpage/types";
 import { newElementId, migrateBlocksListIds, ancestorItemIds, itemAt, listElementId, resolveList, type ListRef } from "@/lib/openpage/element-style";
 import { applyBlocksDefaults } from "@/lib/openpage/block-factory";
+import { FLEX_LAYOUT_KEYS, normalizeLayoutValue, type FlexLayoutPatch } from "@/lib/openpage/flex-layout";
 
 export type { ListRef };
 
@@ -90,7 +91,7 @@ interface ConfigState {
   /** Phone-only column width (%); never touches the desktop/tablet `width`. */
   updateColumnMobileWidth: (sectionBlockId: string, colIndex: number, width: number) => void
   /** Set (or clear with `undefined`) a column's Items layout: direction / justifyContent / alignItems. */
-  updateColumnLayout: (sectionBlockId: string, colIndex: number, patch: Partial<Record<'direction' | 'justifyContent' | 'alignItems', string | undefined>>) => void
+  updateColumnLayout: (sectionBlockId: string, colIndex: number, patch: FlexLayoutPatch) => void
   addColumn: (sectionBlockId: string) => void
   removeColumn: (sectionBlockId: string, colIndex: number) => void
   addPage: (name: string, path: string) => string
@@ -191,6 +192,25 @@ export const defaultConfig: SiteConfig = {
   pages: [{ id: 'page-home', name: 'Home', path: '/', blocks: defaultBlocks }],
   blocks: defaultBlocks,
   globalWidgets: [],
+}
+
+/**
+ * True while the store still holds its built-in starter page, i.e. no page
+ * has been loaded into it. In development a hot reload can recreate the
+ * store with this starter page while a real page is open in the builder; it
+ * must never be saved over that page.
+ */
+export function isUnloadedConfig(config: SiteConfig): boolean {
+  return config === defaultConfig
+}
+
+/**
+ * The site to save for `page`: the builder's config, or, if the store was
+ * never loaded (see isUnloadedConfig), `fallback` (the page's own content).
+ */
+export function siteToSave(fallback: () => SiteConfig): SiteConfig {
+  const config = useConfigStore.getState().config
+  return isUnloadedConfig(config) ? fallback() : config
 }
 
 function snapshot(state: ConfigState): { pages?: PageConfig[]; blocks: BlockConfig[]; theme?: Partial<ThemeConfig>; globalWidgets?: GlobalWidget[]; forms?: SiteConfig["forms"] } {
@@ -904,11 +924,12 @@ export const useConfigStore = create<ConfigState>()((set, get) => ({
             if (!section || section.type !== 'columns') return
             const cols = section.props.columns as Array<Record<string, unknown>> | undefined
             if (!cols || !cols[colIndex]) return
-            for (const key of ['direction', 'justifyContent', 'alignItems'] as const) {
+            for (const key of FLEX_LAYOUT_KEYS) {
               if (!(key in patch)) continue
-              const value = patch[key]
-              // Unset = the default layout, so store nothing for it.
-              if (value) cols[colIndex][key] = value
+              // Only valid values are kept; unset = the default layout, so
+              // store nothing for it.
+              const value = normalizeLayoutValue(key, patch[key])
+              if (value !== undefined) cols[colIndex][key] = value
               else delete cols[colIndex][key]
             }
             draft.blocks = page.blocks

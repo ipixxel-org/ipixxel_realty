@@ -8,6 +8,7 @@ import { useConfigStore } from "@/components/openpage/store/configStore";
 import { useEditorStore } from "@/components/openpage/store/editorStore";
 import type { BlockConfig } from "../blocks/types";
 import { isDivBlock } from "@/lib/openpage/block-factory";
+import { blockMetadata } from "@/lib/openpage/block-metadata";
 import { findBlock } from "@/lib/openpage/block-tree";
 import { isHiddenOnViewport, resolveBlockStyleForDevice } from "@/lib/openpage/block-style";
 import { FloatingBlockToolbar } from "./FloatingBlockToolbar";
@@ -241,7 +242,7 @@ export function SortableBlock({ block, isSelected, isMultiSelected = false, froz
         }`}
       >
         <GripVertical size={11} className="shrink-0" />
-        <span>{isDivBlock(block) ? "Div" : blockLabels[block.type] || block.type}</span>
+        <span>{isDivBlock(block) ? "Div" : blockLabels[block.type] || blockMetadata.find((m) => m.type === block.type)?.label || block.type}</span>
       </div>
 
       {/* Floating Toolbar (Elementor Pro style) */}

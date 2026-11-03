@@ -5,6 +5,8 @@ export type GenericBlockType =
   | "section"
   /** Blocks panel tile only; created as a one-column, unpadded `columns` block, never stored. */
   | "div"
+  /** Blocks panel tile only; a Div whose widgets are laid out as a grid, never stored. */
+  | "grid"
   | "navbar"
   | "hero"
   | "features"
@@ -41,7 +43,26 @@ export type GenericBlockType =
   | "property-search"
   | "property-filters"
   | "emi-calculator"
-  | "payment-plan";
+  | "payment-plan"
+  // Elementor-style elements (components/openpage/blocks/elements).
+  | "icon-list"
+  | "alert"
+  | "animated-headline"
+  | "counter"
+  | "star-rating"
+  | "progress-bar"
+  | "price-list"
+  | "flip-box"
+  | "hotspot"
+  | "site-logo"
+  | "site-title"
+  | "page-title"
+  | "breadcrumbs"
+  | "table-of-contents"
+  | "off-canvas"
+  | "posts"
+  | "portfolio"
+  | "reviews";
 
 export type RealEstateBlockType =
   | "project-banner"
@@ -60,7 +81,8 @@ export type RealEstateBlockType =
   | "lead-form"
   | "download-brochure"
   | "site-visit"
-  | "custom-section";
+  | "custom-section"
+  | "property-carousel";
 
 export type BlockType = GenericBlockType | RealEstateBlockType;
 
