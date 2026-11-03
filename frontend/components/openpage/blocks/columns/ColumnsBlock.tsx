@@ -16,7 +16,15 @@ import { toast } from "sonner";
 import { ColumnResizer } from "./ColumnResizer";
 import { useElementEditor } from "../El";
 import { readDropPayload, type DropPayload } from "@/lib/openpage/drag-payload";
-import { flexLayoutStyle, isVertical, readFlexLayout, type FlexLayout } from "@/lib/openpage/flex-layout";
+import {
+  flexLayoutStyle,
+  isBlockDisplay,
+  isGridDisplay,
+  itemsInFlexRow,
+  readFlexLayout,
+  stacksItems,
+  type FlexLayout,
+} from "@/lib/openpage/flex-layout";
 
 /** One column ("div"): its width plus the optional layout of its widgets. */
 type ColumnData = { width: number; mobileWidth?: number; blocks: BlockConfig[] } & FlexLayout;
@@ -163,12 +171,15 @@ function ColumnDropSlot({
   colIndex,
   index,
   horizontal = false,
+  fullRow = false,
 }: {
   sectionBlockId: string;
   colIndex: number;
   index: number;
   /** The column lays its widgets out in a row: the slot is a thin vertical bar. */
   horizontal?: boolean;
+  /** Grid layout: the slot spans a whole row instead of taking a grid cell. */
+  fullRow?: boolean;
 }) {
   const [isOver, setIsOver] = useState(false);
   const draggedItem = useEditorStore((s) => s.draggedItem);
@@ -213,6 +224,7 @@ function ColumnDropSlot({
           console.error("Drop into column slot failed", err);
         }
       }}
+      style={fullRow ? { gridColumn: "1 / -1" } : undefined}
       className={`transition-all duration-200 relative flex items-center justify-center select-none rounded ${
         horizontal
           ? isOver
@@ -260,9 +272,9 @@ function columnBox(col: ColumnData, gap: string, stacked: boolean): { className:
 }
 
 /** The box around a column's widgets, laid out by the column's Items settings. */
-function itemsBox(col: ColumnData): { className: string; style: CSSProperties | undefined; inRow: boolean } {
+function itemsBox(col: ColumnData): { className: string; style: CSSProperties | undefined; inRow: boolean; grid: boolean } {
   const layout = readFlexLayout(col);
-  const inRow = !isVertical(layout.direction, "column");
+  const inRow = itemsInFlexRow(layout, "column");
   const style = flexLayoutStyle(layout);
   return {
     // With a Justify Content set it fills the column's height so vertical
@@ -270,6 +282,7 @@ function itemsBox(col: ColumnData): { className: string; style: CSSProperties | 
     className: `flex ${layout.justifyContent ? "flex-1" : ""} ${inRow ? "flex-row flex-wrap" : "flex-col"}`,
     style: Object.keys(style).length ? style : undefined,
     inRow,
+    grid: isGridDisplay(layout.display),
   };
 }
 
@@ -481,12 +494,16 @@ function DroppableColumn({
             <SortableContext items={realBlocks.map((b) => b.id)} strategy={verticalListSortingStrategy}>
               {realBlocks.map((childBlock, i) => (
                 <Fragment key={childBlock.id}>
-                  <ColumnDropSlot
-                    sectionBlockId={sectionBlockId}
-                    colIndex={colIndex}
-                    index={i}
-                    horizontal={itemsInRow}
-                  />
+                  {/* In a grid a slot would take a cell, so only the final
+                      full-row slot is shown (widgets still reorder by drag). */}
+                  {!items.grid && (
+                    <ColumnDropSlot
+                      sectionBlockId={sectionBlockId}
+                      colIndex={colIndex}
+                      index={i}
+                      horizontal={itemsInRow}
+                    />
+                  )}
                   <ColumnBlock
                     block={childBlock}
                     columnId={sectionBlockId}
@@ -501,6 +518,7 @@ function DroppableColumn({
               colIndex={colIndex}
               index={realBlocks.length}
               horizontal={itemsInRow}
+              fullRow={items.grid}
             />
           </div>
 
@@ -537,9 +555,12 @@ export function ColumnsBlock({ block }: { block: BlockConfig }) {
   // The container's "Items" layout for its columns. Unset values keep the
   // original row / start / stretch layout.
   const layout = readFlexLayout(p);
-  const stacked = isVertical(layout.direction, "row");
-  // Drag-to-resize handles only make sense for a normal left-to-right row.
-  const showResizers = !layout.direction || layout.direction === "row";
+  // Vertical flex and Block / Inline Block stack the columns.
+  const stacked = stacksItems(layout, "row");
+  // Drag-to-resize handles only make sense for a normal left-to-right flex
+  // row (in a grid they would take a cell; in Block they would stack).
+  const showResizers =
+    !isGridDisplay(layout.display) && !isBlockDisplay(layout.display) && (!layout.direction || layout.direction === "row");
   // Only the builder canvas provides an editor scope. The published page and
   // preview get plain columns with no editing controls.
   const editing = useElementEditor()?.isEditing === true;

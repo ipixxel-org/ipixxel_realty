@@ -70,3 +70,19 @@ describe("Hero / Banner with a Style background image (no Cover image)", () => {
     expect(placeholderLayer(renderOn(styled("overlay", {})))).toBe(true);
   });
 });
+
+describe("Hero / Banner content width (overlay template)", () => {
+  it("keeps the text in a centred box of that width", () => {
+    const c = renderOn({ id: "hero", type: "project-banner", variant: "overlay", props: { headline: "Hyderabad", image: "https://cdn.example/hero.jpg", contentWidth: "1200px" } } as BlockConfig);
+    const box = c.querySelector<HTMLElement>("[data-op-hero-content]");
+    expect(box?.style.maxWidth).toBe("1200px");
+    expect(box?.textContent).toContain("Hyderabad");
+  });
+
+  it("is unchanged when empty or invalid", () => {
+    for (const contentWidth of ["", "wide; color:red"]) {
+      const c = renderOn({ id: "hero", type: "project-banner", variant: "overlay", props: { headline: "H", image: "", contentWidth } } as BlockConfig);
+      expect(c.querySelector("[data-op-hero-content]")).toBeNull();
+    }
+  });
+});

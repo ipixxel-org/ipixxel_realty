@@ -31,6 +31,17 @@ export function createBlockFromType(type: BlockType): BlockConfig | null {
       props: { ...container.props, gap: "16px", kind: DIV_KIND, columns: [{ width: 100, blocks: [] }] },
     };
   }
+  // "Grid" is a Blocks panel tile, not a stored type: a Div whose widgets
+  // are laid out as a 3-column grid (change it under Items).
+  if (type === "grid") {
+    const div = createBlockFromType("div");
+    if (!div) return null;
+    return {
+      ...div,
+      id: `block-grid-${Date.now().toString(36)}`,
+      props: { ...div.props, columns: [{ width: 100, blocks: [], display: "grid", gridColumns: 3, itemsGap: "16px" }] },
+    };
+  }
   // "Section" is a Blocks panel tile, not a stored type: it is always a
   // single full-width column, whatever Container's defaults become.
   if (type === "section") {
@@ -48,6 +59,10 @@ export function createBlockFromType(type: BlockType): BlockConfig | null {
     ? JSON.parse(JSON.stringify(meta.defaultProps))
     : {};
   if (type === "footer") props = upgradeFooterProps(props);
+  // A countdown starts 30 days ahead (a fixed date, so it really counts down).
+  if (type === "countdown" && !props.targetDate) {
+    props.targetDate = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().slice(0, 16);
+  }
 
   // Special container defaults
   if (type === "columns" && (!props.columns || !props.columns.length)) {
