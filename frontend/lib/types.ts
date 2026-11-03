@@ -2102,11 +2102,43 @@ export interface AdminAuditLogsExportResponse {
   data: AdminAuditLogEntry[];
 }
 
-/** Platform-wide lead row for Super Admin All Leads. */
+/** Platform-wide lead management vocabulary for Super Admin. */
+export type AdminLeadStatus =
+  | "new"
+  | "contacted"
+  | "connected"
+  | "follow_up"
+  | "interested"
+  | "not_interested"
+  | "converted"
+  | "lost";
+
+/** Platform-wide lead row for Super Admin Lead Management. */
 export interface AdminLeadOrganisation {
   id: string;
   name: string;
   slug: string;
+}
+
+export interface AdminLeadNextAction {
+  type: string | null;
+  scheduledAt: string;
+  note: string | null;
+  reminderAt: string | null;
+  overdue: boolean;
+}
+
+export interface AdminLeadActor {
+  id: string;
+  name: string;
+}
+
+export interface AdminLeadActivity {
+  id: string;
+  type: string;
+  text: string;
+  createdAt: string;
+  actor: AdminLeadActor | null;
 }
 
 export interface AdminLead {
@@ -2118,10 +2150,72 @@ export interface AdminLead {
   project: { id: string; name: string } | null;
   formName: string | null;
   source: string | null;
+  platform: string | null;
   data: Record<string, unknown>;
-  status: CrmLeadStatus;
+  status: AdminLeadStatus;
+  legacyStatus: string | null;
   assignedTo: CrmAssignee | null;
+  nextAction: AdminLeadNextAction | null;
   createdAt: string;
+}
+
+export interface AdminLeadDetails {
+  altName: string | null;
+  altPhone: string | null;
+  whatsapp: string | null;
+  city: string | null;
+  budgetMin: number | null;
+  budgetMax: number | null;
+  configurations: string[];
+  purpose: string | null;
+  financing: string | null;
+  loanStatus: string | null;
+  timelineToBuy: string | null;
+  preferredFloor: string | null;
+  facing: string | null;
+  parking: string | null;
+  requirementNotes: string | null;
+  temperature: string | null;
+  tags: string[];
+  consentWhatsapp: boolean;
+  consentCall: boolean;
+  consentEmail: boolean;
+}
+
+export interface AdminLeadAttribution {
+  campaign: string | null;
+  medium: string | null;
+  campaignId: string | null;
+  adSet: string | null;
+  adSetId: string | null;
+  ad: string | null;
+  adId: string | null;
+  utmSource: string | null;
+  utmMedium: string | null;
+  utmCampaign: string | null;
+  utmTerm: string | null;
+  utmContent: string | null;
+  referrer: string | null;
+  fbclid: string | null;
+  gclid: string | null;
+  firstTouchSource: string | null;
+  lastTouchSource: string | null;
+}
+
+export interface AdminLeadDetail extends AdminLead {
+  landingPageUrl: string | null;
+  assignedTo: (CrmAssignee & { email?: string }) | null;
+  details: AdminLeadDetails;
+  attribution: AdminLeadAttribution;
+  activities: AdminLeadActivity[];
+  callLogs: Array<{
+    id: string;
+    direction: string;
+    outcome: string;
+    durationSeconds: number;
+    createdAt: string;
+    actor: AdminLeadActor | null;
+  }>;
 }
 
 export interface AdminLeadsListResponse {
@@ -2132,30 +2226,37 @@ export interface AdminLeadsListResponse {
   stats: {
     total: number;
     unassigned: number;
-    new: number;
-    followUp: number;
-    siteVisit: number;
-    won: number;
-    contacted: number;
-    negotiation: number;
-    lost: number;
+    followUpsDue: number;
+    today: number;
+    conversionRate: number;
+    byStatus: Record<AdminLeadStatus, number>;
+    topSources: Array<{ source: string; count: number }>;
   };
 }
 
 export interface AdminLeadsMeta {
   organisations: AdminLeadOrganisation[];
+  projects: Array<{ id: string; name: string }>;
   sources: string[];
-  statuses: CrmLeadStatus[];
+  statuses: AdminLeadStatus[];
 }
+
+export type AdminLeadSortField =
+  | "createdAt"
+  | "status"
+  | "source"
+  | "formName";
 
 export interface AdminLeadsParams {
   page?: number;
   limit?: number;
   orgId?: string;
   projectId?: string;
-  status?: CrmLeadStatus;
+  status?: AdminLeadStatus;
   source?: string;
   search?: string;
+  sortBy?: AdminLeadSortField;
+  sortDir?: "asc" | "desc";
 }
 
 /** GET /admin/platform-config — Super Admin platform subdomain / DNS + billing policy. */

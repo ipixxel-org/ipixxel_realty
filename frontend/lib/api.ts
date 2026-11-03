@@ -441,6 +441,11 @@ export async function listForms(scope: FormScope): Promise<LeadFormRecord[]> {
   return apiFetch<LeadFormRecord[]>(formPath(scope));
 }
 
+/** Public embed lookup — resolves the saved form by its embed id, no session. */
+export async function getPublicFormByEmbed(embedId: string): Promise<LeadFormRecord> {
+  return apiFetch<LeadFormRecord>(`/public/forms/embed/${encodeURIComponent(embedId)}`);
+}
+
 export async function getForm(scope: FormScope, id: string): Promise<LeadFormRecord> {
   return apiFetch<LeadFormRecord>(`${formPath(scope)}/${id}`);
 }
@@ -1935,6 +1940,8 @@ function adminLeadsQuery(params?: import("./types").AdminLeadsParams): string {
   if (params?.status) q.set("status", params.status);
   if (params?.source) q.set("source", params.source);
   if (params?.search) q.set("search", params.search);
+  if (params?.sortBy) q.set("sortBy", params.sortBy);
+  if (params?.sortDir) q.set("sortDir", params.sortDir);
   const s = q.toString();
   return s ? `?${s}` : "";
 }
@@ -1949,6 +1956,50 @@ export async function getAdminLeads(
 
 export async function getAdminLeadsMeta(): Promise<import("./types").AdminLeadsMeta> {
   return apiFetch<import("./types").AdminLeadsMeta>("/admin/leads/meta");
+}
+
+export async function getAdminLead(
+  id: string,
+): Promise<import("./types").AdminLeadDetail> {
+  return apiFetch<import("./types").AdminLeadDetail>(
+    `/admin/leads/${encodeURIComponent(id)}`,
+  );
+}
+
+export async function updateAdminLeadStatus(
+  id: string,
+  input: { status: import("./types").AdminLeadStatus; remark?: string },
+): Promise<import("./types").AdminLeadDetail> {
+  return apiFetch<import("./types").AdminLeadDetail>(
+    `/admin/leads/${encodeURIComponent(id)}/status`,
+    { method: "PATCH", body: JSON.stringify(input) },
+  );
+}
+
+export async function addAdminLeadRemark(
+  id: string,
+  remark: string,
+): Promise<import("./types").AdminLeadActivity> {
+  return apiFetch<import("./types").AdminLeadActivity>(
+    `/admin/leads/${encodeURIComponent(id)}/remarks`,
+    { method: "POST", body: JSON.stringify({ remark }) },
+  );
+}
+
+export async function updateAdminLeadFollowUp(
+  id: string,
+  input: { scheduledAt: string; reminderAt?: string; note?: string },
+): Promise<{
+  nextAction: import("./types").AdminLeadNextAction;
+  activity: import("./types").AdminLeadActivity;
+}> {
+  return apiFetch<{
+    nextAction: import("./types").AdminLeadNextAction;
+    activity: import("./types").AdminLeadActivity;
+  }>(`/admin/leads/${encodeURIComponent(id)}/follow-up`, {
+    method: "PATCH",
+    body: JSON.stringify(input),
+  });
 }
 
 export async function getAdminOrganisationsList(): Promise<{ id: string; name: string }[]> {

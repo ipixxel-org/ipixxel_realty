@@ -6,6 +6,8 @@ import { SiteRenderer } from "@/components/openpage/renderer/SiteRenderer";
 import type { SiteConfig as LegacySiteConfig } from "@/lib/openpage/types";
 import type { FormDefinition } from "@/lib/openpage/forms-store";
 import { findFormByEmbedId, loadFormLibrary } from "@/lib/openpage/forms-store";
+import { formDefFromRecord } from "@/lib/openpage/forms-backend";
+import { getPublicFormByEmbed } from "@/lib/api";
 import { loadPages } from "@/lib/openpage/persist";
 import { ensureConfig } from "@/lib/openpage/site-config";
 
@@ -33,26 +35,41 @@ export default function EmbedFormPage({ params }: { params: Promise<{ embedId: s
 
   useEffect(() => {
     if (!embedId) return;
-    // Try the forms library first (reusable forms), then fall back to page
-    // configs (per-template form).
-    const lib = loadFormLibrary();
-    const fromLib = findFormByEmbedId(embedId, lib);
-    if (fromLib) {
-      setForm(fromLib);
-      return;
-    }
-    const pages = loadPages();
-    for (const pg of pages) {
-      const cfg = ensureConfig(pg);
-      const f = cfg.form;
-      if (f.embed?.id === embedId || pg.slug === embedId) {
-        setForm(withEmbedId(f, embedId));
-        return;
-      }
-    }
-    // Fallback: first page's form
-    const fallback = pages[0] ? ensureConfig(pages[0]).form : null;
-    setForm(fallback ? withEmbedId(fallback, embedId) : null);
+    let cancelled = false;
+
+    // The backend row is the source of truth for saved Form Builder forms, so
+    // try it first — localStorage may be empty in a visitor's browser.
+    void getPublicFormByEmbed(embedId)
+      .then((rec) => {
+        if (!cancelled) setForm(formDefFromRecord(rec));
+      })
+      .catch(() => {
+        if (cancelled) return;
+        // Fall back to the local forms library (reusable forms), then page
+        // configs (per-template form).
+        const lib = loadFormLibrary();
+        const fromLib = findFormByEmbedId(embedId, lib);
+        if (fromLib) {
+          setForm(fromLib);
+          return;
+        }
+        const pages = loadPages();
+        for (const pg of pages) {
+          const cfg = ensureConfig(pg);
+          const f = cfg.form;
+          if (f.embed?.id === embedId || pg.slug === embedId) {
+            setForm(withEmbedId(f, embedId));
+            return;
+          }
+        }
+        // Fallback: first page's form
+        const fallback = pages[0] ? ensureConfig(pages[0]).form : null;
+        setForm(fallback ? withEmbedId(fallback, embedId) : null);
+      });
+
+    return () => {
+      cancelled = true;
+    };
   }, [embedId]);
 
   const site = useMemo<SiteConfig | null>(() => {
