@@ -6,12 +6,15 @@ import { useToast } from "@/components/ui/toast";
 import { formatDate, formatINR } from "@/lib/billing/pricing";
 import type { AdminPaymentRow, PaymentStatus } from "@/lib/billing/types";
 import { useBillingEnv, useBillingQuery } from "../context";
+import { useAdminBillingAccess } from "./admin-env";
 import { BillingDialog, DialogActions } from "../dialog";
 import { BLink, Empty, ErrorNote, Loading, PAYMENT_STATUS_META, Section } from "../ui";
 import { OrderIdCell, PaymentDocuments } from "./payment-cells";
 
 export function RefundDialog({ payment, onClose, onRefunded }: { payment: AdminPaymentRow | null; onClose: () => void; onRefunded: () => void }) {
-  const { client, canEdit } = useBillingEnv();
+  const { client } = useBillingEnv();
+  // POST …/refund: the Subscriptions "Add" switch.
+  const canRefund = useAdminBillingAccess().post;
   const { toast } = useToast();
   const [reason, setReason] = useState("");
   const [busy, setBusy] = useState(false);
@@ -41,9 +44,11 @@ export function RefundDialog({ payment, onClose, onRefunded }: { payment: AdminP
           <button type="button" className="btn btn-ghost btn-sm" onClick={onClose}>
             Back
           </button>
-          <button type="button" className="btn btn-danger btn-sm" disabled={busy || !canEdit} onClick={() => void refund()}>
-            Refund {payment ? formatINR(payment.amount) : ""}
-          </button>
+          {canRefund ? (
+            <button type="button" className="btn btn-danger btn-sm" disabled={busy} onClick={() => void refund()}>
+              Refund {payment ? formatINR(payment.amount) : ""}
+            </button>
+          ) : null}
         </DialogActions>
       }
     >
@@ -68,6 +73,7 @@ export function RefundDialog({ payment, onClose, onRefunded }: { payment: AdminP
 }
 
 export function AdminPaymentsView({ initialRefundId }: { initialRefundId?: string }) {
+  const canRefund = useAdminBillingAccess().post;
   const [status, setStatus] = useState<PaymentStatus | "">("");
   const [orgId, setOrgId] = useState("");
   // Search box text, and the search sent to the server once typing pauses.
@@ -205,7 +211,7 @@ export function AdminPaymentsView({ initialRefundId }: { initialRefundId?: strin
                     <td>
                       <div style={{ display: "flex", flexWrap: "wrap", gap: 4, justifyContent: "flex-end" }}>
                         <PaymentDocuments payment={p} />
-                        {(p.status === "captured" || p.status === "offline") && p.amount > 0 ? (
+                        {canRefund && (p.status === "captured" || p.status === "offline") && p.amount > 0 ? (
                           <button type="button" className="btn btn-ghost btn-sm" onClick={() => setRefund(p)}>
                             Refund
                           </button>

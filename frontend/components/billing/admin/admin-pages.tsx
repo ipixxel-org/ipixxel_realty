@@ -6,7 +6,7 @@ import { useAuth } from "@/lib/auth-context";
 import { BLink, PageHead } from "../ui";
 import { billingClient } from "@/lib/billing";
 import { BillingEnvProvider } from "../context";
-import { AdminBillingEnv } from "./admin-env";
+import { AdminBillingEnv, useAdminBillingAccess } from "./admin-env";
 import { CheckoutsNeedingReview } from "./checkouts-review";
 import { BLANK_COUPON, CouponForm, CouponsList, CouponUsage, EditCoupon } from "./coupons";
 import { LifecycleSettingsCard } from "./lifecycle";
@@ -52,7 +52,8 @@ export function AdminPlansV2() {
 /** /admin-console/subscriptions/plans/:id/edit with billing v2 on: the full plan form. */
 export function AdminEditPlanPage({ planId }: { planId: string }) {
   const { hasPermission } = useAuth();
-  if (!hasPermission("admin_subscriptions", "edit")) {
+  // The save confirm previews the change (POST → add) and saves it (PUT → edit).
+  if (!hasPermission("admin_subscriptions", "edit") || !hasPermission("admin_subscriptions", "add")) {
     return (
       <div className="card" style={{ padding: 32, textAlign: "center" }}>
         <h1 style={{ margin: "0 0 8px", fontSize: 22 }}>Access restricted</h1>
@@ -138,6 +139,8 @@ export function AdminSubscriptionDetailPage({ orgId, origin = {} }: { orgId: str
 }
 
 export function AdminCouponsPage() {
+  // A new coupon is a POST: the Subscriptions "Add" switch.
+  const canCreate = useAdminBillingAccess().post;
   return (
     <Guard>
       <PageHead
@@ -147,9 +150,11 @@ export function AdminCouponsPage() {
         sub="Discounts organisations can enter at checkout. Taken off before GST."
         sampleFns={["listCoupons"]}
         actions={
-          <BLink to="adminCouponNew" className="btn btn-primary">
-            <Icon name="plus" size={15} /> New coupon
-          </BLink>
+          canCreate ? (
+            <BLink to="adminCouponNew" className="btn btn-primary">
+              <Icon name="plus" size={15} /> New coupon
+            </BLink>
+          ) : undefined
         }
       />
       <CouponsList />
@@ -205,9 +210,12 @@ export function AdminCompanyTaxDetails() {
 
 /** Drop-in for the Settings page's "Subscription expiry policy" card. */
 export function AdminLifecycleSettings() {
+  // GET / PUT /admin/billing/lifecycle are admin_settings (view / edit).
+  const { settingsView, settingsEdit } = useAdminBillingAccess();
+  if (!settingsView) return null;
   return (
-    <AdminBillingEnv>
+    <BillingEnvProvider client={billingClient} canEdit={settingsEdit}>
       <LifecycleSettingsCard />
-    </AdminBillingEnv>
+    </BillingEnvProvider>
   );
 }

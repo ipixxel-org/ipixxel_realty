@@ -6,7 +6,7 @@ import { useToast } from "@/components/ui/toast";
 import { formatDate } from "@/lib/billing/pricing";
 import type { RetentionChoices, RetentionItem, WhatStaysChoice } from "@/lib/billing/types";
 import { useBillingEnv, useBillingQuery, useOptionalOrgBilling, type BillingRoute, type RouteParams } from "./context";
-import { Banner, BLink, countLabel, ErrorNote, Loading, Section, WhatStaysLockedNote } from "./ui";
+import { Banner, BLink, countLabel, ErrorNote, Loading, ManageBillingNote, Section, WhatStaysLockedNote } from "./ui";
 
 /** Super Admin editing one organisation's choice (any time; applied at once when it's on that plan). */
 export interface WhatStaysAdmin {
@@ -49,6 +49,7 @@ function TickList({
   const max = limit ?? Infinity;
   const full = selected.length >= max;
   const fits = allFit(items, limit);
+  const { canEdit: canEditPicks } = useBillingEnv();
   return (
     <Section
       title={title}
@@ -58,6 +59,8 @@ function TickList({
     >
       {items.map((it) => {
         const on = fits || selected.includes(it.id);
+        // Without billing:edit the picks are view-only.
+        const readOnly = !canEditPicks;
         const blocked = fits || (!on && full);
         return (
           <label
@@ -74,7 +77,7 @@ function TickList({
             }
             style={blocked && !fits ? { opacity: 0.6, cursor: "not-allowed" } : undefined}
           >
-            <input type="checkbox" checked={on} disabled={it.locked || blocked} onChange={() => onToggle(it.id)} aria-label={it.name} />
+            <input type="checkbox" checked={on} disabled={it.locked || blocked || readOnly} onChange={() => onToggle(it.id)} aria-label={it.name} />
             <span className="bl-tick-main">
               <b>
                 {it.name} {it.locked ? <Icon name="lock" size={12} style={{ verticalAlign: "-1px", color: "var(--muted)" }} /> : null}
@@ -220,6 +223,7 @@ function Editor({
         <button type="button" className="btn btn-primary" disabled={!canEdit || busy} onClick={() => void save()}>
           <Icon name="check" size={15} /> {busy ? "Saving…" : "Save"}
         </button>
+        {!canEdit ? <ManageBillingNote style={{ flexBasis: "100%" }} /> : null}
         <button type="button" className="btn btn-ghost" onClick={resetDefaults}>
           Reset to the picks we suggest
         </button>
@@ -372,6 +376,7 @@ export function WhatStaysOptions({
   onChange: (pick: WhatStaysPick) => void;
 }) {
   const { data, error } = useBillingQuery((c) => c.getRetentionChoices({ targetPlanId }), [targetPlanId]);
+  const { canEdit } = useBillingEnv();
   const [choice, setChoice] = useState<WhatStaysChoice | null>(initialChoice);
   const saved = !!data && !data.isDefault;
   // A saved choice counts only while it fits the plan's limits today (they can be
@@ -405,12 +410,14 @@ export function WhatStaysOptions({
     </div>
   );
   const name = `what-stays-${targetPlanId}`;
+  const radioNote = canEdit ? null : <ManageBillingNote />;
   const choose = { target: targetPlanId, ...chooseParams };
   return (
     <div className="bl-stack" style={{ gap: 10 }} data-testid="what-stays-options" role="radiogroup" aria-label="What stays">
+      {radioNote}
       <div>
         <label className="bl-row" style={{ gap: 8, alignItems: "center", cursor: "pointer" }}>
-          <input type="radio" name={name} checked={choice === "default"} onChange={() => setChoice("default")} />
+          <input type="radio" name={name} checked={choice === "default"} disabled={!canEdit} onChange={() => setChoice("default")} />
           <b>Keep the default picks</b>
         </label>
         <div style={{ marginLeft: 24 }} data-testid="what-stays-defaults">
@@ -419,7 +426,7 @@ export function WhatStaysOptions({
       </div>
       <div>
         <label className="bl-row" style={{ gap: 8, alignItems: "center", cursor: "pointer" }}>
-          <input type="radio" name={name} checked={choice === "saved"} onChange={() => setChoice("saved")} />
+          <input type="radio" name={name} checked={choice === "saved"} disabled={!canEdit} onChange={() => setChoice("saved")} />
           <b>I&apos;ll choose what stays</b>
         </label>
         {choice === "saved" ? (

@@ -11,7 +11,7 @@ import { ScheduledChangeNote } from "./banners";
 import { useBillingEnv, useBillingQuery, useOrgBilling } from "./context";
 import { BillingDialog, DialogActions } from "./dialog";
 import { WhatStaysOptions, type WhatStaysPick } from "./choose-what-stays";
-import { Banner, BillingRedirect, BLink, countLabel, ErrorNote, Kv, Loading, Section } from "./ui";
+import { Banner, BillingRedirect, BLink, countLabel, ErrorNote, Kv, Loading, ManageBillingNote, Section } from "./ui";
 
 function ConfirmDialog({
   open,
@@ -242,9 +242,16 @@ export function DowngradeScreen({
         >
           <Icon name="arrow-down" size={15} /> {toMonthly ? "Confirm switch to monthly" : toBasic ? `Move to ${target.name}` : "Confirm plan change"}
         </button>
-        <BLink to="plans" className="btn btn-ghost">
-          Keep {o.plan.name}
-        </BLink>
+        {!canEdit ? <ManageBillingNote style={{ flexBasis: "100%" }} /> : null}
+        {canEdit ? (
+          <BLink to="plans" className="btn btn-ghost">
+            Keep {o.plan.name}
+          </BLink>
+        ) : (
+          <button type="button" className="btn btn-ghost" disabled title="Only people who can manage billing can do this. Ask your organisation admin.">
+            Keep {o.plan.name}
+          </button>
+        )}
       </div>
       <ConfirmDialog
         open={confirm}

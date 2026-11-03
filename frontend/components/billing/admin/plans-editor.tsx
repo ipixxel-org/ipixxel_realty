@@ -11,6 +11,7 @@ import { planLimitWarnings, planLimitWarningsFor, type PlanLimitWarning } from "
 import { formatINR, packagePriceText, yearlySaving } from "@/lib/billing/pricing";
 import type { BillingPlan, PlanLimits, PlanModules, PlanSavePreview, PlanVersionCount } from "@/lib/billing/types";
 import { useBillingEnv, useBillingQuery } from "../context";
+import { useAdminBillingAccess } from "./admin-env";
 import { BillingDialog, DialogActions } from "../dialog";
 import { BLink, ErrorNote, Loading } from "../ui";
 import { PlanVersionHistoryDialog } from "./plan-version-history";
@@ -112,6 +113,7 @@ const chip: React.CSSProperties = {
  */
 export function AdminPlansEditor({ canDelete = false }: { canDelete?: boolean }) {
   const { client, canEdit } = useBillingEnv();
+  const access = useAdminBillingAccess();
   const { toast } = useToast();
   const { data, error, reload } = useBillingQuery((c) => c.listAdminPlans(), []);
   const [deleting, setDeleting] = useState<BillingPlan | null>(null);
@@ -232,7 +234,7 @@ export function AdminPlansEditor({ canDelete = false }: { canDelete?: boolean })
             </div>
 
             <div style={{ display: "flex", gap: 8, paddingTop: 12, borderTop: "1px solid #f1f5f9" }}>
-              {canEdit ? (
+              {canEdit && access.editPlan ? (
                 <BLink
                   to="adminPlanEdit"
                   params={{ id: p.id }}
@@ -342,6 +344,7 @@ export function PlanEditForm({
   onCancel?: () => void;
 }) {
   const { client, canEdit } = useBillingEnv();
+  const access = useAdminBillingAccess();
   const { toast } = useToast();
   const [saved, setSaved] = useState(initial);
   const [plan, setPlan] = useState(initial);
@@ -476,9 +479,11 @@ export function PlanEditForm({
           <button className={formPageStyles.btn} type="button" onClick={() => (onCancel ? onCancel() : setPlan(saved))}>
             Cancel
           </button>
-          <button className={formPageStyles.btnPrimary} type="button" disabled={!dirty || busy || !canEdit} onClick={() => void requestSave()}>
-            {busy ? "Saving…" : "Save plan"}
-          </button>
+          {canEdit && access.editPlan ? (
+            <button className={formPageStyles.btnPrimary} type="button" disabled={!dirty || busy} onClick={() => void requestSave()}>
+              {busy ? "Saving…" : "Save plan"}
+            </button>
+          ) : null}
         </div>
       </div>
       <BillingDialog

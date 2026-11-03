@@ -10,7 +10,7 @@ import { renewalChangeNotice, upcomingChoicePrompt } from "@/lib/billing/version
 import type { BillingOverview, RetentionSummary } from "@/lib/billing/types";
 import { useBillingEnv, useOptionalOrgBilling } from "./context";
 import { BillingDialog, DialogActions } from "./dialog";
-import { Banner, BLink, CompactBanner, Countdown, useRenewalLive, WhatStaysLockedNote } from "./ui";
+import { Banner, BLink, CompactBanner, Countdown, ManageBillingNote, useRenewalLive, WhatStaysLockedNote } from "./ui";
 import { MemberBillingBanner } from "./member-banner";
 import { noticeFromOverview } from "@/lib/billing/notice";
 
@@ -232,26 +232,30 @@ export function UndoButton({ label, run, done, onDone }: { label: string; run: (
   const refresh = useRefresh();
   const [busy, setBusy] = useState(false);
   return (
-    <button
-      type="button"
-      className="btn btn-primary btn-sm"
-      disabled={!canEdit || busy}
-      onClick={async () => {
-        setBusy(true);
-        try {
-          await run();
-          await refresh();
-          toast({ variant: "success", title: done });
-          onDone?.();
-        } catch (e) {
-          toast({ variant: "error", title: "Couldn't undo", description: e instanceof Error ? e.message : undefined });
-        } finally {
-          setBusy(false);
-        }
-      }}
-    >
-      {label}
-    </button>
+    <>
+      <button
+        type="button"
+        className="btn btn-primary btn-sm"
+        disabled={!canEdit || busy}
+        title={canEdit ? undefined : "Only people who can manage billing can do this. Ask your organisation admin."}
+        onClick={async () => {
+          setBusy(true);
+          try {
+            await run();
+            await refresh();
+            toast({ variant: "success", title: done });
+            onDone?.();
+          } catch (e) {
+            toast({ variant: "error", title: "Couldn't undo", description: e instanceof Error ? e.message : undefined });
+          } finally {
+            setBusy(false);
+          }
+        }}
+      >
+        {label}
+      </button>
+      {!canEdit ? <ManageBillingNote /> : null}
+    </>
   );
 }
 

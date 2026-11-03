@@ -476,6 +476,17 @@ export function useRenewalLive(overview: BillingOverview | null): boolean {
 
 /* ------------------------------------------------ What stays (locked) */
 
+/** Visible under actions people with billing:view (but not billing:edit) can't use. */
+export const MANAGE_BILLING_TEXT = "Only people who can manage billing can do this. Ask your organisation admin.";
+
+export function ManageBillingNote({ style }: { style?: CSSProperties }) {
+  return (
+    <div className="bl-muted bl-small" data-testid="manage-billing-note" style={{ marginTop: 6, ...style }}>
+      {MANAGE_BILLING_TEXT}
+    </div>
+  );
+}
+
 export const WHAT_STAYS_LOCKED_TEXT = "To change what stays, contact our support team";
 
 /**

@@ -13,7 +13,7 @@ import { ScheduledChangeNote } from "./banners";
 import { usePayment } from "./payment";
 import { WithdrawRequestButton } from "./requests";
 import { WhatStaysOptions, type WhatStaysPick } from "./choose-what-stays";
-import { Banner, BillingRedirect, BLink, ErrorNote, Loading, Section, useCheckoutLive } from "./ui";
+import { Banner, BillingRedirect, BLink, ErrorNote, Loading, ManageBillingNote, MANAGE_BILLING_TEXT, Section, useCheckoutLive } from "./ui";
 
 /* ---------------------------------------------------------- Billing details */
 
@@ -537,7 +537,7 @@ export function CheckoutScreen({
         ? pendingRequestText(pendingUpgrade)
         : PAYMENT_REVIEW_TEXT
       : !canEdit
-        ? "Ask an admin with billing access to buy a plan"
+        ? MANAGE_BILLING_TEXT
         : missingDetails.length
           ? "Complete your organisation details to continue"
           : mustChoose
@@ -639,6 +639,7 @@ export function CheckoutScreen({
                     )}
                   </button>
                 </div>
+                {!canEdit ? <ManageBillingNote style={{ textAlign: "center" }} /> : null}
                 <div className="bl-muted bl-small" style={{ textAlign: "center", marginTop: 8 }}>
                   {online ? "Secure payment by Razorpay. GST invoice by email." : "No payment is taken now. GST invoice by email once it's approved."}
                 </div>

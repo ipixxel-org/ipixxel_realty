@@ -7,6 +7,7 @@ import { useToast } from "@/components/ui/toast";
 import { daysBetween, describeCoupon, formatDate, formatINR } from "@/lib/billing/pricing";
 import type { Coupon, CouponDuration, CouponStatus } from "@/lib/billing/types";
 import { useBillingEnv, useBillingQuery } from "../context";
+import { useAdminBillingAccess } from "./admin-env";
 import { BLink, Empty, ErrorNote, Kv, Loading, Section } from "../ui";
 
 export const COUPON_STATUS: Record<CouponStatus, { label: string; badge: string }> = {
@@ -20,6 +21,7 @@ export const COUPON_STATUS: Record<CouponStatus, { label: string; badge: string 
 /* ------------------------------------------------------------------- List */
 
 export function CouponsList() {
+  const canEditCoupons = useAdminBillingAccess().put;
   const [q, setQ] = useState("");
   const { data, error } = useBillingQuery((c) => c.listCoupons(), []);
   const { data: plans } = useBillingQuery((c) => c.listAdminPlans(), []);
@@ -81,9 +83,11 @@ export function CouponsList() {
                       <BLink to="adminCoupon" params={{ code: c.code }} className="btn btn-ghost btn-sm">
                         Usage
                       </BLink>{" "}
-                      <BLink to="adminCouponEdit" params={{ code: c.code }} className="btn btn-ghost btn-sm">
-                        <Icon name="edit" size={13} /> Edit
-                      </BLink>
+                      {canEditCoupons ? (
+                        <BLink to="adminCouponEdit" params={{ code: c.code }} className="btn btn-ghost btn-sm">
+                          <Icon name="edit" size={13} /> Edit
+                        </BLink>
+                      ) : null}
                     </td>
                   </tr>
                 ))}
@@ -134,6 +138,9 @@ function validate(c: Coupon): Errors {
 
 export function CouponForm({ initial, isNew }: { initial: Coupon; isNew: boolean }) {
   const { client, nav, canEdit } = useBillingEnv();
+  const access = useAdminBillingAccess();
+  // A new coupon is a POST (add); changing one is a PUT (edit).
+  const canSave = canEdit && (isNew ? access.post : access.put);
   const { toast } = useToast();
   const { data: orgOptions } = useBillingQuery((cl) => cl.listOrgOptions(), []);
   const { data: plans } = useBillingQuery((cl) => cl.listAdminPlans(), []);
@@ -350,9 +357,11 @@ export function CouponForm({ initial, isNew }: { initial: Coupon; isNew: boolean
       </Section>
 
       <div className="bl-row">
-        <button type="button" className="btn btn-primary" disabled={busy || !canEdit} onClick={() => void save()}>
-          {isNew ? "Create coupon" : "Save changes"}
-        </button>
+        {canSave ? (
+          <button type="button" className="btn btn-primary" disabled={busy} onClick={() => void save()}>
+            {isNew ? "Create coupon" : "Save changes"}
+          </button>
+        ) : null}
         <BLink to="adminCoupons" className="btn btn-ghost">
           Cancel
         </BLink>
@@ -373,6 +382,7 @@ export function EditCoupon({ code }: { code: string }) {
 /* ------------------------------------------------------------------ Usage */
 
 export function CouponUsage({ code }: { code: string }) {
+  const canEditCoupons = useAdminBillingAccess().put;
   const { data, error } = useBillingQuery((c) => c.getCoupon(code), [code]);
   const paged = usePagedRows(data?.redemptions ?? [], code);
   if (error) return <ErrorNote message={error} />;
@@ -384,9 +394,11 @@ export function CouponUsage({ code }: { code: string }) {
         title={<span className="bl-mono">{data.coupon.code}</span>}
         sub={data.coupon.description}
         action={
-          <BLink to="adminCouponEdit" params={{ code }} className="btn btn-ghost btn-sm">
-            <Icon name="edit" size={13} /> Edit
-          </BLink>
+          canEditCoupons ? (
+            <BLink to="adminCouponEdit" params={{ code }} className="btn btn-ghost btn-sm">
+              <Icon name="edit" size={13} /> Edit
+            </BLink>
+          ) : undefined
         }
       >
         <div className="bl-grid4">

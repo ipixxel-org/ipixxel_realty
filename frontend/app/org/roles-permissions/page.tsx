@@ -8,7 +8,7 @@ import { Reveal } from "@/components/superadmin/reveal";
 import { Icon } from "@/components/icons";
 import { Seg } from "@/components/superadmin/seg";
 import { useFlash } from "@/lib/flash";
-import { applyPermissionToggle } from "@/lib/permissions";
+import { applyPermissionToggle, isHiddenColumn, ROLE_EDITOR_COPY } from "@/lib/permissions";
 import { ORG_ROLES_FLASH_KEY, ORG_ROLES_PATH } from "./roles-shared";
 import { ConfirmModal } from "@/components/ui/confirm-modal";
 import type { OrgUsersListResponse, OrgUser } from "@/lib/types";
@@ -129,6 +129,16 @@ function actionLabel(mod: ModuleDef | undefined, action: (typeof ACTIONS)[number
 
 function supportedColumns(mod: ModuleDef | undefined) {
   return ACTIONS.filter((act) => supportsAction(mod, act)).map((act) => ACTION_COLUMNS[act]);
+}
+
+/** The switches shown for a module (Billing: View and Manage); hidden ones keep their stored value. */
+function shownColumns(mod: ModuleDef | undefined) {
+  return supportedColumns(mod).filter((col) => !mod || !isHiddenColumn(mod.key, col));
+}
+
+/** Pill text: the editor's own label (Billing: Manage) or the catalog's. */
+function pillLabel(mod: ModuleDef | undefined, column: PermissionColumn) {
+  return (mod && ROLE_EDITOR_COPY[mod.key]?.labels?.[column]) ?? actionLabel(mod, COLUMN_ACTIONS[column]);
 }
 
 export default function OrgRolesPermissionsPage() {
@@ -368,7 +378,7 @@ export default function OrgRolesPermissionsPage() {
     const mod = catalog?.modules.find((m) => m.key === moduleKey);
     const current = roleState.permissions[moduleKey] ?? emptyRow(moduleKey);
     const enabled = !current[column];
-    const label = actionLabel(mod, COLUMN_ACTIONS[column]);
+    const label = pillLabel(mod, column);
     // Same rule as Super Admin > Organisation roles: every action needs View,
     // so granting one also grants View, and removing View removes them all —
     // except the Settings "My profile" pills (see applyPermissionToggle).
@@ -388,7 +398,8 @@ export default function OrgRolesPermissionsPage() {
     const current = roleState.permissions[moduleKey] ?? emptyRow(moduleKey);
     const next = emptyRow(moduleKey);
     for (const col of supportedColumns(mod)) {
-      next[col] = enabled ? current[col] || canGrant(moduleKey, col) : false;
+      // Hidden switches (Billing's Add / Delete / Approve) keep their stored value.
+      next[col] = isHiddenColumn(moduleKey, col) ? current[col] : enabled ? current[col] || canGrant(moduleKey, col) : false;
     }
     void saveModuleRow(
       moduleKey,
@@ -579,14 +590,14 @@ export default function OrgRolesPermissionsPage() {
                   <div className="platform-permission-row" key={m.key}>
                     <div className="platform-permission-module">
                       <div style={{ fontWeight: 700, fontSize: 13.5 }}>{m.label}</div>
-                      <div className="muted" style={{ fontSize: 12 }}>{m.description}</div>
+                      <div className="muted" style={{ fontSize: 12 }}>{ROLE_EDITOR_COPY[m.key]?.description ?? m.description}</div>
                     </div>
                     <div className="platform-permission-actions">
-                      {supportedColumns(m).map((act) => {
+                      {shownColumns(m).map((act) => {
                         // Locked roles (Admin) show exactly what Super Admin
                         // granted — disabled actions stay white.
                         const enabled = permRow[act];
-                        const label = actionLabel(m, COLUMN_ACTIONS[act]);
+                        const label = pillLabel(m, act);
                         // Members can't switch on what they don't hold.
                         const cannotGrant = !enabled && !canGrant(m.key, act);
                         return (
@@ -595,7 +606,7 @@ export default function OrgRolesPermissionsPage() {
                             key={act}
                             type="button"
                             disabled={isLocked || cannotGrant || savingModule !== null}
-                            title={cannotGrant && !isLocked ? "You can only grant permissions you have yourself" : undefined}
+                            title={cannotGrant && !isLocked ? "You can only grant permissions you have yourself" : ROLE_EDITOR_COPY[m.key]?.tips?.[act]}
                             onClick={() => handleToggleRolePerm(m.key, act)}
                             aria-pressed={enabled}
                             aria-label={`${label} permission for ${m.label}`}
@@ -690,10 +701,10 @@ export default function OrgRolesPermissionsPage() {
                       <tr key={m.key}>
                         <td>
                           <div style={{ fontWeight: 600 }}>{m.label}</div>
-                          <div style={{ fontSize: 12, color: "var(--fg-subtle)" }}>{m.description}</div>
+                          <div style={{ fontSize: 12, color: "var(--fg-subtle)" }}>{ROLE_EDITOR_COPY[m.key]?.description ?? m.description}</div>
                         </td>
                         {ACTIONS.map((act) => {
-                          if (!supportsAction(m, act)) {
+                          if (!supportsAction(m, act) || isHiddenColumn(m.key, ACTION_COLUMNS[act])) {
                             return (
                               <td key={act} style={{ textAlign: "center", color: "var(--fg-subtle)" }} title="Not applicable to this module">
                                 —

@@ -120,6 +120,8 @@ export default function SuperAdminSubscriptionsPage() {
   const canChangeSubscription = hasPermission("admin_subscriptions", "edit");
   const canApproveRequest = hasPermission("admin_subscriptions", "approve");
   const canRejectRequest = hasPermission("admin_subscriptions", "delete");
+  // Expiry & Grace Policy is a Settings card (admin_settings), shown here too.
+  const canViewExpiryPolicy = hasPermission("admin_settings", "view");
   const [plans, setPlans] = useState<Plan[]>([]);
   const [plansLoading, setPlansLoading] = useState(true);
   const [subs, setSubs] = useState<Subscription[]>([]);
@@ -306,7 +308,7 @@ export default function SuperAdminSubscriptionsPage() {
     if (urlTab !== null) setTab(urlTab);
     setRequestFilterStatus(reqStatus);
     fetchPackageChangeRequests(reqStatus, reqPage);
-    loadExpiryPolicy();
+    if (canViewExpiryPolicy) loadExpiryPolicy();
   }, [canViewSubscriptions]);
 
   useEffect(() => {
@@ -348,7 +350,7 @@ export default function SuperAdminSubscriptionsPage() {
     { index: 2, label: `Organisation Subscriptions (${subsTotal})` },
     { index: 3, label: `Package Requests (${requestsTotal})` },
     { index: 4, label: "Payments & Invoicing" },
-    { index: 5, label: "Expiry & Grace Policy" },
+    ...(canViewExpiryPolicy ? [{ index: 5, label: "Expiry & Grace Policy" }] : []),
   ];
 
   useEffect(() => {

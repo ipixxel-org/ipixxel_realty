@@ -16,7 +16,8 @@ export function CheckoutsNeedingReview() {
   const { data, error, reload } = useBillingQuery((c) => c.listAdminCheckouts("needs_review"), []);
   const { client } = useBillingEnv();
   const { hasPermission } = useAuth();
-  const canEdit = hasPermission("admin_subscriptions", "edit");
+  // POST /admin/billing/checkouts/:id/resolve: the Subscriptions "Add" switch.
+  const canEdit = hasPermission("admin_subscriptions", "add");
   const [busy, setBusy] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
   if (error || !data || data.length === 0) return null;

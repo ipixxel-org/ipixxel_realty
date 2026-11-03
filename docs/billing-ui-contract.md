@@ -964,11 +964,56 @@ templates, …) plus the Meta pages limit.
   - coupon is taken off before GST; the order of coupon checks decides which reason is shown
   - default picks: owner, then admins, then most recent login; projects by last update;
     landing pages by leads in the last 30 days
-- **Permissions:** org calls need `billing:view` (reads) / `billing:edit` (writes). Admin calls
-  need `admin_subscriptions` view/edit, except `/admin/billing/lifecycle`, which is
-  `admin_settings` (it sits on the Settings page). Both prefixes are in
-  `PLATFORM_ROUTE_MODULES` (handoff §4.8 — unmapped admin paths are open to any platform role;
-  the more specific prefix is listed first).
+- **Permissions:** see [Permissions](#permissions) below.
+
+## Permissions
+
+The screens show, enable or hide each action using the same check the backend makes; nobody
+gets a button that ends in 403.
+
+**Organisation** (`billing` module; the role editors show only **View** and **Manage** = the
+stored `canView` / `canEdit`. Add / Delete / Approve grant nothing for billing: hidden in both
+role editors, stored values kept as they are on every save. Manage turns View on; View off turns
+Manage off. The org Admin role always passes the backend check.)
+
+| Action | Backend | Screen without it |
+|---|---|---|
+| Banner, lock badges, limit prompts | none — `GET /org/billing/notice` and `GET /org/billing/access` are open to every member (no money in them) | — (everyone sees them; without `billing:edit` the banner has no amounts and "Ask your organisation admin…" instead of buttons) |
+| Settings → Billing, Plans, Invoices, Payments, Requests, Coupons, Choose what stays (open), checkout preview | `billing:view` | Billing hidden in Settings; billing pages show "Access restricted". Settings → Billing opens with `billing:view` alone (the other sections still need `settings:view`) |
+| Pay / Send change request / Request renewal, downgrade, Move to Basic, Keep <plan>, save what stays / keep default picks, Withdraw | `billing:edit` | disabled with "Only people who can manage billing can do this. Ask your organisation admin." (Withdraw and "Use at checkout" hidden); renewal and "Choose what stays active" pop-ups not shown |
+| Billing details (name, address, state, GSTIN) | `settings:edit` | "Ask your organisation admin to complete these details." |
+| Limit prompts' Upgrade / Change what stays | `billing:edit` | "{Thing} limit reached. Your plan allows {limit} and you have {used}. Ask your organisation admin to upgrade the plan." + OK |
+| Contact support links | `support:view` | hidden |
+
+**Super Admin.** `SuperAdminGuard` maps the path to a module (`PLATFORM_ROUTE_MODULES`, first
+match wins; every `/admin/billing/*` path is mapped) and the HTTP method to an action: GET =
+view, POST = add, PUT/PATCH = edit, DELETE = delete; package requests: approve → approve,
+reject → delete. Without the switch the button is hidden.
+
+| Action | Request | Module · switch (role editor label) |
+|---|---|---|
+| Plans, version history, orgs on a version, coupons list, subscriptions, org page, package requests, payments, Razorpay key status | GET | `admin_subscriptions` · View |
+| Edit Plan (save confirm preview + save) | POST `…/plans/:id/preview` + PUT `…/plans/:id` | `admin_subscriptions` · Add (Create / Assign plan) **and** Edit (Edit / Change) |
+| Delete plan | DELETE `/admin/plans/:id` | `admin_subscriptions` · Delete (Delete / Reject) |
+| New coupon | POST `…/coupons` | `admin_subscriptions` · Add |
+| Edit coupon | PUT `…/coupons/:code` | `admin_subscriptions` · Edit |
+| Extend grace, Mark paid offline, Apply coupon, Move to Basic (org page) | POST `…/subscriptions/:orgId/…` | `admin_subscriptions` · Add |
+| Choose what stays (org page and requests) | PUT `…/subscriptions/:orgId/retention` | `admin_subscriptions` · Edit (otherwise "View what stays") |
+| Mark as paid / Edit payment, coupon on a request | PUT `/admin/package-change-requests/:id/payment` · `/coupon` | `admin_subscriptions` · Edit |
+| Clear payment, remove a request's coupon | DELETE `…/payment` · `…/coupon` | `admin_subscriptions` · Delete |
+| Approve | POST `…/:id/approve` | `admin_subscriptions` · Approve |
+| Reject | POST `…/:id/reject` | `admin_subscriptions` · Delete (Reject) |
+| Mark resolved (paid — needs review) | POST `…/checkouts/:id/resolve` | `admin_subscriptions` · Add |
+| Refund | POST `…/payments/:id/refund` | `admin_subscriptions` · Add |
+| Expiry & Grace Policy (Settings page and the Subscriptions tab) | GET / PUT `…/lifecycle` | `admin_settings` · View (tab and card) / Edit (Save) |
+| Run lifecycle check now | POST `…/lifecycle/run` | `super_admin` role only |
+| Company & tax details | GET / PUT `…/company` | `admin_settings` · View / Edit |
+| Integrations → Online payments switch | GET / PUT `…/online-payments` | `admin_settings` · View / Edit (card listed for `admin_subscriptions` or `admin_settings` view) |
+| Razorpay keys: save, clear, test | PUT / DELETE / POST `/admin/payments/settings…` | `super_admin` role only |
+
+The Subscriptions row of the platform role editor has paired pills that share one stored switch
+(Create plan = Assign plan, Edit = Change, Delete = Reject); their tooltips list what each switch
+allows.
 
 ## Organisation
 

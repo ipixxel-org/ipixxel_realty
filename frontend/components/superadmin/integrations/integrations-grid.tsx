@@ -54,7 +54,12 @@ export function IntegrationsGrid() {
 
   const unrestricted = isUnrestrictedPlatformUser(user);
   const visible = INTEGRATIONS.filter(
-    (it) => it.comingSoon || unrestricted || hasPermission(it.permission, "view"),
+    (it) =>
+      it.comingSoon ||
+      unrestricted ||
+      hasPermission(it.permission, "view") ||
+      // Online payments: the gateways are Subscriptions, the on/off switch is Settings.
+      (it.key === "payments" && hasPermission("admin_settings", "view")),
   );
 
   return (

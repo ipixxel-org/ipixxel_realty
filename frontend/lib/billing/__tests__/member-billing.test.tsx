@@ -243,6 +243,20 @@ describe("billing:view without billing:edit", () => {
     expect(screen.getByText("Tower A")).toBeInTheDocument();
     expect((await calls()).filter((c) => c.refused)).toEqual([]);
   });
+
+  it("opens Settings → Billing actions as disabled with the visible permission message", async () => {
+    const { PlansScreen } = await import("@/components/billing/plans");
+    await renderShell(["billing:view", ...SALES_AGENT], <PlansScreen />);
+    const blocked = screen.getAllByTestId("plan-action-blocked");
+    expect(blocked.length).toBeGreaterThan(0);
+    for (const action of blocked) {
+      expect(action.querySelector("button")).toBeDisabled();
+    }
+    expect(screen.getAllByTestId("manage-billing-note").length).toBeGreaterThan(0);
+    expect(screen.getAllByTestId("manage-billing-note")[0]).toHaveTextContent(
+      "Only people who can manage billing can do this. Ask your organisation admin.",
+    );
+  });
 });
 
 describe("billing editors see everything as before", () => {
@@ -255,6 +269,14 @@ describe("billing editors see everything as before", () => {
     const paths = (await calls()).map((c) => c.path);
     expect(paths).toContain("/org/billing/v2");
     expect(paths).not.toContain("/org/billing/notice");
+  });
+
+  it("Settings → Billing keeps its existing enabled actions and UI", async () => {
+    const { PlansScreen } = await import("@/components/billing/plans");
+    await renderShell(BILLING_EDITOR, <PlansScreen />);
+    expect(screen.queryByTestId("plan-action-blocked")).toBeNull();
+    expect(screen.queryByTestId("manage-billing-note")).toBeNull();
+    expect(screen.getAllByRole("link", { name: /Change plan/ }).length).toBeGreaterThan(0);
   });
 });
 
