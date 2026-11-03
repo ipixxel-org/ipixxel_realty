@@ -89,17 +89,35 @@ describe("Plans & Pricing: Edit Plan needs the preview (add) and the save (edit)
   });
 });
 
-describe("Coupons: New coupon is a POST (add); Edit is a PUT (edit)", () => {
+describe("Coupons follow their own module (admin_coupons): New coupon = Create, Edit = Edit", () => {
   it.each([
-    ["viewOnly", false, false],
-    ["editOnly", false, true],
-    ["addOnly", true, false],
-  ] as const)("%s → New coupon %s, Edit %s", async (role, newShown, editShown) => {
-    as(role);
+    ["Coupons View", ["view"], true, false, false],
+    ["Coupons Create", ["view", "add"], true, true, false],
+    ["Coupons Edit", ["view", "edit"], true, false, true],
+    // Subscriptions switches no longer reach coupons.
+    ["Subscriptions only", [], false, false, false],
+  ] as const)("%s → page %s, New coupon %s, Edit %s", async (_name, coupons, page, newShown, editShown) => {
+    as("addAndEdit");
+    for (const a of coupons) perms.add(`admin_coupons:${a}`);
     const { AdminCouponsPage } = await import("../admin-pages");
     await show(<AdminCouponsPage />);
+    expect(screen.queryByText("You don't have permission to view coupons.") === null).toBe(page);
     expect(has(/New coupon/)).toBe(newShown);
     expect(has(/^Edit$/)).toBe(editShown);
+  });
+
+  it("the coupon form's plan picker reads the Coupons endpoint, not Plans & Pricing", async () => {
+    as("viewOnly");
+    perms.add("admin_coupons:view");
+    perms.add("admin_coupons:add");
+    const listAdminPlans = vi.fn(shared.client.listAdminPlans);
+    const listCouponPlans = vi.fn(shared.client.listCouponPlans);
+    shared.client = { ...shared.client, listAdminPlans, listCouponPlans } as BillingClient;
+    const { AdminNewCouponPage } = await import("../admin-pages");
+    await show(<AdminNewCouponPage />);
+    expect(listCouponPlans).toHaveBeenCalled();
+    expect(listAdminPlans).not.toHaveBeenCalled();
+    expect(has("Create coupon")).toBe(true);
   });
 });
 

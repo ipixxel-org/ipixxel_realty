@@ -81,16 +81,43 @@ const MODULE_PERMISSION_PILLS: Record<string, PermissionPill[]> = {
   ],
   // Billing v2: the backend picks the switch from the request method (POST =
   // Add, PUT = Edit, DELETE = Delete), so the tooltips list what each one
-  // really allows. Pairs share one stored switch (turning one on turns both on).
+  // really allows. "Assign plan" and "Change" (old Subscriptions screens) are
+  // gone: they were the same stored switches as Create plan and Edit.
   admin_subscriptions: [
-    { key: "canView", permission: "canView", label: "View", title: "See plans, version history, coupons, organisation subscriptions, package requests, payments and the Razorpay key status." },
-    { key: "createPlan", permission: "canAdd", label: "Create plan", title: "Shared with Assign plan / Create plan. Allows: New coupon, Extend grace, Move to Basic, Mark paid offline, apply a coupon to a subscription, Refund, Mark resolved, and the save preview when editing a plan (Edit plan needs this and Edit)." },
-    { key: "canEdit", permission: "canEdit", label: "Edit", title: "Shared with Edit / Change. Allows: save a plan (with Create plan), edit a coupon, Choose what stays, Mark as paid / Edit payment, a coupon on a request." },
-    { key: "canDelete", permission: "canDelete", label: "Delete", title: "Shared with Delete / Reject. Allows: delete a plan, Reject a request, Clear payment, remove a request's coupon." },
-    { key: "assignPlan", permission: "canAdd", label: "Assign plan", title: "Shared with Assign plan / Create plan. Allows: New coupon, Extend grace, Move to Basic, Mark paid offline, apply a coupon to a subscription, Refund, Mark resolved, and the save preview when editing a plan (Edit plan needs this and Edit)." },
-    { key: "changePlan", permission: "canEdit", label: "Change", title: "Shared with Edit / Change. Allows: save a plan (with Create plan), edit a coupon, Choose what stays, Mark as paid / Edit payment, a coupon on a request." },
+    {
+      key: "canView",
+      permission: "canView",
+      label: "View",
+      title:
+        "See plans, version history, organisation subscriptions, package requests, payments and the Razorpay key status; Open an organisation's billing page from Package requests and Organisation subscriptions.",
+    },
+    {
+      key: "createPlan",
+      permission: "canAdd",
+      label: "Create plan",
+      title:
+        "Extend grace, Move to Basic, Refund, Mark resolved, apply a coupon to a subscription, and the save preview when editing a plan (Edit plan needs this and Edit).",
+    },
+    {
+      key: "canEdit",
+      permission: "canEdit",
+      label: "Edit",
+      title: "Save a plan (with Create plan), Choose what stays, Mark as paid / Edit payment, a coupon on a request.",
+    },
+    {
+      key: "canDelete",
+      permission: "canDelete",
+      label: "Delete",
+      title: "Delete a plan, Clear payment, remove a request's coupon. Same switch as Reject.",
+    },
     { key: "approve", permission: "canApprove", label: "Approve", title: "Approve a package request (one with a price needs Mark as paid first, which needs Edit)." },
-    { key: "reject", permission: "canDelete", label: "Reject", title: "Shared with Delete / Reject. Allows: delete a plan, Reject a request, Clear payment, remove a request's coupon." },
+    { key: "reject", permission: "canDelete", label: "Reject", title: "Reject a package request. Same switch as Delete." },
+  ],
+  // Coupons have no delete or approve step.
+  admin_coupons: [
+    { key: "canView", permission: "canView", label: "View", title: "See coupons, their usage, and the coupon in use on an organisation's billing page." },
+    { key: "canAdd", permission: "canAdd", label: "Create", title: "Create a new coupon." },
+    { key: "canEdit", permission: "canEdit", label: "Edit", title: "Change a coupon or switch it off." },
   ],
 };
 
@@ -350,7 +377,7 @@ export function PlatformRolesPanel({
                       <div style={{ fontWeight: 700 }}>{item.label}</div>
                       <div className="muted" style={{ fontSize: 12 }}>
                         {item.description}
-                        {MODULE_NOTES[item.moduleKey] ? ` ${MODULE_NOTES[item.moduleKey]}` : ""}
+                        {MODULE_NOTES[item.moduleKey] ? `${/[.!?]$/.test(item.description.trim()) ? "" : "."} ${MODULE_NOTES[item.moduleKey]}` : ""}
                       </div>
                     </div>
                     <div className="platform-permission-actions">

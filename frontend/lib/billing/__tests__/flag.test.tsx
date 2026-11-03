@@ -491,6 +491,7 @@ describe("billing v2 flag", () => {
         "getBillingNotice",
         "getLifecycleSettings",
         "listAdminPlans",
+        "listCouponPlans",
         "listPlans",
         "saveAdminPlan",
         "saveLifecycleSettings",

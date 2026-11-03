@@ -361,6 +361,16 @@ export class AdminBillingController {
     return this.coupons.save(dto.coupon, false, user.sub, code);
   }
 
+  /**
+   * Plans for the coupon form's plan picker — the same list as GET
+   * /admin/billing/plans, under Coupons (admin_coupons) so a coupons-only
+   * role can fill in the form.
+   */
+  @Get('coupon-plans')
+  couponPlans() {
+    return this.service.listPlans();
+  }
+
   /** Organisations for the coupon form's "only these organisations" picker. */
   @Get('org-options')
   orgOptions() {

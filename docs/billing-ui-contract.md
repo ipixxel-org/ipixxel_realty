@@ -992,11 +992,12 @@ reject → delete. Without the switch the button is hidden.
 
 | Action | Request | Module · switch (role editor label) |
 |---|---|---|
-| Plans, version history, orgs on a version, coupons list, subscriptions, org page, package requests, payments, Razorpay key status | GET | `admin_subscriptions` · View |
+| Plans, version history, orgs on a version, subscriptions, org page, package requests, payments, Razorpay key status | GET | `admin_subscriptions` · View |
+| Coupons page, coupon usage, the "Usage →" link on an org page, the coupon form's organisation and plan pickers | GET `…/coupons`, `…/org-options`, `…/coupon-plans` | `admin_coupons` · View |
 | Edit Plan (save confirm preview + save) | POST `…/plans/:id/preview` + PUT `…/plans/:id` | `admin_subscriptions` · Add (Create / Assign plan) **and** Edit (Edit / Change) |
 | Delete plan | DELETE `/admin/plans/:id` | `admin_subscriptions` · Delete (Delete / Reject) |
-| New coupon | POST `…/coupons` | `admin_subscriptions` · Add |
-| Edit coupon | PUT `…/coupons/:code` | `admin_subscriptions` · Edit |
+| New coupon | POST `…/coupons` | `admin_coupons` · Create |
+| Edit coupon | PUT `…/coupons/:code` | `admin_coupons` · Edit |
 | Extend grace, Mark paid offline, Apply coupon, Move to Basic (org page) | POST `…/subscriptions/:orgId/…` | `admin_subscriptions` · Add |
 | Choose what stays (org page and requests) | PUT `…/subscriptions/:orgId/retention` | `admin_subscriptions` · Edit (otherwise "View what stays") |
 | Mark as paid / Edit payment, coupon on a request | PUT `/admin/package-change-requests/:id/payment` · `/coupon` | `admin_subscriptions` · Edit |
@@ -1011,9 +1012,17 @@ reject → delete. Without the switch the button is hidden.
 | Integrations → Online payments switch | GET / PUT `…/online-payments` | `admin_settings` · View / Edit (card listed for `admin_subscriptions` or `admin_settings` view) |
 | Razorpay keys: save, clear, test | PUT / DELETE / POST `/admin/payments/settings…` | `super_admin` role only |
 
-The Subscriptions row of the platform role editor has paired pills that share one stored switch
-(Create plan = Assign plan, Edit = Change, Delete = Reject); their tooltips list what each switch
-allows.
+**Coupons** is its own platform module (`admin_coupons`: View, Create, Edit — no Delete or
+Approve). Using a coupon on an organisation stays under Subscriptions: Apply coupon to a
+subscription (Add) and a coupon on a package request (Edit / Delete). The data migration
+`20261104090000_admin_coupons_permissions` copied every role's Subscriptions View / Add / Edit
+to Coupons, so nobody lost access when it was split out.
+
+The Subscriptions row of the platform role editor shows View, Create plan (Add), Edit, Delete,
+Approve and Reject; Delete and Reject are one stored switch. The old "Assign plan" and "Change"
+pills were removed (same switches as Create plan and Edit, for screens billing v2 replaced).
+Each pill's tooltip lists what it allows; View includes the Open buttons in Package requests and
+Organisation subscriptions (they open the organisation's billing page).
 
 ## Organisation
 

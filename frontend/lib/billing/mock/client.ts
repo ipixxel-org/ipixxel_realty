@@ -533,6 +533,7 @@ export function createMockBillingClient(opts: { initial?: Partial<MockState>; pe
     /* ------------------------------------------------------------ admin */
 
     listAdminPlans: () => ok([...get().plans].sort((a, b) => a.rank - b.rank)),
+    listCouponPlans: () => ok([...get().plans].sort((a, b) => a.rank - b.rank)),
     // The mock keeps no history: each plan is its own v1, with the mock orgs on it.
     getPlanVersions(planId) {
       const s = get();

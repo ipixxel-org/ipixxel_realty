@@ -30,6 +30,8 @@ export function AdminBillingEnv({ children }: { children: ReactNode }) {
  *    Clear payment, remove a request's coupon
  *  - approve (Subscriptions "Approve"): Approve a request
  *  - settings*: Lifecycle (Expiry & Grace Policy) and Company & tax details
+ *  - coupons*: the Coupons module (admin_coupons) — list / usage, New coupon
+ *    (POST → add, "Create"), Edit coupon (PUT → edit)
  */
 export function useAdminBillingAccess() {
   // Outside an AuthProvider (walkthroughs on the mock, isolated tests): everything, as before.
@@ -46,6 +48,9 @@ export function useAdminBillingAccess() {
     approve: sub("approve"),
     /** Editing a plan: the confirm previews (POST) and the save is a PUT. */
     editPlan: post && put,
+    couponsView: hasPermission("admin_coupons", "view"),
+    couponsAdd: hasPermission("admin_coupons", "add"),
+    couponsEdit: hasPermission("admin_coupons", "edit"),
     settingsView: hasPermission("admin_settings", "view"),
     settingsEdit: hasPermission("admin_settings", "edit"),
   };

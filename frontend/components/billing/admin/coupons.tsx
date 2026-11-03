@@ -21,10 +21,10 @@ export const COUPON_STATUS: Record<CouponStatus, { label: string; badge: string 
 /* ------------------------------------------------------------------- List */
 
 export function CouponsList() {
-  const canEditCoupons = useAdminBillingAccess().put;
+  const canEditCoupons = useAdminBillingAccess().couponsEdit;
   const [q, setQ] = useState("");
   const { data, error } = useBillingQuery((c) => c.listCoupons(), []);
-  const { data: plans } = useBillingQuery((c) => c.listAdminPlans(), []);
+  const { data: plans } = useBillingQuery((c) => c.listCouponPlans(), []);
   const planLabel = (ids: string[]) => ids.map((id) => plans?.find((p) => p.id === id)?.name ?? id).join(", ");
   const rows = (data ?? []).filter((r) => r.coupon.code.includes(q.trim().toUpperCase()));
   const paged = usePagedRows(rows, q);
@@ -137,13 +137,13 @@ function validate(c: Coupon): Errors {
 }
 
 export function CouponForm({ initial, isNew }: { initial: Coupon; isNew: boolean }) {
-  const { client, nav, canEdit } = useBillingEnv();
+  const { client, nav } = useBillingEnv();
   const access = useAdminBillingAccess();
-  // A new coupon is a POST (add); changing one is a PUT (edit).
-  const canSave = canEdit && (isNew ? access.post : access.put);
+  // Coupons module: a new coupon is a POST (Create), changing one a PUT (Edit).
+  const canSave = isNew ? access.couponsAdd : access.couponsEdit;
   const { toast } = useToast();
   const { data: orgOptions } = useBillingQuery((cl) => cl.listOrgOptions(), []);
-  const { data: plans } = useBillingQuery((cl) => cl.listAdminPlans(), []);
+  const { data: plans } = useBillingQuery((cl) => cl.listCouponPlans(), []);
   const [c, setC] = useState<Coupon>(initial);
   const [submitted, setSubmitted] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -382,7 +382,7 @@ export function EditCoupon({ code }: { code: string }) {
 /* ------------------------------------------------------------------ Usage */
 
 export function CouponUsage({ code }: { code: string }) {
-  const canEditCoupons = useAdminBillingAccess().put;
+  const canEditCoupons = useAdminBillingAccess().couponsEdit;
   const { data, error } = useBillingQuery((c) => c.getCoupon(code), [code]);
   const paged = usePagedRows(data?.redemptions ?? [], code);
   if (error) return <ErrorNote message={error} />;

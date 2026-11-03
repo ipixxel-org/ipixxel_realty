@@ -119,6 +119,8 @@ export interface BillingClient {
   /* ---------------- Super Admin (admin_subscriptions) ---------------- */
   /** GET /admin/billing/plans */
   listAdminPlans(): Promise<BillingPlan[]>;
+  /** GET /admin/billing/coupon-plans — the same plans, for the coupon form (Coupons permission). */
+  listCouponPlans(): Promise<BillingPlan[]>;
   /** GET /admin/billing/plans/:id/versions — version history: values, who / when, orgs per version. */
   getPlanVersions(planId: string): Promise<PlanVersionHistory>;
   /** GET /admin/billing/plans/:id/versions/:versionId/orgs — the organisations on a version (paged). */

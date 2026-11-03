@@ -138,11 +138,25 @@ export function AdminSubscriptionDetailPage({ orgId, origin = {} }: { orgId: str
   );
 }
 
+/** Coupon pages follow the Coupons module (admin_coupons), not Subscriptions. */
+function CouponsGuard({ children }: { children: ReactNode }) {
+  const { couponsView } = useAdminBillingAccess();
+  if (!couponsView) {
+    return (
+      <div className="card" style={{ padding: 32, textAlign: "center" }}>
+        <h1 style={{ margin: "0 0 8px", fontSize: 22 }}>Access restricted</h1>
+        <p className="muted" style={{ margin: 0 }}>You don&apos;t have permission to view coupons.</p>
+      </div>
+    );
+  }
+  return <AdminBillingEnv>{children}</AdminBillingEnv>;
+}
+
 export function AdminCouponsPage() {
-  // A new coupon is a POST: the Subscriptions "Add" switch.
-  const canCreate = useAdminBillingAccess().post;
+  // A new coupon is a POST: the Coupons "Create" switch.
+  const canCreate = useAdminBillingAccess().couponsAdd;
   return (
-    <Guard>
+    <CouponsGuard>
       <PageHead
         eyebrow="Billing"
         icon="tag"
@@ -158,34 +172,34 @@ export function AdminCouponsPage() {
         }
       />
       <CouponsList />
-    </Guard>
+    </CouponsGuard>
   );
 }
 
 export function AdminNewCouponPage() {
   return (
-    <Guard>
+    <CouponsGuard>
       <PageHead eyebrow="Coupons" icon="tag" title="New coupon" back={{ to: "adminCoupons", label: "Coupons" }} sampleFns={["saveCoupon"]} />
       <CouponForm initial={BLANK_COUPON} isNew />
-    </Guard>
+    </CouponsGuard>
   );
 }
 
 export function AdminEditCouponPage({ code }: { code: string }) {
   return (
-    <Guard>
+    <CouponsGuard>
       <PageHead eyebrow="Coupons" icon="tag" title={`Edit ${code}`} back={{ to: "adminCoupon", params: { code }, label: code }} sampleFns={["getCoupon"]} />
       <EditCoupon code={code} />
-    </Guard>
+    </CouponsGuard>
   );
 }
 
 export function AdminCouponUsagePage({ code }: { code: string }) {
   return (
-    <Guard>
+    <CouponsGuard>
       <PageHead eyebrow="Coupons · usage" icon="tag" title={code} back={{ to: "adminCoupons", label: "Coupons" }} sampleFns={["getCoupon"]} />
       <CouponUsage code={code} />
-    </Guard>
+    </CouponsGuard>
   );
 }
 

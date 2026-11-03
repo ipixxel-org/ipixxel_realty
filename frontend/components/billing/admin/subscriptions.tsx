@@ -488,7 +488,7 @@ export function SubscriptionDetailView({
   children?: ReactNode;
 }) {
   // Extend grace, Mark paid offline, Apply coupon, Move to Basic are POSTs: the Subscriptions "Add" switch.
-  const canAct = useAdminBillingAccess().post;
+  const { post: canAct, couponsView: canSeeCoupons } = useAdminBillingAccess();
   const { toast } = useToast();
   const { data, error } = useBillingQuery((c) => c.getSubscription(orgId), [orgId, version]);
   // An action's result, until the next reload.
@@ -613,9 +613,11 @@ export function SubscriptionDetailView({
             <div style={{ display: "grid", gap: 6 }}>
               <div className="bl-row" style={{ gap: 8 }}>
                 <span className="badge b-violet bl-mono">{d.coupon.coupon.code}</span>
-                <BLink to="adminCoupon" params={{ code: d.coupon.coupon.code }} className="bl-muted">
-                  Usage →
-                </BLink>
+                {canSeeCoupons ? (
+                  <BLink to="adminCoupon" params={{ code: d.coupon.coupon.code }} className="bl-muted">
+                    Usage →
+                  </BLink>
+                ) : null}
               </div>
               <div style={{ fontSize: 13 }}>{describeCoupon(d.coupon.coupon)}</div>
               <div className="bl-muted">{d.coupon.coupon.description}</div>
