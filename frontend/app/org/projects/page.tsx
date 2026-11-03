@@ -13,8 +13,9 @@ import { ConfirmModal } from "@/components/ui/confirm-modal";
 import { Icon } from "@/components/icons";
 import { PlanLockBadge, usePlanLocks } from "@/components/billing/locked";
 import { PLAN_LOCK_COPY } from "@/lib/plan-lock";
+import { UpgradeOrAsk, useCanManageBilling, useMemberLimitPrompt, useOrgUsage } from "@/components/billing/limit-prompt";
 import "@/app/org/org.css";
-import type { OrgBillingSummary, Project, ProjectDetail, ProjectsListResponse, ProjectStatus } from "@/lib/types";
+import type { Project, ProjectDetail, ProjectsListResponse, ProjectStatus } from "@/lib/types";
 
 const LIMIT = 10;
 
@@ -85,11 +86,12 @@ export default function OrgProjectsPage() {
   // Plan project quota — checked here so the wizard can't be entered at all
   // when the org is already at its limit. The server stays authoritative at
   // create time; this is purely UX.
-  const [projectQuota, setProjectQuota] = useState<{
-    used: number;
-    limit: number | null;
-    planName: string | null;
-  } | null>(null);
+  // From GET /org/billing/access — every member can read it.
+  const { usage, planName: quotaPlanName } = useOrgUsage();
+  const projectQuota = usage ? { used: usage.projectsUsed, limit: usage.projectsLimit, planName: quotaPlanName } : null;
+  // Billing editors keep today's Upgrade; everyone else gets "ask your admin" + OK.
+  const canManageBilling = useCanManageBilling();
+  const memberPrompt = useMemberLimitPrompt();
 
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -111,16 +113,6 @@ export default function OrgProjectsPage() {
         setCounts({ total: all.total, active: active.total, inactive: inactive.total })
       )
       .catch(() => setCounts(null));
-
-    apiFetch<OrgBillingSummary>("/org/billing", { headers })
-      .then((b) =>
-        setProjectQuota({
-          used: b.usage.projectsUsed,
-          limit: b.usage.projectsLimit,
-          planName: b.plan?.name ?? null,
-        }),
-      )
-      .catch(() => setProjectQuota(null));
   }, [accessToken]);
 
   useEffect(() => {
@@ -230,7 +222,26 @@ export default function OrgProjectsPage() {
           </div>
         </div>
         <div className="actions">
-          {!canCreate ? null : atProjectLimit ? (
+          {!canCreate ? null : atProjectLimit && !canManageBilling ? (
+            <button
+              className="btn btn-primary"
+              type="button"
+              onClick={() => memberPrompt.show({ thing: "Project", limit: projectQuota?.limit, used: projectQuota?.used })}
+              style={{
+                background: "#0066f5",
+                borderRadius: 9,
+                padding: "9px 18px",
+                fontWeight: 600,
+                fontSize: 13.5,
+                boxShadow: "0 4px 14px rgba(0, 102, 245, 0.35)",
+                display: "inline-flex",
+                alignItems: "center",
+                gap: 6,
+              }}
+            >
+              <Icon name="plus" size={14} /> New project
+            </button>
+          ) : atProjectLimit ? (
             <button
               className="btn btn-primary"
               type="button"
@@ -271,11 +282,14 @@ export default function OrgProjectsPage() {
           <div style={{ flex: 1, minWidth: 220, fontSize: 13.5 }}>
             Your{projectQuota?.planName ? ` ${projectQuota.planName}` : ""} plan allows{" "}
             <b>{projectQuota?.limit}</b> project{projectQuota?.limit === 1 ? "" : "s"} and you have{" "}
-            <b>{projectQuota?.used}</b>. Upgrade your plan to add more.
+            <b>{projectQuota?.used}</b>. {canManageBilling ? "Upgrade your plan to add more." : ""}
           </div>
-          <Link href="/org/settings?section=billing" className="btn btn-soft btn-sm">Upgrade plan</Link>
+          <UpgradeOrAsk>
+            <Link href="/org/settings?section=billing" className="btn btn-soft btn-sm">Upgrade plan</Link>
+          </UpgradeOrAsk>
         </div>
       ) : null}
+      {memberPrompt.dialog}
 
       {/* KPI Cards Row (4 Cards) */}
       <div className="grid g4 reveal in mb-6" style={{ gap: 16 }}>

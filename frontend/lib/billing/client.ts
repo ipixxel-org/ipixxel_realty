@@ -6,6 +6,7 @@
  */
 import type {
   AccessStatus,
+  BillingNotice,
   AdminCheckoutRow,
   CheckoutStatus,
   AdminCancelRequest,
@@ -102,6 +103,8 @@ export interface BillingClient {
   keepDefaultPicks(): Promise<RetentionChoices>;
   /** GET /org/billing/access — what's paused / view-only / offline, plus limits and modules. */
   getAccessStatus(): Promise<AccessStatus>;
+  /** GET /org/billing/notice — the banner for every member (no amounts; no billing permission needed). */
+  getBillingNotice(): Promise<BillingNotice>;
   /** GET /org/billing/invoices */
   listInvoices(req: PageRequest): Promise<Paged<Invoice>>;
   /** GET /org/billing/payments */

@@ -484,8 +484,10 @@ export function OrgAdminShell({ children }: { children: ReactNode }) {
   const dismissedExpiryRef = useRef<Set<string>>(new Set());
   const [currentPlanName, setCurrentPlanName] = useState<string | null>(null);
 
+  // GET /org/billing needs billing:view; without it the call would only answer 403.
+  const canViewBilling = hasPermission("billing", "view");
   const pollBilling = useCallback(async () => {
-    if (!accessToken) return;
+    if (!accessToken || !canViewBilling) return;
     try {
       const billing = await getOrgBilling();
       const next = expiryBannerFromBilling(billing);
@@ -501,7 +503,7 @@ export function OrgAdminShell({ children }: { children: ReactNode }) {
       // the banner or the sidebar plan name; their bell notifications still
       // surface the popup.
     }
-  }, [accessToken]);
+  }, [accessToken, canViewBilling]);
 
   useEffect(() => {
     if (!accessToken) return;
@@ -1036,7 +1038,7 @@ export function OrgAdminShell({ children }: { children: ReactNode }) {
         ) : null}
         <div className="page">
           <LeadStagesProvider>
-            <BillingV2Root canEdit={hasPermission("billing", "edit")} viewerId={user?.id ?? null} canEditOrgProfile={hasPermission("settings", SETTINGS_ACTIONS.editProfile)}>{children}</BillingV2Root>
+            <BillingV2Root canEdit={hasPermission("billing", "edit")} canView={hasPermission("billing", "view")} viewerId={user?.id ?? null} canEditOrgProfile={hasPermission("settings", SETTINGS_ACTIONS.editProfile)}>{children}</BillingV2Root>
           </LeadStagesProvider>
         </div>
 

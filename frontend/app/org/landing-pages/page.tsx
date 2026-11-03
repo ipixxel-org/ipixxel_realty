@@ -52,7 +52,6 @@ import { ConfirmModal } from "@/components/ui/confirm-modal";
 import type {
   LandingPageRow,
   LandingPageStatus,
-  OrgBillingSummary,
   OrgLandingPagesListResponse,
   OrgTemplateSummary,
   OrgTemplatesListResponse,
@@ -68,7 +67,7 @@ import {
   type InventoryBindValue,
 } from "@/components/org/inventory-bind-fields";
 import { LandingPageAccessBadge, PlanLockBadge, usePlanLocks } from "@/components/billing/locked";
-import { PLAN_LOCK_COPY } from "@/lib/plan-lock";
+import { ASK_ADMIN_UPGRADE, atLimit, UpgradeOrAsk, useCanManageBilling, useMemberLimitPrompt, useOrgUsage, usePlanLockCopy } from "@/components/billing/limit-prompt";
 import "@/app/openpage.css";
 import "./landing-pages.css";
 
@@ -219,17 +218,6 @@ export default function OrgLandingPagesPage() {
   const [bulkConfirmDelete, setBulkConfirmDelete] = useState(false);
   const applySelection = (ids: string[]) => setSelection({ key: selectionKey, ids });
 
-  const [landingPageQuota, setLandingPageQuota] = useState<{
-    used: number;
-    limit: number | null;
-    planName: string | null;
-  } | null>(null);
-  // Published-pages quota — separate from the create quota above.
-  const [publishQuota, setPublishQuota] = useState<{
-    used: number;
-    limit: number | null;
-    planName: string | null;
-  } | null>(null);
 
   // Deletion
   const [deleteTarget, setDeleteTarget] = useState<{ id: string; name: string } | null>(null);
@@ -311,32 +299,38 @@ export default function OrgLandingPagesPage() {
     fetchList();
   }, [fetchList]);
 
-  // Re-read plan usage whenever the page list changes (create / duplicate /
-  // publish / unpublish / delete all refresh `allPages`).
-  useEffect(() => {
-    if (!accessToken) return;
-    apiFetch<OrgBillingSummary>("/org/billing", {
-      headers: { Authorization: `Bearer ${accessToken}` },
-    })
-      .then((billing) => {
-        setLandingPageQuota({
-          used: billing.usage.landingPagesCreateUsed ?? 0,
-          limit: billing.usage.landingPagesCreateLimit ?? null,
-          planName: billing.plan?.name ?? null,
-        });
-        setPublishQuota({
-          used: billing.usage.landingPagesUsed,
-          limit: billing.usage.landingPagesLimit,
-          planName: billing.plan?.name ?? null,
-        });
-      })
-      .catch(() => {
-        setLandingPageQuota(null);
-        setPublishQuota(null);
-      });
-  }, [accessToken, allPages]);
+  // Plan usage from GET /org/billing/access (every member can read it),
+  // re-read whenever the page list changes (create / duplicate / publish /
+  // unpublish / delete all refresh `allPages`).
+  const { usage, planName: quotaPlanName } = useOrgUsage(allPages);
+  const landingPageQuota = usage
+    ? { used: usage.landingPagesCreateUsed, limit: usage.landingPagesCreateLimit, planName: quotaPlanName }
+    : null;
+  // Published-pages quota — separate from the create quota above.
+  const publishQuota = usage ? { used: usage.landingPagesUsed, limit: usage.landingPagesLimit, planName: quotaPlanName } : null;
+  // Billing editors keep the disabled buttons + Upgrade as before; everyone
+  // else can click and is told to ask their organisation admin.
+  const canManageBilling = useCanManageBilling();
+  const memberPrompt = useMemberLimitPrompt();
+  const lockCopy = usePlanLockCopy();
+  const createFull = atLimit(landingPageQuota?.used, landingPageQuota?.limit);
+  const publishFull = atLimit(publishQuota?.used, publishQuota?.limit);
+  /** True (and the prompt shown) when someone without billing:edit hits a limit. */
+  function blockedForMember(kind: "create" | "publish"): boolean {
+    if (canManageBilling) return false;
+    if (kind === "create" && createFull) {
+      memberPrompt.show({ thing: "Landing page", limit: landingPageQuota?.limit, used: landingPageQuota?.used });
+      return true;
+    }
+    if (kind === "publish" && publishFull) {
+      memberPrompt.show({ thing: "Publishing", limit: publishQuota?.limit, used: publishQuota?.used });
+      return true;
+    }
+    return false;
+  }
 
   async function openTemplatePicker() {
+    if (blockedForMember("create")) return;
     setTemplatePickerOpen(true);
     setTemplatePickerLoading(true);
     setTemplatePickerError(null);
@@ -422,7 +416,7 @@ export default function OrgLandingPagesPage() {
   }
 
   async function publishPage(id: string) {
-    if (!accessToken) return;
+    if (!accessToken || blockedForMember("publish")) return;
     setBusyId(id);
     try {
       await apiFetch(`/org/landing-pages/${id}/publish`, {
@@ -478,7 +472,7 @@ export default function OrgLandingPagesPage() {
   }
 
   async function duplicatePage(id: string) {
-    if (!accessToken) return;
+    if (!accessToken || blockedForMember("create")) return;
     setBusyId(id);
     try {
       await apiFetch(`/org/landing-pages/${id}/duplicate`, {
@@ -509,6 +503,7 @@ export default function OrgLandingPagesPage() {
 
   async function runBulk(action: "publish" | "unpublish" | "delete") {
     if (!accessToken || selectedIds.length === 0 || bulkBusy) return;
+    if (action === "publish" && blockedForMember("publish")) return;
     if (action === "publish" && atPublishLimit) {
       notify(publishLimitReason || "Publish limit reached for your plan.");
       return;
@@ -516,7 +511,7 @@ export default function OrgLandingPagesPage() {
     // Offline pages come back through "Change what stays", not Publish.
     const ids = action === "publish" ? selectedIds.filter((id) => !locks.pageOffline(id)) : [...selectedIds];
     if (ids.length === 0) {
-      notify(PLAN_LOCK_COPY.landing_page_offline.tooltip);
+      notify(lockCopy.landing_page_offline.tooltip);
       return;
     }
     const label = action === "publish" ? "Published" : action === "unpublish" ? "Unpublished" : "Deleted";
@@ -666,12 +661,9 @@ export default function OrgLandingPagesPage() {
 
   const total = result?.total ?? rawRows.length;
   const totalPages = Math.max(1, Math.ceil(total / LIMIT));
-  const atLandingPageCreateLimit =
-    landingPageQuota != null &&
-    landingPageQuota.limit != null &&
-    landingPageQuota.used >= landingPageQuota.limit;
-  const atPublishLimit =
-    publishQuota != null && publishQuota.limit != null && publishQuota.used >= publishQuota.limit;
+  // Disables the buttons for billing editors (as before); members click and get the prompt.
+  const atLandingPageCreateLimit = createFull && canManageBilling;
+  const atPublishLimit = publishFull && canManageBilling;
   const createLimitReason = atLandingPageCreateLimit
     ? "You've reached your plan's landing page limit"
     : undefined;
@@ -830,7 +822,7 @@ export default function OrgLandingPagesPage() {
                               className="btn btn-primary btn-sm"
                               onClick={() => openTemplateUse(template.id, template.name)}
                               disabled={template.paused}
-                              title={template.paused ? PLAN_LOCK_COPY.template_paused.tooltip : undefined}
+                              title={template.paused ? lockCopy.template_paused.tooltip : undefined}
                               style={{ flex: 1, justifyContent: "center", fontWeight: 700, ...(template.paused ? { opacity: 0.5, cursor: "not-allowed" } : {}) }}
                             >
                               <Sparkles size={13} /> Use
@@ -979,7 +971,7 @@ export default function OrgLandingPagesPage() {
                   setScratchSelectedLabel("");
                   setScratchBind({ kind: "none" });
                   setScratchError(null);
-                  setScratchOpen(true);
+                  if (!blockedForMember("create")) setScratchOpen(true);
                 }}
               >
                 <FileText size={15} />
@@ -1004,7 +996,7 @@ export default function OrgLandingPagesPage() {
         </div>
       </div>
 
-      {atLandingPageCreateLimit ? (
+      {createFull ? (
         <div
           className="card reveal in"
           style={{
@@ -1020,15 +1012,17 @@ export default function OrgLandingPagesPage() {
           <div style={{ flex: 1, minWidth: 220, fontSize: 13.5 }}>
             Your{landingPageQuota?.planName ? ` ${landingPageQuota.planName}` : ""} plan allows creating up to{" "}
             <b>{landingPageQuota?.limit}</b> landing page{landingPageQuota?.limit === 1 ? "" : "s"} and you have{" "}
-            <b>{landingPageQuota?.used}</b>. Upgrade your plan to create more.
+            <b>{landingPageQuota?.used}</b>. {canManageBilling ? "Upgrade your plan to create more." : ""}
           </div>
-          <Link href="/org/settings?section=billing" className="btn btn-soft btn-sm">
-            Upgrade plan
-          </Link>
+          <UpgradeOrAsk>
+            <Link href="/org/settings?section=billing" className="btn btn-soft btn-sm">
+              Upgrade plan
+            </Link>
+          </UpgradeOrAsk>
         </div>
       ) : null}
 
-      {canPublish && atPublishLimit ? (
+      {canPublish && publishFull ? (
         <div
           className="card reveal in"
           style={{
@@ -1044,11 +1038,13 @@ export default function OrgLandingPagesPage() {
           <div style={{ flex: 1, minWidth: 220, fontSize: 13.5 }}>
             Your{publishQuota?.planName ? ` ${publishQuota.planName}` : ""} plan allows up to{" "}
             <b>{publishQuota?.limit}</b> published landing page{publishQuota?.limit === 1 ? "" : "s"} and you have{" "}
-            <b>{publishQuota?.used}</b>. Unpublish a page or upgrade your plan to publish more.
+            <b>{publishQuota?.used}</b>. {canManageBilling ? "Unpublish a page or upgrade your plan to publish more." : "Unpublish a page to publish another."}
           </div>
-          <Link href="/org/settings?section=billing" className="btn btn-soft btn-sm">
-            Upgrade plan
-          </Link>
+          <UpgradeOrAsk>
+            <Link href="/org/settings?section=billing" className="btn btn-soft btn-sm">
+              Upgrade plan
+            </Link>
+          </UpgradeOrAsk>
         </div>
       ) : null}
 
@@ -1248,7 +1244,7 @@ export default function OrgLandingPagesPage() {
           <option value={2}>Published</option>
           <option value={1}>Draft</option>
           <option value={3}>Unpublished</option>
-          {locks.active ? <option value={OFFLINE_TAB}>{PLAN_LOCK_COPY.landing_page_offline.badge}</option> : null}
+          {locks.active ? <option value={OFFLINE_TAB}>{lockCopy.landing_page_offline.badge}</option> : null}
         </select>
 
         {/* Project Dropdown */}
@@ -1472,7 +1468,7 @@ export default function OrgLandingPagesPage() {
                       setScratchSelectedLabel("");
                       setScratchBind({ kind: "none" });
                       setScratchError(null);
-                      setScratchOpen(true);
+                      if (!blockedForMember("create")) setScratchOpen(true);
                     }}
                     style={{ padding: "10px 20px", fontSize: 14, fontWeight: 600, borderRadius: 12 }}
                   >
@@ -1621,7 +1617,7 @@ export default function OrgLandingPagesPage() {
                             type="button"
                             className="btn btn-primary btn-sm"
                             disabled={busyId === row.id || atPublishLimit || locks.pageOffline(row.id)}
-                            title={locks.pageOffline(row.id) ? PLAN_LOCK_COPY.landing_page_offline.tooltip : publishLimitReason}
+                            title={locks.pageOffline(row.id) ? lockCopy.landing_page_offline.tooltip : publishLimitReason}
                             onClick={() => publishPage(row.id)}
                             style={{ fontWeight: 700 }}
                           >
@@ -1674,7 +1670,7 @@ export default function OrgLandingPagesPage() {
               onView={() => openView(row.id)}
               onViewThankYou={() => openViewThankYou(row)}
               onPublish={canPublish ? () => publishPage(row.id) : undefined}
-              publishDisabledReason={locks.pageOffline(row.id) ? PLAN_LOCK_COPY.landing_page_offline.tooltip : publishLimitReason}
+              publishDisabledReason={locks.pageOffline(row.id) ? lockCopy.landing_page_offline.tooltip : publishLimitReason}
               onUnpublish={canPause ? () => unpublishPage(row.id) : undefined}
               onDuplicate={canCreate ? () => duplicatePage(row.id) : undefined}
               duplicateDisabledReason={createLimitReason}
@@ -1768,7 +1764,7 @@ export default function OrgLandingPagesPage() {
                   }
                 }}
                 disabled={!!assignedTemplates.find((item) => item.id === templatePreviewId)?.paused}
-                title={assignedTemplates.find((item) => item.id === templatePreviewId)?.paused ? PLAN_LOCK_COPY.template_paused.tooltip : undefined}
+                title={assignedTemplates.find((item) => item.id === templatePreviewId)?.paused ? lockCopy.template_paused.tooltip : undefined}
                 style={{ fontWeight: 700, ...(assignedTemplates.find((item) => item.id === templatePreviewId)?.paused ? { opacity: 0.5, cursor: "not-allowed" } : {}) }}
               >
                 <Sparkles size={14} /> Use template
@@ -1816,26 +1812,30 @@ export default function OrgLandingPagesPage() {
         footer={
           <>
             <button className="btn btn-ghost" type="button" onClick={() => setPackagePrompt(null)}>
-              Close
+              {canManageBilling ? "Close" : "OK"}
             </button>
-            <button
-              className="btn btn-primary"
-              type="button"
-              onClick={() => {
-                setPackagePrompt(null);
-                router.push("/org/settings?section=billing");
-              }}
-              style={{ fontWeight: 700 }}
-            >
-              Upgrade Subscription Plan →
-            </button>
+            {canManageBilling ? (
+              <button
+                className="btn btn-primary"
+                type="button"
+                onClick={() => {
+                  setPackagePrompt(null);
+                  router.push("/org/settings?section=billing");
+                }}
+                style={{ fontWeight: 700 }}
+              >
+                Upgrade Subscription Plan →
+              </button>
+            ) : null}
           </>
         }
       >
         <div style={{ fontSize: 13.5, color: "var(--ink-2)", lineHeight: 1.6 }}>
           {packagePrompt?.body}
+          {canManageBilling ? null : <p style={{ margin: "10px 0 0" }}>{ASK_ADMIN_UPGRADE}</p>}
         </div>
       </Modal>
+      {memberPrompt.dialog}
 
       {/* Toast */}
       {toast && (

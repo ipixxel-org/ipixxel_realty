@@ -11,6 +11,8 @@ import type { BillingOverview, RetentionSummary } from "@/lib/billing/types";
 import { useBillingEnv, useOptionalOrgBilling } from "./context";
 import { BillingDialog, DialogActions } from "./dialog";
 import { Banner, BLink, CompactBanner, Countdown, useRenewalLive, WhatStaysLockedNote } from "./ui";
+import { MemberBillingBanner } from "./member-banner";
+import { noticeFromOverview } from "@/lib/billing/notice";
 
 /** Re-fetch the shared overview after an action (no-op outside OrgBillingProvider). */
 function useRefresh() {
@@ -311,8 +313,12 @@ const left = (n: number) => `${n} ${n === 1 ? "day" : "days"} left`;
  * Yellow (amber) for every reminder, grace day and scheduled change — the last day too.
  */
 export function BillingBanner({ overview }: { overview: BillingOverview }) {
-  const { client } = useBillingEnv();
+  const { client, canEdit } = useBillingEnv();
   const live = useRenewalLive(overview);
+  // Without billing:edit: the same situation, no amounts, "ask your admin" instead of buttons.
+  if (!canEdit) {
+    return <MemberBillingBanner notice={noticeFromOverview(overview)} picks={overview.retention ? <PicksSummary retention={overview.retention} /> : undefined} />;
+  }
   // Manual mode: renewing and changing plan are both requests to our team.
   const manual = !live && overview.paymentMode === "manual";
   const o = overview;
@@ -610,8 +616,9 @@ export function RenewalReminderPopup({ overview, alwaysOpen = false }: { overvie
   const live = useRenewalLive(overview);
   // Manual mode: the popup offers "Request renewal" (not while a request already waits).
   const manual = !live && overview.paymentMode === "manual";
+  // Only for people who can pay or request it (billing:edit), in both modes.
   const show =
-    (live || (manual && canEdit && !blockingRequest(overview))) && overview.renewalMode === "manual" && overview.status === "renewal_due" && (!dismissed || alwaysOpen);
+    canEdit && (live || (manual && !blockingRequest(overview))) && overview.renewalMode === "manual" && overview.status === "renewal_due" && (!dismissed || alwaysOpen);
 
   return (
     <>

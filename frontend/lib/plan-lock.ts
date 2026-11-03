@@ -29,12 +29,46 @@ export const PLAN_LOCK_COPY: Record<PlanLockKind, { badge: string; tooltip: stri
   },
 };
 
+/**
+ * The same locks for people who can't manage billing (no billing:edit): they
+ * can't upgrade or change what stays themselves, so they're told who can.
+ */
+export const MEMBER_PLAN_LOCK_COPY: typeof PLAN_LOCK_COPY = {
+  project_view_only: {
+    badge: "View only",
+    tooltip: "View only because your plan's project limit is lower. Ask your organisation admin to upgrade or change what stays.",
+    error: "This project is view-only because your plan's project limit is lower. Ask your organisation admin to upgrade or change what stays.",
+  },
+  landing_page_offline: {
+    badge: "Offline",
+    tooltip: "Offline because your plan's live page limit is lower. Ask your organisation admin to upgrade or change what stays.",
+    error: "This landing page is offline because your plan's live page limit is lower. Ask your organisation admin to upgrade or change what stays.",
+  },
+  user_paused: {
+    badge: "Paused",
+    tooltip: "Paused because your plan's user limit is lower. Ask your organisation admin to upgrade or change what stays.",
+    error: "This user is paused because your plan's user limit is lower. Ask your organisation admin to upgrade or change what stays.",
+  },
+  template_paused: {
+    badge: "Paused",
+    tooltip:
+      "Paused because your plan's template limit is lower: it can't be used for new landing pages. Pages already made from it aren't affected. Ask your organisation admin to upgrade or change what stays.",
+    error:
+      "This template is paused because your plan's template limit is lower, so it can't be used for new landing pages. Pages already made from it aren't affected. Ask your organisation admin to upgrade or change what stays.",
+  },
+};
+
+/** The copy for the viewer: `canManageBilling` (billing:edit) gets today's words, others the ask-your-admin ones. */
+export function planLockCopy(canManageBilling: boolean): typeof PLAN_LOCK_COPY {
+  return canManageBilling ? PLAN_LOCK_COPY : MEMBER_PLAN_LOCK_COPY;
+}
+
 const KINDS = Object.keys(PLAN_LOCK_COPY) as PlanLockKind[];
 
 /** The friendly message for a `plan_locked` API error body, else null. */
-export function planLockMessage(body: unknown): string | null {
+export function planLockMessage(body: unknown, canManageBilling = true): string | null {
   const b = body as { code?: unknown; lock?: unknown } | null | undefined;
   if (!b || b.code !== "plan_locked") return null;
   const kind = KINDS.find((k) => k === b.lock) ?? "project_view_only";
-  return PLAN_LOCK_COPY[kind].error;
+  return planLockCopy(canManageBilling)[kind].error;
 }

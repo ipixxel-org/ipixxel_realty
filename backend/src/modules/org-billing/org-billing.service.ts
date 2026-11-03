@@ -6,14 +6,8 @@ import {
 import { Injectable } from '@nestjs/common';
 import { BadRequestException, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../../database/prisma.service';
-import {
-  assertPlanFitsCurrentUsage,
-  countBillableOrgUsers,
-  countOrgLandingPages,
-  countOrgTotalLandingPages,
-  countOrgProjects,
-  resolveLimit,
-} from '../../common/utils/plan-quota.util';
+import { assertPlanFitsCurrentUsage } from '../../common/utils/plan-quota.util';
+import { orgUsageSummary } from './org-usage';
 import {
   applyOrgSubscriptionLifecycle,
   renewOrgSubscription,
@@ -59,46 +53,23 @@ export class OrgBillingService {
     // At most one non-cancelled subscription per org — enforced by
     // SubscriptionsService.create(), not a DB constraint. Mirrors that
     // same lookup rather than assuming a unique index exists.
-    const [subscription, templatesUsed, projectsUsed, usersUsed, landingPagesUsed, landingPagesCreateUsed] =
-      await Promise.all([
-        // `plan` is the org's version of its plan (limits, features, price).
-        this.prisma.subscription
-          .findFirst({
-            where: { orgId, status: { not: 'cancelled' } },
-            include: SUB_PLAN_INCLUDE,
-          })
-          .then(withEffectivePlan),
-        this.prisma.organisationTemplate.count({ where: { orgId } }),
-        countOrgProjects(this.prisma, orgId),
-        countBillableOrgUsers(this.prisma, orgId),
-        countOrgLandingPages(this.prisma, orgId),
-        countOrgTotalLandingPages(this.prisma, orgId),
-      ]);
+    // `plan` is the org's version of its plan (limits, features, price).
+    const subscription = await this.prisma.subscription
+      .findFirst({
+        where: { orgId, status: { not: 'cancelled' } },
+        include: SUB_PLAN_INCLUDE,
+      })
+      .then(withEffectivePlan);
+    // Same numbers as GET /org/billing/access (orgUsageSummary).
+    const usage = await orgUsageSummary(
+      this.prisma,
+      orgId,
+      subscription?.plan ?? null,
+    );
 
     if (!subscription) {
-      return {
-        plan: null,
-        subscription: null,
-        usage: {
-          templatesUsed,
-          templatesLimit: null,
-          projectsUsed,
-          projectsLimit: null,
-          usersUsed,
-          usersLimit: null,
-          landingPagesUsed,
-          landingPagesLimit: null,
-          landingPagesCreateUsed,
-          landingPagesCreateLimit: null,
-        },
-      };
+      return { plan: null, subscription: null, usage };
     }
-
-    // Infinity -> null so the UI renders "unlimited" without a magic number.
-    const asLimit = (key: 'projects' | 'users' | 'templates' | 'landingPages' | 'landingPagesCreate') => {
-      const n = resolveLimit(subscription.plan, key);
-      return n === Infinity ? null : n;
-    };
 
     return {
       plan: {
@@ -125,18 +96,7 @@ export class OrgBillingService {
         cancelledAt: subscription.cancelledAt,
       },
       // `*Limit: null` = unlimited on this plan.
-      usage: {
-        templatesUsed,
-        templatesLimit: asLimit('templates'),
-        projectsUsed,
-        projectsLimit: asLimit('projects'),
-        usersUsed,
-        usersLimit: asLimit('users'),
-        landingPagesUsed,
-        landingPagesLimit: asLimit('landingPages'),
-        landingPagesCreateUsed,
-        landingPagesCreateLimit: asLimit('landingPagesCreate'),
-      },
+      usage,
     };
   }
 

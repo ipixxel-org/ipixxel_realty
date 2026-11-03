@@ -49,9 +49,12 @@ import {
 } from './plan-modules';
 import type {
   AccessStatusV2,
+  BillingNoticeV2,
   BillingOverviewV2,
   BillingPlanV2,
 } from './billing.types';
+import { toBillingNotice } from './billing-notice';
+import { orgUsageSummary } from '../org-billing/org-usage';
 
 /**
  * Billing v2, organisation side (read-only in step 1). Lives beside the
@@ -305,13 +308,31 @@ export class OrgBillingV2Service {
     return { ...overview, ...versions };
   }
 
+  /** The billing banner for any member: dates and counts, no money (toBillingNotice). */
+  async getNotice(orgId: string): Promise<BillingNoticeV2> {
+    return toBillingNotice(await this.getOverview(orgId));
+  }
+
   /**
-   * Limits and features for the locked-state UI. Nothing is paused by the
-   * backend yet (that arrives with "fall back to Basic"), so the lists are empty.
+   * Limits, features, what's paused and the usage counts, for the locked
+   * states and limit prompts. Open to every member: nothing here is money.
    */
   async getAccess(orgId: string): Promise<AccessStatusV2> {
     const o = await this.getOverview(orgId);
+    // The legacy GET /org/billing numbers, so the prompts keep their counts.
+    const subscription = await this.prisma.subscription
+      .findFirst({
+        where: { orgId, status: { not: 'cancelled' } },
+        include: SUB_PLAN_INCLUDE,
+      })
+      .then(withEffectivePlan);
+    const usage = await orgUsageSummary(
+      this.prisma,
+      orgId,
+      subscription?.plan ?? null,
+    );
     return {
+      usage,
       planId: o.plan.id,
       planName: o.plan.name,
       limits: o.plan.limits,

@@ -64,13 +64,13 @@ import type {
   LandingPageRow,
   OrgTemplateSummary,
   OrgTemplatesListResponse,
-  OrgBillingSummary,
   Project,
   ProjectAssigneeCandidate,
   ProjectStatus,
   SafeOrganisation,
 } from "@/lib/types";
 import Link from "next/link";
+import { ASK_ADMIN_UPGRADE, useCanManageBilling, useOrgUsage } from "@/components/billing/limit-prompt";
 
 // The wizard's draft rows are the shared table's rows — one shape, so the
 // component and the localStorage draft can't drift apart.
@@ -384,11 +384,10 @@ export default function AddNewProjectPage() {
   // limit (deep-link / bookmark guard — the projects list is the primary
   // block). A resumable draft is still allowed through; the Review step's
   // server-error path handles the "limit reached while mid-wizard" case.
-  const [projectQuota, setProjectQuota] = useState<{
-    used: number;
-    limit: number | null;
-    planName: string | null;
-  } | null>(null);
+  // From GET /org/billing/access — every member can read it.
+  const { usage, planName: quotaPlanName } = useOrgUsage();
+  const projectQuota = usage ? { used: usage.projectsUsed, limit: usage.projectsLimit, planName: quotaPlanName } : null;
+  const canManageBilling = useCanManageBilling();
 
   // Org catalogs (Settings → Project Catalogs). `null` = not loaded yet;
   // refetched on entry to each catalog step so freshly-added options show up.
@@ -463,15 +462,6 @@ export default function AddNewProjectPage() {
         setOrgSlug(o.slug ?? "");
       })
       .catch(() => setOrgName(""));
-    apiFetch<OrgBillingSummary>("/org/billing", auth)
-      .then((b) =>
-        setProjectQuota({
-          used: b.usage.projectsUsed,
-          limit: b.usage.projectsLimit,
-          planName: b.plan?.name ?? null,
-        }),
-      )
-      .catch(() => setProjectQuota(null));
     getOrgLandingPages()
       .then((rows) => setOrgLandingPages(rows.filter((lp) => lp.pageType === "landing")))
       .catch(() => setOrgLandingPages([]));
@@ -1107,11 +1097,11 @@ export default function AddNewProjectPage() {
         <p className="muted" style={{ margin: "0 0 18px", fontSize: 14 }}>
           Your{projectQuota?.planName ? ` ${projectQuota.planName}` : ""} plan allows{" "}
           <b>{projectQuota?.limit}</b> project{projectQuota?.limit === 1 ? "" : "s"} and you already have{" "}
-          <b>{projectQuota?.used}</b>. Upgrade your plan to create another.
+          <b>{projectQuota?.used}</b>. {canManageBilling ? "Upgrade your plan to create another." : ASK_ADMIN_UPGRADE}
         </p>
         <div className="row gap-10" style={{ justifyContent: "center" }}>
           <button className="btn btn-ghost" type="button" onClick={() => router.push("/org/projects")}>← Back to projects</button>
-          <Link href="/org/settings?section=billing" className="btn btn-primary">Upgrade plan</Link>
+          {canManageBilling ? <Link href="/org/settings?section=billing" className="btn btn-primary">Upgrade plan</Link> : null}
         </div>
       </div>
     );

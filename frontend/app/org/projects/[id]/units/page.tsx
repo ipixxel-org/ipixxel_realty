@@ -42,7 +42,7 @@ import { Icon } from "@/components/icons";
 import { RowActionsMenu } from "@/components/superadmin/row-actions-menu";
 import { ProjectPageHead } from "@/components/org/project-tabs";
 import { useProjectViewOnly } from "@/components/billing/locked";
-import { PLAN_LOCK_COPY } from "@/lib/plan-lock";
+import { usePlanLockCopy } from "@/components/billing/limit-prompt";
 import {
   ConfigurationSelect,
   TowerCombobox,
@@ -164,6 +164,7 @@ export default function OrgProjectUnitsPage() {
   // Projects > Add unit / Edit unit / Delete unit (unit types included).
   // Billing v2: a view-only project's units can be opened, not changed.
   const viewOnly = useProjectViewOnly(id);
+  const lockCopy = usePlanLockCopy();
   const canAddUnit = hasPermission("projects", PROJECT_UNIT_ACTIONS.add) && !viewOnly;
   const canEditUnit = hasPermission("projects", PROJECT_UNIT_ACTIONS.edit) && !viewOnly;
   const canDeleteUnit = hasPermission("projects", PROJECT_UNIT_ACTIONS.delete) && !viewOnly;
@@ -1446,7 +1447,7 @@ export default function OrgProjectUnitsPage() {
                             className={`badge ${STATUS_BADGE[row.status]} nb`}
                             value={row.status}
                             disabled={statusSavingId === row.id || viewOnly}
-                            title={viewOnly ? PLAN_LOCK_COPY.project_view_only.tooltip : undefined}
+                            title={viewOnly ? lockCopy.project_view_only.tooltip : undefined}
                             onChange={(e) =>
                               void changeStatus(
                                 row,

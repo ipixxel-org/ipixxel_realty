@@ -41,6 +41,7 @@ import { missingBillingDetails } from "../details";
 import { pendingRequestText } from "../requests";
 import { DEFAULT_BILLING_DETAILS, DEMO_ORG, MOCK_SELLER, TODAY, type MockOrg, type MockPayment } from "./data";
 import { deriveAccess, deriveDates, deriveOverview, deriveRetention, freePlan, initialMockState, planById, planNames, type MockState } from "./state";
+import { noticeFromOverview } from "../notice";
 
 export interface MockBillingClient extends BillingClient {
   /** Current mock state (read-only use: fixtures, tests). */
@@ -437,6 +438,7 @@ export function createMockBillingClient(opts: { initial?: Partial<MockState>; pe
     },
 
     getAccessStatus: () => ok(deriveAccess(get())),
+    getBillingNotice: () => ok(noticeFromOverview(overview())),
 
     listInvoices: (req) =>
       ok(paged(overview().status === "free" ? [] : get().invoices.map((i) => ({ ...i, pdfUrl: null, checkoutId: null })), req.page, req.pageSize)),
