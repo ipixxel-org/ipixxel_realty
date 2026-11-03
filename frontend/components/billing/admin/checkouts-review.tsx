@@ -41,7 +41,7 @@ export function CheckoutsNeedingReview() {
       <div style={{ fontSize: 14, fontWeight: 700, color: "#92400e" }}>Paid — needs review ({data.length})</div>
       <p style={{ fontSize: 12, color: "#92400e", margin: "2px 0 10px" }}>
         These organisations paid online, but the plan couldn&apos;t be applied automatically. Their plan changes are on hold until this is resolved: refund
-        the payment (Payments &amp; Invoicing), or change their plan by hand and mark it resolved.
+        the payment in the Razorpay dashboard, or change their plan by hand, then mark it resolved.
       </p>
       {actionError ? <p style={{ fontSize: 12, color: "#b91c1c", margin: "0 0 8px" }}>{actionError}</p> : null}
       <div style={{ overflowX: "auto" }}>

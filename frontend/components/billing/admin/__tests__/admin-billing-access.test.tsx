@@ -141,11 +141,12 @@ describe("Organisation billing: Extend grace and Move to Basic are POSTs (add)",
   });
 });
 
-describe("Payments: Refund is a POST (add)", () => {
+describe("Payments: Refund is switched off for now", () => {
   it.each([
     ["viewOnly", false],
     ["editOnly", false],
-    ["addOnly", true],
+    ["addOnly", false],
+    ["addAndEdit", false],
   ] as const)("%s → Refund shown: %s", async (role, shown) => {
     as(role);
     const { AdminPaymentsView } = await import("../payments");

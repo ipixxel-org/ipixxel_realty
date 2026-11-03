@@ -72,8 +72,16 @@ export function RefundDialog({ payment, onClose, onRefunded }: { payment: AdminP
   );
 }
 
+/**
+ * Refund is switched off for now: no Refund button on the payments list. The
+ * dialog and POST /admin/billing/payments/:id/refund are kept (the admin
+ * walkthrough still opens the dialog); set this to true to bring it back.
+ */
+const REFUNDS_ENABLED = false;
+
 export function AdminPaymentsView({ initialRefundId }: { initialRefundId?: string }) {
-  const canRefund = useAdminBillingAccess().post;
+  const canPost = useAdminBillingAccess().post;
+  const canRefund = REFUNDS_ENABLED && canPost;
   const [status, setStatus] = useState<PaymentStatus | "">("");
   const [orgId, setOrgId] = useState("");
   // Search box text, and the search sent to the server once typing pauses.

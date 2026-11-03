@@ -96,7 +96,7 @@ const MODULE_PERMISSION_PILLS: Record<string, PermissionPill[]> = {
       permission: "canAdd",
       label: "Create plan",
       title:
-        "Extend grace, Move to Basic, Refund, Mark resolved, apply a coupon to a subscription, and the save preview when editing a plan (Edit plan needs this and Edit).",
+        "Extend grace, Move to Basic, Mark resolved, apply a coupon to a subscription, and the save preview when editing a plan (Edit plan needs this and Edit).",
     },
     {
       key: "canEdit",

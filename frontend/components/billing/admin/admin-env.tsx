@@ -22,7 +22,7 @@ export function AdminBillingEnv({ children }: { children: ReactNode }) {
  * PUT edit, DELETE delete; package requests: approve → approve, reject →
  * delete), so each button checks the switch its request really needs:
  *  - post (Subscriptions "Add" — the "Create plan" / "Assign plan" switch):
- *    Extend grace, Mark paid offline, Apply coupon, Move to Basic, Refund,
+ *    Extend grace, Mark paid offline, Apply coupon, Move to Basic, Refund (switched off for now),
  *    Mark resolved, New coupon, and the plan save-confirm preview
  *  - put (Subscriptions "Edit" / "Change"): save a plan, edit a coupon,
  *    Choose what stays, Mark as paid / Edit payment, a coupon on a request

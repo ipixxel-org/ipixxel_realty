@@ -1005,7 +1005,7 @@ reject → delete. Without the switch the button is hidden.
 | Approve | POST `…/:id/approve` | `admin_subscriptions` · Approve |
 | Reject | POST `…/:id/reject` | `admin_subscriptions` · Delete (Reject) |
 | Mark resolved (paid — needs review) | POST `…/checkouts/:id/resolve` | `admin_subscriptions` · Add |
-| Refund | POST `…/payments/:id/refund` | `admin_subscriptions` · Add |
+| Refund — **switched off for now** (no button; `REFUNDS_ENABLED` in `payments.tsx`) | POST `…/payments/:id/refund` | `admin_subscriptions` · Add |
 | Expiry & Grace Policy (Settings page and the Subscriptions tab) | GET / PUT `…/lifecycle` | `admin_settings` · View (tab and card) / Edit (Save) |
 | Run lifecycle check now | POST `…/lifecycle/run` | `super_admin` role only |
 | Company & tax details | GET / PUT `…/company` | `admin_settings` · View / Edit |
