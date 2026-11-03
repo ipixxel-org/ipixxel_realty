@@ -38,6 +38,8 @@ export class SaveAdminPlanDto {
   // round-trips, then ignored — the version is decided by what changed.
   @IsOptional() @IsInt() version?: number | null;
   @IsOptional() @IsArray() versions?: unknown[];
+  // Orgs still on an older version (the plan card's note): read-only, ignored.
+  @IsOptional() olderOrgs?: unknown;
   @IsString() @MaxLength(80) name!: string;
   @IsOptional() @IsString() @MaxLength(300) tagline?: string;
   @IsNumber() priceMonthly!: number;
