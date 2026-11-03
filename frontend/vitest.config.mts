@@ -10,5 +10,8 @@ export default defineConfig({
     environment: 'jsdom',
     globals: true,
     setupFiles: ['./vitest.setup.ts'],
+    // Full-page UI flows (wizards, walkthroughs) regularly need more than the
+    // 5s default on CI-class machines.
+    testTimeout: 15000,
   },
 })
