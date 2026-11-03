@@ -25,11 +25,12 @@ import { SortableBlock } from "./SortableBlock";
 import { RenderBlock } from "@/components/openpage/blocks/registry";
 import { resolveSiteTheme, siteBrandAttrs, siteThemeCSS, sitePageBackground } from "@/lib/openpage/theme-presets";
 import { useGoogleFonts } from "@/lib/openpage/useGoogleFonts";
+import { blockFontFamilies } from "@/lib/openpage/block-fonts";
 import { createBlockFromType, createBlockFromPresetId } from "@/lib/openpage/block-factory";
 import { readDropPayload } from "@/lib/openpage/drag-payload";
 import { canvasCollision } from "@/lib/openpage/canvas-collision";
 import { findBlock, allAtRoot, findColumnList } from "@/lib/openpage/block-tree";
-import type { BlockConfig, BlockStyle, BlockType } from "@/components/openpage/blocks/types";
+import type { BlockConfig, BlockType } from "@/components/openpage/blocks/types";
 import { ElementEditorContext } from "@/components/openpage/blocks/El";
 import { DeviceProvider } from "@/components/openpage/runtime/device";
 
@@ -260,29 +261,7 @@ export function Canvas() {
   const cssVars = useMemo(() => siteThemeCSS(site), [site]);
   const brandAttrs = useMemo(() => siteBrandAttrs(site), [site]);
 
-  const blockFonts = useMemo(() => {
-    const fonts = new Set<string>();
-    function scanStyles(style: BlockStyle | undefined) {
-      if (style?.typography?.fontFamily) fonts.add(style.typography.fontFamily);
-      if (style?.responsive?.tablet?.typography?.fontFamily) fonts.add(style.responsive.tablet.typography.fontFamily);
-      if (style?.responsive?.mobile?.typography?.fontFamily) fonts.add(style.responsive.mobile.typography.fontFamily);
-    }
-    function scan(list: BlockConfig[]) {
-      for (const b of list) {
-        scanStyles(b.style);
-        // Element-level styles can introduce fonts the block style never used.
-        if (b.elementStyles) {
-          for (const style of Object.values(b.elementStyles)) scanStyles(style);
-        }
-        if (b.type === "columns") {
-          const cols = b.props.columns as Array<{ blocks?: BlockConfig[] }> | undefined;
-          cols?.forEach((c) => c.blocks && scan(c.blocks));
-        }
-      }
-    }
-    scan(blocks);
-    return Array.from(fonts);
-  }, [blocks]);
+  const blockFonts = useMemo(() => blockFontFamilies(blocks), [blocks]);
 
   useGoogleFonts([resolved.fontSans, resolved.fontDisplay, resolved.fontMono, ...blockFonts]);
 

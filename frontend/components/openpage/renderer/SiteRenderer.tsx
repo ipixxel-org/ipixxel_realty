@@ -5,6 +5,7 @@ import type { SiteConfig, BlockConfig } from "@/components/openpage/blocks/types
 import { RenderBlock } from "@/components/openpage/blocks/registry";
 import { resolveSiteTheme, siteBrandAttrs, siteThemeCSS, sitePageBackground } from "@/lib/openpage/theme-presets";
 import { useGoogleFonts } from "@/lib/openpage/useGoogleFonts";
+import { blockFontFamilies } from "@/lib/openpage/block-fonts";
 import { DeviceProvider } from "@/components/openpage/runtime/device";
 import { OpenPageRuntimeProvider } from "@/components/openpage/runtime/OpenPageRuntime";
 import type { FormDefinition } from "@/lib/openpage/forms-store";
@@ -64,7 +65,13 @@ export function SiteRenderer({
   const resolved = useMemo(() => resolveSiteTheme(resolvedSite), [resolvedSite]);
   const cssVars = useMemo(() => siteThemeCSS(resolvedSite), [resolvedSite]);
   const brandAttrs = useMemo(() => siteBrandAttrs(resolvedSite), [resolvedSite]);
-  useGoogleFonts([resolved.fontSans, resolved.fontDisplay, resolved.fontMono]);
+  // Fonts picked on individual blocks too, not only the theme fonts — otherwise
+  // a heading set to e.g. Playfair Display falls back to a system font when live.
+  const blockFonts = useMemo(
+    () => blockFontFamilies([...(resolvedSite.blocks ?? []), ...(resolvedSite.pages ?? []).flatMap((p) => p.blocks ?? [])]),
+    [resolvedSite],
+  );
+  useGoogleFonts([resolved.fontSans, resolved.fontDisplay, resolved.fontMono, ...blockFonts]);
   const library = mergeFormLibraries(forms, resolvedSite.forms);
 
   const binding = resolvedSite.propertyBinding;
