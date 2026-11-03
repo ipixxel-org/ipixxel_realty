@@ -273,7 +273,19 @@ const ITEM_TYPE_EXCLUDE = ":not(:where(button, button *, .op-btn, .op-btn *, for
  *   - card typography (`itemTypography`) lands on every card at once, below
  *     any card's own element style.
  */
-export function blockStyleTag(blockId: string, style?: BlockStyle): string {
+/**
+ * Small widgets (Heading, Text, Button…) draw their own spacing around their
+ * content. For these, a padding set in the Style tab replaces that built-in
+ * spacing on the same side (like Elementor), so 0 really means 0. Sides left
+ * empty keep the built-in spacing. Big sections keep theirs.
+ */
+export const WIDGETS_WITH_REPLACEABLE_PADDING = new Set<string>([
+  "heading", "text", "button", "icon", "image", "video", "divider", "spacer", "icon-box", "image-box", "html-code",
+  "icon-list", "alert", "animated-headline", "counter", "star-rating", "progress-bar", "price-list", "flip-box",
+  "site-logo", "site-title", "page-title", "breadcrumbs", "table-of-contents", "off-canvas", "social-icons",
+]);
+
+export function blockStyleTag(blockId: string, style?: BlockStyle, replacePadding = false): string {
   if (!style) return "";
   const root = `[data-block-id="${blockId}"]`;
   const child = `${root} > :not(style)`;
@@ -321,6 +333,13 @@ export function blockStyleTag(blockId: string, style?: BlockStyle): string {
   if (style.objectFit) childRules.push(`object-fit:${style.objectFit} !important`);
   if (style.objectPosition) childRules.push(`object-position:${style.objectPosition} !important`);
   if (style.aspectRatio) childRules.push(`aspect-ratio:${style.aspectRatio} !important`);
+  if (replacePadding) {
+    // The wrapper carries the chosen padding; the widget's own is removed.
+    for (const side of ["Top", "Right", "Bottom", "Left"] as const) {
+      const v = style[`padding${side}`];
+      if (typeof v === "string" ? v.trim() !== "" : typeof v === "number") childRules.push(`padding-${side.toLowerCase()}:0 !important`);
+    }
+  }
 
   const parts: string[] = [];
   if (wrapperRules.length) parts.push(`${root} { ${wrapperRules.join("; ")}; }`);

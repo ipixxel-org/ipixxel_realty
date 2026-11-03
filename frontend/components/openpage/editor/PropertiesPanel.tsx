@@ -161,6 +161,13 @@ const blockFields: Partial<Record<BlockType, { sections: { title: string; fields
   hero: {
     sections: [
       {
+        title: 'Layout',
+        fields: [
+          { key: 'contentWidth', label: 'Content Width (default: boxed)', type: 'select', options: ['boxed', 'full'] },
+          { key: 'gap', label: 'Gap', type: 'text' },
+        ],
+      },
+      {
         title: 'Content',
         fields: [
           { key: 'badge', label: 'Badge', type: 'text' },
@@ -511,8 +518,8 @@ const blockFields: Partial<Record<BlockType, { sections: { title: string; fields
     sections: [
       { title: 'Layout', fields: [
         { key: 'variant', label: 'Template', type: 'select', options: ['split-form', 'overlay', 'centered', 'stats', 'editorial', 'framed', 'asymmetric', 'info-bar', 'framed-center', 'split-curve'] },
-        // Overlay template: background full width, text in a centred box.
-        { key: 'contentWidth', label: 'Content width (overlay; e.g. 1200px, empty = default)', type: 'text' },
+        { key: 'contentWidth', label: 'Content Width (default: boxed)', type: 'select', options: ['boxed', 'full'] },
+        { key: 'gap', label: 'Gap', type: 'text' },
       ]},
       { title: 'Content', fields: [
         { key: 'badge', label: 'Badge', type: 'text' },
@@ -2222,6 +2229,20 @@ export function PropertiesPanel({ block }: { block: BlockConfig }) {
               </button>
             )}
           </div>
+        </Section>
+      )}
+
+      {(block.type === "hero" || block.type === "project-banner") && (
+        <Section title="Items">
+          <FlexItemsControls
+            value={readFlexLayout(block.props)}
+            defaultDirection="column"
+            showGap
+            onChange={(patch) => updateBlockProps(block.id, patch)}
+          />
+          <p className="text-[10px] text-text-3 leading-snug mt-2">
+            Controls the hero content layout without changing its existing styles.
+          </p>
         </Section>
       )}
 

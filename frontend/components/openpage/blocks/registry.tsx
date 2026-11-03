@@ -7,6 +7,7 @@ import {
   blockAnimationClass,
   blockAnimationStyle,
   blockStyleTag,
+  WIDGETS_WITH_REPLACEABLE_PADDING,
   resolveBlockStyleForDevice,
 } from "@/lib/openpage/block-style";
 import { useDevice } from "@/components/openpage/runtime/device";
@@ -205,7 +206,7 @@ export function RenderBlock({ block }: { block: BlockConfig }): ReactNode {
   const device = useDevice()
   const Renderer = blockRenderers[block.type] || PlaceholderBlock
   const resolved = resolveBlockStyleForDevice(block.style, device)
-  const scopedCss = blockStyleTag(block.id, resolved)
+  const scopedCss = blockStyleTag(block.id, resolved, WIDGETS_WITH_REPLACEABLE_PADDING.has(block.type))
   // Inline: the wrapper's box only. Backgrounds, borders, transforms and
   // typography come from `scopedCss`, so each is applied exactly once.
   const style = {
