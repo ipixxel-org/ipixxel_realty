@@ -33,6 +33,9 @@ client is the reference behaviour (see `frontend/lib/billing/__tests__/mock-clie
 | Manual mode: coupon on the request | Super Admin `PUT` / `DELETE /admin/package-change-requests/:id/coupon`; Mark as paid amount = the request total; `OrgPlanRequest.quote` / admin row `quote`; `SubscriptionDetail.paymentMode`; org-level offline payment / apply coupon refused in manual mode (`use_request`) | `package-change-requests.service.ts` (`applyCoupon` / `removeCoupon`), `request-coupon.ts`, `coupon-lookup.ts` (`findCouponFor`, shared with checkout), `coupon-settlement.ts`; migration `20261025090000_request_coupon` |
 | Online steps 1–4 (2026-10-29) | Grace rules, "choose what stays" at the checkout, online payments as rows, `payment_review` block, superseded checkouts, `resolveAdminCheckout`; `OrgPlanRequest.kind` `online_payment` / `online`, `CheckoutPreview.usageConflict` in both modes | `checkout-quote.ts`, `billing-checkout.service.ts` (`whatStaysProblem`, `adminResolve`), `billing-plan-change.service.ts`, `billing/online-rows.ts`, `billing-overview.ts`; frontend `lib/billing/direction.ts` (`isOverdue`), `lib/billing/requests.ts`, `components/billing/requests.tsx`, `admin/package-requests.tsx`, `admin/checkouts-review.tsx`; migrations `20261029090000_checkout_what_stays_choice`, `20261029100000_online_payment_rows` |
 | Plan versions (2026-10-30) | `previewAdminPlanSave`; `BillingPlan.version` / `versions` (admin list); `BillingOverview.planVersion` / `nextVersion`; `SubscriptionRow.planVersion` / `latestVersion` / `versionAppliesOn`; `CheckoutPreview` unchanged | `common/utils/plan-version.util.ts`, `common/utils/plan-version-change.util.ts`, `applyPlanVersionChanges` (sweep), `applyPlanChange` (`planVersionId`), `admin-billing.service.ts` (`previewPlanSave`); frontend `lib/billing/versions.ts`, `components/billing/{banners,overview}.tsx`, `admin/{plans-editor,subscriptions}.tsx`; migration `20261030090000_plan_versions` |
+| Compact banners, renewal via Plans, grace extension in text (2026-10-30) | `BillingOverview.graceExtraDays`, `SubscriptionRow.graceExtraDays`, `SubscriptionDetail.dueDate`; no new client function | `billing-overview.ts`, `admin-subscriptions.service.ts`; frontend `components/billing/{banners,ui}.tsx` (`CompactBanner`), `lib/billing/grace.ts`, `plans.tsx` (`RenewPlanButton`), `admin/subscriptions.tsx` |
+| Plan version history (2026-10-30) | `getPlanVersions`, `listPlanVersionOrgs`; `SubscriptionRow.planVersionId` | `admin-billing.service.ts` (`planVersions`, `planVersionOrgs`), `plan-version-change.util.ts` (`versionValues`, `HISTORY_LIMITS` / `HISTORY_FEATURES`); frontend `components/billing/admin/plan-version-history.tsx` |
+| Answering "what stays" for a version; org tabs (2026-11-02) | `keepDefaultPicks`; `NextPlanVersion.overLimits` / `whatStays`; `PlanVersionOrg.moveReason` / `overLimits` / `whatStays`; `BillingPlan.olderOrgs` (admin list; `versions[].orgNames` removed) | `billing-retention.service.ts` (`keepDefaultPicks`, `store`), `plan-version-change.util.ts` (`versionAnswer`, `overLimitsFor`), `org-billing-v2.service.ts`, `admin-billing.service.ts`; frontend `lib/billing/versions.ts` (`upcomingChoicePrompt`), `components/billing/banners.tsx` (`UpcomingChoiceModal`, `pausedCountsText`), `shell-integration.tsx`, `dialog.tsx` (`dismissible`), `components/ui/modal.tsx` (`hideClose`); migrations `20261102090000_retention_templates_chosen`, `20261102100000_retention_choice_version` |
 | Fixes after testing (2) | one `plan_locked` error; list filters `viewOnly` / `offline` / `paused` / `needsReassign`; invoice email; `packagePriceText` | `common/utils/plan-lock.util.ts`, `billing-invoice-mailer.service.ts`, `lead-assignee.util.ts`; frontend `lib/plan-lock.ts`, `PlanLockBadge` (`components/billing/locked.tsx`); migration `20261016093000_billing_invoice_email` |
 
 Every function is real except `updatePaymentMethod`, which stays unimplemented on purpose: renewals are
@@ -320,7 +323,7 @@ decided or takes effect; after that only Super Admin can change it. Helpers: `bi
 - **Super Admin UI:** org detail → Package requests, **Action** column (last): Mark as paid /
   Approve / Reject as before, then **Choose what stays** on the editable latest row, **View what
   stays** (read-only, same headers as the org) on every other row with a record, nothing without one.
-  Org page order: action row (Extend grace, Cancel = move to Basic, **Choose what stays**), plan
+  Org page order: action row (Extend grace, **Move to Basic** (the cancel action), **Choose what stays**), plan
   summary, Package requests, Payments, then Timeline and Coupon in use. The action row's standalone
   **Choose what stays** shows only when no request set the
   current plan (`SubscriptionDetail.whatStaysOrgLevel`; `currentPlanSetByRow` — the latest applied
@@ -344,9 +347,10 @@ the same rules").
   the renewal quote (today's price, renewal coupon, GST; a scheduled smaller plan is renewed at its
   price) instead of refusing — **`renewal_manual` is removed**. Open from the renewal window
   (`notifyDays` before `renewsAt`) through grace. The renewal banner, the 3-day popup, the grace
-  banner and the overview action row show "Request renewal · ₹X + GST" (→ the renewal request
-  screen, `checkout?…&renew=1`, button "Send renewal request"); "Renewal requested" (disabled) while
-  it waits. Approval continues the period from `renewsAt` (`renewalPeriodEnd`).
+  banner and the overview action row show "Request renewal · ₹X + GST" (→ the Plans page, where the
+  current plan's "Request renewal" opens the renewal request screen, `checkout?…&renew=1`, button
+  "Send renewal request" — since 2026-10-30, see "Compact banners"); "Renewal requested"
+  (disabled) while it waits. Approval continues the period from `renewsAt` (`renewalPeriodEnd`).
 - **Renewal overdue (grace, `past_due`):** any paid plan — same, bigger or smaller, either interval —
   is a request at that plan's **full price + GST** (`quoteOverdueChange`, kind `renewal`, no
   proration: nothing was paid for the overdue days; a renewal coupon on the subscription applies as it
@@ -609,9 +613,9 @@ in `docs/archive/online-mode-audit.md`.
   or a Super Admin renewal meanwhile) goes to `needs_review` instead of extending twice. Usage
   isn't re-checked (it's the plan the org already has). Audit `subscription_renewed`;
   notification "Plan Renewed".
-- **UI:** "Pay now" (banners, overview, 3-day popup) is live in online mode. With saved billing
-  details it opens Razorpay straight away; without, it opens the renewal checkout
-  (`/org/settings/billing/checkout?plan=…&interval=…&renew=1`), which collects them. After
+- **UI:** "Pay now" (banners, overview, 3-day popup) is live in online mode. Since 2026-10-30 it
+  opens the Plans page, where the current plan (highlighted) reads "Renew" and opens the renewal
+  checkout (`/org/settings/billing/checkout?plan=…&interval=…&renew=1`, "Renew Pro", "Pay ₹X"). After
   payment the UI waits for a new `periodEnd` (`waitForPlan` with `isApplied`).
 - **Loophole closed:** `POST /org/billing/renew` refuses paid plans
   (`paid_renewal_requires_checkout`); a free plan still renews there. With the flag off, the
@@ -802,6 +806,95 @@ templates, …) plus the Meta pages limit.
   stays" only when they're over a new limit. Nothing is shown when the new version is the same or
   better.
 
+### Plan version history (Super Admin, 2026-10-30)
+
+- `getPlanVersions(planId)` → `PlanVersionHistory`: `limitRows` / `featureRows` (`HISTORY_LIMITS`,
+  `HISTORY_FEATURES`), `versions[]` newest first with `priceMonthly`, `priceYearly`, `limits`,
+  `features`, `createdAt`, `createdBy`, `orgs`, `latest`.
+- `listPlanVersionOrgs({ planId, versionId, page, pageSize })` → `Paged<PlanVersionOrg>`: orgs
+  currently subscribed on that version (none recorded counts as the latest), with `interval` and
+  `movesOn`.
+- UI: `PlanVersionHistoryDialog` ("Starter — version history"): one column per version, rows for
+  prices, limits and features; a value changed from the version before is highlighted, tooltip
+  "Was 5 in v1". `onlyVersionId` shows one version (the org page's "View" next to "Starter v1").
+  The explicit `/admin/billing/plans` prefix is in `PLATFORM_ROUTE_MODULES`.
+
+### Answering "what stays" for a plan version (2026-11-02)
+
+- **Data:** `retention_choices.target_version_id` (the version a saved choice answers) and
+  `default_picks` (they pressed "Keep the default picks") — migration
+  `20261102100000_retention_choice_version`. A choice counts as the answer for the upcoming
+  version only when `targetPlanId` and `targetVersionId` both match (`versionAnswer`); a choice
+  saved for an earlier change doesn't. At the move, `applyRetention` still uses any saved choice
+  for the plan (`savedChoiceFor` doesn't look at the version).
+- **Overview:** `nextVersion.overLimits` (`{ key, limit, used }[]`, the new limits they're over —
+  `overLimitsFor`; empty = they fit) and `nextVersion.whatStays` (`chosen` / `default` / null).
+  `renewalChangeNotice().answered` collapses the notice to one line, `answeredText`: "Basic
+  changes on 9 Nov 2026. You've chosen what stays" (overdue: "… changes when you renew. …") +
+  "View / Change" (`chooseWhatStays`, `target` = the org's plan), on the current-plan card and in
+  the banner.
+- **Saving:** `saveRetentionChoices` for the org's own plan while a newer version is coming
+  records `targetVersionId` (`answersVersion`). `keepDefaultPicks()` → `POST
+  /org/billing/retention/default` stores the default picks with `defaultPicks: true`, audit
+  `retention_choices_saved` (choice `default`); `nothing_to_choose` when no newer version is
+  coming. Nothing is paused before the date either way.
+- **After-login question:** `UpcomingChoiceModal` (mounted in `ShellBanners`; not on the Choose
+  what stays screen) when `upcomingChoicePrompt(overview)` isn't null — over a new limit and not
+  answered — and the viewer has `billing:edit`. Title "Choose what stays active", text "Starting
+  9 Nov 2026, Basic includes 4 users (you have 5). Pick what stays active; nothing is deleted."
+  (overdue: "When you renew, …"), buttons "Keep the default picks" / "Choose what stays". Not
+  dismissible: `BillingDialog dismissible={false}` → `Modal hideClose` (no X; Escape and backdrop
+  do nothing).
+- **"You're on Basic now":** counts through `pausedCountsText(locked)` (no zeros, singular /
+  plural); `WhatStaysLockedNote` (banner and overview action row) hidden while
+  `nextVersion.lower`.
+- **Super Admin:** `PlanVersionOrg.moveReason` (`renewal` / `notice` / null), `overLimits`,
+  `whatStays` (`chosen` / `default` / `not_chosen`, only when over; null otherwise). The dialog
+  lists orgs in one tab per version, older first ("v1 · 2 orgs", "v2 · 0 orgs · latest"); default
+  tab = `initialVersion`, else the oldest older version with orgs, else the latest. Columns
+  Organisation / Billing / What happens next ("Already on latest", "Moves to v2 on 9 Nov 2026
+  (renewal)" / "(7-day notice)") / Over new limits ("Yes: 5 users, limit 4; …" / "No") / What
+  stays ("Chosen" / "Default picks" / "Not chosen yet" / "—"). Admin plan list: `olderOrgs` `{
+  orgs, versions (oldest first), nextMoveOn }` or null → the card's "4 orgs still on v2 · next move
+  9 Nov"; the names list (`orgNames`) is gone.
+
+### Compact banners, renewal via Plans, grace extensions (2026-10-30, 2026-11-02)
+
+- **Banners** (`CompactBanner` in `components/billing/ui.tsx`): one line — bold title, " · " the
+  rest, a countdown chip, buttons. `details` (the what-stays list) opens in place from "See what
+  stays" / "Hide what stays". The X collapses to a strip (`strip` text + "Show") for that viewer
+  for the rest of their local day (`localStorage` key per viewer id and billing `state`); a new
+  state shows in full. Tones: `amber` (solid yellow, every reminder, grace day — the last one too
+  — scheduled change and version notice), `gray` for `moved_to_basic`, `info` for the (unused)
+  auto-renew copy. No banner uses `rose`. Shown by the org shell on every page except
+  `/org/settings*` (the Billing panel renders it itself) and the walkthroughs.
+- **Renewal via Plans:** `PayNowButton` / `RequestRenewalButton` (banners, overview, popup) link
+  to the Plans page; the current plan's card (same interval) shows `RenewPlanButton` — "Renew"
+  (online) / "Request renewal" (manual) → `checkout?…&renew=1`. Renewal popup "Remind me later" is
+  kept in `sessionStorage` per `periodEnd`.
+- **Grace extensions:** `graceExtraDays` on the overview and the admin rows. `graceDayText()` →
+  "Day 8 of 10 (7 days + 3 extra days from our team)" (banner and current-plan line); the
+  countdown counts to `graceEndsAt`, which includes them. Super Admin "Give more time to pay":
+  typed whole days 1–60 (`graceDaysError`, `GRACE_EXTEND_MAX`), live "Grace will end on …
+  (currently …)" (`graceEndAfter`), button "Extend by N days"; list "+3 days" tag; summary "7
+  days + 3 extra days"; timeline "Grace extended by 3 days → 6 Dec 2026 by <name> · '<note>'"
+  (`graceExtendedText`), oldest first. `extendGrace` writes the subscription update and the
+  `grace_extended` audit log in one transaction.
+- **"Keep no templates":** `retention_choices.templates_chosen` (migration
+  `20261102090000_retention_templates_chosen`): an empty `templateIds` saved on purpose stays empty
+  instead of reading back as "no choice" (default picks).
+- **Org page:** the cancel action is labelled **Move to Basic** (dialog "Move <org> to Basic",
+  confirm "Move to Basic"); Extend grace is always shown, disabled outside grace with the reason
+  as hover text.
+
+### Known gaps (plan versions)
+
+- The org Plans page (`listPlans`) shows each plan's latest values, including the org's own plan
+  while it's on an older version (the Billing page shows its version).
+- `teamChat` is only enforced in the UI (read-only notice); `metaLeadAds` / `metaPages` aren't
+  enforced anywhere. Versions still record and compare them.
+- Plan direction (`planRanker`) uses each plan's latest monthly price.
+
 ### Step 7 notes — invoices, payments, Super Admin tools
 
 - **Invoices** (`billing.invoices`): a GST tax invoice for every paid plan payment — issued in
@@ -893,6 +986,7 @@ templates, …) plus the Meta pages limit.
 | `undoDowngrade()` | `DELETE /org/billing/downgrade` | — | `BillingOverview` |
 | `getRetentionChoices(req)` | `GET /org/billing/retention?targetPlanId=&requestId=` | `GetRetentionChoicesRequest` | `RetentionChoices` (`locked` = view-only for the org) |
 | `saveRetentionChoices(req)` | `PUT /org/billing/retention` | `SaveRetentionChoicesRequest` | `RetentionChoices` (reject over-limit picks or a missing owner; `what_stays_locked` once decided) |
+| `keepDefaultPicks()` | `POST /org/billing/retention/default` (`billing:edit`) | — | `RetentionChoices` — saves the default picks as the org's answer for the upcoming plan version (`nextVersion.whatStays` → `default`); `nothing_to_choose` when no newer version is coming |
 | `getAccessStatus()` | `GET /org/billing/access` | — | `AccessStatus` (paused users, view-only projects, offline landing pages, limits, modules) |
 | `listInvoices(req)` | `GET /org/billing/v2/invoices?page=&pageSize=` (`/org/billing/invoices` is the legacy list) | `PageRequest` | `Paged<Invoice>` (invoices and credit notes; `pdfUrl` = signed link to the printable document) |
 | `listPayments(req)` | `GET /org/billing/v2/payments?page=&pageSize=` | `PageRequest` | `Paged<PaymentRecord>` (plan payments: Razorpay + offline) |
@@ -908,7 +1002,9 @@ page shows the paused message (`frontend/lib/billing/paused.ts`).
 
 | Method | Endpoint | Request | Response |
 |---|---|---|---|
-| `listAdminPlans()` | `GET /admin/billing/plans` | — | `BillingPlan[]` (with `version` and `versions[]` per plan) |
+| `listAdminPlans()` | `GET /admin/billing/plans` | — | `BillingPlan[]` (with `version`, `versions[]` and `olderOrgs` per plan) |
+| `getPlanVersions(planId)` | `GET /admin/billing/plans/:id/versions` | — | `PlanVersionHistory` (`limitRows`, `featureRows`, `versions[]` newest first with values, `createdBy`, `orgs`) |
+| `listPlanVersionOrgs(req)` | `GET /admin/billing/plans/:id/versions/:versionId/orgs?page=&pageSize=` | `ListPlanVersionOrgsRequest` | `Paged<PlanVersionOrg>` (`interval`, `movesOn`, `moveReason`, `overLimits`, `whatStays`) |
 | `previewAdminPlanSave(plan)` | `POST /admin/billing/plans/:id/preview` | `BillingPlan` | `PlanSavePreview` (a new version? who it affects — the save confirm) |
 | `saveAdminPlan(plan)` | `PUT /admin/billing/plans/:id` | `BillingPlan` | `BillingPlan` (a price / limit / feature change creates the next version) |
 | `listCoupons()` | `GET /admin/billing/coupons` | — | `CouponRow[]` |
