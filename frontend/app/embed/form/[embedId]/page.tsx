@@ -72,6 +72,21 @@ export default function EmbedFormPage({ params }: { params: Promise<{ embedId: s
     };
   }, [embedId]);
 
+  useEffect(() => {
+    if (!embedId || typeof window === "undefined") return;
+    const sendHeight = () => {
+      const height = document.documentElement.scrollHeight || document.body.scrollHeight;
+      window.parent?.postMessage(
+        { prestateEmbedId: embedId, height, type: "embed-resize" },
+        "*",
+      );
+    };
+    sendHeight();
+    const ro = new ResizeObserver(sendHeight);
+    if (document.body) ro.observe(document.body);
+    return () => ro.disconnect();
+  }, [embedId, form]);
+
   const site = useMemo<SiteConfig | null>(() => {
     if (!form) return null;
     return {

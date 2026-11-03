@@ -38,6 +38,10 @@ export class ListAdminLeadsQueryDto {
 
   @IsOptional()
   @IsString()
+  formName?: string;
+
+  @IsOptional()
+  @IsString()
   search?: string;
 
   @IsOptional()

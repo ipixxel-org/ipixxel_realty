@@ -1937,6 +1937,7 @@ function adminLeadsQuery(params?: import("./types").AdminLeadsParams): string {
   if (params?.limit) q.set("limit", String(params.limit));
   if (params?.orgId) q.set("orgId", params.orgId);
   if (params?.projectId) q.set("projectId", params.projectId);
+  if (params?.formName) q.set("formName", params.formName);
   if (params?.status) q.set("status", params.status);
   if (params?.source) q.set("source", params.source);
   if (params?.search) q.set("search", params.search);

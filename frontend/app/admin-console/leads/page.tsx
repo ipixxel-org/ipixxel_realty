@@ -23,7 +23,6 @@ import {
 } from "@/lib/admin-leads";
 import type {
   AdminLead,
-  AdminLeadOrganisation,
   AdminLeadStatus,
   AdminLeadsMeta,
 } from "@/lib/types";
@@ -66,8 +65,7 @@ export default function AdminLeadsPage() {
   const [searchInput, setSearchInput] = useState("");
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<"" | AdminLeadStatus>("");
-  const [orgFilter, setOrgFilter] = useState("");
-  const [projectFilter, setProjectFilter] = useState("");
+  const [formFilter, setFormFilter] = useState("");
   const [sourceFilter, setSourceFilter] = useState("");
   const [sortBy, setSortBy] = useState("createdAt");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
@@ -105,8 +103,7 @@ export default function AdminLeadsPage() {
         limit: LIST_PAGE_SIZE,
         search: search || undefined,
         status: statusFilter || undefined,
-        orgId: orgFilter || undefined,
-        projectId: projectFilter || undefined,
+        formName: formFilter || undefined,
         source: sourceFilter || undefined,
         sortBy: sortBy as "createdAt" | "status" | "source" | "formName",
         sortDir,
@@ -124,8 +121,7 @@ export default function AdminLeadsPage() {
     page,
     search,
     statusFilter,
-    orgFilter,
-    projectFilter,
+    formFilter,
     sourceFilter,
     sortBy,
     sortDir,
@@ -135,9 +131,6 @@ export default function AdminLeadsPage() {
     // eslint-disable-next-line react-hooks/set-state-in-effect -- load() owns its async loading state
     void load();
   }, [load]);
-
-  const orgs: AdminLeadOrganisation[] = meta?.organisations ?? [];
-  const projects = meta?.projects ?? [];
 
   const statTiles = useMemo(
     () => [
@@ -160,7 +153,7 @@ export default function AdminLeadsPage() {
           </div>
           <h1>Super Admin Leads</h1>
           <div className="sub">
-            Every lead captured by the iframe forms and connected channels. Update stages, add remarks and schedule follow-ups from one place.
+            Leads captured directly through your Lead Forms builder and embed widgets. Update stages, add remarks and schedule follow-ups from one place.
           </div>
         </div>
         <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
@@ -289,33 +282,16 @@ export default function AdminLeadsPage() {
             <select
               className="inp"
               style={{ width: "auto", minWidth: 170 }}
-              value={orgFilter}
+              value={formFilter}
               onChange={(e) => {
-                setOrgFilter(e.target.value);
-                setProjectFilter("");
+                setFormFilter(e.target.value);
                 setPage(1);
               }}
             >
-              <option value="">All organisations</option>
-              {orgs.map((o) => (
-                <option key={o.id} value={o.id}>
-                  {o.name}
-                </option>
-              ))}
-            </select>
-            <select
-              className="inp"
-              style={{ width: "auto", minWidth: 160 }}
-              value={projectFilter}
-              onChange={(e) => {
-                setProjectFilter(e.target.value);
-                setPage(1);
-              }}
-            >
-              <option value="">All projects</option>
-              {projects.map((p) => (
-                <option key={p.id} value={p.id}>
-                  {p.name}
+              <option value="">All Lead Forms</option>
+              {(meta?.forms ?? []).map((f) => (
+                <option key={f.id} value={f.name}>
+                  {f.name}
                 </option>
               ))}
             </select>
@@ -352,7 +328,7 @@ export default function AdminLeadsPage() {
               <option value="source:asc">Source A–Z</option>
               <option value="formName:asc">Form A–Z</option>
             </select>
-            {(search || statusFilter || orgFilter || projectFilter || sourceFilter) ? (
+            {(search || statusFilter || formFilter || sourceFilter) ? (
               <button
                 type="button"
                 className="btn btn-ghost btn-sm"
@@ -360,8 +336,7 @@ export default function AdminLeadsPage() {
                   setSearchInput("");
                   setSearch("");
                   setStatusFilter("");
-                  setOrgFilter("");
-                  setProjectFilter("");
+                  setFormFilter("");
                   setSourceFilter("");
                   setPage(1);
                 }}
@@ -382,8 +357,8 @@ export default function AdminLeadsPage() {
               <thead>
                 <tr>
                   <th>Lead</th>
-                  <th>Organisation</th>
-                  <th>Project</th>
+                  <th>Form</th>
+                  <th>Embed ID</th>
                   <th>Source</th>
                   <th>Status</th>
                   <th>Next follow-up</th>
@@ -424,20 +399,19 @@ export default function AdminLeadsPage() {
                           </div>
                         </td>
                         <td>
-                          {lead.organisation?.id === "platform" ? (
-                            <span style={{ fontWeight: 600 }}>{lead.organisation.name}</span>
-                          ) : lead.organisation ? (
-                            <Link
-                              href={`/admin-console/organisation-detail/${lead.organisation.id}`}
-                              style={{ fontWeight: 600, color: "var(--brand)" }}
-                            >
-                              {lead.organisation.name}
-                            </Link>
+                          <span style={{ fontWeight: 600, color: "var(--ink)" }}>
+                            {lead.formName || "—"}
+                          </span>
+                        </td>
+                        <td>
+                          {lead.landingPageId ? (
+                            <code style={{ fontSize: 11, color: "var(--faint)" }}>
+                              {lead.landingPageId.replace(/^embed_/, "")}
+                            </code>
                           ) : (
                             <span className="muted">—</span>
                           )}
                         </td>
-                        <td>{lead.project?.name || <span className="muted">—</span>}</td>
                         <td>
                           <span className={`badge ${sourceBadgeClass(source)}`}>
                             {source || "Website"}

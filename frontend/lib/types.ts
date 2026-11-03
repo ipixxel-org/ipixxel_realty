@@ -2237,6 +2237,7 @@ export interface AdminLeadsListResponse {
 export interface AdminLeadsMeta {
   organisations: AdminLeadOrganisation[];
   projects: Array<{ id: string; name: string }>;
+  forms?: Array<{ id: string; name: string }>;
   sources: string[];
   statuses: AdminLeadStatus[];
 }
@@ -2252,6 +2253,7 @@ export interface AdminLeadsParams {
   limit?: number;
   orgId?: string;
   projectId?: string;
+  formName?: string;
   status?: AdminLeadStatus;
   source?: string;
   search?: string;

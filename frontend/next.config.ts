@@ -36,10 +36,33 @@ const nextConfig: NextConfig = {
         source: "/:path*",
         headers: [
           { key: "X-Content-Type-Options", value: "nosniff" },
-          { key: "X-Frame-Options", value: "SAMEORIGIN" },
           { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
           { key: "Permissions-Policy", value: "camera=(), microphone=(), geolocation=()" },
           { key: "Strict-Transport-Security", value: "max-age=63072000; includeSubDomains; preload" },
+        ],
+      },
+      {
+        // Enforce SAMEORIGIN framing for all console and private/authenticated routes,
+        // but exclude /embed routes so that form widgets and iframes can be embedded
+        // on external websites (w3schools, client portals, third-party sites).
+        source: "/:path((?!embed).*)",
+        headers: [
+          { key: "X-Frame-Options", value: "SAMEORIGIN" },
+        ],
+      },
+      {
+        // Explicitly allow embedding for /embed routes across any domain
+        source: "/embed/:path*",
+        headers: [
+          { key: "Content-Security-Policy", value: "frame-ancestors *" },
+          { key: "Access-Control-Allow-Origin", value: "*" },
+          { key: "Access-Control-Allow-Methods", value: "GET, POST, OPTIONS" },
+        ],
+      },
+      {
+        source: "/embed.js",
+        headers: [
+          { key: "Access-Control-Allow-Origin", value: "*" },
         ],
       },
     ];
