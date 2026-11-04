@@ -10153,10 +10153,34 @@
   z-index: 2;
 }
 
+.superadmin .mkt-brand-ico,
+.mkt-brand-ico {
+  display: inline-grid !important;
+  place-items: center !important;
+  border-radius: 12px;
+  flex-shrink: 0;
+  box-sizing: border-box !important;
+  overflow: hidden !important;
+}
+
+.superadmin .mkt-brand-ico svg,
+.mkt-brand-ico svg {
+  display: block !important;
+  width: 100% !important;
+  height: 100% !important;
+  max-width: 100% !important;
+  max-height: 100% !important;
+}
+
 .superadmin .mkt-hub-orbit-node,
 .mkt-hub-orbit-node {
   position: absolute;
   z-index: 3;
+  width: 36px;
+  height: 36px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   filter: drop-shadow(0 6px 14px rgba(15, 23, 42, 0.12));
 }
 
