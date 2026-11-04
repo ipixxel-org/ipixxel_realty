@@ -24,3 +24,4 @@ export class ConvertLeadToOrgDto {
   @IsString()
   city?: string;
 }
+

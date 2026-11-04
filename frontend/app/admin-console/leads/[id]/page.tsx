@@ -430,55 +430,6 @@ export default function AdminLeadDetailPage() {
           <Reveal delay={2}>
             <div className="card">
               <div className="card-h">
-                <span className="t">Requirement &amp; preferences</span>
-              </div>
-              <div className="card-b">
-                <div className="grid g2" style={{ gap: 24 }}>
-                  <div>
-                    <DetailRow
-                      label="Budget"
-                      value={
-                        lead.details.budgetMin || lead.details.budgetMax
-                          ? [lead.details.budgetMin, lead.details.budgetMax]
-                              .filter((v) => v != null)
-                              .map((v) => Number(v).toLocaleString("en-IN"))
-                              .join(" – ")
-                          : null
-                      }
-                    />
-                    <DetailRow label="Configurations" value={lead.details.configurations} />
-                    <DetailRow label="Purpose" value={lead.details.purpose} />
-                    <DetailRow label="Timeline" value={lead.details.timelineToBuy} />
-                    <DetailRow label="Facing" value={lead.details.facing} />
-                  </div>
-                  <div>
-                    <DetailRow label="Financing" value={lead.details.financing} />
-                    <DetailRow label="Loan status" value={lead.details.loanStatus} />
-                    <DetailRow label="Preferred floor" value={lead.details.preferredFloor} />
-                    <DetailRow label="Parking" value={lead.details.parking} />
-                    <DetailRow label="Temperature" value={lead.details.temperature} />
-                  </div>
-                </div>
-                <div className="divider" />
-                <DetailRow label="Requirement notes" value={lead.details.requirementNotes} />
-                <DetailRow label="Tags" value={lead.details.tags} />
-                <DetailRow
-                  label="Consent"
-                  value={[
-                    lead.details.consentCall ? "Call" : null,
-                    lead.details.consentWhatsapp ? "WhatsApp" : null,
-                    lead.details.consentEmail ? "Email" : null,
-                  ]
-                    .filter(Boolean)
-                    .join(", ")}
-                />
-              </div>
-            </div>
-          </Reveal>
-
-          <Reveal delay={3}>
-            <div className="card">
-              <div className="card-h">
                 <span className="t">Captured form fields</span>
                 <span className="x">{capturedFields.length} fields</span>
               </div>
