@@ -86,11 +86,13 @@ export class MetaOAuthCallbackController {
     const frontend = (
       process.env.FRONTEND_URL ?? 'http://localhost:3001'
     ).replace(/\/$/, '');
-    const returnKey = this.service.platformKeyFromOAuthState(state);
+    const stateInfo = this.service.infoFromOAuthState(state);
+    const returnKey = stateInfo.platformKey || 'meta';
+    const redirectPrefix = stateInfo.orgId === 'platform' ? '/admin-console' : '/org';
     if (error) {
       const msg = encodeURIComponent(errorDescription || error);
       return res.redirect(
-        `${frontend}/org/marketing/apps/${returnKey}?connected=0&meta=error&message=${msg}`,
+        `${frontend}${redirectPrefix}/marketing/apps/${returnKey}?connected=0&meta=error&message=${msg}`,
       );
     }
     try {
@@ -101,7 +103,7 @@ export class MetaOAuthCallbackController {
         err instanceof Error ? err.message : 'Facebook connection failed',
       );
       return res.redirect(
-        `${frontend}/org/marketing/apps/${returnKey}?connected=0&meta=error&message=${message}`,
+        `${frontend}${redirectPrefix}/marketing/apps/${returnKey}?connected=0&meta=error&message=${message}`,
       );
     }
   }
@@ -117,9 +119,13 @@ export class MetaOAuthCallbackController {
 export class OrgMetaLeadsController {
   constructor(private readonly service: MetaLeadsService) { }
 
+  private resolveOrgId(user: JwtPayload): string {
+    return user.orgId || (user.roles?.includes('super_admin') ? 'platform' : '');
+  }
+
   @Get('app-credentials')
   getAppCredentials(@CurrentUser() user: JwtPayload) {
-    return this.service.getOrgAppCredentials(user.orgId as string);
+    return this.service.getOrgAppCredentials(this.resolveOrgId(user));
   }
 
   @Put('app-credentials')
@@ -127,20 +133,21 @@ export class OrgMetaLeadsController {
     @CurrentUser() user: JwtPayload,
     @Body() dto: SaveOrgMetaAppCredentialsDto,
   ) {
-    return this.service.saveOrgAppCredentials(user.orgId as string, dto);
+    return this.service.saveOrgAppCredentials(this.resolveOrgId(user), dto);
   }
 
   @Get('config')
   config(@CurrentUser() user: JwtPayload) {
-    return this.service.getPublicConfig(user.orgId ?? undefined);
+    return this.service.getPublicConfig(this.resolveOrgId(user) || undefined);
   }
 
   @Get('connect')
   async connect(@CurrentUser() user: JwtPayload) {
-    if (!user.orgId) {
+    const orgId = this.resolveOrgId(user);
+    if (!orgId) {
       return { url: null, error: 'Organisation required' };
     }
-    return await this.service.getConnectUrl(user.orgId, user.sub);
+    return await this.service.getConnectUrl(orgId, user.sub);
   }
 
   @Post('connect-token')
@@ -148,12 +155,12 @@ export class OrgMetaLeadsController {
     @CurrentUser() user: JwtPayload,
     @Body() dto: MetaManualTokenDto,
   ) {
-    return this.service.connectWithToken(user.orgId as string, user.sub, dto);
+    return this.service.connectWithToken(this.resolveOrgId(user), user.sub, dto);
   }
 
   @Get('connections')
   list(@CurrentUser() user: JwtPayload) {
-    return this.service.listConnections(user.orgId as string);
+    return this.service.listConnections(this.resolveOrgId(user));
   }
 
   @Patch('connections/:id')
@@ -162,12 +169,12 @@ export class OrgMetaLeadsController {
     @Param('id') id: string,
     @Body() dto: UpdateMetaConnectionDto,
   ) {
-    return this.service.updateConnection(user.orgId as string, id, dto);
+    return this.service.updateConnection(this.resolveOrgId(user), id, dto);
   }
 
   @Delete('connections/:id')
   disconnect(@CurrentUser() user: JwtPayload, @Param('id') id: string) {
-    return this.service.disconnect(user.orgId as string, id);
+    return this.service.disconnect(this.resolveOrgId(user), id);
   }
 }
 

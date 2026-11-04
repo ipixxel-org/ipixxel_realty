@@ -86,6 +86,13 @@ export async function assertOrgSessionActive(
   actor: JwtPayload | undefined,
 ): Promise<void> {
   const request = { user: actor as JwtPayload };
+  // Full Super Admin and platform users bypass organisation approval checks
+  if (
+    actor?.roles?.includes('super_admin') ||
+    (!actor?.orgId && actor?.roles?.some((r) => r.startsWith('super_admin') || r === 'admin'))
+  ) {
+    return;
+  }
   const orgId = request.user?.orgId;
   if (!orgId) {
     throw new ForbiddenException('Organisation Admin access required');

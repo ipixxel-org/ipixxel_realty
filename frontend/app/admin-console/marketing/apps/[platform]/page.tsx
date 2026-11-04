@@ -1,0 +1,2605 @@
+"use client";
+
+import { useCallback, useEffect, useState, Suspense } from "react";
+import Link from "next/link";
+import { useParams, useSearchParams } from "next/navigation";
+import { Reveal } from "@/components/superadmin/reveal";
+import { Icon } from "@/components/icons";
+import { formPageStyles } from "@/components/forms/form-page";
+import {
+  apiFetch,
+  connectMarketingCredentials,
+  connectMetaWithToken,
+  createOrgGoogleSheet,
+  disconnectMarketingConnection,
+  disconnectOrgGoogleSheet,
+  getMarketingConnectUrl,
+  getMarketingPlatform,
+  getOrgMetaAppCredentials,
+  updateOrgMetaAppCredentials,
+  getGoogleSheetsAppsScriptConfig,
+  importOrgGoogleSheetsLeads,
+  regenerateGoogleSheetsWebhookToken,
+  resetGoogleSheetsSyncStats,
+  type GoogleSheetsAppsScriptConfig,
+  linkOrgGoogleSheet,
+  syncAllOrgGoogleSheetsLeads,
+  syncMarketingConnection,
+  syncMarketingPlatform,
+  updateMarketingConnection,
+  updateOrgGoogleSheetSettings,
+} from "@/lib/api";
+import type { MarketingConnection, MarketingPlatformCard, MetaPublicConfig, OrgMetaAppCredentials, Project } from "@/lib/types";
+import { Modal, ModalActions } from "@/components/ui/modal";
+import { MetaLeadAdsCard } from "@/components/org/meta-lead-ads-card";
+import { PlatformBrandIcon } from "@/components/org/platform-brand-icon";
+import "@/app/org/org.css";
+
+type ProjectsListResponse = { data: Project[] };
+
+function PlatformDetailInner() {
+  const { platform: routeKey } = useParams<{ platform: string }>();
+  const key = Array.isArray(routeKey) ? routeKey[0] : routeKey;
+  const search = useSearchParams();
+  const [detail, setDetail] = useState<
+    (MarketingPlatformCard & {
+      metaConfig?: MetaPublicConfig | null;
+      oauthConfigured?: boolean;
+      webhookUrl?: string | null;
+    }) | null
+  >(null);
+  const [projects, setProjects] = useState<Project[]>([]);
+  const [error, setError] = useState("");
+  const [message, setMessage] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [manual, setManual] = useState({
+    pageId: "",
+    pageName: "",
+    accessToken: "",
+    projectId: "",
+  });
+  const [cred, setCred] = useState({
+    externalAccountId: "",
+    externalAccountName: "",
+    accessToken: "",
+    refreshToken: "",
+    projectId: "",
+  });
+  const [showManual, setShowManual] = useState(false);
+  const [showCred, setShowCred] = useState(false);
+  const [showAddAccountModal, setShowAddAccountModal] = useState(false);
+  const [addAccountMode, setAddAccountMode] = useState<"oauth" | "manual">("oauth");
+  const [addAccountError, setAddAccountError] = useState("");
+  const [editingAccount, setEditingAccount] = useState<MarketingConnection | null>(null);
+  const [editName, setEditName] = useState("");
+  const [editProjectId, setEditProjectId] = useState("");
+  const [savingEdit, setSavingEdit] = useState(false);
+  const [disconnectingAccount, setDisconnectingAccount] = useState<MarketingConnection | null>(null);
+  const [disconnectingBusy, setDisconnectingBusy] = useState(false);
+  const [showManualToken, setShowManualToken] = useState(false);
+  const [showCredToken, setShowCredToken] = useState(false);
+  const [showRefreshToken, setShowRefreshToken] = useState(false);
+  const [showLinkSheetModal, setShowLinkSheetModal] = useState(false);
+  const [linkSheetInput, setLinkSheetInput] = useState("");
+  const [linkSheetProjectId, setLinkSheetProjectId] = useState("");
+  const [showNewSheetModal, setShowNewSheetModal] = useState(false);
+  const [newSheetTitle, setNewSheetTitle] = useState("");
+  const [newSheetProjectId, setNewSheetProjectId] = useState("");
+  const [activeSheetConnectionId, setActiveSheetConnectionId] = useState("");
+  const [syncingAllLeads, setSyncingAllLeads] = useState(false);
+  const [importingFromSheetId, setImportingFromSheetId] = useState<string | null>(null);
+  const [sheetBusy, setSheetBusy] = useState(false);
+  const [copiedKey, setCopiedKey] = useState<string | null>(null);
+  const [showAppsScriptModal, setShowAppsScriptModal] = useState(false);
+  const [appsScriptConfig, setAppsScriptConfig] =
+    useState<GoogleSheetsAppsScriptConfig | null>(null);
+  const [loadingAppsScript, setLoadingAppsScript] = useState(false);
+  const [regeneratingToken, setRegeneratingToken] = useState(false);
+  const [resettingStats, setResettingStats] = useState(false);
+
+  // Organization Custom Facebook App state
+  const [showCustomAppModal, setShowCustomAppModal] = useState(false);
+  const [customAppCreds, setCustomAppCreds] = useState<OrgMetaAppCredentials | null>(null);
+  const [loadingCustomApp, setLoadingCustomApp] = useState(false);
+  const [savingCustomApp, setSavingCustomApp] = useState(false);
+  const [customAppForm, setCustomAppForm] = useState({
+    metaAppId: "",
+    metaAppSecret: "",
+    metaWebhookVerifyToken: "",
+  });
+  const [showCustomAppSecret, setShowCustomAppSecret] = useState(false);
+
+  const openCustomAppModal = async () => {
+    setShowCustomAppModal(true);
+    setLoadingCustomApp(true);
+    setError("");
+    try {
+      const data = await getOrgMetaAppCredentials();
+      setCustomAppCreds(data);
+      setCustomAppForm({
+        metaAppId: data.appId || "",
+        metaAppSecret: "",
+        metaWebhookVerifyToken: data.verifyToken || "",
+      });
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to load Facebook App credentials");
+    } finally {
+      setLoadingCustomApp(false);
+    }
+  };
+
+  const handleSaveCustomApp = async () => {
+    setSavingCustomApp(true);
+    setError("");
+    try {
+      const res = await updateOrgMetaAppCredentials({
+        metaAppId: customAppForm.metaAppId.trim(),
+        metaAppSecret: customAppForm.metaAppSecret.trim() || undefined,
+        metaWebhookVerifyToken: customAppForm.metaWebhookVerifyToken.trim() || undefined,
+      });
+      setCustomAppCreds(res);
+      setMessage(
+        res.isCustomApp
+          ? "Custom Facebook App credentials saved successfully!"
+          : "Saved. Using platform default Facebook App.",
+      );
+      setShowCustomAppModal(false);
+      await load();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to save Facebook App credentials");
+    } finally {
+      setSavingCustomApp(false);
+    }
+  };
+
+  const handleClearCustomApp = async () => {
+    setSavingCustomApp(true);
+    setError("");
+    try {
+      const res = await updateOrgMetaAppCredentials({
+        metaAppId: "",
+        metaAppSecret: "",
+        metaWebhookVerifyToken: "",
+      });
+      setCustomAppCreds(res);
+      setCustomAppForm({ metaAppId: "", metaAppSecret: "", metaWebhookVerifyToken: "" });
+      setMessage("Custom Facebook App removed. Now using platform default Facebook App.");
+      setShowCustomAppModal(false);
+      await load();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to clear custom Facebook App");
+    } finally {
+      setSavingCustomApp(false);
+    }
+  };
+
+  const handleCopy = async (label: string, text?: string | null) => {
+    if (!text) return;
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopiedKey(label);
+      setTimeout(() => setCopiedKey(null), 2000);
+    } catch {}
+  };
+
+  const load = useCallback(async () => {
+    if (!key) return;
+    try {
+      const [d, proj] = await Promise.all([
+        getMarketingPlatform(key),
+        apiFetch<ProjectsListResponse>("/org/projects?page=1&limit=100").catch(
+          () => ({ data: [] as Project[] }),
+        ),
+      ]);
+      setDetail(d);
+      setProjects(proj.data ?? []);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to load platform");
+    }
+  }, [key]);
+
+  useEffect(() => {
+    void load();
+  }, [load]);
+
+  useEffect(() => {
+    if (search.get("meta") === "connected" || search.get("connected") === "1") {
+      if (key === "google_sheets") {
+        setMessage(
+          "Google Sheets & Drive connected! All incoming Super Admin Lead Management leads will automatically stream into your Google Sheet.",
+        );
+      } else if (key === "google_ads") {
+        setMessage(
+          "Google Ads connected. Account is stored; campaign metrics and lead forms are not synced yet.",
+        );
+      } else if (key === "whatsapp") {
+        setMessage(
+          "WhatsApp connected via Meta. Connection is ready; dedicated WhatsApp lead ingest is not live yet.",
+        );
+      } else if (key === "instagram") {
+        setMessage(
+          "Instagram connected via Meta. Lead ads are labelled Instagram in Super Admin Lead Management when Meta reports the placement; Lead Ads Testing Tool leads show as Facebook. Use Sync Now to import recent form leads.",
+        );
+      } else {
+        setMessage(
+          "Platform connected. New Facebook Lead Ads will appear in Super Admin Lead Management automatically. Use Sync Now to import recent form leads.",
+        );
+      }
+      void load();
+    }
+    if (
+      search.get("connected") === "0" ||
+      search.get("meta") === "error"
+    ) {
+      setError(search.get("message") || "Connection failed");
+    }
+    if (search.get("token") === "1") {
+      if (key === "meta" || key === "instagram" || key === "whatsapp") {
+        setShowManual(true);
+      }
+      if (key === "google_ads") {
+        setShowCred(true);
+      }
+    }
+  }, [search, load, key]);
+
+  const isMetaFamily =
+    key === "meta" || key === "instagram" || key === "whatsapp";
+  const isGoogleAds = key === "google_ads";
+  const isGoogleSheets = key === "google_sheets";
+
+  async function connectOAuth() {
+    if (!key) return;
+    setBusy(true);
+    setError("");
+    try {
+      const { url } = await getMarketingConnectUrl(key);
+      window.location.href = url;
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Connect failed");
+      setBusy(false);
+      setShowCred(true);
+    }
+  }
+
+  async function runSync(connectionId?: string) {
+    if (!key) return;
+    setBusy(true);
+    setError("");
+    setMessage("");
+    try {
+      if (connectionId) {
+        const result = await syncMarketingConnection(connectionId);
+        setMessage(
+          result.message ||
+            (isMetaFamily
+              ? "Lead subscription refreshed and recent form leads imported when available."
+              : isGoogleAds
+                ? "Connection verified. Campaign metrics are not synced yet."
+                : "Sync complete"),
+        );
+      } else {
+        const result = await syncMarketingPlatform(key);
+        if (!result.ok) {
+          setMessage(`Sync finished with ${result.failed} error(s)`);
+        } else if (isMetaFamily) {
+          const detailMsg = result.results?.find((r) => r.message)?.message;
+          setMessage(
+            detailMsg ||
+              `Synced ${result.synced} connection(s). Recent Lead Ad form submissions were imported into Super Admin Lead Management.`,
+          );
+        } else if (isGoogleAds) {
+          setMessage(
+            `Verified ${result.synced} connection(s). Google Ads metrics and lead forms are not synced yet.`,
+          );
+        } else {
+          setMessage(`Synced ${result.synced} connection(s)`);
+        }
+      }
+      await load();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Sync failed");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function saveAccountManual() {
+    if (!key) return;
+    setBusy(true);
+    setError("");
+    setAddAccountError("");
+    setMessage("");
+    try {
+      const accountId = (cred.externalAccountId || manual.pageId).trim();
+      const accountName = (cred.externalAccountName || manual.pageName || accountId).trim();
+      const token = (cred.accessToken || manual.accessToken).trim();
+      const projId = cred.projectId || manual.projectId || null;
+
+      if (!accountId || !token) {
+        throw new Error("Account ID and Access Token are required.");
+      }
+
+      if (key === "meta") {
+        const connected = await connectMetaWithToken({
+          pageId: accountId,
+          pageName: accountName,
+          accessToken: token,
+          projectId: projId,
+        });
+        const count = typeof connected.imported === "number" ? connected.imported : 0;
+        setMessage(
+          count > 0
+            ? `Facebook Page "${accountName}" connected! Imported ${count} recent lead(s).`
+            : `Facebook Page "${accountName}" connected successfully!`,
+        );
+      } else {
+        await connectMarketingCredentials(key, {
+          externalAccountId: accountId,
+          externalAccountName: accountName,
+          accessToken: token,
+          refreshToken: cred.refreshToken.trim() || undefined,
+          projectId: projId,
+        });
+        setMessage(`Account "${accountName}" connected successfully!`);
+      }
+
+      setCred({
+        externalAccountId: "",
+        externalAccountName: "",
+        accessToken: "",
+        refreshToken: "",
+        projectId: "",
+      });
+      setManual({
+        pageId: "",
+        pageName: "",
+        accessToken: "",
+        projectId: "",
+      });
+      setShowManual(false);
+      setShowCred(false);
+      setAddAccountError("");
+      setShowAddAccountModal(false);
+      await load();
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Failed to connect account";
+      setError(msg);
+      setAddAccountError(msg);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  const handleOpenEdit = (conn: MarketingConnection) => {
+    setEditingAccount(conn);
+    setEditName(conn.externalAccountName || "");
+    setEditProjectId(conn.projectId || "");
+    setError("");
+  };
+
+  const handleSaveEdit = async () => {
+    if (!editingAccount) return;
+    setSavingEdit(true);
+    setError("");
+    try {
+      await updateMarketingConnection(editingAccount.id, {
+        externalAccountName: editName.trim() || undefined,
+        projectId: editProjectId || null,
+      });
+      setMessage(`Updated account "${editName.trim() || editingAccount.externalAccountName}".`);
+      setEditingAccount(null);
+      await load();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to update account");
+    } finally {
+      setSavingEdit(false);
+    }
+  };
+
+  const handleOpenDisconnect = (conn: MarketingConnection) => {
+    setDisconnectingAccount(conn);
+  };
+
+  const handleConfirmDisconnect = async () => {
+    if (!disconnectingAccount) return;
+    setDisconnectingBusy(true);
+    setError("");
+    try {
+      if (key === "google_sheets") {
+        await disconnectOrgGoogleSheet(disconnectingAccount.id);
+      } else {
+        await disconnectMarketingConnection(disconnectingAccount.id);
+      }
+      setMessage(`Disconnected account "${disconnectingAccount.externalAccountName}".`);
+      setDisconnectingAccount(null);
+      await load();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to disconnect account");
+    } finally {
+      setDisconnectingBusy(false);
+    }
+  };
+
+  const handleCreateSheet = async () => {
+    setSheetBusy(true);
+    setError("");
+    try {
+      await createOrgGoogleSheet(
+        newSheetTitle.trim() || undefined,
+        activeSheetConnectionId || undefined,
+        newSheetProjectId || undefined,
+      );
+      setShowNewSheetModal(false);
+      setNewSheetTitle("");
+      setNewSheetProjectId("");
+      setMessage("New Google Sheet created in your Google Drive! Auto-sync is active.");
+      await load();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to create Google Sheet");
+    } finally {
+      setSheetBusy(false);
+    }
+  };
+
+  const handleLinkSheet = async () => {
+    if (!linkSheetInput.trim()) return;
+    setSheetBusy(true);
+    setError("");
+    try {
+      await linkOrgGoogleSheet(
+        linkSheetInput.trim(),
+        undefined,
+        activeSheetConnectionId || undefined,
+        linkSheetProjectId || undefined,
+      );
+      setShowLinkSheetModal(false);
+      setLinkSheetInput("");
+      setLinkSheetProjectId("");
+      setMessage("Google Sheet linked successfully! Auto-sync is active.");
+      await load();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to link Google Sheet");
+    } finally {
+      setSheetBusy(false);
+    }
+  };
+
+  const openAppsScriptModal = async (connId?: string) => {
+    setShowAppsScriptModal(true);
+    setLoadingAppsScript(true);
+    setError("");
+    try {
+      const cfg = await getGoogleSheetsAppsScriptConfig(connId);
+      setAppsScriptConfig(cfg);
+    } catch (err) {
+      setError(
+        err instanceof Error ? err.message : "Failed to load Apps Script config",
+      );
+    } finally {
+      setLoadingAppsScript(false);
+    }
+  };
+
+  const handleRegenerateWebhookToken = async (connId?: string) => {
+    if (
+      !confirm(
+        "Regenerating the webhook token will invalidate the previous Apps Script token. You will need to update Code.gs in Google Sheets. Continue?",
+      )
+    ) {
+      return;
+    }
+    setRegeneratingToken(true);
+    setError("");
+    try {
+      const updated = await regenerateGoogleSheetsWebhookToken(connId);
+      setAppsScriptConfig(updated);
+      setMessage(
+        "New webhook token generated! Copy the updated Apps Script code into your Google Sheet.",
+      );
+      await load();
+    } catch (err) {
+      setError(
+        err instanceof Error ? err.message : "Failed to regenerate token",
+      );
+    } finally {
+      setRegeneratingToken(false);
+    }
+  };
+
+  const handleResetSyncStats = async (connId?: string) => {
+    setResettingStats(true);
+    setError("");
+    try {
+      await resetGoogleSheetsSyncStats(connId);
+      if (appsScriptConfig) {
+        setAppsScriptConfig({
+          ...appsScriptConfig,
+          stats: {
+            recordsAdded: 0,
+            recordsUpdated: 0,
+            failedRecords: 0,
+            syncErrors: [],
+            lastSyncAt: appsScriptConfig.stats?.lastSyncAt || null,
+            lastError: null,
+            autoSync: appsScriptConfig.stats?.autoSync !== false,
+          },
+        });
+      }
+      setMessage("Google Sheets sync statistics reset successfully.");
+      await load();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to reset stats");
+    } finally {
+      setResettingStats(false);
+    }
+  };
+
+  const handleImportLeadsFromSheet = async (connId: string, projectId?: string | null) => {
+    setImportingFromSheetId(connId);
+    setError("");
+    setMessage("");
+    try {
+      const res = await importOrgGoogleSheetsLeads({
+        connectionId: connId,
+        projectId: projectId || undefined,
+      });
+      setMessage(res.message);
+      await load();
+    } catch (err) {
+      setError(
+        err instanceof Error ? err.message : "Failed to import leads from Google Sheet",
+      );
+    } finally {
+      setImportingFromSheetId(null);
+    }
+  };
+
+  const handleSyncAll = async (connectionId?: string) => {
+    setSyncingAllLeads(true);
+    setError("");
+    setMessage("");
+    try {
+      const res = await syncAllOrgGoogleSheetsLeads(
+        connectionId ? { connectionId } : undefined,
+      );
+      setMessage(res.message || `Successfully synced ${res.synced} lead(s) to Google Sheet!`);
+      await load();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Sync all leads failed");
+    } finally {
+      setSyncingAllLeads(false);
+    }
+  };
+
+  const handleToggleAutoSync = async (current: boolean, connectionId?: string) => {
+    setSheetBusy(true);
+    try {
+      await updateOrgGoogleSheetSettings({
+        autoSync: !current,
+        connectionId: connectionId || undefined,
+      });
+      setMessage(!current ? "Auto-sync enabled. New leads will stream to sheet." : "Auto-sync paused.");
+      await load();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to update auto-sync setting");
+    } finally {
+      setSheetBusy(false);
+    }
+  };
+
+  const handleToggleSheetPerProject = async (
+    field: "sheetPerProject" | "createSheetPerProject",
+    value: boolean,
+    connectionId?: string,
+  ) => {
+    setSheetBusy(true);
+    setError("");
+    try {
+      await updateOrgGoogleSheetSettings({
+        [field]: value,
+        connectionId: connectionId || undefined,
+      });
+      setMessage(
+        field === "sheetPerProject"
+          ? value
+            ? "Project-wise sheets enabled. Leads are routed per project."
+            : "Project-wise sheets disabled. All leads go to the default tab."
+          : value
+            ? "Project tabs will be created automatically in this spreadsheet."
+            : "Automatic project tab creation disabled.",
+      );
+      await load();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to update project sheet setting");
+    } finally {
+      setSheetBusy(false);
+    }
+  };
+
+  return (
+    <>
+      <div className="page-head">
+        <div>
+          <div className="eyebrow">
+            <Icon name="integrations" size={14} /> Connected Apps
+          </div>
+          <h1 style={{ display: "flex", alignItems: "center", gap: 12 }}>
+            {key ? <PlatformBrandIcon platformKey={key} size={36} /> : null}
+            {detail?.name ?? key}
+          </h1>
+          <div className="sub">{detail?.description}</div>
+        </div>
+        <div className="actions">
+          {key === "meta" ? (
+            <button
+              type="button"
+              className="btn btn-secondary"
+              onClick={() => void openCustomAppModal()}
+            >
+              <Icon name="key" size={14} /> Configure Facebook App
+            </button>
+          ) : null}
+          <button
+            type="button"
+            className="btn btn-primary"
+            onClick={() => {
+              if (key === "google_sheets") {
+                void connectOAuth();
+              } else {
+                setAddAccountError("");
+                setShowAddAccountModal(true);
+              }
+            }}
+          >
+            <Icon name="plus" size={14} /> Add Account
+          </button>
+          {(detail?.connections.length ?? 0) > 0 ? (
+            <button
+              type="button"
+              className="btn btn-secondary"
+              disabled={busy}
+              onClick={() => void runSync()}
+            >
+              {busy ? "Syncing…" : "Sync All"}
+            </button>
+          ) : null}
+          <Link className="btn btn-ghost" href="/admin-console/marketing/apps">
+            <Icon name="chevron-left" size={14} /> All apps
+          </Link>
+        </div>
+      </div>
+
+      {message ? (
+        <div className="badge b-green" style={{ marginBottom: 12 }}>
+          {message}
+        </div>
+      ) : null}
+      {error ? (
+        <div style={{ color: "#b91c1c", marginBottom: 12 }}>{error}</div>
+      ) : null}
+
+      <Reveal delay={1}>
+        <div className="card" style={{ marginBottom: 16 }}>
+          <div className="card-h">
+            <span className="t">
+              Connection Status
+              {(detail?.connections.length ?? 0) > 0
+                ? ` (${detail!.connections.length} ${
+                    detail!.connections.length === 1 ? "Account" : "Accounts"
+                  } Connected)`
+                : ""}
+            </span>
+            <span className="x">
+              {(detail?.connections.length ?? 0) > 0 ? (
+                <span className="badge b-green">
+                  {detail!.connections.length === 1
+                    ? "Connected"
+                    : `${detail!.connections.length} Accounts Active`}
+                </span>
+              ) : (
+                <span className="badge b-gray">Not connected</span>
+              )}
+            </span>
+          </div>
+          <div className="card-b">
+            {isMetaFamily ? (
+              <>
+                <p className="muted" style={{ marginTop: 0 }}>
+                  {key === "whatsapp"
+                    ? "Connect via Meta Page OAuth to store this connection. Dedicated WhatsApp lead ingest is not live yet — Facebook Lead Ads remain the production capture path."
+                    : key === "instagram"
+                      ? "Connect via Meta Page OAuth (same as Facebook). Lead ads are labelled Instagram in Super Admin Lead Management when Meta reports the placement; Lead Ads Testing Tool leads show as Facebook. Sync Now imports recent form leads."
+                      : "Connect a Facebook Page so Lead Ad form submissions flow into Super Admin Lead Management in realtime. Sync Now re-subscribes the Page and imports recent form leads so you can see them in Super Admin Lead Management."}
+                </p>
+                {key === "meta" && detail?.metaConfig && !detail.metaConfig.configured ? (
+                  <div
+                    style={{
+                      background: "#fffbeb",
+                      border: "1px solid #fde68a",
+                      borderRadius: 10,
+                      padding: "12px 16px",
+                      marginBottom: 14,
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "space-between",
+                      gap: 10,
+                      flexWrap: "wrap",
+                    }}
+                  >
+                    <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                      <Icon name="alert" size={18} style={{ color: "#d97706", flexShrink: 0 }} />
+                      <span style={{ fontSize: 13, color: "#92400e", fontWeight: 500 }}>
+                        Facebook integration has not been enabled yet. You can connect your organization's own Facebook App or ask a Superadmin to enable platform defaults.
+                      </span>
+                    </div>
+                    <button
+                      type="button"
+                      className="btn btn-secondary btn-xs"
+                      onClick={() => void openCustomAppModal()}
+                    >
+                      <Icon name="key" size={12} /> Configure Facebook App
+                    </button>
+                  </div>
+                ) : key === "meta" && detail?.metaConfig?.configured ? (
+                  <div
+                    style={{
+                      background: detail.metaConfig.isCustomApp ? "#f5f3ff" : "#f0fdf4",
+                      border: `1px solid ${detail.metaConfig.isCustomApp ? "#ddd6fe" : "#bbf7d0"}`,
+                      borderRadius: 10,
+                      padding: "10px 14px",
+                      marginBottom: 14,
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "space-between",
+                      gap: 8,
+                      fontSize: 12.5,
+                      color: detail.metaConfig.isCustomApp ? "#6b21a8" : "#166534",
+                      flexWrap: "wrap",
+                    }}
+                  >
+                    <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                      <Icon name={detail.metaConfig.isCustomApp ? "key" : "check"} size={14} style={{ verticalAlign: -2 }} />
+                      <span>
+                        {detail.metaConfig.isCustomApp
+                          ? `Organization Custom Facebook App active (App ID: ${detail.metaConfig.appId || "configured"})`
+                          : "Platform default Facebook App active"}
+                      </span>
+                    </div>
+                    <button
+                      type="button"
+                      className="btn btn-ghost btn-xs"
+                      style={{ fontSize: 11, padding: "2px 8px" }}
+                      onClick={() => void openCustomAppModal()}
+                    >
+                      <Icon name="settings" size={11} /> {detail.metaConfig.isCustomApp ? "Edit App Settings" : "Use Custom App"}
+                    </button>
+                  </div>
+                ) : key !== "meta" && !detail?.oauthConfigured ? (
+                  <div
+                    style={{
+                      background: "#fffbeb",
+                      border: "1px solid #fde68a",
+                      borderRadius: 10,
+                      padding: "12px 16px",
+                      marginBottom: 14,
+                      display: "flex",
+                      alignItems: "center",
+                      gap: 10,
+                    }}
+                  >
+                    <Icon name="alert" size={18} style={{ color: "#d97706", flexShrink: 0 }} />
+                    <span style={{ fontSize: 13, color: "#92400e", fontWeight: 500 }}>
+                      {key === "instagram" ? "Instagram" : "WhatsApp"} integration credentials have not been configured by the Super Administrator yet.
+                    </span>
+                  </div>
+                ) : key !== "meta" && detail?.oauthConfigured ? (
+                  <div
+                    style={{
+                      background: "#f0fdf4",
+                      border: "1px solid #bbf7d0",
+                      borderRadius: 10,
+                      padding: "8px 14px",
+                      marginBottom: 14,
+                      display: "flex",
+                      alignItems: "center",
+                      gap: 8,
+                      fontSize: 12.5,
+                      color: "#166534",
+                    }}
+                  >
+                    <Icon name="check" size={14} style={{ verticalAlign: -2 }} />
+                    <span>{key === "instagram" ? "Instagram" : "WhatsApp"} integration is enabled</span>
+                  </div>
+                ) : null}
+                <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                  <button
+                    type="button"
+                    className="btn btn-primary btn-sm"
+                    disabled={
+                      busy ||
+                      (key === "meta"
+                        ? !detail?.metaConfig?.configured
+                        : !detail?.oauthConfigured)
+                    }
+                    onClick={() => void connectOAuth()}
+                  >
+                    {key === "instagram"
+                      ? "Connect with Instagram (Meta)"
+                      : key === "whatsapp"
+                        ? "Connect via Meta"
+                        : "Connect with Facebook"}
+                  </button>
+                  <button
+                    type="button"
+                    className="btn btn-ghost btn-sm"
+                    onClick={() => setShowManual((v) => !v)}
+                  >
+                    {showManual ? "Hide token form" : "Connect with Page token"}
+                  </button>
+                </div>
+                {showManual ? (
+                  <div className={formPageStyles.page} style={{ marginTop: 14 }}>
+                    <div className="field">
+                      <label>Page ID</label>
+                      <input
+                        className="inp"
+                        value={manual.pageId}
+                        onChange={(e) =>
+                          setManual((m) => ({ ...m, pageId: e.target.value }))
+                        }
+                      />
+                    </div>
+                    <div className="field">
+                      <label>Page name</label>
+                      <input
+                        className="inp"
+                        value={manual.pageName}
+                        onChange={(e) =>
+                          setManual((m) => ({ ...m, pageName: e.target.value }))
+                        }
+                      />
+                    </div>
+                    <div className="field">
+                      <label>Page access token</label>
+                      <div style={{ display: "flex", gap: 6 }}>
+                        <input
+                          className="inp inp-mono"
+                          type={showManualToken ? "text" : "password"}
+                          placeholder="EAA..."
+                          value={manual.accessToken}
+                          onChange={(e) =>
+                            setManual((m) => ({
+                              ...m,
+                              accessToken: e.target.value,
+                            }))
+                          }
+                        />
+                        <button
+                          type="button"
+                          className="btn btn-ghost btn-sm"
+                          onClick={() => setShowManualToken((v) => !v)}
+                          title={showManualToken ? "Hide token" : "Show token"}
+                        >
+                          <Icon name={showManualToken ? "eye-off" : "eye"} size={14} />
+                        </button>
+                      </div>
+                    </div>
+                    <div className="field">
+                      <label>Default project (optional)</label>
+                      <select
+                        className="inp"
+                        value={manual.projectId}
+                        onChange={(e) =>
+                          setManual((m) => ({
+                            ...m,
+                            projectId: e.target.value,
+                          }))
+                        }
+                      >
+                        <option value="">No project mapping</option>
+                        {projects.map((p) => (
+                          <option key={p.id} value={p.id}>
+                            {p.name}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                    <button
+                      type="button"
+                      className="btn btn-primary btn-sm"
+                      disabled={
+                        busy ||
+                        !manual.pageId.trim() ||
+                        !manual.accessToken.trim()
+                      }
+                      onClick={() => void saveAccountManual()}
+                    >
+                      Save
+                    </button>
+                  </div>
+                ) : null}
+              </>
+            ) : isGoogleAds ? (
+              <>
+                <p className="muted" style={{ marginTop: 0 }}>
+                  Connect Google Ads via OAuth when Super Admin has configured
+                  credentials, or paste a customer ID and access token below.
+                  Connection is stored today; campaign metrics and Google lead
+                  forms are not synced yet.
+                </p>
+                {!detail?.oauthConfigured && !detail?.configured ? (
+                  <div
+                    style={{
+                      background: "#fffbeb",
+                      border: "1px solid #fde68a",
+                      borderRadius: 10,
+                      padding: "12px 16px",
+                      marginBottom: 14,
+                      display: "flex",
+                      alignItems: "center",
+                      gap: 10,
+                    }}
+                  >
+                    <Icon name="alert" size={18} style={{ color: "#d97706", flexShrink: 0 }} />
+                    <span style={{ fontSize: 13, color: "#92400e", fontWeight: 500 }}>
+                      Google Ads OAuth has not been configured by the Super Administrator yet. Please contact your platform administrator to configure Google OAuth credentials in the Superadmin Console.
+                    </span>
+                  </div>
+                ) : detail?.oauthConfigured ? (
+                  <div
+                    style={{
+                      background: "#f0fdf4",
+                      border: "1px solid #bbf7d0",
+                      borderRadius: 10,
+                      padding: "8px 14px",
+                      marginBottom: 14,
+                      display: "flex",
+                      alignItems: "center",
+                      gap: 8,
+                      fontSize: 12.5,
+                      color: "#166534",
+                    }}
+                  >
+                    <Icon name="check" size={14} style={{ verticalAlign: -2 }} />
+                    <span>Google Ads platform OAuth is enabled</span>
+                  </div>
+                ) : null}
+                <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                  <button
+                    type="button"
+                    className="btn btn-primary btn-sm"
+                    disabled={busy || !detail?.oauthConfigured}
+                    onClick={() => void connectOAuth()}
+                  >
+                    Connect with Google
+                  </button>
+                  <button
+                    type="button"
+                    className="btn btn-ghost btn-sm"
+                    onClick={() => setShowCred((v) => !v)}
+                  >
+                    {showCred ? "Hide token form" : "Connect with access token"}
+                  </button>
+                </div>
+              </>
+            ) : isGoogleSheets ? (
+              <>
+                <p className="muted" style={{ marginTop: 0 }}>
+                  Bidirectional Google Sheets Integration: Automatically stream incoming CRM leads into your Google Sheet (Export),
+                  or import leads directly from any Google Sheet into Super Admin Lead Management attributed to your chosen project (Import).
+                </p>
+                {!detail?.oauthConfigured && !detail?.configured ? (
+                  <div
+                    style={{
+                      background: "#fffbeb",
+                      border: "1px solid #fde68a",
+                      borderRadius: 10,
+                      padding: "12px 16px",
+                      marginBottom: 14,
+                      display: "flex",
+                      alignItems: "center",
+                      gap: 10,
+                    }}
+                  >
+                    <Icon name="alert" size={18} style={{ color: "#d97706", flexShrink: 0 }} />
+                    <span style={{ fontSize: 13, color: "#92400e", fontWeight: 500 }}>
+                      Google Cloud OAuth has not been configured by the Super Administrator yet. Please contact your platform administrator to configure Google credentials in the Superadmin Console.
+                    </span>
+                  </div>
+                ) : null}
+
+                {(detail?.connections.length ?? 0) === 0 ? (
+                  <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 10 }}>
+                    <button
+                      type="button"
+                      className="btn btn-primary btn-sm"
+                      disabled={busy || (!detail?.oauthConfigured && !detail?.configured)}
+                      onClick={() => void connectOAuth()}
+                    >
+                      <Icon name="link" size={13} /> Connect with Google (Sheets &amp; Drive)
+                    </button>
+                  </div>
+                ) : (
+                  <div>
+                    {detail!.connections.map((c) => {
+                      const meta = (c.metadata as any) ?? {};
+                      const autoSync = meta.autoSync !== false;
+                      const sheetUrl =
+                        meta.spreadsheetUrl ||
+                        (meta.spreadsheetId
+                          ? `https://docs.google.com/spreadsheets/d/${meta.spreadsheetId}/edit`
+                          : null);
+
+                      return (
+                        <div
+                          key={c.id}
+                          style={{
+                            background: "#f0fdf4",
+                            border: "1px solid #bbf7d0",
+                            borderRadius: 12,
+                            padding: "16px 18px",
+                            display: "flex",
+                            flexDirection: "column",
+                            gap: 12,
+                          }}
+                        >
+                          <div
+                            style={{
+                              display: "flex",
+                              justifyContent: "space-between",
+                              alignItems: "center",
+                              flexWrap: "wrap",
+                              gap: 10,
+                            }}
+                          >
+                            <div>
+                              <div
+                                style={{
+                                  fontSize: 14,
+                                  fontWeight: 700,
+                                  color: "#166534",
+                                  display: "flex",
+                                  alignItems: "center",
+                                  gap: 8,
+                                  flexWrap: "wrap",
+                                }}
+                              >
+                                <Icon name="check" size={16} />
+                                Google Drive Connected
+                                {meta.googleEmail ? (
+                                  <span
+                                    style={{
+                                      fontWeight: 400,
+                                      color: "#15803d",
+                                      fontSize: 13,
+                                    }}
+                                  >
+                                    ({meta.googleEmail})
+                                  </span>
+                                ) : null}
+                              </div>
+                              <div
+                                className="muted"
+                                style={{ fontSize: 12.5, marginTop: 2 }}
+                              >
+                                Sheet Tab: <b>{meta.sheetName || "Leads"}</b>{" "}
+                                &bull; Realtime Sync:{" "}
+                                <span
+                                  style={{
+                                    color: autoSync ? "#15803d" : "#64748b",
+                                    fontWeight: 600,
+                                  }}
+                                >
+                                  {autoSync ? "Active" : "Paused"}
+                                </span>
+                                {meta.sheetPerProject ? (
+                                  <>
+                                    {" "}
+                                    &bull; Project-wise Tabs:{" "}
+                                    <span
+                                      style={{
+                                        color: "#0f766e",
+                                        fontWeight: 600,
+                                      }}
+                                    >
+                                      {meta.createSheetPerProject
+                                        ? "Auto-create"
+                                        : "On"}
+                                    </span>
+                                  </>
+                                ) : null}
+                                {c.projectId ? (
+                                  <span
+                                    className="muted"
+                                    style={{ display: "block", marginTop: 2 }}
+                                  >
+                                    Project: <b>{c.project?.name || c.projectId}</b>
+                                  </span>
+                                ) : null}
+                              </div>
+
+                              {/* Live Sync Metrics Ribbon */}
+                              <div
+                                style={{
+                                  display: "flex",
+                                  flexWrap: "wrap",
+                                  alignItems: "center",
+                                  gap: 12,
+                                  marginTop: 8,
+                                  fontSize: 12,
+                                  background: "#f8fafc",
+                                  border: "1px solid #e2e8f0",
+                                  borderRadius: 6,
+                                  padding: "5px 10px",
+                                }}
+                              >
+                                <span>
+                                  📥 <b>Added:</b>{" "}
+                                  <span style={{ color: "#15803d", fontWeight: 700 }}>
+                                    {meta.recordsAdded ?? 0}
+                                  </span>
+                                </span>
+                                <span>
+                                  🔄 <b>Updated:</b>{" "}
+                                  <span style={{ color: "#0284c7", fontWeight: 700 }}>
+                                    {meta.recordsUpdated ?? 0}
+                                  </span>
+                                </span>
+                                <span>
+                                  ⚠️ <b>Failed:</b>{" "}
+                                  <span
+                                    style={{
+                                      color:
+                                        (meta.failedRecords ?? 0) > 0
+                                          ? "#dc2626"
+                                          : "#64748b",
+                                      fontWeight: 700,
+                                    }}
+                                  >
+                                    {meta.failedRecords ?? 0}
+                                  </span>
+                                </span>
+                                <span
+                                  className="muted"
+                                  style={{ marginLeft: "auto", fontSize: 11.5 }}
+                                >
+                                  ⏱️ Last Sync:{" "}
+                                  <b>
+                                    {c.lastSyncAt
+                                      ? new Date(c.lastSyncAt).toLocaleString()
+                                      : meta.lastSyncAt
+                                        ? new Date(meta.lastSyncAt).toLocaleString()
+                                        : "Never"}
+                                  </b>
+                                </span>
+                              </div>
+
+                              {/* Error / Warning Callout */}
+                              {((meta.failedRecords ?? 0) > 0 || c.lastError) ? (
+                                <div
+                                  style={{
+                                    marginTop: 6,
+                                    padding: "6px 10px",
+                                    borderRadius: 6,
+                                    background: "#fef2f2",
+                                    border: "1px solid #fecaca",
+                                    color: "#991b1b",
+                                    fontSize: 11.5,
+                                    display: "flex",
+                                    justifyContent: "space-between",
+                                    alignItems: "center",
+                                  }}
+                                >
+                                  <span>
+                                    ⚠️ <b>Sync Note:</b>{" "}
+                                    {c.lastError ||
+                                      `${meta.failedRecords} row(s) encountered sync issues.`}
+                                  </span>
+                                  <button
+                                    type="button"
+                                    className="btn btn-ghost btn-xs"
+                                    style={{
+                                      color: "#991b1b",
+                                      fontSize: 11,
+                                      padding: "2px 6px",
+                                    }}
+                                    onClick={() => void openAppsScriptModal(c.id)}
+                                  >
+                                    View Script / Retry &rarr;
+                                  </button>
+                                </div>
+                              ) : null}
+                            </div>
+                            <div
+                              style={{
+                                display: "flex",
+                                gap: 8,
+                                flexWrap: "wrap",
+                              }}
+                            >
+                              {sheetUrl ? (
+                                <a
+                                  href={sheetUrl}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="btn btn-primary btn-sm"
+                                  style={{ textDecoration: "none" }}
+                                >
+                                  <Icon name="link" size={13} /> Open in Google
+                                  Sheets ↗
+                                </a>
+                              ) : null}
+                              <button
+                                type="button"
+                                className="btn btn-secondary btn-sm"
+                                disabled={syncingAllLeads || sheetBusy}
+                                onClick={() => void handleSyncAll(c.id)}
+                              >
+                                <Icon
+                                  name="refresh"
+                                  size={13}
+                                />
+                                {syncingAllLeads
+                                  ? "Syncing…"
+                                  : "Export All Leads to Sheet"}
+                              </button>
+                              <button
+                                type="button"
+                                className="btn btn-primary btn-sm"
+                                style={{
+                                  background: "#2563eb",
+                                  borderColor: "#2563eb",
+                                }}
+                                disabled={importingFromSheetId === c.id || sheetBusy}
+                                onClick={() => void handleImportLeadsFromSheet(c.id, c.projectId)}
+                              >
+                                <Icon name="download" size={13} />
+                                {importingFromSheetId === c.id
+                                  ? "Importing Leads…"
+                                  : "Import Leads from Sheet"}
+                              </button>
+                              <button
+                                type="button"
+                                className="btn btn-primary btn-sm"
+                                style={{
+                                  background: "#059669",
+                                  borderColor: "#059669",
+                                }}
+                                onClick={() => void openAppsScriptModal(c.id)}
+                              >
+                                <Icon name="integrations" size={13} /> Apps Script Auto-Sync
+                              </button>
+                            </div>
+                          </div>
+
+                          <div
+                            style={{
+                              borderTop: "1px solid #dcfce7",
+                              paddingTop: 10,
+                              display: "flex",
+                              gap: 8,
+                              flexWrap: "wrap",
+                              alignItems: "center",
+                            }}
+                          >
+                            <button
+                              type="button"
+                              className="btn btn-ghost btn-sm"
+                              disabled={sheetBusy}
+                              onClick={() => void handleToggleAutoSync(autoSync, c.id)}
+                            >
+                              <Icon
+                                name={autoSync ? "alert" : "check"}
+                                size={13}
+                              />
+                              {autoSync
+                                ? "Pause Realtime Auto-Sync"
+                                : "Enable Realtime Auto-Sync"}
+                            </button>
+                            <button
+                              type="button"
+                              className="btn btn-ghost btn-sm"
+                              disabled={sheetBusy}
+                              onClick={() =>
+                                void handleToggleSheetPerProject(
+                                  "sheetPerProject",
+                                  !meta.sheetPerProject,
+                                  c.id,
+                                )
+                              }
+                            >
+                              <Icon
+                                name={meta.sheetPerProject ? "check" : "alert"}
+                                size={13}
+                              />
+                              {meta.sheetPerProject
+                                ? "Project-wise: On"
+                                : "Project-wise: Off"}
+                            </button>
+                            {meta.sheetPerProject ? (
+                              <button
+                                type="button"
+                                className="btn btn-ghost btn-sm"
+                                disabled={sheetBusy}
+                                onClick={() =>
+                                  void handleToggleSheetPerProject(
+                                    "createSheetPerProject",
+                                    !meta.createSheetPerProject,
+                                    c.id,
+                                  )
+                                }
+                              >
+                                <Icon name="modules" size={13} />
+                                {meta.createSheetPerProject
+                                  ? "Auto-create tabs: On"
+                                  : "Auto-create tabs: Off"}
+                              </button>
+                            ) : null}
+                            <button
+                              type="button"
+                              className="btn btn-ghost btn-sm"
+                              onClick={() => {
+                                setActiveSheetConnectionId(c.id);
+                                setNewSheetProjectId(c.projectId || "");
+                                setShowNewSheetModal(true);
+                              }}
+                            >
+                              <Icon name="modules" size={13} /> Create New Sheet
+                              in Drive
+                            </button>
+                            <button
+                              type="button"
+                              className="btn btn-ghost btn-sm"
+                              onClick={() => {
+                                setActiveSheetConnectionId(c.id);
+                                setLinkSheetProjectId(c.projectId || "");
+                                setShowLinkSheetModal(true);
+                              }}
+                            >
+                              <Icon name="link" size={13} /> Link Another Sheet
+                            </button>
+                            <button
+                              type="button"
+                              className="btn btn-ghost btn-sm"
+                              title="Re-authenticate Google Account"
+                              onClick={() => void connectOAuth()}
+                            >
+                              <Icon name="refresh" size={13} /> Reconnect
+                            </button>
+                            <button
+                              type="button"
+                              className="btn btn-ghost btn-sm"
+                              style={{ color: "#b91c1c" }}
+                              onClick={() =>
+                                void disconnectOrgGoogleSheet(c.id).then(() =>
+                                  load(),
+                                )
+                              }
+                            >
+                              <Icon name="trash" size={13} /> Disconnect
+                            </button>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  <div
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "space-between",
+                      flexWrap: "wrap",
+                      gap: 10,
+                      marginTop: 14,
+                      paddingTop: 14,
+                      borderTop: "1px dashed #bbf7d0",
+                    }}
+                  >
+                    <span className="muted" style={{ fontSize: 12.5 }}>
+                      You can connect multiple Google accounts. New leads stream to
+                      every connected sheet that is eligible (based on auto-sync and
+                      project filters).
+                    </span>
+                    <button
+                      type="button"
+                      className="btn btn-primary btn-sm"
+                      disabled={busy}
+                      onClick={() => void connectOAuth()}
+                    >
+                      <Icon name="link" size={13} /> Connect another Google account
+                    </button>
+                  </div>
+                  </div>
+                )}
+              </>
+            ) : (
+              <p className="muted" style={{ marginTop: 0 }}>
+                This platform is not available.
+              </p>
+            )}
+
+            {showCred && isGoogleAds ? (
+              <div className={formPageStyles.page} style={{ marginTop: 14 }}>
+                <div className="field">
+                  <label>Account / Customer ID</label>
+                  <input
+                    className="inp"
+                    value={cred.externalAccountId}
+                    onChange={(e) =>
+                      setCred((c) => ({
+                        ...c,
+                        externalAccountId: e.target.value,
+                      }))
+                    }
+                  />
+                </div>
+                <div className="field">
+                  <label>Account name</label>
+                  <input
+                    className="inp"
+                    value={cred.externalAccountName}
+                    onChange={(e) =>
+                      setCred((c) => ({
+                        ...c,
+                        externalAccountName: e.target.value,
+                      }))
+                    }
+                  />
+                </div>
+                <div className="field">
+                  <label>Access token</label>
+                  <div style={{ display: "flex", gap: 6 }}>
+                    <input
+                      className="inp inp-mono"
+                      type={showCredToken ? "text" : "password"}
+                      value={cred.accessToken}
+                      onChange={(e) =>
+                        setCred((c) => ({ ...c, accessToken: e.target.value }))
+                      }
+                    />
+                    <button
+                      type="button"
+                      className="btn btn-ghost btn-sm"
+                      onClick={() => setShowCredToken((v) => !v)}
+                      title={showCredToken ? "Hide token" : "Show token"}
+                    >
+                      <Icon name={showCredToken ? "eye-off" : "eye"} size={14} />
+                    </button>
+                  </div>
+                </div>
+                <div className="field">
+                  <label>Refresh token (optional)</label>
+                  <div style={{ display: "flex", gap: 6 }}>
+                    <input
+                      className="inp inp-mono"
+                      type={showRefreshToken ? "text" : "password"}
+                      value={cred.refreshToken}
+                      onChange={(e) =>
+                        setCred((c) => ({ ...c, refreshToken: e.target.value }))
+                      }
+                    />
+                    <button
+                      type="button"
+                      className="btn btn-ghost btn-sm"
+                      onClick={() => setShowRefreshToken((v) => !v)}
+                      title={showRefreshToken ? "Hide token" : "Show token"}
+                    >
+                      <Icon name={showRefreshToken ? "eye-off" : "eye"} size={14} />
+                    </button>
+                  </div>
+                </div>
+                <div className="field">
+                  <label>Default project</label>
+                  <select
+                    className="inp"
+                    value={cred.projectId}
+                    onChange={(e) =>
+                      setCred((c) => ({ ...c, projectId: e.target.value }))
+                    }
+                  >
+                    <option value="">Unassigned</option>
+                    {projects.map((p) => (
+                      <option key={p.id} value={p.id}>
+                        {p.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <button
+                  type="button"
+                  className="btn btn-primary btn-sm"
+                  disabled={
+                    busy ||
+                    !cred.externalAccountId.trim() ||
+                    !cred.accessToken.trim()
+                  }
+                  onClick={() => void saveAccountManual()}
+                >
+                  Save connection
+                </button>
+              </div>
+            ) : null}
+          </div>
+        </div>
+      </Reveal>
+
+      {(detail?.connections.length ?? 0) > 0 && !isGoogleSheets ? (
+        <Reveal delay={2}>
+          <div className="card">
+            <div
+              className="card-h"
+              style={{
+                display: "flex",
+                justifyContent: "space-between",
+                alignItems: "center",
+                flexWrap: "wrap",
+                gap: 10,
+              }}
+            >
+              <span className="t">
+                Connected Accounts ({detail!.connections.length})
+              </span>
+              <button
+                type="button"
+                className="btn btn-primary btn-sm"
+                onClick={() => {
+                  if (key === "google_sheets") {
+                    void connectOAuth();
+                  } else {
+                    setShowAddAccountModal(true);
+                  }
+                }}
+              >
+                <Icon name="plus" size={13} /> Add Another Account
+              </button>
+            </div>
+            <div className="card-b" style={{ padding: 0 }}>
+              <div className="tbl-wrap">
+                <table className="tbl">
+                  <thead>
+                    <tr>
+                      <th>Account Name</th>
+                      <th>Account ID / Handle</th>
+                      <th>Assigned Project</th>
+                      <th>Status</th>
+                      <th>Last Sync</th>
+                      <th style={{ textAlign: "right" }}>Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {detail!.connections.map((c) => (
+                      <tr key={c.id}>
+                        <td>
+                          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                            <b>{c.externalAccountName}</b>
+                            <button
+                              type="button"
+                              className="btn btn-ghost btn-sm"
+                              style={{ padding: "2px 6px", height: "auto", fontSize: 11 }}
+                              onClick={() => handleOpenEdit(c)}
+                              title="Rename account"
+                            >
+                              <Icon name="edit" size={12} /> Rename
+                            </button>
+                          </div>
+                        </td>
+                        <td>
+                          <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                            <span
+                              className="mono"
+                              style={{
+                                fontSize: 12,
+                                background: "#f1f5f9",
+                                padding: "2px 6px",
+                                borderRadius: 4,
+                              }}
+                            >
+                              {c.externalAccountId}
+                            </span>
+                            <button
+                              type="button"
+                              className="btn btn-ghost btn-sm"
+                              style={{ padding: "2px 4px", height: "auto" }}
+                              onClick={() => void handleCopy(c.id, c.externalAccountId)}
+                              title="Copy ID"
+                            >
+                              <Icon
+                                name={copiedKey === c.id ? "check" : "copy"}
+                                size={12}
+                              />
+                            </button>
+                          </div>
+                        </td>
+                        <td>
+                          <select
+                            className="inp"
+                            style={{ minWidth: 150 }}
+                            value={c.projectId ?? ""}
+                            onChange={(e) =>
+                              void updateMarketingConnection(c.id, {
+                                projectId: e.target.value || null,
+                              }).then(() => load())
+                            }
+                          >
+                            <option value="">Unassigned (All Projects)</option>
+                            {projects.map((p) => (
+                              <option key={p.id} value={p.id}>
+                                {p.name}
+                              </option>
+                            ))}
+                          </select>
+                        </td>
+                        <td>
+                          {c.status === "error" || c.lastError ? (
+                            <span
+                              className="badge b-rose"
+                              title={c.lastError || "Error"}
+                            >
+                              Error
+                            </span>
+                          ) : (
+                            <span className="badge b-green">Active</span>
+                          )}
+                        </td>
+                        <td className="muted" style={{ fontSize: 12 }}>
+                          {c.lastSyncAt
+                            ? new Date(c.lastSyncAt).toLocaleString()
+                            : "—"}
+                        </td>
+                        <td>
+                          <div
+                            style={{
+                              display: "flex",
+                              gap: 6,
+                              justifyContent: "flex-end",
+                            }}
+                          >
+                            <button
+                              type="button"
+                              className="btn btn-ghost btn-sm"
+                              disabled={busy}
+                              onClick={() => void runSync(c.id)}
+                              title="Sync this account"
+                            >
+                              <Icon name="refresh" size={12} /> Sync
+                            </button>
+                            <button
+                              type="button"
+                              className="btn btn-ghost btn-sm"
+                              style={{ color: "#b91c1c" }}
+                              onClick={() => handleOpenDisconnect(c)}
+                              title="Disconnect this account"
+                            >
+                              <Icon name="trash" size={12} /> Disconnect
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        </Reveal>
+      ) : null}
+
+      {key === "meta" ? (
+        <div style={{ marginTop: 18 }}>
+          <MetaLeadAdsCard />
+        </div>
+      ) : null}
+
+
+
+      {/* Create New Sheet Modal */}
+      <Modal
+        open={showNewSheetModal}
+        onClose={() => setShowNewSheetModal(false)}
+        title="Create New Google Sheet in Drive"
+        description="A new spreadsheet will be created inside your connected Google Drive account and formatted with Super Admin Lead Management columns."
+      >
+        <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+          <div className="field">
+            <label style={{ fontWeight: 600, fontSize: 13 }}>Spreadsheet Title</label>
+            <input
+              className="inp"
+              placeholder="e.g. My Organization - Leads 2026"
+              value={newSheetTitle}
+              onChange={(e) => setNewSheetTitle(e.target.value)}
+            />
+            <span className="hint">
+              Leave blank to automatically use &ldquo;[Your Organization] - Leads&rdquo;.
+            </span>
+          </div>
+
+          <div className="field">
+            <label style={{ fontWeight: 600, fontSize: 13 }}>Target Project (Optional)</label>
+            <select
+              className="inp"
+              value={newSheetProjectId}
+              onChange={(e) => setNewSheetProjectId(e.target.value)}
+            >
+              <option value="">All Projects (Organisation-wide)</option>
+              {projects.map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.name}
+                </option>
+              ))}
+            </select>
+            <span className="hint">
+              If selected, only leads belonging to this project will stream to this spreadsheet.
+            </span>
+          </div>
+
+          <ModalActions>
+            <button
+              type="button"
+              className="btn btn-ghost btn-sm"
+              disabled={sheetBusy}
+              onClick={() => setShowNewSheetModal(false)}
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              className="btn btn-primary btn-sm"
+              disabled={sheetBusy}
+              onClick={() => void handleCreateSheet()}
+            >
+              <Icon name={sheetBusy ? "refresh" : "modules"} size={13} />
+              {sheetBusy ? "Creating in Drive…" : "Create Spreadsheet"}
+            </button>
+          </ModalActions>
+        </div>
+      </Modal>
+
+      {/* Link Existing Sheet Modal */}
+      <Modal
+        open={showLinkSheetModal}
+        onClose={() => setShowLinkSheetModal(false)}
+        title="Link Existing Google Sheet"
+        description="Paste either the full URL or the Spreadsheet ID of any existing Google Sheet that your connected Google account has access to edit."
+      >
+        <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+          <div className="field">
+            <label style={{ fontWeight: 600, fontSize: 13 }}>Google Sheet URL or ID</label>
+            <input
+              className="inp inp-mono"
+              placeholder="https://docs.google.com/spreadsheets/d/1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgvE2upms/edit or ID"
+              value={linkSheetInput}
+              onChange={(e) => setLinkSheetInput(e.target.value)}
+            />
+            <span className="hint">
+              Make sure the connected Google account has &ldquo;Editor&rdquo; permissions on this sheet.
+            </span>
+          </div>
+
+          <div className="field">
+            <label style={{ fontWeight: 600, fontSize: 13 }}>Target Project (Optional)</label>
+            <select
+              className="inp"
+              value={linkSheetProjectId}
+              onChange={(e) => setLinkSheetProjectId(e.target.value)}
+            >
+              <option value="">All Projects (Organisation-wide)</option>
+              {projects.map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.name}
+                </option>
+              ))}
+            </select>
+            <span className="hint">
+              If selected, only leads belonging to this project will stream to this sheet.
+            </span>
+          </div>
+
+          <ModalActions>
+            <button
+              type="button"
+              className="btn btn-ghost btn-sm"
+              disabled={sheetBusy}
+              onClick={() => setShowLinkSheetModal(false)}
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              className="btn btn-primary btn-sm"
+              disabled={sheetBusy || !linkSheetInput.trim()}
+              onClick={() => void handleLinkSheet()}
+            >
+              <Icon name={sheetBusy ? "refresh" : "link"} size={13} />
+              {sheetBusy ? "Linking…" : "Link Spreadsheet"}
+            </button>
+          </ModalActions>
+        </div>
+      </Modal>
+
+      {/* Add Account Modal */}
+      <Modal
+        open={showAddAccountModal}
+        onClose={() => {
+          setShowAddAccountModal(false);
+          setAddAccountError("");
+        }}
+        title={`Connect ${detail?.name ?? "Account"}`}
+        description={`Add another account for this organization. Leads captured will be routed based on your settings.`}
+        size="md"
+      >
+        <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+          {addAccountError ? (
+            <div
+              style={{
+                background: "#fef2f2",
+                border: "1px solid #fecaca",
+                color: "#991b1b",
+                padding: "10px 14px",
+                borderRadius: 8,
+                fontSize: 13,
+                display: "flex",
+                alignItems: "flex-start",
+                gap: 8,
+                lineHeight: 1.4,
+              }}
+            >
+              <Icon name="alert" size={16} style={{ flexShrink: 0, marginTop: 2, color: "#dc2626" }} />
+              <div>
+                <strong>Failed to connect:</strong> {addAccountError}
+              </div>
+            </div>
+          ) : null}
+
+          <div style={{ display: "flex", gap: 8, borderBottom: "1px solid #e2e8f0", paddingBottom: 10 }}>
+            {detail?.supportsOAuth ? (
+              <button
+                type="button"
+                className={`btn btn-sm ${addAccountMode === "oauth" ? "btn-primary" : "btn-ghost"}`}
+                onClick={() => setAddAccountMode("oauth")}
+              >
+                OAuth Connect
+              </button>
+            ) : null}
+            <button
+              type="button"
+              className={`btn btn-sm ${addAccountMode === "manual" ? "btn-primary" : "btn-ghost"}`}
+              onClick={() => setAddAccountMode("manual")}
+            >
+              Access Token / Credentials
+            </button>
+          </div>
+
+          {addAccountMode === "oauth" && detail?.supportsOAuth ? (
+            <div style={{ display: "flex", flexDirection: "column", gap: 12, padding: "8px 0" }}>
+              <p className="muted" style={{ margin: 0, fontSize: 13 }}>
+                {key === "meta"
+                  ? detail?.metaConfig?.isCustomApp
+                    ? "Authorize another Facebook Page using your organization's custom Facebook Developer App. You will be redirected to Facebook to choose your Page."
+                    : "Authorize another Facebook Page using platform OAuth. You will be redirected to Facebook to choose your Page."
+                  : "Click below to authorize another account via OAuth. You will be redirected to complete authorization."}
+              </p>
+              <button
+                type="button"
+                className="btn btn-primary"
+                disabled={busy}
+                onClick={() => void connectOAuth()}
+              >
+                {key === "google_ads"
+                  ? "Connect another Google Ads Account"
+                  : key === "instagram"
+                    ? "Connect another Instagram Account (Meta)"
+                    : key === "whatsapp"
+                      ? "Connect another WhatsApp Account (Meta)"
+                      : "Connect another Facebook Page"}
+              </button>
+            </div>
+          ) : (
+            <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+              <div className="field">
+                <label style={{ fontWeight: 600, fontSize: 12.5 }}>
+                  {key === "instagram"
+                    ? "Instagram Account ID or Handle (@username)"
+                    : key === "whatsapp"
+                      ? "WhatsApp Phone Number ID or WABA ID"
+                      : key === "google_ads"
+                        ? "Google Ads Customer ID (e.g. 123-456-7890)"
+                        : key === "meta"
+                          ? "Facebook Page ID"
+                          : "Account ID"}
+                </label>
+                <input
+                  className="inp inp-mono"
+                  placeholder={
+                    key === "instagram"
+                      ? "e.g. @ipixxel_realty or 17841400..."
+                      : key === "whatsapp"
+                        ? "e.g. 109827364510293 or +91 98765 43210"
+                        : key === "google_ads"
+                          ? "e.g. 123-456-7890"
+                          : "e.g. 109283746592019"
+                  }
+                  value={cred.externalAccountId}
+                  onChange={(e) =>
+                    setCred((c) => ({ ...c, externalAccountId: e.target.value }))
+                  }
+                />
+              </div>
+
+              <div className="field">
+                <label style={{ fontWeight: 600, fontSize: 12.5 }}>
+                  {key === "instagram"
+                    ? "Account Display Name / Handle"
+                    : key === "whatsapp"
+                      ? "Hotline / Team Label"
+                      : key === "google_ads"
+                        ? "Campaign Portfolio / Account Name"
+                        : key === "meta"
+                          ? "Facebook Page Name"
+                          : "Account Name"}
+                </label>
+                <input
+                  className="inp"
+                  placeholder="e.g. Downtown Properties Account"
+                  value={cred.externalAccountName}
+                  onChange={(e) =>
+                    setCred((c) => ({ ...c, externalAccountName: e.target.value }))
+                  }
+                />
+              </div>
+
+              <div className="field">
+                <label style={{ fontWeight: 600, fontSize: 12.5 }}>
+                  {key === "whatsapp"
+                    ? "WhatsApp System User Token"
+                    : key === "google_ads"
+                      ? "Google Ads Access Token"
+                      : "Access Token"}
+                </label>
+                <div style={{ display: "flex", gap: 6 }}>
+                  <input
+                    className="inp inp-mono"
+                    type={showCredToken ? "text" : "password"}
+                    placeholder="Token string..."
+                    value={cred.accessToken}
+                    onChange={(e) =>
+                      setCred((c) => ({ ...c, accessToken: e.target.value }))
+                    }
+                  />
+                  <button
+                    type="button"
+                    className="btn btn-ghost btn-sm"
+                    onClick={() => setShowCredToken((v) => !v)}
+                  >
+                    <Icon name={showCredToken ? "eye-off" : "eye"} size={14} />
+                  </button>
+                </div>
+              </div>
+
+              {key === "google_ads" ? (
+                <div className="field">
+                  <label style={{ fontWeight: 600, fontSize: 12.5 }}>
+                    Refresh Token (optional)
+                  </label>
+                  <input
+                    className="inp inp-mono"
+                    placeholder="Refresh token..."
+                    value={cred.refreshToken}
+                    onChange={(e) =>
+                      setCred((c) => ({ ...c, refreshToken: e.target.value }))
+                    }
+                  />
+                </div>
+              ) : null}
+
+              <div className="field">
+                <label style={{ fontWeight: 600, fontSize: 12.5 }}>
+                  Assign to Project (optional)
+                </label>
+                <select
+                  className="inp"
+                  value={cred.projectId}
+                  onChange={(e) =>
+                    setCred((c) => ({ ...c, projectId: e.target.value }))
+                  }
+                >
+                  <option value="">Unassigned (All Projects)</option>
+                  {projects.map((p) => (
+                    <option key={p.id} value={p.id}>
+                      {p.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <ModalActions>
+                <button
+                  type="button"
+                  className="btn btn-ghost"
+                  onClick={() => setShowAddAccountModal(false)}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  className="btn btn-primary"
+                  disabled={busy || !cred.externalAccountId.trim() || !cred.accessToken.trim()}
+                  onClick={() => void saveAccountManual()}
+                >
+                  {busy ? "Saving…" : "Save Account"}
+                </button>
+              </ModalActions>
+            </div>
+          )}
+        </div>
+      </Modal>
+
+      {/* Edit Account Modal */}
+      <Modal
+        open={Boolean(editingAccount)}
+        onClose={() => setEditingAccount(null)}
+        title="Edit Account Details"
+        description="Update the display label and default project routing for this account."
+        size="md"
+      >
+        {editingAccount ? (
+          <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+            <div className="field">
+              <label style={{ fontWeight: 600, fontSize: 12.5 }}>Account Identifier</label>
+              <input
+                className="inp inp-mono"
+                disabled
+                value={editingAccount.externalAccountId}
+              />
+            </div>
+            <div className="field">
+              <label style={{ fontWeight: 600, fontSize: 12.5 }}>Account Display Name</label>
+              <input
+                className="inp"
+                value={editName}
+                onChange={(e) => setEditName(e.target.value)}
+                placeholder="Account display name"
+              />
+            </div>
+            <div className="field">
+              <label style={{ fontWeight: 600, fontSize: 12.5 }}>Default Project Assignment</label>
+              <select
+                className="inp"
+                value={editProjectId}
+                onChange={(e) => setEditProjectId(e.target.value)}
+              >
+                <option value="">Unassigned (All Projects)</option>
+                {projects.map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {p.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <ModalActions>
+              <button
+                type="button"
+                className="btn btn-ghost"
+                onClick={() => setEditingAccount(null)}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                className="btn btn-primary"
+                disabled={savingEdit}
+                onClick={() => void handleSaveEdit()}
+              >
+                {savingEdit ? "Saving…" : "Save Changes"}
+              </button>
+            </ModalActions>
+          </div>
+        ) : null}
+      </Modal>
+
+      {/* Disconnect Account Confirmation Modal */}
+      <Modal
+        open={Boolean(disconnectingAccount)}
+        onClose={() => setDisconnectingAccount(null)}
+        title="Disconnect Account"
+        description="Are you sure you want to disconnect this account?"
+        size="md"
+      >
+        {disconnectingAccount ? (
+          <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+            <p style={{ margin: 0, fontSize: 13.5, color: "#334155" }}>
+              Disconnecting <b>{disconnectingAccount.externalAccountName}</b> (
+              <code style={{ fontSize: 12 }}>{disconnectingAccount.externalAccountId}</code>) will stop automatic lead streaming and campaign attribution for this account.
+            </p>
+            <ModalActions>
+              <button
+                type="button"
+                className="btn btn-ghost"
+                disabled={disconnectingBusy}
+                onClick={() => setDisconnectingAccount(null)}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                className="btn btn-primary"
+                style={{ background: "#dc2626", borderColor: "#dc2626" }}
+                disabled={disconnectingBusy}
+                onClick={() => void handleConfirmDisconnect()}
+              >
+                {disconnectingBusy ? "Disconnecting…" : "Disconnect Account"}
+              </button>
+            </ModalActions>
+          </div>
+        ) : null}
+      </Modal>
+
+      {/* Google Sheets Apps Script Real-Time Auto-Sync Modal */}
+      <Modal
+        open={showAppsScriptModal}
+        onClose={() => setShowAppsScriptModal(false)}
+        title="Google Sheets Apps Script Real-Time Auto-Sync"
+        description="Install this Google Apps Script in your spreadsheet to sync new leads and sheet edits to CRM in near real time. Changes to mapped cells, including clearing a value, are applied to the lead; deleting a sheet row does not delete its CRM lead."
+        size="lg"
+      >
+        <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+          {loadingAppsScript ? (
+            <div className="muted" style={{ padding: "24px 0", textAlign: "center" }}>
+              Generating secure Apps Script code…
+            </div>
+          ) : appsScriptConfig ? (
+            <>
+              {/* Live Sync Metrics Ribbon */}
+              <div
+                style={{
+                  display: "grid",
+                  gridTemplateColumns: "repeat(auto-fit, minmax(130px, 1fr))",
+                  gap: 10,
+                  background: "#f8fafc",
+                  border: "1px solid #e2e8f0",
+                  borderRadius: 10,
+                  padding: "12px 14px",
+                }}
+              >
+                <div>
+                  <div style={{ fontSize: 11, color: "#64748b", fontWeight: 600 }}>RECORDS ADDED</div>
+                  <div style={{ fontSize: 18, fontWeight: 800, color: "#16a34a" }}>
+                    {appsScriptConfig.stats?.recordsAdded ?? 0}
+                  </div>
+                </div>
+                <div>
+                  <div style={{ fontSize: 11, color: "#64748b", fontWeight: 600 }}>RECORDS UPDATED</div>
+                  <div style={{ fontSize: 18, fontWeight: 800, color: "#0284c7" }}>
+                    {appsScriptConfig.stats?.recordsUpdated ?? 0}
+                  </div>
+                </div>
+                <div>
+                  <div style={{ fontSize: 11, color: "#64748b", fontWeight: 600 }}>FAILED RECORDS</div>
+                  <div
+                    style={{
+                      fontSize: 18,
+                      fontWeight: 800,
+                      color:
+                        (appsScriptConfig.stats?.failedRecords ?? 0) > 0
+                          ? "#dc2626"
+                          : "#64748b",
+                    }}
+                  >
+                    {appsScriptConfig.stats?.failedRecords ?? 0}
+                  </div>
+                </div>
+                <div>
+                  <div style={{ fontSize: 11, color: "#64748b", fontWeight: 600 }}>LAST SYNC</div>
+                  <div style={{ fontSize: 12, fontWeight: 700, color: "#334155", marginTop: 2 }}>
+                    {appsScriptConfig.stats?.lastSyncAt
+                      ? new Date(appsScriptConfig.stats.lastSyncAt).toLocaleString()
+                      : "Pending first sync"}
+                  </div>
+                </div>
+              </div>
+
+              {/* Sync Errors Box (if any) */}
+              {((appsScriptConfig.stats?.failedRecords ?? 0) > 0 ||
+                (appsScriptConfig.stats?.syncErrors && appsScriptConfig.stats.syncErrors.length > 0)) ? (
+                <div
+                  style={{
+                    background: "#fef2f2",
+                    border: "1px solid #fecaca",
+                    borderRadius: 8,
+                    padding: "10px 14px",
+                    color: "#991b1b",
+                    fontSize: 12,
+                  }}
+                >
+                  <div
+                    style={{
+                      display: "flex",
+                      justifyContent: "space-between",
+                      alignItems: "center",
+                      marginBottom: 6,
+                    }}
+                  >
+                    <span style={{ fontWeight: 700 }}>⚠️ Recent Sync Errors & Issues</span>
+                    <button
+                      type="button"
+                      className="btn btn-ghost btn-xs"
+                      style={{ color: "#991b1b" }}
+                      disabled={resettingStats}
+                      onClick={() => void handleResetSyncStats(appsScriptConfig.connectionId)}
+                    >
+                      {resettingStats ? "Resetting…" : "Reset Stats"}
+                    </button>
+                  </div>
+                  <ul style={{ margin: 0, paddingLeft: 16 }}>
+                    {(appsScriptConfig.stats?.syncErrors || []).slice(0, 5).map((err, idx) => (
+                      <li key={idx} style={{ marginBottom: 3 }}>
+                        {err}
+                      </li>
+                    ))}
+                  </ul>
+                  <div className="muted" style={{ fontSize: 11, color: "#b91c1c", marginTop: 4 }}>
+                    Tip: In your Google Sheet, click <b>⚡ Super Admin Lead Management CRM &rarr; Retry Failed Rows</b> to reprocess.
+                  </div>
+                </div>
+              ) : null}
+
+              {/* Quick Setup Steps */}
+              <div
+                style={{
+                  background: "#f0fdf4",
+                  border: "1px solid #bbf7d0",
+                  borderRadius: 10,
+                  padding: "14px 16px",
+                  fontSize: 13,
+                  color: "#166534",
+                }}
+              >
+                <div style={{ fontWeight: 700, marginBottom: 8, fontSize: 13.5 }}>
+                  🚀 3-Minute Quick Setup Guide
+                </div>
+                <ol style={{ margin: 0, paddingLeft: 20, display: "flex", flexDirection: "column", gap: 6 }}>
+                  <li>
+                    Open your Google Sheet, then in the top menu click <b>Extensions &rarr; Apps Script</b>.
+                  </li>
+                  <li>
+                    Select and delete all existing code inside <code>Code.gs</code>, then paste the script below.
+                  </li>
+                  <li>
+                    Click <b>Save (💾)</b>. In the function dropdown, select <code>initialSetup</code> and click <b>Run</b> (grant permissions once).
+                  </li>
+                  <li>
+                    Refresh your Google Sheet. A new <b>⚡ Super Admin Lead Management CRM</b> menu will appear! Edits to mapped cells will update the matching CRM lead automatically, including cleared values. Deleting a row does not delete the CRM lead.
+                  </li>
+                </ol>
+              </div>
+
+              {/* Webhook Endpoint Info */}
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+                <div className="field">
+                  <label style={{ fontSize: 12, fontWeight: 600 }}>Webhook URL</label>
+                  <div style={{ display: "flex", gap: 6 }}>
+                    <input
+                      className="inp inp-mono"
+                      readOnly
+                      style={{ fontSize: 11.5 }}
+                      value={appsScriptConfig.webhookUrl}
+                    />
+                    <button
+                      type="button"
+                      className="btn btn-ghost btn-sm"
+                      onClick={() => void handleCopy("apps_webhook_url", appsScriptConfig.webhookUrl)}
+                      title="Copy Webhook URL"
+                    >
+                      <Icon name={copiedKey === "apps_webhook_url" ? "check" : "copy"} size={13} />
+                    </button>
+                  </div>
+                </div>
+
+                <div className="field">
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                    <label style={{ fontSize: 12, fontWeight: 600 }}>Webhook Token</label>
+                    <button
+                      type="button"
+                      className="btn btn-ghost btn-xs"
+                      disabled={regeneratingToken}
+                      style={{ fontSize: 11, padding: "1px 6px" }}
+                      onClick={() => void handleRegenerateWebhookToken(appsScriptConfig.connectionId)}
+                      title="Regenerate secure token and update script code"
+                    >
+                      <Icon name="refresh" size={11} /> {regeneratingToken ? "Regenerating…" : "Regenerate Token"}
+                    </button>
+                  </div>
+                  <div style={{ display: "flex", gap: 6 }}>
+                    <input
+                      className="inp inp-mono"
+                      readOnly
+                      style={{ fontSize: 11.5 }}
+                      value={appsScriptConfig.webhookSecret}
+                    />
+                    <button
+                      type="button"
+                      className="btn btn-ghost btn-sm"
+                      onClick={() => void handleCopy("apps_webhook_token", appsScriptConfig.webhookSecret)}
+                      title="Copy Webhook Token"
+                    >
+                      <Icon name={copiedKey === "apps_webhook_token" ? "check" : "copy"} size={13} />
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              {/* Script Code with Copy Button */}
+              <div>
+                <div
+                  style={{
+                    display: "flex",
+                    justifyContent: "space-between",
+                    alignItems: "center",
+                    marginBottom: 6,
+                  }}
+                >
+                  <label style={{ fontSize: 12.5, fontWeight: 700, color: "#334155" }}>
+                    Apps Script Code (Code.gs)
+                  </label>
+                  <button
+                    type="button"
+                    className="btn btn-primary btn-sm"
+                    onClick={() => void handleCopy("apps_script_code", appsScriptConfig.appsScriptCode)}
+                  >
+                    <Icon name={copiedKey === "apps_script_code" ? "check" : "copy"} size={13} />
+                    {copiedKey === "apps_script_code" ? "Copied!" : "Copy Full Script"}
+                  </button>
+                </div>
+                <textarea
+                  className="inp inp-mono"
+                  readOnly
+                  rows={14}
+                  style={{
+                    width: "100%",
+                    fontSize: 11.5,
+                    background: "#0f172a",
+                    color: "#f8fafc",
+                    lineHeight: 1.5,
+                    resize: "vertical",
+                  }}
+                  value={appsScriptConfig.appsScriptCode}
+                />
+              </div>
+
+              <ModalActions>
+                <button
+                  type="button"
+                  className="btn btn-ghost btn-sm"
+                  onClick={() => setShowAppsScriptModal(false)}
+                >
+                  Close
+                </button>
+                <button
+                  type="button"
+                  className="btn btn-primary btn-sm"
+                  onClick={() => void handleCopy("apps_script_code_btn", appsScriptConfig.appsScriptCode)}
+                >
+                  <Icon name={copiedKey === "apps_script_code_btn" ? "check" : "copy"} size={13} />
+                  {copiedKey === "apps_script_code_btn" ? "Copied Code!" : "Copy Code to Clipboard"}
+                </button>
+              </ModalActions>
+            </>
+          ) : null}
+        </div>
+      </Modal>
+
+      {/* Organization Custom Facebook App Modal */}
+      <Modal
+        open={showCustomAppModal}
+        onClose={() => setShowCustomAppModal(false)}
+        title="Configure Organization Facebook App"
+        description="Connect your organization's dedicated Meta Developer App to route OAuth dialogs, manage lead retrieval, and capture webhooks independently from platform defaults."
+        size="lg"
+      >
+        <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+          {loadingCustomApp ? (
+            <div className="muted" style={{ padding: 24, textAlign: "center" }}>
+              Loading app configuration…
+            </div>
+          ) : (
+            <>
+              {customAppCreds?.isCustomApp ? (
+                <div
+                  style={{
+                    background: "#f5f3ff",
+                    border: "1px solid #ddd6fe",
+                    borderRadius: 10,
+                    padding: "10px 14px",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "space-between",
+                    gap: 10,
+                  }}
+                >
+                  <div style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12.5, color: "#6b21a8" }}>
+                    <Icon name="key" size={16} />
+                    <span><b>Custom Facebook App is active</b> for your organization.</span>
+                  </div>
+                  <button
+                    type="button"
+                    className="btn btn-ghost btn-xs"
+                    disabled={savingCustomApp}
+                    style={{ color: "#b91c1c" }}
+                    onClick={() => void handleClearCustomApp()}
+                  >
+                    Reset to Platform Default
+                  </button>
+                </div>
+              ) : (
+                <div
+                  style={{
+                    background: "#f8fafc",
+                    border: "1px solid #e2e8f0",
+                    borderRadius: 10,
+                    padding: "10px 14px",
+                    fontSize: 12.5,
+                    color: "#475569",
+                  }}
+                >
+                  Currently using the <b>Platform Default Facebook App</b>. Enter your Meta Developer App details below to isolate your organization's Facebook login dialogs and lead capture under your own app branding.
+                </div>
+              )}
+
+              {/* Form Inputs */}
+              <div className="field">
+                <label style={{ fontWeight: 600, fontSize: 12.5 }}>Meta App ID</label>
+                <input
+                  className="inp inp-mono"
+                  placeholder="e.g. 1598273645102938"
+                  value={customAppForm.metaAppId}
+                  onChange={(e) =>
+                    setCustomAppForm((f) => ({ ...f, metaAppId: e.target.value }))
+                  }
+                />
+                <span className="hint" style={{ fontSize: 11.5, color: "#64748b" }}>
+                  Find this in your Meta App Dashboard under App settings &gt; Basic.
+                </span>
+              </div>
+
+              <div className="field">
+                <label style={{ fontWeight: 600, fontSize: 12.5 }}>
+                  Meta App Secret {customAppCreds?.hasAppSecret ? "(Configured - leave blank to keep existing secret)" : ""}
+                </label>
+                <div style={{ display: "flex", gap: 6 }}>
+                  <input
+                    className="inp inp-mono"
+                    type={showCustomAppSecret ? "text" : "password"}
+                    placeholder={customAppCreds?.hasAppSecret ? "••••••••••••••••••••••••••••••••" : "Paste your App Secret..."}
+                    value={customAppForm.metaAppSecret}
+                    onChange={(e) =>
+                      setCustomAppForm((f) => ({ ...f, metaAppSecret: e.target.value }))
+                    }
+                  />
+                  <button
+                    type="button"
+                    className="btn btn-ghost btn-sm"
+                    onClick={() => setShowCustomAppSecret((v) => !v)}
+                  >
+                    <Icon name={showCustomAppSecret ? "eye-off" : "eye"} size={14} />
+                  </button>
+                </div>
+              </div>
+
+              <div className="field">
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                  <label style={{ fontWeight: 600, fontSize: 12.5 }}>Meta Webhook Verify Token</label>
+                  <button
+                    type="button"
+                    className="btn btn-ghost btn-xs"
+                    style={{ fontSize: 11, padding: "1px 6px" }}
+                    onClick={() => {
+                      const randomToken = "ipixxel_meta_" + Math.random().toString(36).slice(2, 12) + "_" + Date.now().toString(36);
+                      setCustomAppForm((f) => ({ ...f, metaWebhookVerifyToken: randomToken }));
+                    }}
+                  >
+                    <Icon name="refresh" size={11} /> Generate Token
+                  </button>
+                </div>
+                <div style={{ display: "flex", gap: 6 }}>
+                  <input
+                    className="inp inp-mono"
+                    placeholder="Verify token for Meta webhook subscription..."
+                    value={customAppForm.metaWebhookVerifyToken}
+                    onChange={(e) =>
+                      setCustomAppForm((f) => ({ ...f, metaWebhookVerifyToken: e.target.value }))
+                    }
+                  />
+                  <button
+                    type="button"
+                    className="btn btn-ghost btn-sm"
+                    onClick={() => void handleCopy("custom_verify_token", customAppForm.metaWebhookVerifyToken)}
+                    title="Copy Verify Token"
+                  >
+                    <Icon name={copiedKey === "custom_verify_token" ? "check" : "copy"} size={13} />
+                  </button>
+                </div>
+              </div>
+
+              {/* Developer Portal Endpoints to Copy */}
+              <div style={{ background: "#f8fafc", border: "1px solid #e2e8f0", borderRadius: 10, padding: 14 }}>
+                <div style={{ fontWeight: 600, fontSize: 12.5, color: "#0f172a", marginBottom: 10 }}>
+                  Required Meta Developer App Settings
+                </div>
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 12 }}>
+                  <div className="field" style={{ margin: 0 }}>
+                    <label style={{ fontSize: 11.5, fontWeight: 600 }}>OAuth Valid Redirect URI</label>
+                    <div style={{ display: "flex", gap: 6 }}>
+                      <input
+                        className="inp inp-mono"
+                        readOnly
+                        style={{ fontSize: 11 }}
+                        value={customAppCreds?.oauthRedirectUri || ""}
+                      />
+                      <button
+                        type="button"
+                        className="btn btn-ghost btn-sm"
+                        onClick={() => void handleCopy("oauth_redirect_uri", customAppCreds?.oauthRedirectUri)}
+                      >
+                        <Icon name={copiedKey === "oauth_redirect_uri" ? "check" : "copy"} size={13} />
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="field" style={{ margin: 0 }}>
+                    <label style={{ fontSize: 11.5, fontWeight: 600 }}>Webhook Callback URL</label>
+                    <div style={{ display: "flex", gap: 6 }}>
+                      <input
+                        className="inp inp-mono"
+                        readOnly
+                        style={{ fontSize: 11 }}
+                        value={customAppCreds?.webhookCallbackUrl || ""}
+                      />
+                      <button
+                        type="button"
+                        className="btn btn-ghost btn-sm"
+                        onClick={() => void handleCopy("webhook_callback_url", customAppCreds?.webhookCallbackUrl)}
+                      >
+                        <Icon name={copiedKey === "webhook_callback_url" ? "check" : "copy"} size={13} />
+                      </button>
+                    </div>
+                  </div>
+                </div>
+
+                <div style={{ fontSize: 11.5, color: "#64748b", lineHeight: 1.5 }}>
+                  • <b>App Product:</b> Add <b>Facebook Login for Business</b> and paste the <i>OAuth Valid Redirect URI</i>.<br />
+                  • <b>Webhooks:</b> Subscribe to <b>Page</b> object with field <b>leadgen</b>, and paste the <i>Callback URL</i> and <i>Verify Token</i>.<br />
+                  • <b>Permissions:</b> Ensure your app has access to <code>pages_show_list</code>, <code>pages_read_engagement</code>, <code>pages_manage_metadata</code>, <code>leads_retrieval</code>, and <code>pages_manage_ads</code>.
+                </div>
+              </div>
+
+              <ModalActions>
+                <button
+                  type="button"
+                  className="btn btn-ghost"
+                  onClick={() => setShowCustomAppModal(false)}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  className="btn btn-primary"
+                  disabled={savingCustomApp || !customAppForm.metaAppId.trim()}
+                  onClick={() => void handleSaveCustomApp()}
+                >
+                  {savingCustomApp ? "Saving…" : "Save App Credentials"}
+                </button>
+              </ModalActions>
+            </>
+          )}
+        </div>
+      </Modal>
+    </>
+  );
+}
+
+export default function OrgMarketingPlatformPage() {
+  return (
+    <Suspense fallback={<div className="muted">Loading…</div>}>
+      <PlatformDetailInner />
+    </Suspense>
+  );
+}

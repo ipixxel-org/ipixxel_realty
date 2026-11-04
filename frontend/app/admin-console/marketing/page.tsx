@@ -373,6 +373,15 @@ export default function SuperAdminMarketingPage() {
             Configure the 4 core ad platforms (Meta, Instagram, WhatsApp, and Google Ads),
             manage OAuth credentials, and inspect real-time webhook telemetry.
           </div>
+          <div style={{ display: "flex", gap: 10, marginTop: 14, flexWrap: "wrap" }}>
+            <Link
+              href="/admin-console/marketing/apps"
+              className="btn btn-primary"
+              style={{ display: "inline-flex", alignItems: "center", gap: 6, fontWeight: 700 }}
+            >
+              <Icon name="integrations" size={15} /> Connect Super Admin Social Media →
+            </Link>
+          </div>
         </div>
 
         {/* 4-Platform Orbital Showcase */}
