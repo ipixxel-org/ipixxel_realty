@@ -603,13 +603,19 @@ export class AdminLeadsService {
   ) {
     const lead = await this.prisma.lead.findUnique({
       where: { id },
-      select: { id: true, orgId: true, status: true },
+      select: { id: true, orgId: true, status: true, data: true },
     });
     if (!lead) throw new NotFoundException('Lead not found');
 
     const previous = normalizeStatus(lead.status);
     const next = normalizeStatus(dto.status);
     const remark = dto.remark?.trim();
+
+    if (previous === 'converted' && next !== 'converted') {
+      throw new BadRequestException(
+        'Lead status cannot be changed once converted.',
+      );
+    }
 
     if (previous === next && !remark) {
       return this.getById(id);

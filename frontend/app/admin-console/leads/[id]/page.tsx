@@ -96,6 +96,7 @@ export default function AdminLeadDetailPage() {
   const phone = lead ? leadDisplayPhone(lead) : "";
   const email = lead ? leadDisplayEmail(lead) : "";
   const source = lead ? leadDisplaySource(lead) : "";
+  const isConverted = lead ? lead.status === "converted" || Boolean(lead.convertedOrg) : false;
 
   const capturedFields = lead?.data
     ? Object.entries(lead.data)
@@ -141,8 +142,8 @@ export default function AdminLeadDetailPage() {
         }
       }
 
-      // 1. Status update (carries remark if changed)
-      if (isStatusChanged) {
+      // 1. Status update (carries remark if changed) - only allowed if not already converted
+      if (isStatusChanged && !isConverted) {
         await updateAdminLeadStatus(lead.id, {
           status: statusDraft,
           remark: hasRemark ? remark.trim() : undefined,
@@ -481,12 +482,30 @@ export default function AdminLeadDetailPage() {
               <div className="card-b" style={{ display: "flex", flexDirection: "column", gap: 14 }}>
                 {/* 1. Status Dropdown */}
                 <div className="field">
-                  <label htmlFor="lead-status" style={{ fontWeight: 600 }}>Pipeline stage</label>
+                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 4 }}>
+                    <label htmlFor="lead-status" style={{ fontWeight: 600 }}>Pipeline stage</label>
+                    {isConverted ? (
+                      <span style={{ fontSize: 11.5, color: "#16a34a", fontWeight: 600 }}>
+                        Locked (Converted)
+                      </span>
+                    ) : null}
+                  </div>
                   <select
                     id="lead-status"
                     className="inp"
                     value={statusDraft}
                     onChange={(e) => setStatusDraft(e.target.value as AdminLeadStatus)}
+                    disabled={isConverted}
+                    style={
+                      isConverted
+                        ? {
+                            background: "#f8fafc",
+                            color: "#64748b",
+                            cursor: "not-allowed",
+                            opacity: 0.9,
+                          }
+                        : undefined
+                    }
                   >
                     {ADMIN_LEAD_STATUS_ORDER.map((status) => (
                       <option key={status} value={status}>
@@ -494,6 +513,11 @@ export default function AdminLeadDetailPage() {
                       </option>
                     ))}
                   </select>
+                  {isConverted ? (
+                    <div style={{ fontSize: 11.5, color: "#64748b", marginTop: 4 }}>
+                      This lead has reached the terminal converted stage and cannot be changed.
+                    </div>
+                  ) : null}
                 </div>
 
                 {/* 2. Add Remark / Note */}
