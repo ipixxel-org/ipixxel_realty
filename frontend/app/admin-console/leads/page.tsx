@@ -67,7 +67,6 @@ export default function AdminLeadsPage() {
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<"" | AdminLeadStatus>("");
   const [formFilter, setFormFilter] = useState("");
-  const [sourceFilter, setSourceFilter] = useState("");
   const [sortBy, setSortBy] = useState("createdAt");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
   const [convertModalLead, setConvertModalLead] = useState<AdminLead | null>(null);
@@ -106,7 +105,6 @@ export default function AdminLeadsPage() {
         search: search || undefined,
         status: statusFilter || undefined,
         formName: formFilter || undefined,
-        source: sourceFilter || undefined,
         sortBy: sortBy as "createdAt" | "status" | "source" | "formName",
         sortDir,
       });
@@ -124,7 +122,6 @@ export default function AdminLeadsPage() {
     search,
     statusFilter,
     formFilter,
-    sourceFilter,
     sortBy,
     sortDir,
   ]);
@@ -299,22 +296,6 @@ export default function AdminLeadsPage() {
             </select>
             <select
               className="inp"
-              style={{ width: "auto", minWidth: 140 }}
-              value={sourceFilter}
-              onChange={(e) => {
-                setSourceFilter(e.target.value);
-                setPage(1);
-              }}
-            >
-              <option value="">All sources</option>
-              {(meta?.sources ?? []).map((s) => (
-                <option key={s} value={s}>
-                  {s}
-                </option>
-              ))}
-            </select>
-            <select
-              className="inp"
               style={{ width: "auto", minWidth: 150 }}
               value={`${sortBy}:${sortDir}`}
               onChange={(e) => {
@@ -330,7 +311,7 @@ export default function AdminLeadsPage() {
               <option value="source:asc">Source A–Z</option>
               <option value="formName:asc">Form A–Z</option>
             </select>
-            {(search || statusFilter || formFilter || sourceFilter) ? (
+            {(search || statusFilter || formFilter) ? (
               <button
                 type="button"
                 className="btn btn-ghost btn-sm"
@@ -339,7 +320,6 @@ export default function AdminLeadsPage() {
                   setSearch("");
                   setStatusFilter("");
                   setFormFilter("");
-                  setSourceFilter("");
                   setPage(1);
                 }}
               >
