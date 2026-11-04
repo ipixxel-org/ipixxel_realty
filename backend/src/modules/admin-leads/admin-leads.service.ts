@@ -308,12 +308,14 @@ export class AdminLeadsService {
               convertedAt: rawData.convertedAt ? String(rawData.convertedAt) : null,
             }
           : null;
-        const data =
-          lead.data &&
-          typeof lead.data === 'object' &&
-          !Array.isArray(lead.data)
-            ? normalizeLeadData(lead.data)
-            : lead.data;
+        const cleanData = rawData ? { ...rawData } : {};
+        delete cleanData.convertedOrgId;
+        delete cleanData.convertedOrgName;
+        delete cleanData.convertedAt;
+        delete cleanData.convertedUserId;
+        delete cleanData.landing_page_url;
+        delete cleanData.landingPageUrl;
+        const data = normalizeLeadData(cleanData);
         const org = orgById.get(lead.orgId) ?? null;
         const status = normalizeStatus(lead.status);
         return {
@@ -499,10 +501,14 @@ export class AdminLeadsService {
           convertedAt: rawData.convertedAt ? String(rawData.convertedAt) : null,
         }
       : null;
-    const data =
-      lead.data && typeof lead.data === 'object' && !Array.isArray(lead.data)
-        ? normalizeLeadData(lead.data)
-        : lead.data;
+    const cleanData = rawData ? { ...rawData } : {};
+    delete cleanData.convertedOrgId;
+    delete cleanData.convertedOrgName;
+    delete cleanData.convertedAt;
+    delete cleanData.convertedUserId;
+    delete cleanData.landing_page_url;
+    delete cleanData.landingPageUrl;
+    const data = normalizeLeadData(cleanData);
 
     return {
       id: lead.id,

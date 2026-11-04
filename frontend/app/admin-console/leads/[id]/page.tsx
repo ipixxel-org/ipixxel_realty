@@ -98,9 +98,21 @@ export default function AdminLeadDetailPage() {
   const source = lead ? leadDisplaySource(lead) : "";
   const isConverted = lead ? lead.status === "converted" || Boolean(lead.convertedOrg) : false;
 
+  const INTERNAL_KEYS = new Set([
+    "unitId",
+    "convertedOrgId",
+    "convertedOrgName",
+    "convertedAt",
+    "convertedUserId",
+    "landing_page_url",
+    "landingPageUrl",
+    "projectId",
+    "orgId",
+  ]);
+
   const capturedFields = lead?.data
     ? Object.entries(lead.data)
-        .filter(([key]) => !["unitId"].includes(key))
+        .filter(([key]) => !INTERNAL_KEYS.has(key))
         .map(([key, value]) => ({ key, value }))
     : [];
 
@@ -535,7 +547,8 @@ export default function AdminLeadDetailPage() {
                 </div>
 
                 {/* 3. Follow-up Section */}
-                <div style={{ borderTop: "1px solid #f1f5f9", paddingTop: 14 }}>
+                {!isConverted ? (
+                  <div style={{ borderTop: "1px solid #f1f5f9", paddingTop: 14 }}>
                   <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
                     <span style={{ fontSize: 13, fontWeight: 700, color: "#1e293b", display: "flex", alignItems: "center", gap: 6 }}>
                       <Icon name="calendar" size={14} /> Follow-up schedule
@@ -591,16 +604,17 @@ export default function AdminLeadDetailPage() {
                     </div>
                   </div>
                 </div>
+                ) : null}
 
                 {/* 4. Single Unified Action Button */}
                 <button
                   type="button"
                   className="btn btn-primary"
                   style={{ width: "100%", height: 40, marginTop: 4, fontWeight: 700 }}
-                  disabled={saving}
+                  disabled={saving || (isConverted && !remark.trim())}
                   onClick={() => void saveCombinedLead()}
                 >
-                  {saving ? "Saving changes…" : "Save changes"}
+                  {saving ? "Saving changes…" : isConverted ? "Add remark" : "Save changes"}
                 </button>
               </div>
             </div>
