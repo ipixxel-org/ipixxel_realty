@@ -303,12 +303,12 @@ function itemsBox(col: ColumnData): { className: string; style: CSSProperties | 
  * A column on the published page / preview: only its widgets. None of the
  * builder's drop zones, placeholders, toolbars or "Drop or add widget".
  */
-function StaticColumn({ col, gap, stacked }: { col: ColumnData; gap: string; stacked: boolean }) {
+function StaticColumn({ col, gap, stacked, emptyHeight }: { col: ColumnData; gap: string; stacked: boolean; emptyHeight?: string }) {
   const blocks = (col.blocks || []).filter((b) => !b.id.includes("placeholder"));
   const box = columnBox(col, gap, stacked);
   const items = itemsBox(col);
   return (
-    <div className={box.className} style={box.style}>
+    <div className={box.className} style={emptyHeight ? { ...box.style, minHeight: emptyHeight } : box.style}>
       {blocks.length ? (
         <div data-op-col-items="" className={items.className} style={items.style}>
           {blocks.map((child) => (
@@ -579,6 +579,31 @@ function DroppableColumn({
   );
 }
 
+/** Height of an empty column in the builder (its "Column 1" placeholder). */
+export const EMPTY_COLUMN_HEIGHT = "180px";
+
+const filled = (v: unknown) =>
+  typeof v === "string" ? !["", "none", "transparent"].includes(v.trim().toLowerCase()) : false;
+
+/**
+ * True when a container has no widgets in any column, has a background
+ * (colour or image, any device) and no height set by the user. Such a box
+ * would otherwise collapse to 0px on the live page and its background vanish.
+ * Empty containers without a background keep collapsing, as before.
+ */
+export function keepsEmptyHeight(block: BlockConfig, columns: ColumnData[]): boolean {
+  const empty = columns.every((c) => !(c.blocks || []).some((b) => !b.id.includes("placeholder")));
+  if (!empty) return false;
+  const s = block.style;
+  if (!s) return false;
+  const layers = [s, s.responsive?.tablet, s.responsive?.mobile];
+  const hasBackground = layers.some(
+    (l) => l && (filled(l.backgroundColor) || filled(l.backgroundImage) || filled(l.sectionBackground)),
+  );
+  const hasHeight = layers.some((l) => l && (filled(l.minHeight) || filled(l.height)));
+  return hasBackground && !hasHeight;
+}
+
 export function ColumnsBlock({ block }: { block: BlockConfig }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const p = block.props as ColumnsProps;
@@ -612,6 +637,9 @@ export function ColumnsBlock({ block }: { block: BlockConfig }) {
   const fullWidth = p.contentWidth === "full";
   const outerCls = div ? "" : fullWidth ? "py-6" : "px-6 py-6";
   const innerCls = div || fullWidth ? "w-full" : "max-w-6xl mx-auto";
+  // An empty container with a background keeps the builder's placeholder
+  // height when live, so its colour / image is visible like in the builder.
+  const keepEmptyHeight = !editing && keepsEmptyHeight(block, columns);
   const validTags = new Set(["div", "section", "article", "main", "aside", "header", "footer", "nav"]);
   const TagName: ElementType = p.htmlTag && validTags.has(p.htmlTag) ? p.htmlTag : "div";
 
@@ -626,7 +654,7 @@ export function ColumnsBlock({ block }: { block: BlockConfig }) {
         {columns.map((col, i) => (
           <Fragment key={i}>
             {!editing ? (
-              <StaticColumn col={col} gap={gap} stacked={stacked} />
+              <StaticColumn col={col} gap={gap} stacked={stacked} emptyHeight={keepEmptyHeight ? EMPTY_COLUMN_HEIGHT : undefined} />
             ) : (
               <DroppableColumn
                 sectionBlockId={block.id}
