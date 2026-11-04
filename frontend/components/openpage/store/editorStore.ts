@@ -2,6 +2,7 @@
 
 import { create } from "zustand";
 import type { BlockStyle, BlockType, BlockConfig } from "@/components/openpage/blocks/types";
+import type { CopiedBlockStyle } from "@/lib/openpage/copy-style";
 
 export type Viewport = 'desktop' | 'tablet' | 'mobile'
 
@@ -38,6 +39,9 @@ interface EditorState {
   leftSidebarOpen: boolean
   rightSidebarOpen: boolean
   clipboardStyle: Partial<BlockStyle> | null
+  /** Full look of a block from the right-click "Copy Style" (style + element styles). */
+  copiedBlockStyle: CopiedBlockStyle | null
+  setCopiedBlockStyle: (copied: CopiedBlockStyle | null) => void
   clipboardProps: Record<string, unknown> | null
   clipboardBlock: BlockConfig | null
   navigatorExpanded: Record<string, boolean>
@@ -51,6 +55,12 @@ interface EditorState {
   aiModalOpen: boolean
   showGrid: boolean
   spotlightOpen: boolean
+  /** Floating Structure (navigator) panel, opened from the top bar. */
+  structureOpen: boolean
+  toggleStructure: () => void
+  closeStructure: () => void
+  /** Expand or collapse many navigator rows at once. */
+  setNavigatorExpandedAll: (ids: string[], expanded: boolean) => void
   openAiModal: () => void
   closeAiModal: () => void
   toggleAiModal: () => void
@@ -101,6 +111,8 @@ export const useEditorStore = create<EditorState>()((set) => ({
   leftSidebarOpen: true,
   rightSidebarOpen: true,
   clipboardStyle: null,
+  copiedBlockStyle: null,
+  setCopiedBlockStyle: (copied) => set({ copiedBlockStyle: copied }),
   clipboardProps: null,
   clipboardBlock: null,
   navigatorExpanded: {},
@@ -147,11 +159,13 @@ export const useEditorStore = create<EditorState>()((set) => ({
   toggleRightSidebar: () => set((s) => ({ rightSidebarOpen: !s.rightSidebarOpen })),
   openLeftSidebar: () => set({ leftSidebarOpen: true }),
   openRightSidebar: () => set({ rightSidebarOpen: true }),
-  setClipboardStyle: (style) => set({ clipboardStyle: style }),
+  // A newer copy from a Style / Type panel replaces an older right-click copy.
+  setClipboardStyle: (style) => set({ clipboardStyle: style, copiedBlockStyle: null }),
   setClipboardProps: (props) => set({ clipboardProps: props }),
   setClipboardBlock: (block) => set({ clipboardBlock: block }),
+  // Rows start expanded (unset = expanded), so the first click collapses.
   toggleNavigatorExpand: (id) => set((s) => ({
-    navigatorExpanded: { ...s.navigatorExpanded, [id]: !s.navigatorExpanded[id] },
+    navigatorExpanded: { ...s.navigatorExpanded, [id]: s.navigatorExpanded[id] === false },
   })),
   setInsertIndex: (index) => set({ insertIndex: index }),
   setIsDragging: (dragging) => set({ isDragging: dragging }),
@@ -165,4 +179,12 @@ export const useEditorStore = create<EditorState>()((set) => ({
   spotlightOpen: false,
   toggleShowGrid: () => set((s) => ({ showGrid: !s.showGrid })),
   toggleSpotlight: () => set((s) => ({ spotlightOpen: !s.spotlightOpen })),
+  structureOpen: false,
+  toggleStructure: () => set((s) => ({ structureOpen: !s.structureOpen })),
+  closeStructure: () => set({ structureOpen: false }),
+  setNavigatorExpandedAll: (ids, expanded) => set((s) => {
+    const next = { ...s.navigatorExpanded };
+    for (const id of ids) next[id] = expanded;
+    return { navigatorExpanded: next };
+  }),
 }))

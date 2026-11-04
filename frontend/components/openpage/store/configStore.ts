@@ -17,6 +17,7 @@ import {
   type BlockInsertTarget,
 } from "@/lib/openpage/block-tree";
 import { ITEM_ID_KEY } from "@/components/openpage/blocks/types";
+import { applyCopiedStyle, type CopiedBlockStyle } from "@/lib/openpage/copy-style";
 import type { Device } from "@/lib/openpage/types";
 import { newElementId, migrateBlocksListIds, ancestorItemIds, itemAt, listElementId, resolveList, type ListRef } from "@/lib/openpage/element-style";
 import { applyBlocksDefaults } from "@/lib/openpage/block-factory";
@@ -56,6 +57,8 @@ interface ConfigState {
   updateBlock: (id: string, updates: Partial<BlockConfig>) => void
   updateBlockProps: (id: string, props: Record<string, unknown>) => void
   updateBlockStyle: (id: string, style: Partial<BlockStyle>) => void
+  /** Right-click "Paste Style": make the block look like the copied one (one undo step). */
+  pasteBlockStyle: (id: string, copied: CopiedBlockStyle) => void
   /** Desktop writes the style root; tablet/mobile write `responsive[device]` only. */
   setBlockStyleForDevice: (id: string, style: Partial<BlockStyle>, device: Device) => void
   /**
@@ -375,6 +378,19 @@ export const useConfigStore = create<ConfigState>()((set, get) => ({
               if (!block.style) block.style = {}
               Object.assign(block.style, style)
             }
+            draft.blocks = page.blocks
+          }),
+        })),
+
+      pasteBlockStyle: (id, copied) =>
+        set((state) => ({
+          ...pushUndo(state, 'Paste style'),
+          config: produce(withPages(state.config), (draft) => {
+            const page = draft.pages!.find((p) => p.id === state.activePageId)
+            if (!page) return
+            const located = findBlockLocation(page.blocks, id)
+            const block = located ? located.parentList[located.index] : undefined
+            if (block) applyCopiedStyle(block, copied)
             draft.blocks = page.blocks
           }),
         })),

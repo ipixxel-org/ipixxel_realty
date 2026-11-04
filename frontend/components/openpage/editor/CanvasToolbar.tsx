@@ -6,6 +6,7 @@ import { useConfigStore } from "@/components/openpage/store/configStore";
 import { useEditorStore } from "@/components/openpage/store/editorStore";
 import type { PageConfig } from "@/components/openpage/blocks/types";
 import { SpotlightSearch } from "./SpotlightSearch";
+import { StructurePanel } from "./StructurePanel";
 
 function AddPagePopover({ onAdd, onClose }: { onAdd: (name: string, path: string) => void; onClose: () => void }) {
   const [name, setName] = useState('')
@@ -278,6 +279,7 @@ export function CanvasToolbar() {
       {/* Spotlight Command Modal — mounted only while open so its state
           (query/selection) resets on every open */}
       {spotlightOpen && <SpotlightSearch onClose={toggleSpotlight} />}
+      <StructurePanel />
     </div>
   );
 }

@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef } from "react";
+import { copyBlockStyle, hasCopiedStyle } from "@/lib/openpage/copy-style";
 import {
   Pencil,
   Copy,
@@ -29,6 +30,8 @@ interface BlockContextMenuProps {
   x: number;
   y: number;
   onClose: () => void;
+  /** Set for a widget inside a Div / Container: Move Up / Down stay within its column. */
+  column?: { sectionId: string; colIndex: number };
 }
 
 export function BlockContextMenu({
@@ -38,13 +41,16 @@ export function BlockContextMenu({
   x,
   y,
   onClose,
+  column,
 }: BlockContextMenuProps) {
   const menuRef = useRef<HTMLDivElement>(null);
   const {
     duplicateBlock,
     removeBlock,
     moveBlock,
+    moveBlockInColumn,
     updateBlockStyle,
+    pasteBlockStyle,
     addGlobalWidget,
   } = useConfigStore();
   const {
@@ -53,6 +59,8 @@ export function BlockContextMenu({
     viewport,
     setClipboardStyle,
     clipboardStyle,
+    setCopiedBlockStyle,
+    copiedBlockStyle,
     setClipboardBlock,
     clipboardBlock,
   } = useEditorStore();
@@ -140,7 +148,7 @@ export function BlockContextMenu({
         type="button"
         onClick={() => {
           duplicateBlock(block.id);
-          toast.success("Section duplicated");
+          toast.success(column ? "Widget duplicated" : "Section duplicated");
           onClose();
         }}
         className="w-full text-left px-3 py-1.5 flex items-center justify-between hover:bg-bg-3 hover:text-text-0 transition-colors"
@@ -157,14 +165,14 @@ export function BlockContextMenu({
         type="button"
         onClick={() => {
           setClipboardBlock(JSON.parse(JSON.stringify(block)));
-          toast.success("Section copied — use Paste or Ctrl+V");
+          toast.success(column ? "Widget copied — use Paste or Ctrl+V" : "Section copied — use Paste or Ctrl+V");
           onClose();
         }}
         className="w-full text-left px-3 py-1.5 flex items-center justify-between hover:bg-bg-3 hover:text-text-0 transition-colors"
       >
         <div className="flex items-center gap-2.5">
           <Clipboard size={13} className="text-purple-400" />
-          <span>Copy Section</span>
+          <span>{column ? "Copy Widget" : "Copy Section"}</span>
         </div>
         <kbd className="text-[9px] text-text-3 font-mono">Ctrl+C</kbd>
       </button>
@@ -206,11 +214,14 @@ export function BlockContextMenu({
       <button
         type="button"
         onClick={() => {
-          if (block.style) {
-            setClipboardStyle(JSON.parse(JSON.stringify(block.style)));
+          const copied = copyBlockStyle(block);
+          if (hasCopiedStyle(copied)) {
+            // Block style also goes to the Style tab's paste button.
+            setClipboardStyle(copied.style);
+            setCopiedBlockStyle(copied);
             toast.success("Style copied");
           } else {
-            toast.info("No custom style on this block");
+            toast.info("This block has no custom style to copy");
           }
           onClose();
         }}
@@ -223,11 +234,19 @@ export function BlockContextMenu({
       {/* Paste Style */}
       <button
         type="button"
-        disabled={!clipboardStyle}
+        disabled={!copiedBlockStyle && !clipboardStyle}
         onClick={() => {
-          if (clipboardStyle) {
+          if (copiedBlockStyle) {
+            pasteBlockStyle(block.id, copiedBlockStyle);
+            toast.success(
+              copiedBlockStyle.type === block.type
+                ? "Style pasted"
+                : "Style pasted (parts like title or button styles only paste onto the same widget type)",
+            );
+          } else if (clipboardStyle) {
+            // Copied from a Style / Type panel: add those values.
             updateBlockStyle(block.id, clipboardStyle);
-            toast.success("Style applied to section");
+            toast.success("Style pasted");
           }
           onClose();
         }}
@@ -264,7 +283,8 @@ export function BlockContextMenu({
         disabled={isFirst}
         onClick={() => {
           if (!isFirst) {
-            moveBlock(index, index - 1);
+            if (column) moveBlockInColumn(column.sectionId, column.colIndex, index, index - 1);
+            else moveBlock(index, index - 1);
             toast.success("Moved up");
           }
           onClose();
@@ -284,7 +304,8 @@ export function BlockContextMenu({
         disabled={isLast}
         onClick={() => {
           if (!isLast) {
-            moveBlock(index, index + 1);
+            if (column) moveBlockInColumn(column.sectionId, column.colIndex, index, index + 1);
+            else moveBlock(index, index + 1);
             toast.success("Moved down");
           }
           onClose();

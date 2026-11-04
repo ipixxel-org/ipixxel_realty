@@ -6,6 +6,7 @@ import { SortableContext, verticalListSortingStrategy, useSortable } from "@dnd-
 import { CSS } from "@dnd-kit/utilities";
 import type { BlockConfig } from "../types";
 import { RenderBlock } from "../registry";
+import { BlockContextMenu } from "@/components/openpage/editor/BlockContextMenu";
 import { useConfigStore } from "@/components/openpage/store/configStore";
 import { useEditorStore } from "@/components/openpage/store/editorStore";
 import { createBlockFromType, isDivBlock } from "@/lib/openpage/block-factory";
@@ -48,11 +49,17 @@ function ColumnBlock({
   block,
   columnId,
   colIndex,
+  index = 0,
+  total = 1,
 }: {
   block: BlockConfig;
   columnId: string;
   colIndex: number;
+  index?: number;
+  total?: number;
 }) {
+  // Right-click menu for this widget (not the Div / Container around it).
+  const [menu, setMenu] = useState<{ x: number; y: number } | null>(null);
   const { selectedBlockId, selectBlock, setRightSidebarTab } = useEditorStore();
   const { removeBlockFromColumn, duplicateBlockInColumn } = useConfigStore();
   const {
@@ -81,6 +88,12 @@ function ColumnBlock({
       onClick={(e) => {
         e.stopPropagation();
         selectBlock(block.id);
+      }}
+      onContextMenu={(e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        selectBlock(block.id);
+        setMenu({ x: e.clientX, y: e.clientY });
       }}
       className={`relative min-w-0 group/colblock my-1.5 rounded transition-all ${isSelected
           ? "outline outline-2 outline-dashed outline-blue-400"
@@ -148,6 +161,17 @@ function ColumnBlock({
         </button>
       </div>
       <RenderBlock block={block} />
+      {menu && (
+        <BlockContextMenu
+          block={block}
+          index={index}
+          totalBlocks={total}
+          x={menu.x}
+          y={menu.y}
+          onClose={() => setMenu(null)}
+          column={{ sectionId: columnId, colIndex }}
+        />
+      )}
     </div>
   );
 }
@@ -540,6 +564,8 @@ function DroppableColumn({
                     block={childBlock}
                     columnId={sectionBlockId}
                     colIndex={colIndex}
+                    index={i}
+                    total={realBlocks.length}
                   />
                 </Fragment>
               ))}

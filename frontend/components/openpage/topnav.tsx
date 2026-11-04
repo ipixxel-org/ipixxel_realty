@@ -26,6 +26,7 @@ import {
   FileText,
   LoaderCircle,
   Sparkles,
+  Layers,
 } from "lucide-react";
 import { useEditorStore, type Viewport } from "@/components/openpage/store/editorStore";
 import type { ModuleKey } from "@/lib/openpage/types";
@@ -716,11 +717,31 @@ function EditorChromeButtons({
         <Redo2 size={15} />
       </button>
       <div className="ps-vdiv" style={{ height: 20, margin: "0 4px" }} />
+      <StructureButton />
       <button type="button" onClick={onPreview} title="Preview this page" className="ps-topnav-btn">
         <Eye size={14} />
         <span className="ps-btn-label">Preview</span>
       </button>
     </div>
+  );
+}
+
+/** Opens the floating Structure panel (the page as a tree of sections, Divs and widgets). */
+function StructureButton() {
+  const open = useEditorStore((s) => s.structureOpen);
+  const toggle = useEditorStore((s) => s.toggleStructure);
+  return (
+    <button
+      type="button"
+      onClick={toggle}
+      title="Structure: sections, Divs and widgets"
+      aria-label="Structure"
+      aria-pressed={open}
+      className="ps-topnav-icon-btn"
+      style={{ ...iconBtn(true), ...(open ? { background: "rgba(109, 93, 252, 0.14)", color: "#6d5dfc" } : {}) }}
+    >
+      <Layers size={15} />
+    </button>
   );
 }
 
