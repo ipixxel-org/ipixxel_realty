@@ -12,7 +12,6 @@ import {
   syncMarketingPlatform,
 } from "@/lib/api";
 import type { MarketingAppsOverview, MarketingPlatformCard } from "@/lib/types";
-import "@/app/org/org.css";
 
 const HERO_KEYS = ["meta", "instagram", "google_sheets", "google_ads", "whatsapp"] as const;
 

@@ -6,7 +6,6 @@ import { Reveal } from "@/components/superadmin/reveal";
 import { Icon } from "@/components/icons";
 import { getOrgMarketingSyncLogs } from "@/lib/api";
 import type { MarketingSyncLog } from "@/lib/types";
-import "@/app/org/org.css";
 
 export default function AdminMarketingSyncLogsPage() {
   const [logs, setLogs] = useState<MarketingSyncLog[]>([]);

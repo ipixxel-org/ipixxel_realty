@@ -33,7 +33,6 @@ import type { MarketingConnection, MarketingPlatformCard, MetaPublicConfig, OrgM
 import { Modal, ModalActions } from "@/components/ui/modal";
 import { MetaLeadAdsCard } from "@/components/org/meta-lead-ads-card";
 import { PlatformBrandIcon } from "@/components/org/platform-brand-icon";
-import "@/app/org/org.css";
 
 type ProjectsListResponse = { data: Project[] };
 
