@@ -28,6 +28,12 @@ export function formatUnit(val: string | undefined): string | undefined {
   if (/^-?\d+(\.\d+)?$/.test(trimmed)) {
     return `${trimmed}px`;
   }
+  // Up to 4 space-separated sizes (e.g. unlinked corners "20 0 20 0"): bare
+  // numbers get px, so the browser doesn't drop the whole value.
+  const parts = trimmed.split(/\s+/);
+  if (parts.length > 1 && parts.length <= 4 && parts.every((p) => /^-?\d+(\.\d+)?([a-z]+|%)?$/i.test(p))) {
+    return parts.map((p) => (/^-?\d+(\.\d+)?$/.test(p) ? `${p}px` : p)).join(" ");
+  }
   return trimmed;
 }
 
@@ -289,7 +295,10 @@ export const WIDGETS_WITH_REPLACEABLE_PADDING = new Set<string>([
   "site-logo", "site-title", "page-title", "breadcrumbs", "table-of-contents", "off-canvas", "social-icons",
 ]);
 
-export function blockStyleTag(blockId: string, style?: BlockStyle, replacePadding = false): string {
+/** Widgets that show a picture / video; a border radius also clips it. */
+export const MEDIA_WIDGETS = new Set<string>(["image", "video", "slider"]);
+
+export function blockStyleTag(blockId: string, style?: BlockStyle, replacePadding = false, clipMedia = false): string {
   if (!style) return "";
   const root = `[data-block-id="${blockId}"]`;
   const child = `${root} > :not(style)`;
@@ -315,6 +324,8 @@ export function blockStyleTag(blockId: string, style?: BlockStyle, replacePaddin
   if (style.borderRadius) {
     wrapperRules.push(`border-radius:${formatUnit(style.borderRadius)} !important`);
     childRules.push(`border-radius:${formatUnit(style.borderRadius)} !important`);
+    // Image / video widgets: clip the picture to the rounded corners.
+    if (clipMedia) childRules.push("overflow:hidden !important");
   }
   if (style.boxShadow) wrapperRules.push(`box-shadow:${style.boxShadow} !important`);
   if (style.opacity) wrapperRules.push(`opacity:${style.opacity} !important`);
@@ -530,6 +541,8 @@ export function elementStyleTag(
   const media: string[] = [];
   if (style.objectFit) media.push(`object-fit:${style.objectFit} !important`);
   if (style.objectPosition) media.push(`object-position:${style.objectPosition} !important`);
+  // A rounded image element also rounds the picture inside it.
+  if (style.borderRadius) media.push("border-radius:inherit !important");
   if (style.aspectRatio) media.push("width:100% !important", "height:100% !important");
   if (media.length) parts.push(`${sel} > :where(img, video, iframe) { ${media.join("; ")}; }`);
 

@@ -2,6 +2,7 @@
 
 import { create } from "zustand";
 import type { BlockStyle, BlockType, BlockConfig } from "@/components/openpage/blocks/types";
+import type { CopiedBlockStyle } from "@/lib/openpage/copy-style";
 
 export type Viewport = 'desktop' | 'tablet' | 'mobile'
 
@@ -38,6 +39,9 @@ interface EditorState {
   leftSidebarOpen: boolean
   rightSidebarOpen: boolean
   clipboardStyle: Partial<BlockStyle> | null
+  /** Full look of a block from the right-click "Copy Style" (style + element styles). */
+  copiedBlockStyle: CopiedBlockStyle | null
+  setCopiedBlockStyle: (copied: CopiedBlockStyle | null) => void
   clipboardProps: Record<string, unknown> | null
   clipboardBlock: BlockConfig | null
   navigatorExpanded: Record<string, boolean>
@@ -107,6 +111,8 @@ export const useEditorStore = create<EditorState>()((set) => ({
   leftSidebarOpen: true,
   rightSidebarOpen: true,
   clipboardStyle: null,
+  copiedBlockStyle: null,
+  setCopiedBlockStyle: (copied) => set({ copiedBlockStyle: copied }),
   clipboardProps: null,
   clipboardBlock: null,
   navigatorExpanded: {},
@@ -153,7 +159,8 @@ export const useEditorStore = create<EditorState>()((set) => ({
   toggleRightSidebar: () => set((s) => ({ rightSidebarOpen: !s.rightSidebarOpen })),
   openLeftSidebar: () => set({ leftSidebarOpen: true }),
   openRightSidebar: () => set({ rightSidebarOpen: true }),
-  setClipboardStyle: (style) => set({ clipboardStyle: style }),
+  // A newer copy from a Style / Type panel replaces an older right-click copy.
+  setClipboardStyle: (style) => set({ clipboardStyle: style, copiedBlockStyle: null }),
   setClipboardProps: (props) => set({ clipboardProps: props }),
   setClipboardBlock: (block) => set({ clipboardBlock: block }),
   // Rows start expanded (unset = expanded), so the first click collapses.
