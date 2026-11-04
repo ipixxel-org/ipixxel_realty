@@ -51,6 +51,12 @@ interface EditorState {
   aiModalOpen: boolean
   showGrid: boolean
   spotlightOpen: boolean
+  /** Floating Structure (navigator) panel, opened from the top bar. */
+  structureOpen: boolean
+  toggleStructure: () => void
+  closeStructure: () => void
+  /** Expand or collapse many navigator rows at once. */
+  setNavigatorExpandedAll: (ids: string[], expanded: boolean) => void
   openAiModal: () => void
   closeAiModal: () => void
   toggleAiModal: () => void
@@ -150,8 +156,9 @@ export const useEditorStore = create<EditorState>()((set) => ({
   setClipboardStyle: (style) => set({ clipboardStyle: style }),
   setClipboardProps: (props) => set({ clipboardProps: props }),
   setClipboardBlock: (block) => set({ clipboardBlock: block }),
+  // Rows start expanded (unset = expanded), so the first click collapses.
   toggleNavigatorExpand: (id) => set((s) => ({
-    navigatorExpanded: { ...s.navigatorExpanded, [id]: !s.navigatorExpanded[id] },
+    navigatorExpanded: { ...s.navigatorExpanded, [id]: s.navigatorExpanded[id] === false },
   })),
   setInsertIndex: (index) => set({ insertIndex: index }),
   setIsDragging: (dragging) => set({ isDragging: dragging }),
@@ -165,4 +172,12 @@ export const useEditorStore = create<EditorState>()((set) => ({
   spotlightOpen: false,
   toggleShowGrid: () => set((s) => ({ showGrid: !s.showGrid })),
   toggleSpotlight: () => set((s) => ({ spotlightOpen: !s.spotlightOpen })),
+  structureOpen: false,
+  toggleStructure: () => set((s) => ({ structureOpen: !s.structureOpen })),
+  closeStructure: () => set({ structureOpen: false }),
+  setNavigatorExpandedAll: (ids, expanded) => set((s) => {
+    const next = { ...s.navigatorExpanded };
+    for (const id of ids) next[id] = expanded;
+    return { navigatorExpanded: next };
+  }),
 }))
