@@ -129,7 +129,7 @@ export const NAV_GROUPS: NavGroup[] = [
         href: "/admin-console/marketing/apps",
         icon: "integrations",
         label: "Connected Apps",
-        tip: "Connect Meta, Instagram, WhatsApp, Google Ads & Google Sheets",
+        tip: "Connect Meta, Instagram, WhatsApp & Google Sheets",
         activeMatch: ["/admin-console/marketing/apps"],
       },
       {

@@ -14,7 +14,7 @@ import {
 import type { MarketingAppsOverview, MarketingPlatformCard } from "@/lib/types";
 import "@/app/org/org.css";
 
-const HERO_KEYS = ["meta", "instagram", "google_sheets", "google_ads", "whatsapp"] as const;
+const HERO_KEYS = ["meta", "instagram", "google_sheets", /* "google_ads", */ "whatsapp"] as const;
 
 const PLATFORM_COPY: Record<
   string,
@@ -131,6 +131,7 @@ const PLATFORM_COPY: Record<
     setupHint:
       "Meta integration has not been enabled by your platform administrator yet. Please contact your Super Administrator to configure Meta platform credentials.",
   },
+  /*
   google_ads: {
     blurb:
       "Connect Google Ads to store your account securely. Lead forms and campaign spend sync are not live yet — connection prepares the next phase.",
@@ -165,6 +166,7 @@ const PLATFORM_COPY: Record<
     setupHint:
       "Google Ads OAuth has not been enabled by your platform administrator yet. Please contact your Super Administrator to configure Google credentials.",
   },
+  */
   google_sheets: {
     blurb:
       "Automatically stream and sync all incoming Lead Center leads directly into a Google Sheet in your organization's Google Drive.",
@@ -330,7 +332,7 @@ export default function OrgMarketingAppsPage() {
           <h1>Connected Apps</h1>
           <div className="sub">
             Connect ad platforms and spreadsheets to capture leads into Lead Center.
-            Facebook, Instagram, WhatsApp, Google Ads, and Google Sheets manage their own dedicated accounts and attribution.
+            Facebook, Instagram, WhatsApp, and Google Sheets manage their own dedicated accounts and attribution.
           </div>
         </div>
         <div className="actions">

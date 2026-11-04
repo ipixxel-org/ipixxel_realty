@@ -33,7 +33,7 @@ const TABS: Array<{ id: Tab; label: string; icon: "modules" | "link" | "sync" | 
 ];
 
 /** The 4 officially supported lead capture channels */
-const REQUIRED_PLATFORM_KEYS = ["meta", "instagram", "whatsapp", "google_ads"] as const;
+const REQUIRED_PLATFORM_KEYS = ["meta", "instagram", "whatsapp" /*, "google_ads" */] as const;
 
 interface PlatformMeta {
   protocol: string;
@@ -61,12 +61,14 @@ const PLATFORM_DETAILS: Record<string, PlatformMeta> = {
     capabilities: ["OAuth 2.0", "Meta Page Link", "Click-to-WhatsApp", "Attribution Ready"],
     configTab: "meta",
   },
+  /*
   google_ads: {
     protocol: "Google Ads API v17",
     role: "Google Ads account connection for click ID (GCLID) parameter tracking and campaign metrics.",
     capabilities: ["OAuth 2.0", "GCLID Tracking", "Lead Forms Ready", "Spend Sync"],
     configTab: "settings",
   },
+  */
 };
 
 async function copyText(text: string): Promise<boolean> {
@@ -246,6 +248,7 @@ export default function SuperAdminMarketingPage() {
   const filteredPlatforms = useMemo(() => {
     const q = query.trim().toLowerCase();
     return platforms.filter((p) => {
+      if (p.key === "google_ads") return false; // Google Ads removed from frontend
       if (statusFilter === "active" && !p.enabled) return false;
       if (statusFilter === "disabled" && p.enabled) return false;
       if (!q) return true;
@@ -370,7 +373,7 @@ export default function SuperAdminMarketingPage() {
           </div>
           <h1>Marketing Platforms</h1>
           <div className="sub">
-            Configure the 4 core ad platforms (Meta, Instagram, WhatsApp, and Google Ads),
+            Configure the core ad platforms (Meta, Instagram, and WhatsApp),
             manage OAuth credentials, and inspect real-time webhook telemetry.
           </div>
           <div style={{ display: "flex", gap: 10, marginTop: 14, flexWrap: "wrap" }}>
@@ -1157,7 +1160,7 @@ export default function SuperAdminMarketingPage() {
                 <option value="meta">Facebook / Meta</option>
                 <option value="instagram">Instagram</option>
                 <option value="whatsapp">WhatsApp Ads</option>
-                <option value="google_ads">Google Ads</option>
+                {/* <option value="google_ads">Google Ads</option> */}
               </select>
 
               {/* Status dropdown filter */}
