@@ -59,16 +59,11 @@ export default function AdminLeadDetailPage() {
   const [error, setError] = useState<string | null>(null);
 
   const [statusDraft, setStatusDraft] = useState<AdminLeadStatus>("new");
-  const [statusRemark, setStatusRemark] = useState("");
-  const [savingStatus, setSavingStatus] = useState(false);
-
   const [remark, setRemark] = useState("");
-  const [savingRemark, setSavingRemark] = useState(false);
-
   const [followUpAt, setFollowUpAt] = useState("");
   const [reminderAt, setReminderAt] = useState("");
   const [followUpNote, setFollowUpNote] = useState("");
-  const [savingFollowUp, setSavingFollowUp] = useState(false);
+  const [saving, setSaving] = useState(false);
   const [convertModalOpen, setConvertModalOpen] = useState(false);
 
   const load = useCallback(async () => {
@@ -112,88 +107,73 @@ export default function AdminLeadDetailPage() {
     ? Object.values(lead.attribution).some((value) => Boolean(value))
     : false;
 
-  async function saveStatus() {
+  async function saveCombinedLead() {
     if (!lead) return;
-    setSavingStatus(true);
+    setSaving(true);
     setError(null);
-    try {
-      const updated = await updateAdminLeadStatus(lead.id, {
-        status: statusDraft,
-        remark: statusRemark.trim() || undefined,
-      });
-      setLead(updated);
-      setStatusRemark("");
-      toast({ title: "Lead status updated", description: ADMIN_LEAD_STATUS_META[statusDraft].label });
-    } catch (e) {
-      const message = e instanceof Error ? e.message : "Could not update status.";
-      setError(message);
-      toast({ title: "Status update failed", description: message, variant: "error" });
-    } finally {
-      setSavingStatus(false);
-    }
-  }
 
-  async function saveRemark() {
-    if (!lead || !remark.trim()) return;
-    setSavingRemark(true);
-    setError(null);
+    const isStatusChanged = statusDraft !== lead.status;
+    const hasRemark = Boolean(remark.trim());
+    const hasFollowUp = Boolean(followUpAt);
+
+    if (!isStatusChanged && !hasRemark && !hasFollowUp) {
+      toast({ title: "No changes to save" });
+      setSaving(false);
+      return;
+    }
+
     try {
-      const activity = await addAdminLeadRemark(lead.id, remark.trim());
-      setLead((prev) =>
-        prev ? { ...prev, activities: [activity, ...prev.activities] } : prev,
-      );
+      let scheduledIso: string | undefined;
+      let reminderIso: string | undefined;
+
+      if (hasFollowUp) {
+        const scheduled = new Date(followUpAt);
+        if (Number.isNaN(scheduled.getTime())) {
+          throw new Error("Follow-up date is invalid.");
+        }
+        scheduledIso = scheduled.toISOString();
+        if (reminderAt) {
+          const reminder = new Date(reminderAt);
+          if (Number.isNaN(reminder.getTime())) {
+            throw new Error("Reminder date is invalid.");
+          }
+          reminderIso = reminder.toISOString();
+        }
+      }
+
+      // 1. Status update (carries remark if changed)
+      if (isStatusChanged) {
+        await updateAdminLeadStatus(lead.id, {
+          status: statusDraft,
+          remark: hasRemark ? remark.trim() : undefined,
+        });
+      } else if (hasRemark) {
+        // Just add remark
+        await addAdminLeadRemark(lead.id, remark.trim());
+      }
+
+      // 2. Follow-up update if date was set
+      if (hasFollowUp && scheduledIso) {
+        await updateAdminLeadFollowUp(lead.id, {
+          scheduledAt: scheduledIso,
+          reminderAt: reminderIso,
+          note: followUpNote.trim() || undefined,
+        });
+      }
+
+      await load();
       setRemark("");
-      toast({ title: "Remark added" });
-    } catch (e) {
-      const message = e instanceof Error ? e.message : "Could not add remark.";
-      setError(message);
-      toast({ title: "Remark failed", description: message, variant: "error" });
-    } finally {
-      setSavingRemark(false);
-    }
-  }
+      toast({ title: "Lead updated successfully" });
 
-  async function saveFollowUp() {
-    if (!lead) return;
-    if (!followUpAt) {
-      setError("Choose a follow-up date and time.");
-      return;
-    }
-    const scheduled = new Date(followUpAt);
-    if (Number.isNaN(scheduled.getTime())) {
-      setError("Follow-up date is invalid.");
-      return;
-    }
-    const reminder = reminderAt ? new Date(reminderAt) : null;
-    if (reminder && Number.isNaN(reminder.getTime())) {
-      setError("Reminder date is invalid.");
-      return;
-    }
-
-    setSavingFollowUp(true);
-    setError(null);
-    try {
-      const res = await updateAdminLeadFollowUp(lead.id, {
-        scheduledAt: scheduled.toISOString(),
-        reminderAt: reminder ? reminder.toISOString() : undefined,
-        note: followUpNote.trim() || undefined,
-      });
-      setLead((prev) =>
-        prev
-          ? {
-              ...prev,
-              nextAction: res.nextAction,
-              activities: [res.activity, ...prev.activities],
-            }
-          : prev,
-      );
-      toast({ title: lead.nextAction ? "Follow-up updated" : "Follow-up scheduled" });
+      if (statusDraft === "converted" && !lead.convertedOrg) {
+        setConvertModalOpen(true);
+      }
     } catch (e) {
-      const message = e instanceof Error ? e.message : "Could not save follow-up.";
+      const message = e instanceof Error ? e.message : "Could not save updates.";
       setError(message);
-      toast({ title: "Follow-up failed", description: message, variant: "error" });
+      toast({ title: "Update failed", description: message, variant: "error" });
     } finally {
-      setSavingFollowUp(false);
+      setSaving(false);
     }
   }
 
@@ -495,12 +475,13 @@ export default function AdminLeadDetailPage() {
           <Reveal delay={1}>
             <div className="card">
               <div className="card-h">
-                <span className="t">Update status</span>
+                <span className="t">Update status, remark &amp; follow-up</span>
                 <LeadStatusPill status={lead.status} />
               </div>
-              <div className="card-b">
+              <div className="card-b" style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+                {/* 1. Status Dropdown */}
                 <div className="field">
-                  <label htmlFor="lead-status">Pipeline stage</label>
+                  <label htmlFor="lead-status" style={{ fontWeight: 600 }}>Pipeline stage</label>
                   <select
                     id="lead-status"
                     className="inp"
@@ -514,119 +495,88 @@ export default function AdminLeadDetailPage() {
                     ))}
                   </select>
                 </div>
+
+                {/* 2. Add Remark / Note */}
                 <div className="field">
-                  <label htmlFor="status-remark">Remark</label>
+                  <label htmlFor="lead-remark" style={{ fontWeight: 600 }}>Add remark / Note</label>
                   <textarea
-                    id="status-remark"
+                    id="lead-remark"
                     className="inp"
                     rows={3}
                     maxLength={2000}
-                    placeholder="Optional note for this status change"
-                    value={statusRemark}
-                    onChange={(e) => setStatusRemark(e.target.value)}
-                  />
-                </div>
-                <button
-                  type="button"
-                  className="btn btn-primary"
-                  style={{ width: "100%" }}
-                  disabled={savingStatus}
-                  onClick={() => void saveStatus()}
-                >
-                  {savingStatus ? "Saving…" : "Save status"}
-                </button>
-              </div>
-            </div>
-          </Reveal>
-
-          <Reveal delay={2}>
-            <div className="card">
-              <div className="card-h">
-                <span className="t">Follow-up</span>
-                {lead.nextAction ? (
-                  <span className={`badge ${lead.nextAction.overdue ? "b-rose" : "b-amber"}`}>
-                    {lead.nextAction.overdue ? "Overdue" : "Scheduled"}
-                  </span>
-                ) : (
-                  <span className="badge b-gray">Not scheduled</span>
-                )}
-              </div>
-              <div className="card-b">
-                {lead.nextAction ? (
-                  <div className="form-alert ok" style={{ marginBottom: 14, fontSize: 12.5 }}>
-                    {formatAdminLeadDate(lead.nextAction.scheduledAt)}
-                    {lead.nextAction.note ? ` · ${lead.nextAction.note}` : ""}
-                  </div>
-                ) : null}
-                <div className="field">
-                  <label htmlFor="lead-follow-up">Follow-up at</label>
-                  <input
-                    id="lead-follow-up"
-                    type="datetime-local"
-                    className="inp"
-                    value={followUpAt}
-                    onChange={(e) => setFollowUpAt(e.target.value)}
-                  />
-                </div>
-                <div className="field">
-                  <label htmlFor="lead-reminder">Reminder at</label>
-                  <input
-                    id="lead-reminder"
-                    type="datetime-local"
-                    className="inp"
-                    value={reminderAt}
-                    onChange={(e) => setReminderAt(e.target.value)}
-                  />
-                </div>
-                <div className="field">
-                  <label htmlFor="lead-follow-up-note">Note</label>
-                  <textarea
-                    id="lead-follow-up-note"
-                    className="inp"
-                    rows={2}
-                    maxLength={2000}
-                    placeholder="What should happen on this follow-up?"
-                    value={followUpNote}
-                    onChange={(e) => setFollowUpNote(e.target.value)}
-                  />
-                </div>
-                <button
-                  type="button"
-                  className="btn btn-primary"
-                  style={{ width: "100%" }}
-                  disabled={savingFollowUp}
-                  onClick={() => void saveFollowUp()}
-                >
-                  {savingFollowUp ? "Saving…" : lead.nextAction ? "Update follow-up" : "Schedule follow-up"}
-                </button>
-              </div>
-            </div>
-          </Reveal>
-
-          <Reveal delay={3}>
-            <div className="card">
-              <div className="card-h">
-                <span className="t">Add remark</span>
-              </div>
-              <div className="card-b">
-                <div className="field">
-                  <textarea
-                    className="inp"
-                    rows={4}
-                    maxLength={2000}
-                    placeholder="Add a note to the activity history…"
+                    placeholder="Add a remark or note about this lead…"
                     value={remark}
                     onChange={(e) => setRemark(e.target.value)}
                   />
                 </div>
+
+                {/* 3. Follow-up Section */}
+                <div style={{ borderTop: "1px solid #f1f5f9", paddingTop: 14 }}>
+                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
+                    <span style={{ fontSize: 13, fontWeight: 700, color: "#1e293b", display: "flex", alignItems: "center", gap: 6 }}>
+                      <Icon name="calendar" size={14} /> Follow-up schedule
+                    </span>
+                    {lead.nextAction ? (
+                      <span className={`badge ${lead.nextAction.overdue ? "b-rose" : "b-amber"}`}>
+                        {lead.nextAction.overdue ? "Overdue" : "Scheduled"}
+                      </span>
+                    ) : (
+                      <span className="badge b-gray">Optional</span>
+                    )}
+                  </div>
+
+                  {lead.nextAction ? (
+                    <div className="form-alert ok" style={{ marginBottom: 12, fontSize: 12 }}>
+                      Next: {formatAdminLeadDate(lead.nextAction.scheduledAt)}
+                      {lead.nextAction.note ? ` · ${lead.nextAction.note}` : ""}
+                    </div>
+                  ) : null}
+
+                  <div className="field">
+                    <label htmlFor="lead-follow-up" style={{ fontSize: 12 }}>Follow-up date &amp; time</label>
+                    <input
+                      id="lead-follow-up"
+                      type="datetime-local"
+                      className="inp"
+                      value={followUpAt}
+                      onChange={(e) => setFollowUpAt(e.target.value)}
+                    />
+                  </div>
+
+                  <div className="grid g2" style={{ gap: 10 }}>
+                    <div className="field">
+                      <label htmlFor="lead-reminder" style={{ fontSize: 12 }}>Reminder date</label>
+                      <input
+                        id="lead-reminder"
+                        type="datetime-local"
+                        className="inp"
+                        value={reminderAt}
+                        onChange={(e) => setReminderAt(e.target.value)}
+                      />
+                    </div>
+                    <div className="field">
+                      <label htmlFor="lead-follow-up-note" style={{ fontSize: 12 }}>Follow-up note</label>
+                      <input
+                        id="lead-follow-up-note"
+                        type="text"
+                        className="inp"
+                        placeholder="e.g. Call for site visit"
+                        value={followUpNote}
+                        onChange={(e) => setFollowUpNote(e.target.value)}
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                {/* 4. Single Unified Action Button */}
                 <button
                   type="button"
                   className="btn btn-primary"
-                  style={{ width: "100%" }}
-                  disabled={savingRemark || !remark.trim()}
-                  onClick={() => void saveRemark()}
+                  style={{ width: "100%", height: 40, marginTop: 4, fontWeight: 700 }}
+                  disabled={saving}
+                  onClick={() => void saveCombinedLead()}
                 >
-                  {savingRemark ? "Adding…" : "Add remark"}
+                  {saving ? "Saving changes…" : "Save changes"}
                 </button>
               </div>
             </div>
