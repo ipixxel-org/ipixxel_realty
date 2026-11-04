@@ -161,27 +161,22 @@ export class LeadsService implements OnModuleInit {
         select: { id: true, landingPageId: true, projectId: true },
       });
       if (platformLeads.length > 0) {
-        const defaultOrg = await this.prisma.organisation.findFirst({
-          where: { status: 'active' },
-          orderBy: { createdAt: 'asc' },
-          select: { id: true },
-        });
-        if (defaultOrg) {
-          for (const l of platformLeads) {
-            let targetOrgId = defaultOrg.id;
-            if (l.landingPageId) {
-              const lp = await this.prisma.landingPage.findUnique({
-                where: { id: l.landingPageId },
-                select: { orgId: true },
-              });
-              if (lp?.orgId) targetOrgId = lp.orgId;
-            } else if (l.projectId) {
-              const prj = await this.prisma.project.findUnique({
-                where: { id: l.projectId },
-                select: { orgId: true },
-              });
-              if (prj?.orgId) targetOrgId = prj.orgId;
-            }
+        for (const l of platformLeads) {
+          let targetOrgId: string | null = null;
+          if (l.landingPageId && !l.landingPageId.startsWith('embed_')) {
+            const lp = await this.prisma.landingPage.findUnique({
+              where: { id: l.landingPageId },
+              select: { orgId: true },
+            });
+            if (lp?.orgId) targetOrgId = lp.orgId;
+          } else if (l.projectId) {
+            const prj = await this.prisma.project.findUnique({
+              where: { id: l.projectId },
+              select: { orgId: true },
+            });
+            if (prj?.orgId) targetOrgId = prj.orgId;
+          }
+          if (targetOrgId) {
             await this.prisma.lead.update({
               where: { id: l.id },
               data: { orgId: targetOrgId },
@@ -341,20 +336,7 @@ export class LeadsService implements OnModuleInit {
     }
 
     if (!orgId || orgId === PLATFORM_LEAD_ORG_ID) {
-      const defaultOrg = (this.prisma as any).organisation?.findFirst
-        ? await (this.prisma as any).organisation.findFirst({
-            where: { status: 'active' },
-            orderBy: { createdAt: 'asc' },
-            select: { id: true },
-          })
-        : null;
-      if (defaultOrg) {
-        orgId = defaultOrg.id;
-      } else if (orgId === PLATFORM_LEAD_ORG_ID) {
-        // Retain platform lead sentinel if no default active organisation is present
-      } else {
-        throw new NotFoundException('Unable to resolve organisation');
-      }
+      orgId = PLATFORM_LEAD_ORG_ID;
     }
 
     if (!orgId) {

@@ -6,6 +6,7 @@ import { useParams } from "next/navigation";
 import { Reveal } from "@/components/superadmin/reveal";
 import { Icon } from "@/components/icons";
 import { LeadStatusPill } from "@/components/superadmin/lead-status-pill";
+import { ConvertLeadModal } from "@/components/superadmin/convert-lead-modal";
 import { useToast } from "@/components/ui/toast";
 import {
   addAdminLeadRemark,
@@ -68,6 +69,7 @@ export default function AdminLeadDetailPage() {
   const [reminderAt, setReminderAt] = useState("");
   const [followUpNote, setFollowUpNote] = useState("");
   const [savingFollowUp, setSavingFollowUp] = useState(false);
+  const [convertModalOpen, setConvertModalOpen] = useState(false);
 
   const load = useCallback(async () => {
     if (!id) return;
@@ -236,7 +238,40 @@ export default function AdminLeadDetailPage() {
             {formatAdminLeadDate(lead.createdAt)}
           </div>
         </div>
-        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+          {lead.convertedOrg ? (
+            <Link
+              href={`/admin-console/organisation-detail/${lead.convertedOrg.id}`}
+              className="btn btn-sm"
+              style={{
+                background: "#ecfdf5",
+                color: "#059669",
+                border: "1px solid #a7f3d0",
+                fontWeight: 600,
+                display: "inline-flex",
+                alignItems: "center",
+                gap: 6,
+                textDecoration: "none",
+              }}
+            >
+              <Icon name="building" size={14} /> View Organisation: {lead.convertedOrg.name} ↗
+            </Link>
+          ) : lead.status === "converted" ? (
+            <button
+              type="button"
+              className="btn btn-primary btn-sm"
+              style={{
+                background: "linear-gradient(135deg, #10b981, #059669)",
+                borderColor: "#059669",
+                display: "inline-flex",
+                alignItems: "center",
+                gap: 6,
+              }}
+              onClick={() => setConvertModalOpen(true)}
+            >
+              <Icon name="sparkles" size={14} /> Convert to Organisation
+            </button>
+          ) : null}
           <Link href="/admin-console/leads" className="btn btn-ghost btn-sm">
             Back to Leads
           </Link>
@@ -256,6 +291,103 @@ export default function AdminLeadDetailPage() {
       {error ? (
         <div className="form-alert" style={{ marginBottom: 16 }}>
           {error}
+        </div>
+      ) : null}
+
+      {lead.convertedOrg ? (
+        <div
+          style={{
+            background: "#f0fdf4",
+            border: "1px solid #bbf7d0",
+            borderRadius: 12,
+            padding: "14px 18px",
+            marginBottom: 18,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            gap: 16,
+          }}
+        >
+          <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+            <div
+              style={{
+                width: 36,
+                height: 36,
+                borderRadius: 8,
+                background: "#dcfce7",
+                color: "#16a34a",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                flexShrink: 0,
+              }}
+            >
+              <Icon name="check" size={18} />
+            </div>
+            <div>
+              <div style={{ fontWeight: 700, fontSize: 14, color: "#166534" }}>
+                Lead Converted into Organisation: {lead.convertedOrg.name}
+              </div>
+              <div style={{ fontSize: 12.5, color: "#15803d", marginTop: 2 }}>
+                Converted {formatAdminLeadDate(lead.convertedOrg.convertedAt || lead.createdAt)}. You can manage its profile, subscriptions, and templates anytime.
+              </div>
+            </div>
+          </div>
+          <Link
+            href={`/admin-console/organisation-detail/${lead.convertedOrg.id}`}
+            className="btn btn-primary btn-sm"
+            style={{ background: "#16a34a", borderColor: "#16a34a", whiteSpace: "nowrap" }}
+          >
+            Open Organisation Setup →
+          </Link>
+        </div>
+      ) : lead.status === "converted" ? (
+        <div
+          style={{
+            background: "#eff6ff",
+            border: "1px solid #bfdbfe",
+            borderRadius: 12,
+            padding: "14px 18px",
+            marginBottom: 18,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            gap: 16,
+          }}
+        >
+          <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+            <div
+              style={{
+                width: 36,
+                height: 36,
+                borderRadius: 8,
+                background: "#dbeafe",
+                color: "#2563eb",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                flexShrink: 0,
+              }}
+            >
+              <Icon name="sparkles" size={18} />
+            </div>
+            <div>
+              <div style={{ fontWeight: 700, fontSize: 14, color: "#1e40af" }}>
+                Lead Ready for Organisation Conversion
+              </div>
+              <div style={{ fontSize: 12.5, color: "#2563eb", marginTop: 2 }}>
+                This lead is marked as Completed/Converted. Convert it now to generate credentials and configure workspace.
+              </div>
+            </div>
+          </div>
+          <button
+            type="button"
+            className="btn btn-primary btn-sm"
+            style={{ whiteSpace: "nowrap" }}
+            onClick={() => setConvertModalOpen(true)}
+          >
+            Convert to Organisation →
+          </button>
         </div>
       ) : null}
 
@@ -603,6 +735,13 @@ export default function AdminLeadDetailPage() {
           ) : null}
         </div>
       </div>
+
+      <ConvertLeadModal
+        isOpen={convertModalOpen}
+        lead={lead}
+        onClose={() => setConvertModalOpen(false)}
+        onSuccess={() => void load()}
+      />
     </>
   );
 }

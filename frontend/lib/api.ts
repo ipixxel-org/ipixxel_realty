@@ -2003,6 +2003,34 @@ export async function updateAdminLeadFollowUp(
   });
 }
 
+export async function convertAdminLeadToOrg(
+  leadId: string,
+  input: {
+    orgName: string;
+    email: string;
+    phone?: string;
+    firstName?: string;
+    lastName?: string;
+    city?: string;
+  },
+): Promise<{
+  success: boolean;
+  organisation: { id: string; name: string; slug: string; city?: string };
+  user: {
+    id: string;
+    email: string;
+    firstName?: string;
+    lastName?: string;
+    phoneNumber?: string;
+  };
+  tempPassword?: string;
+}> {
+  return apiFetch(`/admin/leads/${encodeURIComponent(leadId)}/convert-to-organisation`, {
+    method: "POST",
+    body: JSON.stringify(input),
+  });
+}
+
 export async function getAdminOrganisationsList(): Promise<{ id: string; name: string }[]> {
   const meta = await getAdminLeadsMeta().catch(() => ({ organisations: [] }));
   return meta.organisations || [];

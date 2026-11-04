@@ -2152,6 +2152,7 @@ export interface AdminLead {
   source: string | null;
   platform: string | null;
   data: Record<string, unknown>;
+  convertedOrg?: { id: string; name: string; convertedAt?: string | null } | null;
   status: AdminLeadStatus;
   legacyStatus: string | null;
   assignedTo: CrmAssignee | null;
