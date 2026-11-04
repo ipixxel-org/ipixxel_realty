@@ -618,7 +618,7 @@ function PlatformDetailInner() {
   };
 
   return (
-    <>
+    <div className="org" style={{ background: "transparent" }}>
       <div className="page-head">
         <div>
           <div className="eyebrow">
@@ -2592,11 +2592,11 @@ function PlatformDetailInner() {
           )}
         </div>
       </Modal>
-    </>
+    </div>
   );
 }
 
-export default function OrgMarketingPlatformPage() {
+export default function AdminMarketingPlatformPage() {
   return (
     <Suspense fallback={<div className="muted">Loading…</div>}>
       <PlatformDetailInner />

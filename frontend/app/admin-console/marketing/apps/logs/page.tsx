@@ -23,7 +23,7 @@ export default function AdminMarketingSyncLogsPage() {
   }, []);
 
   return (
-    <>
+    <div className="org" style={{ background: "transparent" }}>
       <div className="page-head" style={{ marginBottom: 20 }}>
         <div>
           <div className="eyebrow" style={{ display: "flex", alignItems: "center", gap: 6, color: "#64748b", fontSize: 13, fontWeight: 600 }}>
@@ -111,6 +111,6 @@ export default function AdminMarketingSyncLogsPage() {
           </div>
         </div>
       </Reveal>
-    </>
+    </div>
   );
 }

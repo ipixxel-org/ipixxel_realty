@@ -9,10 +9,9 @@ import { PlatformBrandIcon } from "@/components/org/platform-brand-icon";
 import {
   getMarketingAppsOverview,
   getMarketingConnectUrl,
-  getMarketingDashboard,
   syncMarketingPlatform,
 } from "@/lib/api";
-import type { MarketingAppsOverview, MarketingDashboard, MarketingPlatformCard } from "@/lib/types";
+import type { MarketingAppsOverview, MarketingPlatformCard } from "@/lib/types";
 import "@/app/org/org.css";
 
 const HERO_KEYS = ["meta", "instagram", "google_sheets", "google_ads", "whatsapp"] as const;
@@ -32,161 +31,173 @@ const PLATFORM_COPY: Record<
 > = {
   meta: {
     blurb:
-      "Connect official Super Admin Facebook Pages so Lead Ad submissions stream directly into Super Admin Lead Management in real time, with UTM and campaign attribution.",
+      "Connect your Facebook Page so Lead Ad form submissions flow into Lead Center in realtime, with campaign and UTM attribution.",
     primaryLabel: "Connect with Facebook",
     secondaryLabel: "Connect with Page Token",
     secondaryHref: "/admin-console/marketing/apps/meta?token=1",
     features: [
-      { icon: "sync", label: "Lead Ads Capture", tip: "Realtime + Webhook import" },
-      { icon: "target", label: "Campaign Attribution", tip: "Ad / ad set / campaign tags" },
-      { icon: "bolt", label: "Instant Delivery", tip: "Flows to Super Admin Leads" },
-      { icon: "link", label: "UTM Tracking", tip: "First & last touch tracked" },
+      { icon: "sync", label: "Lead Ads Capture", tip: "Realtime + Sync import" },
+      { icon: "target", label: "Campaign Names", tip: "Ad / ad set / campaign" },
+      { icon: "bolt", label: "Webhook Sync", tip: "New leads instantly" },
+      { icon: "link", label: "UTM Attribution", tip: "First & last touch" },
     ],
     steps: [
       {
-        title: "Platform API Credentials",
-        body: "Meta App ID and Secret configured in Admin Console > Marketing > API Credentials.",
+        title: "Platform Setup by Administrator",
+        body: "Meta App and Webhooks are configured globally by the Super Administrator in Admin Console.",
       },
       {
         title: "Connect Facebook Page",
-        body: "Click Connect with Facebook or provide a Page Access Token to authorize pages.",
+        body: "Click Connect with Facebook. Authorize the Facebook Pages you want to capture leads from.",
       },
       {
-        title: "Instant Webhook Subscription",
-        body: "Page is automatically subscribed to real-time Leadgen webhooks.",
+        title: "Assign Projects",
+        body: "Map your connected pages and forms to CRM projects for lead assignment.",
       },
       {
-        title: "Direct Ingest to Super Admin Leads",
-        body: "All leads from this page appear immediately in Super Admin Lead Management.",
+        title: "Realtime Lead Streaming",
+        body: "Form submissions stream immediately into Lead Center with campaign and UTM attribution.",
       },
     ],
     guideHref: "/admin-console/marketing/apps/meta",
     setupHint:
-      "Meta app credentials not configured yet. Configure Meta App ID & Secret in Admin Console > Marketing > API Credentials.",
+      "Meta integration has not been enabled by your platform administrator yet. Please contact your Super Administrator to configure Meta platform credentials.",
   },
   instagram: {
     blurb:
-      "Instagram connects through your Meta Page login. Lead ads are labelled Instagram when Meta reports the placement; leads stream directly to Super Admin Leads.",
-    primaryLabel: "Connect via Meta",
+      "Instagram connects through the same Meta Page login as Facebook. Lead ads are labelled Instagram when Meta reports the placement; Lead Ads Testing Tool leads show as Facebook.",
+    primaryLabel: "Connect with Instagram (Meta)",
     secondaryLabel: "Open details",
     secondaryHref: "/admin-console/marketing/apps/instagram",
     features: [
       { icon: "sync", label: "Shared Meta Connect", tip: "Same Page OAuth" },
       { icon: "target", label: "Lead Ads Path", tip: "Via Facebook Page" },
-      { icon: "bolt", label: "Realtime Capture", tip: "Instant lead creation" },
-      { icon: "link", label: "Instagram Attribution", tip: "Source tagged automatically" },
+      { icon: "bolt", label: "Realtime Capture", tip: "When forms fire" },
+      { icon: "link", label: "Attribution today", tip: "Shows as Instagram" },
     ],
     steps: [
       {
-        title: "Meta Platform Credentials",
-        body: "Meta credentials configured in Admin Console > Marketing.",
+        title: "Platform Setup by Administrator",
+        body: "Meta credentials configured globally by Super Administrator in Admin Console.",
       },
       {
         title: "Connect Facebook Page",
         body: "Instagram Lead Ads flow via the linked Facebook Page OAuth connection.",
       },
       {
-        title: "Link Instagram Business Account",
-        body: "Ensure your Instagram professional account is connected to your Facebook Page.",
+        title: "Link Instagram Account",
+        body: "Ensure your Instagram business account is connected to your Facebook Page.",
       },
       {
-        title: "Direct Ingest to Super Admin Leads",
-        body: "Leads captured via Instagram ad placements appear in Super Admin Lead Management.",
+        title: "Capture & Attribution",
+        body: "Leads captured via Instagram ad placements appear with Instagram attribution in Lead Center.",
       },
     ],
     guideHref: "/admin-console/marketing/apps/instagram",
     setupHint:
-      "Meta platform credentials not configured yet. Configure Meta App ID & Secret in Admin Console > Marketing.",
+      "Meta integration has not been enabled by your platform administrator yet. Please contact your Super Administrator to configure Meta platform credentials.",
   },
   whatsapp: {
     blurb:
-      "WhatsApp connects through your Meta business assets for Ads attribution and lead routing directly into Super Admin Leads.",
+      "WhatsApp connects through the same Meta Page login. This stores the connection for Ads attribution readiness — dedicated WhatsApp lead ingest is not live yet.",
     primaryLabel: "Connect via Meta",
     secondaryLabel: "Open details",
     secondaryHref: "/admin-console/marketing/apps/whatsapp",
     features: [
       { icon: "sync", label: "Meta Connection", tip: "Shared Page token" },
-      { icon: "target", label: "Click-to-WhatsApp", tip: "Ads attribution ready" },
-      { icon: "bolt", label: "Direct Routing", tip: "Leads go to Super Admin" },
-      { icon: "link", label: "Activity Logging", tip: "Full event tracking" },
+      { icon: "target", label: "Ads Ready", tip: "Connection scaffolding" },
+      { icon: "bolt", label: "Not messaging", tip: "No inbox in this module" },
+      { icon: "link", label: "Lead ingest", tip: "Coming in a later phase" },
     ],
     steps: [
       {
-        title: "Meta Platform Credentials",
-        body: "Configured in Admin Console > Marketing.",
+        title: "Platform Setup by Administrator",
+        body: "Meta platform credentials configured globally in Admin Console.",
       },
       {
-        title: "Authorize Assets",
-        body: "Connect the Facebook Page associated with your WhatsApp business number.",
+        title: "Connect Page",
+        body: "WhatsApp Ads connection rides on the connected Facebook Page.",
       },
       {
-        title: "Ads Verification",
-        body: "Campaigns driving to WhatsApp are attributed to Super Admin lead flow.",
+        title: "Enable WhatsApp Business",
+        body: "Confirm WhatsApp is linked to your Meta Business account for Click-to-WhatsApp Ads.",
+      },
+      {
+        title: "Attribution Ready",
+        body: "Status is stored for WhatsApp advertising attribution.",
       },
     ],
     guideHref: "/admin-console/marketing/apps/whatsapp",
     setupHint:
-      "Meta credentials not configured yet. Configure Meta App ID & Secret in Admin Console > Marketing.",
+      "Meta integration has not been enabled by your platform administrator yet. Please contact your Super Administrator to configure Meta platform credentials.",
   },
   google_ads: {
     blurb:
-      "Connect your official Google Ads customer accounts to sync campaigns, impressions, clicks, spend, and lead form extensions into Super Admin.",
-    primaryLabel: "Connect Google Ads",
-    secondaryLabel: "Open details",
-    secondaryHref: "/admin-console/marketing/apps/google_ads",
+      "Connect Google Ads to store your account securely. Lead forms and campaign spend sync are not live yet — connection prepares the next phase.",
+    primaryLabel: "Connect with Google",
+    secondaryLabel: "Connect with access token",
+    secondaryHref: "/admin-console/marketing/apps/google_ads?token=1",
     features: [
-      { icon: "sync", label: "Customer Accounts", tip: "OAuth sync" },
-      { icon: "target", label: "Campaign Analytics", tip: "Spend, CPL, Clicks" },
-      { icon: "bolt", label: "Lead Extensions", tip: "Form assets import" },
-      { icon: "link", label: "GCLID Tracking", tip: "Conversion tracking" },
+      { icon: "sync", label: "OAuth Connect", tip: "Account linked" },
+      { icon: "target", label: "Metrics Sync", tip: "Coming later" },
+      { icon: "bolt", label: "Lead Forms", tip: "Coming later" },
+      { icon: "link", label: "Website gclid", tip: "Captured on web forms" },
     ],
     steps: [
       {
-        title: "Google Cloud OAuth Credentials",
-        body: "Google Ads Client ID & Secret configured in Admin Console > Marketing.",
+        title: "Platform Setup by Administrator",
+        body: "Google OAuth credentials configured globally by Super Administrator in Admin Console.",
       },
       {
-        title: "Authorize Google Account",
-        body: "Click Connect Google Ads and grant read access to your ads customer accounts.",
+        title: "Authorize Account",
+        body: "Click Connect with Google and approve access for your Google Ads account.",
       },
       {
-        title: "Continuous Sync",
-        body: "Hourly background sync fetches campaign performance and leads.",
+        title: "Account Linked",
+        body: "Account connection is stored securely in Lead Center.",
+      },
+      {
+        title: "Attribution Ready",
+        body: "Prepares campaign tracking and click ID (GCLID) attribution.",
       },
     ],
     guideHref: "/admin-console/marketing/apps/google_ads",
     setupHint:
-      "Google Ads client credentials not configured. Configure in Admin Console > Marketing > API Credentials.",
+      "Google Ads OAuth has not been enabled by your platform administrator yet. Please contact your Super Administrator to configure Google credentials.",
   },
   google_sheets: {
     blurb:
-      "Connect Google Sheets for Super Admin. Bi-directionally sync leads to your spreadsheets and auto-import submissions via copy-paste Google Apps Script webhooks.",
-    primaryLabel: "Connect Google Drive",
-    secondaryLabel: "Open details",
+      "Automatically stream and sync all incoming Lead Center leads directly into a Google Sheet in your organization's Google Drive.",
+    primaryLabel: "Connect Google Sheets & Drive",
+    secondaryLabel: "Open Google Sheet settings",
     secondaryHref: "/admin-console/marketing/apps/google_sheets",
     features: [
-      { icon: "sync", label: "Bi-directional Sync", tip: "Leads auto-export to sheets" },
-      { icon: "target", label: "Apps Script Webhook", tip: "Auto-push new sheet rows" },
-      { icon: "bolt", label: "Manual Import", tip: "One-click historical sync" },
-      { icon: "link", label: "Multi-Account", tip: "Connect multiple Google drives" },
+      { icon: "bolt", label: "Realtime Sync", tip: "Appends leads instantly" },
+      { icon: "sync", label: "Google Drive OAuth", tip: "Per-org authorization" },
+      { icon: "target", label: "Custom Sheets", tip: "Create new or link existing" },
+      { icon: "link", label: "One-Click Export", tip: "Backfill all CRM leads" },
     ],
     steps: [
       {
-        title: "Google Drive OAuth",
-        body: "Connect your official Google account to create and manage spreadsheets.",
+        title: "Connect Google Account",
+        body: "Authorize Google Sheets & Google Drive for your organization via OAuth.",
       },
       {
-        title: "Choose or Link Spreadsheet",
-        body: "Create a new dedicated sheet or link an existing Google Sheet by URL.",
+        title: "Auto-Created in Drive",
+        body: "A spreadsheet is automatically created in your Google Drive with formatted lead columns.",
       },
       {
-        title: "Install Apps Script Webhook",
-        body: "Paste the provided script into your Google Sheet to auto-send new rows to Super Admin Leads.",
+        title: "Realtime Lead Streaming",
+        body: "Every new lead captured from landing pages, Facebook, Instagram, WhatsApp, or manual CRM entry appends as a new row.",
+      },
+      {
+        title: "Backfill Anytime",
+        body: "Click 'Sync All Leads to Sheet' at any time to export all historical CRM leads into the spreadsheet.",
       },
     ],
     guideHref: "/admin-console/marketing/apps/google_sheets",
     setupHint:
-      "Google client credentials not configured. Configure in Admin Console > Marketing > API Credentials.",
+      "Google OAuth has not been configured by your platform administrator yet. Please contact your Super Administrator to configure Google Cloud OAuth credentials.",
   },
 };
 
@@ -226,8 +237,10 @@ function FeatureIcon({ name }: { name: "sync" | "target" | "bolt" | "link" }) {
 
 export default function AdminMarketingAppsPage() {
   const { user } = useAuth();
+  const isSuperAdmin =
+    user?.role === "super_admin" || Boolean(user?.platformUnrestricted);
+
   const [data, setData] = useState<MarketingAppsOverview | null>(null);
-  const [dashboard, setDashboard] = useState<MarketingDashboard | null>(null);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(true);
   const [busyKey, setBusyKey] = useState<string | null>(null);
@@ -235,14 +248,8 @@ export default function AdminMarketingAppsPage() {
 
   function reload() {
     setLoading(true);
-    Promise.all([
-      getMarketingAppsOverview(),
-      getMarketingDashboard().catch(() => null),
-    ])
-      .then(([overview, dash]) => {
-        setData(overview);
-        setDashboard(dash);
-      })
+    getMarketingAppsOverview()
+      .then(setData)
       .catch((err) =>
         setError(err instanceof Error ? err.message : "Failed to load apps"),
       )
@@ -251,6 +258,7 @@ export default function AdminMarketingAppsPage() {
 
   useEffect(() => {
     reload();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const platforms = data?.platforms ?? [];
@@ -267,9 +275,7 @@ export default function AdminMarketingAppsPage() {
             ? "Google Ads"
             : key === "whatsapp"
               ? "WhatsApp Ads"
-              : key === "google_sheets"
-                ? "Google Sheets"
-                : "Instagram",
+              : "Instagram",
       description: PLATFORM_COPY[key]?.blurb ?? null,
       supportsOAuth: true,
       supportsWebhook: key === "meta" || key === "instagram",
@@ -300,7 +306,12 @@ export default function AdminMarketingAppsPage() {
     setSyncKey(p.key);
     setError("");
     try {
-      await syncMarketingPlatform(p.key);
+      const result = await syncMarketingPlatform(p.key);
+      if (!result.ok && result.failed > 0) {
+        setError(
+          `Sync finished with ${result.failed} error(s). Check Integration Logs.`,
+        );
+      }
       reload();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Sync failed");
@@ -309,230 +320,221 @@ export default function AdminMarketingAppsPage() {
     }
   }
 
-  const totalConnected = platforms.reduce(
-    (sum, p) => sum + (p.connectionCount || p.connections?.length || 0),
-    0,
-  );
-  const totalLeads = dashboard?.kpis?.leadsTotal ?? 0;
-  const activeChannels = platforms.filter(
-    (p) => (p.connectionCount || p.connections?.length || 0) > 0,
-  ).length;
-
   return (
     <>
-      <div className="page-head" style={{ marginBottom: 20 }}>
+      <div className="page-head mkt-hub-head">
         <div>
-          <div className="eyebrow" style={{ display: "flex", alignItems: "center", gap: 6, color: "#64748b", fontSize: 13, fontWeight: 600 }}>
-            <Icon name="integrations" size={14} /> Super Admin · Marketing
+          <div className="eyebrow">
+            <Icon name="integrations" size={14} /> Marketing
           </div>
-          <h1 style={{ fontSize: 24, fontWeight: 800, color: "#0f172a", marginTop: 4 }}>
-            Connected Social Media &amp; Ad Channels
-          </h1>
-          <p className="muted" style={{ fontSize: 13, color: "#64748b", maxWidth: 760, marginTop: 4 }}>
-            Connect official Facebook Pages, Instagram, WhatsApp, Google Ads, and Google Sheets directly for the Super Admin platform. All generated leads flow into Super Admin Lead Management with separate attribution from client organisations.
-          </p>
+          <h1>Connected Apps &amp; Social Channels</h1>
+          <div className="sub">
+            Connect ad platforms and spreadsheets to capture leads into Lead Center.
+            Facebook, Instagram, WhatsApp, Google Ads, and Google Sheets manage their own dedicated accounts and attribution.
+          </div>
         </div>
-        <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
-          <Link className="btn btn-secondary" href="/admin-console/leads" style={{ display: "flex", alignItems: "center", gap: 6 }}>
-            <Icon name="target" size={15} /> Super Admin Leads
-          </Link>
-          <Link className="btn btn-secondary" href="/admin-console/marketing/apps/logs" style={{ display: "flex", alignItems: "center", gap: 6 }}>
-            <Icon name="sync" size={15} /> Integration Logs
-          </Link>
-          <Link className="btn btn-primary" href="/admin-console/marketing" style={{ display: "flex", alignItems: "center", gap: 6 }}>
-            <Icon name="key" size={15} /> API Credentials
+        <div className="actions">
+          {isSuperAdmin && (
+            <Link
+              className="btn btn-secondary"
+              href="/admin-console/marketing?tab=settings"
+            >
+              <Icon name="key" size={14} /> Configure App Credentials
+            </Link>
+          )}
+          <Link className="btn btn-ghost" href="/admin-console/marketing/apps/logs">
+            <Icon name="document" size={14} /> View Integration Logs
           </Link>
         </div>
       </div>
 
       {error ? (
-        <div className="form-alert" style={{ marginBottom: 16 }}>
-          {error}
+        <div className="card" style={{ color: "#b91c1c", marginBottom: 14 }}>
+          <div className="card-b">{error}</div>
         </div>
       ) : null}
 
-      {/* Quick Summary KPIs */}
-      <Reveal>
-        <div
-          style={{
-            display: "grid",
-            gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))",
-            gap: 16,
-            marginBottom: 24,
-          }}
-        >
-          <div className="card" style={{ padding: "16px 20px" }}>
-            <span style={{ fontSize: 12, color: "#64748b", fontWeight: 600 }}>Connected Accounts</span>
-            <div style={{ fontSize: 28, fontWeight: 800, color: "#0f172a", marginTop: 4 }}>
-              {totalConnected}
+      <Reveal delay={1}>
+        <div className="mkt-hub-hero">
+          <div className="mkt-hub-orbit" aria-hidden>
+            <span className="mkt-hub-orbit-ring" />
+            <span className="mkt-hub-orbit-ring r2" />
+            <div className="mkt-hub-orbit-core">
+              <Icon name="integrations" size={22} />
             </div>
-            <span style={{ fontSize: 12, color: "#10b981", fontWeight: 600, marginTop: 2, display: "block" }}>
-              Across {activeChannels} active channel{activeChannels === 1 ? "" : "s"}
-            </span>
+            {HERO_KEYS.map((key, i) => (
+              <div
+                key={key}
+                className={`mkt-hub-orbit-node n${i + 1}`}
+                title={key}
+              >
+                <PlatformBrandIcon platformKey={key} size={36} />
+              </div>
+            ))}
           </div>
-
-          <div className="card" style={{ padding: "16px 20px" }}>
-            <span style={{ fontSize: 12, color: "#64748b", fontWeight: 600 }}>Captured Social Leads</span>
-            <div style={{ fontSize: 28, fontWeight: 800, color: "#0f172a", marginTop: 4 }}>
-              {totalLeads}
+          <div className="mkt-hub-hero-card">
+            <div className="mkt-hub-hero-card-top">
+              <span className="mkt-hub-hero-badge">Integration Hub</span>
+              <div className="mkt-hub-mini-chart" aria-hidden>
+                <i style={{ height: "38%" }} />
+                <i style={{ height: "62%" }} />
+                <i style={{ height: "48%" }} />
+                <i style={{ height: "78%" }} />
+                <i style={{ height: "55%" }} />
+              </div>
             </div>
-            <span style={{ fontSize: 12, color: "#64748b", marginTop: 2, display: "block" }}>
-              In Super Admin Lead Management
-            </span>
-          </div>
-
-          <div className="card" style={{ padding: "16px 20px" }}>
-            <span style={{ fontSize: 12, color: "#64748b", fontWeight: 600 }}>Lead Flow Isolation</span>
-            <div style={{ fontSize: 18, fontWeight: 800, color: "#2563eb", marginTop: 8 }}>
-              Super Admin Core
+            <h2>Connected Apps for Lead Capture</h2>
+            <p>
+              Connect your marketing channels to stream leads into CRM with clean attribution.
+              Each platform operates independently with dedicated account connections.
+            </p>
+            <div className="mkt-hub-hero-stats">
+              <div>
+                <b>{loading ? "…" : data?.kpis.connectedApps ?? 0}</b>
+                <span>Connected</span>
+              </div>
+              <div>
+                <b>{loading ? "…" : data?.kpis.totalLeads ?? 0}</b>
+                <span>Leads</span>
+              </div>
+              <div>
+                <b>
+                  {loading
+                    ? "…"
+                    : `₹${Math.round(data?.kpis.spend ?? 0).toLocaleString("en-IN")}`}
+                </b>
+                <span>Spend</span>
+              </div>
             </div>
-            <span style={{ fontSize: 12, color: "#64748b", marginTop: 2, display: "block" }}>
-              Isolated from client organisations
-            </span>
           </div>
         </div>
       </Reveal>
 
-      {/* Main Channels Grid */}
-      <div className="mkt-hub-grid">
-        {ordered.map((p, index) => {
-          const copy = PLATFORM_COPY[p.key] ?? {
-            blurb: p.description ?? "Channel integration",
-            primaryLabel: "Connect",
-            secondaryLabel: "Open details",
-            guideHref: `/admin-console/marketing/apps/${p.key}`,
-            setupHint: "Platform is available.",
-            features: [],
-            steps: [],
-          };
-          const connected =
-            p.status === "connected" ||
-            p.status === "tracking" ||
-            (p.connections && p.connections.length > 0) ||
-            Boolean(p.connectionCount && p.connectionCount > 0);
-          const configured = p.configured !== false;
-
-          return (
-            <Reveal key={p.key} delay={index * 1}>
-              <article className="mkt-hub-card">
-                <div className="mkt-hub-card-main">
-                  <div className="mkt-hub-card-head">
-                    <div className="mkt-hub-brand-block">
-                      <div className="mkt-hub-logo-wrap">
-                        <PlatformBrandIcon platformKey={p.key} size={38} />
-                      </div>
-                      <div>
-                        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                          <h3 className="mkt-hub-title">{p.name}</h3>
-                          <StatusPill
-                            connected={connected}
-                            configured={configured}
-                            connectionCount={p.connectionCount || p.connections?.length || 0}
-                          />
-                        </div>
-                        <p className="mkt-hub-card-desc">
-                          {p.description || copy.blurb}
-                        </p>
-                      </div>
-                    </div>
-                    <div className="mkt-hub-card-links">
-                      <Link href={copy.guideHref}>Manage Platform</Link>
-                      <Link href="/admin-console/marketing/apps/logs">Integration Logs</Link>
-                    </div>
-                  </div>
-
-                  <p className="mkt-hub-card-blurb">{copy.blurb}</p>
-
-                  {!configured ? (
-                    <div
-                      className="mkt-hub-alert"
-                      style={{
-                        display: "flex",
-                        alignItems: "center",
-                        gap: 10,
-                      }}
-                    >
-                      <Icon name="alert" size={16} style={{ color: "#d97706", flexShrink: 0 }} />
-                      <span>{copy.setupHint}</span>
-                    </div>
-                  ) : null}
-
-                  <div className="mkt-hub-actions">
-                    {connected ? (
-                      <>
-                        <button
-                          type="button"
-                          className="btn btn-primary"
-                          disabled={syncKey === p.key}
-                          onClick={() => void sync(p)}
-                        >
-                          {syncKey === p.key ? "Syncing…" : "Sync Now"}
-                        </button>
-                        <Link
-                          className="btn btn-secondary"
-                          href={`/admin-console/marketing/apps/${p.key}`}
-                        >
-                          {(p.connectionCount || p.connections?.length || 0) > 1
-                            ? `Manage Accounts (${p.connectionCount || p.connections?.length})`
-                            : "View Details"}
-                        </Link>
-                      </>
-                    ) : (
-                      <>
-                        <button
-                          type="button"
-                          className="btn btn-primary"
-                          disabled={busyKey === p.key || !configured}
-                          onClick={() => void connect(p)}
-                        >
-                          {busyKey === p.key ? "Connecting…" : copy.primaryLabel}
-                        </button>
-                        <Link
-                          className="btn btn-secondary"
-                          href={copy.secondaryHref ?? copy.guideHref}
-                        >
-                          {copy.secondaryLabel}
-                        </Link>
-                      </>
-                    )}
-                  </div>
-
-                  <div className="mkt-hub-features">
-                    {copy.features.map((f) => (
-                      <div key={f.label} className="mkt-hub-feature">
-                        <span className="mkt-hub-feature-ico">
-                          <FeatureIcon name={f.icon} />
-                        </span>
+      <div className="mkt-hub-list">
+        {ordered.map((p, i) => {
+            const copy = PLATFORM_COPY[p.key];
+            if (!copy) return null;
+            const connected = p.status === "connected";
+            const configured = Boolean(p.configured);
+            return (
+              <Reveal key={p.key} delay={Math.min(i + 2, 6)}>
+                <article className="card mkt-hub-card">
+                  <div className="mkt-hub-card-main">
+                    <div className="mkt-hub-card-top">
+                      <div className="mkt-hub-card-brand">
+                        <PlatformBrandIcon platformKey={p.key} size={48} />
                         <div>
-                          <b>{f.label}</b>
-                          <span>{f.tip}</span>
+                          <div className="mkt-hub-card-name-row">
+                            <h3>{p.name}</h3>
+                            <StatusPill
+                              connected={connected}
+                              configured={configured}
+                              connectionCount={p.connectionCount || p.connections?.length || 0}
+                            />
+                          </div>
+                          <p className="mkt-hub-card-desc">
+                            {p.description || copy.blurb}
+                          </p>
                         </div>
                       </div>
-                    ))}
-                  </div>
-                </div>
+                      <div className="mkt-hub-card-links">
+                        <Link href={copy.guideHref}>View Documentation</Link>
+                        <Link href="/admin-console/marketing/apps/logs">Need Help?</Link>
+                      </div>
+                    </div>
 
-                <aside className="mkt-hub-howto">
-                  <div className="mkt-hub-howto-title">How to Connect</div>
-                  <ol className="mkt-hub-steps">
-                    {copy.steps.map((s, idx) => (
-                      <li key={s.title}>
-                        <span className="mkt-hub-step-num">{idx + 1}</span>
-                        <div>
-                          <b>{s.title}</b>
-                          <p>{s.body}</p>
+                    <p className="mkt-hub-card-blurb">{copy.blurb}</p>
+
+                    {!configured ? (
+                      <div
+                        className="mkt-hub-alert"
+                        style={{
+                          display: "flex",
+                          alignItems: "center",
+                          gap: 10,
+                        }}
+                      >
+                        <Icon name="alert" size={16} style={{ color: "#d97706", flexShrink: 0 }} />
+                        <span>{copy.setupHint}</span>
+                      </div>
+                    ) : null}
+
+                    <div className="mkt-hub-actions">
+                      {connected ? (
+                        <>
+                          <button
+                            type="button"
+                            className="btn btn-primary"
+                            disabled={syncKey === p.key}
+                            onClick={() => void sync(p)}
+                          >
+                            {syncKey === p.key ? "Syncing…" : "Sync Now"}
+                          </button>
+                          <Link
+                            className="btn btn-ghost"
+                            href={`/admin-console/marketing/apps/${p.key}`}
+                          >
+                            {(p.connectionCount || p.connections?.length || 0) > 1
+                              ? `Manage Accounts (${p.connectionCount || p.connections?.length})`
+                              : "View Details"}
+                          </Link>
+                        </>
+                      ) : (
+                        <>
+                          <button
+                            type="button"
+                            className="btn btn-primary"
+                            disabled={busyKey === p.key || !configured}
+                            onClick={() => void connect(p)}
+                          >
+                            {busyKey === p.key ? "Connecting…" : copy.primaryLabel}
+                          </button>
+                          <Link
+                            className="btn btn-ghost"
+                            href={copy.secondaryHref ?? copy.guideHref}
+                          >
+                            {copy.secondaryLabel}
+                          </Link>
+                        </>
+                      )}
+                    </div>
+
+                    <div className="mkt-hub-features">
+                      {copy.features.map((f) => (
+                        <div key={f.label} className="mkt-hub-feature">
+                          <span className="mkt-hub-feature-ico">
+                            <FeatureIcon name={f.icon} />
+                          </span>
+                          <div>
+                            <b>{f.label}</b>
+                            <span>{f.tip}</span>
+                          </div>
                         </div>
-                      </li>
-                    ))}
-                  </ol>
-                  <Link className="mkt-hub-guide" href={copy.guideHref}>
-                    View Configuration &amp; Accounts →
-                  </Link>
-                </aside>
-              </article>
-            </Reveal>
-          );
-        })}
+                      ))}
+                    </div>
+                  </div>
+
+                  <aside className="mkt-hub-howto">
+                    <div className="mkt-hub-howto-title">How to Connect</div>
+                    <ol className="mkt-hub-steps">
+                      {copy.steps.map((s, idx) => (
+                        <li key={s.title}>
+                          <span className="mkt-hub-step-num">{idx + 1}</span>
+                          <div>
+                            <b>{s.title}</b>
+                            <p>{s.body}</p>
+                          </div>
+                        </li>
+                      ))}
+                    </ol>
+                    <Link className="mkt-hub-guide" href={copy.guideHref}>
+                      View Step by Step Guide →
+                    </Link>
+                  </aside>
+                </article>
+              </Reveal>
+            );
+          })}
         {!loading && ordered.length === 0 ? (
           <div className="muted">No marketing platforms available.</div>
         ) : null}
