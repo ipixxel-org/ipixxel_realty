@@ -72,13 +72,11 @@ export default function AdminMarketingSyncLogsPage() {
                 <table className="tbl">
                   <thead>
                     <tr>
-                      <th>Status</th>
-                      <th>Platform</th>
-                      <th>Event</th>
-                      <th>Leads</th>
-                      <th>Duration</th>
                       <th>Time</th>
-                      <th>Details</th>
+                      <th>Platform</th>
+                      <th>Direction</th>
+                      <th>Status</th>
+                      <th>Message / Details</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -86,26 +84,22 @@ export default function AdminMarketingSyncLogsPage() {
                       const isOk = log.status === "success" || log.status === "ok";
                       return (
                         <tr key={log.id}>
-                          <td>
-                            <span className={`badge ${isOk ? "b-emerald" : "b-rose"}`}>
-                              {log.status}
-                            </span>
+                          <td className="muted" style={{ fontSize: 12 }}>
+                            {new Date(log.createdAt).toLocaleString()}
                           </td>
                           <td style={{ textTransform: "capitalize", fontWeight: 600 }}>
                             {log.platformKey}
                           </td>
-                          <td>{log.trigger || "Sync"}</td>
-                          <td style={{ fontWeight: 600 }}>
-                            {log.leadsImported ?? 0}
+                          <td style={{ textTransform: "capitalize" }}>
+                            {log.direction || "Inbound"}
                           </td>
-                          <td className="muted">
-                            {log.durationMs ? `${log.durationMs}ms` : "—"}
+                          <td>
+                            <span className={`badge ${isOk ? "b-emerald" : "b-rose"}`}>
+                              {isOk ? "Success" : "Failed"}
+                            </span>
                           </td>
-                          <td className="muted" style={{ fontSize: 12 }}>
-                            {new Date(log.createdAt).toLocaleString()}
-                          </td>
-                          <td style={{ fontSize: 12, maxWidth: 300, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                            {log.errorMessage || (log.metadata ? JSON.stringify(log.metadata) : "—")}
+                          <td style={{ fontSize: 13, color: "#334155" }}>
+                            {log.message || "—"}
                           </td>
                         </tr>
                       );

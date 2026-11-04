@@ -126,11 +126,11 @@ export interface OnboardingAccountInput {
 
 export type SignupStep1Response =
   | ({ status: "created" } & AuthTokens & {
-        user: SafeUser;
-        onboardingStep: OnboardingStep;
-        nextStep: OnboardingStep;
-        email_verification_required?: boolean;
-      })
+    user: SafeUser;
+    onboardingStep: OnboardingStep;
+    nextStep: OnboardingStep;
+    email_verification_required?: boolean;
+  })
   | { status: "exists_incomplete" }
   | { status: "exists_completed" };
 
@@ -1826,7 +1826,7 @@ export interface SalesAgentCall {
   leadName: string | null;
   direction: SalesAgentCallDirection;
   outcome:
-    "connected" | "booked_visit" | "callback" | "no_answer" | "missed" | "busy";
+  "connected" | "booked_visit" | "callback" | "no_answer" | "missed" | "busy";
   durationSeconds: number;
   createdAt: string;
 }
@@ -3144,6 +3144,8 @@ export interface MarketingPlatformAdmin {
 }
 
 export interface MarketingSyncLog {
+  leadsImported?: number;
+  durationMs?: any;
   id: string;
   orgId: string | null;
   connectionId: string | null;
@@ -3151,6 +3153,9 @@ export interface MarketingSyncLog {
   direction: string;
   status: string;
   message: string | null;
+  trigger?: string | null;
+  errorMessage?: string | null;
+  metadata?: any;
   createdAt: string;
 }
 
@@ -3174,74 +3179,74 @@ export interface GoogleAuthInput {
 
 export type GoogleAuthResponse =
   | {
-      status: "authenticated";
-      user: SafeUser;
-      roles: string[];
-      access_token: string;
-      refresh_token: string;
-      token_type?: string;
-      expires_in?: number;
-      onboarding_incomplete: false;
-      googleUser?: {
-        email: string;
-        firstName: string;
-        lastName: string;
-        picture?: string;
-      };
-    }
-  | {
-      status: "exists_incomplete";
-      user: SafeUser;
-      roles: string[];
-      access_token: string;
-      refresh_token: string;
-      token_type?: string;
-      expires_in?: number;
-      onboarding_incomplete: true;
-      onboardingStep: OnboardingStep;
-      existingUserId?: string;
-      firstName?: string;
-      lastName?: string;
-    }
-  | {
-      status: "created";
-      user: SafeUser;
-      access_token: string;
-      refresh_token: string;
-      token_type?: string;
-      expires_in?: number;
-      onboardingStep: OnboardingStep;
-      nextStep?: OnboardingStep;
-      email_verification_required: boolean;
-      googleUser?: {
-        email: string;
-        firstName: string;
-        lastName: string;
-        picture?: string;
-      };
-    }
-  | {
-      status: "exists_completed";
-      email: string;
-      message: string;
-    }
-  | {
-      status: "not_found";
+    status: "authenticated";
+    user: SafeUser;
+    roles: string[];
+    access_token: string;
+    refresh_token: string;
+    token_type?: string;
+    expires_in?: number;
+    onboarding_incomplete: false;
+    googleUser?: {
       email: string;
       firstName: string;
       lastName: string;
       picture?: string;
-      message: string;
-    }
-  | {
-      status: "needs_profile";
-      email: string;
-      firstName: string;
-      lastName: string;
-      picture?: string;
-      googleVerified: true;
-      googleToken?: string;
     };
+  }
+  | {
+    status: "exists_incomplete";
+    user: SafeUser;
+    roles: string[];
+    access_token: string;
+    refresh_token: string;
+    token_type?: string;
+    expires_in?: number;
+    onboarding_incomplete: true;
+    onboardingStep: OnboardingStep;
+    existingUserId?: string;
+    firstName?: string;
+    lastName?: string;
+  }
+  | {
+    status: "created";
+    user: SafeUser;
+    access_token: string;
+    refresh_token: string;
+    token_type?: string;
+    expires_in?: number;
+    onboardingStep: OnboardingStep;
+    nextStep?: OnboardingStep;
+    email_verification_required: boolean;
+    googleUser?: {
+      email: string;
+      firstName: string;
+      lastName: string;
+      picture?: string;
+    };
+  }
+  | {
+    status: "exists_completed";
+    email: string;
+    message: string;
+  }
+  | {
+    status: "not_found";
+    email: string;
+    firstName: string;
+    lastName: string;
+    picture?: string;
+    message: string;
+  }
+  | {
+    status: "needs_profile";
+    email: string;
+    firstName: string;
+    lastName: string;
+    picture?: string;
+    googleVerified: true;
+    googleToken?: string;
+  };
 
 
 // --- Payments (Razorpay) ---------------------------------------------------
