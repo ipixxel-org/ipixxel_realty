@@ -7,6 +7,7 @@ import { Reveal } from "@/components/superadmin/reveal";
 import { CountUp } from "@/components/superadmin/count-up";
 import { Icon } from "@/components/icons";
 import { LeadStatusPill } from "@/components/superadmin/lead-status-pill";
+import { ConvertLeadModal } from "@/components/superadmin/convert-lead-modal";
 import { LIST_PAGE_SIZE, ListPager } from "@/components/ui/list-pager";
 import { getAdminLeads, getAdminLeadsMeta } from "@/lib/api";
 import {
@@ -66,9 +67,9 @@ export default function AdminLeadsPage() {
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<"" | AdminLeadStatus>("");
   const [formFilter, setFormFilter] = useState("");
-  const [sourceFilter, setSourceFilter] = useState("");
   const [sortBy, setSortBy] = useState("createdAt");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
+  const [convertModalLead, setConvertModalLead] = useState<AdminLead | null>(null);
 
   useEffect(() => {
     const t = setTimeout(() => {
@@ -104,7 +105,6 @@ export default function AdminLeadsPage() {
         search: search || undefined,
         status: statusFilter || undefined,
         formName: formFilter || undefined,
-        source: sourceFilter || undefined,
         sortBy: sortBy as "createdAt" | "status" | "source" | "formName",
         sortDir,
       });
@@ -122,7 +122,6 @@ export default function AdminLeadsPage() {
     search,
     statusFilter,
     formFilter,
-    sourceFilter,
     sortBy,
     sortDir,
   ]);
@@ -297,22 +296,6 @@ export default function AdminLeadsPage() {
             </select>
             <select
               className="inp"
-              style={{ width: "auto", minWidth: 140 }}
-              value={sourceFilter}
-              onChange={(e) => {
-                setSourceFilter(e.target.value);
-                setPage(1);
-              }}
-            >
-              <option value="">All sources</option>
-              {(meta?.sources ?? []).map((s) => (
-                <option key={s} value={s}>
-                  {s}
-                </option>
-              ))}
-            </select>
-            <select
-              className="inp"
               style={{ width: "auto", minWidth: 150 }}
               value={`${sortBy}:${sortDir}`}
               onChange={(e) => {
@@ -328,7 +311,7 @@ export default function AdminLeadsPage() {
               <option value="source:asc">Source A–Z</option>
               <option value="formName:asc">Form A–Z</option>
             </select>
-            {(search || statusFilter || formFilter || sourceFilter) ? (
+            {(search || statusFilter || formFilter) ? (
               <button
                 type="button"
                 className="btn btn-ghost btn-sm"
@@ -337,7 +320,6 @@ export default function AdminLeadsPage() {
                   setSearch("");
                   setStatusFilter("");
                   setFormFilter("");
-                  setSourceFilter("");
                   setPage(1);
                 }}
               >
@@ -432,13 +414,53 @@ export default function AdminLeadsPage() {
                         <td className="muted" style={{ whiteSpace: "nowrap", fontSize: 12.5 }}>
                           {formatAdminLeadDate(lead.createdAt)}
                         </td>
-                        <td>
-                          <Link
-                            href={`/admin-console/leads/${lead.id}`}
-                            className="btn btn-ghost btn-sm"
-                          >
-                            Manage
-                          </Link>
+                        <td style={{ whiteSpace: "nowrap" }}>
+                          <div style={{ display: "flex", gap: 6, alignItems: "center", justifyContent: "flex-end" }}>
+                            {lead.convertedOrg ? (
+                              <Link
+                                href={`/admin-console/organisation-detail/${lead.convertedOrg.id}`}
+                                className="btn btn-sm"
+                                style={{
+                                  background: "#ecfdf5",
+                                  color: "#059669",
+                                  border: "1px solid #a7f3d0",
+                                  fontWeight: 600,
+                                  fontSize: 12,
+                                  padding: "4px 8px",
+                                  display: "inline-flex",
+                                  alignItems: "center",
+                                  gap: 4,
+                                  textDecoration: "none",
+                                }}
+                                title={`Converted into ${lead.convertedOrg.name}`}
+                              >
+                                <Icon name="building" size={13} /> {lead.convertedOrg.name} ↗
+                              </Link>
+                            ) : lead.status === "converted" ? (
+                              <button
+                                type="button"
+                                className="btn btn-primary btn-sm"
+                                style={{
+                                  background: "linear-gradient(135deg, #10b981, #059669)",
+                                  borderColor: "#059669",
+                                  fontSize: 12,
+                                  padding: "4px 10px",
+                                  display: "inline-flex",
+                                  alignItems: "center",
+                                  gap: 4,
+                                }}
+                                onClick={() => setConvertModalLead(lead)}
+                              >
+                                <Icon name="sparkles" size={13} /> Convert to Org
+                              </button>
+                            ) : null}
+                            <Link
+                              href={`/admin-console/leads/${lead.id}`}
+                              className="btn btn-ghost btn-sm"
+                            >
+                              Manage
+                            </Link>
+                          </div>
                         </td>
                       </tr>
                     );
@@ -458,6 +480,13 @@ export default function AdminLeadsPage() {
           />
         </div>
       </Reveal>
+
+      <ConvertLeadModal
+        isOpen={Boolean(convertModalLead)}
+        lead={convertModalLead}
+        onClose={() => setConvertModalLead(null)}
+        onSuccess={() => void loadLeads()}
+      />
     </>
   );
 }

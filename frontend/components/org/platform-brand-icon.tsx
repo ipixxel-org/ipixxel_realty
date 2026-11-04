@@ -163,19 +163,41 @@ export function PlatformBrandIcon({
   const key = platformKey.toLowerCase();
   const logo = LOGO[key] ?? FALLBACK;
   const pad = Math.round(size * 0.22);
+  const radius = Math.max(8, Math.round(size * 0.28));
 
   return (
     <span
       className="mkt-brand-ico"
       style={{
+        display: "inline-grid",
+        placeItems: "center",
         width: size,
         height: size,
+        minWidth: size,
+        minHeight: size,
+        maxWidth: size,
+        maxHeight: size,
+        borderRadius: radius,
         background: logo.bg,
         padding: pad,
+        boxSizing: "border-box",
+        overflow: "hidden",
+        flexShrink: 0,
       }}
       aria-hidden
     >
-      <svg viewBox={logo.viewBox ?? "0 0 24 24"} width="100%" height="100%">
+      <svg
+        viewBox={logo.viewBox ?? "0 0 24 24"}
+        width="100%"
+        height="100%"
+        style={{
+          display: "block",
+          width: "100%",
+          height: "100%",
+          maxWidth: "100%",
+          maxHeight: "100%",
+        }}
+      >
         {logo.paths}
       </svg>
     </span>

@@ -8815,6 +8815,11 @@
 .org .mkt-hub-orbit-node {
   position: absolute;
   z-index: 3;
+  width: 36px;
+  height: 36px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   filter: drop-shadow(0 6px 14px rgba(15, 23, 42, 0.12));
 }
 
@@ -8833,6 +8838,11 @@
 .org .mkt-hub-orbit-node.n4 {
   right: 18%;
   bottom: 16%;
+}
+.org .mkt-hub-orbit-node.n5 {
+  left: 50%;
+  top: 12%;
+  margin-left: -18px;
 }
 
 .org .mkt-hub-hero-card {

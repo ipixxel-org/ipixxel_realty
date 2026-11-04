@@ -351,7 +351,9 @@ export class AdminOrganisationsService {
       return { data: [], total: 0, page, limit };
     }
 
-    const where: Prisma.OrganisationWhereInput = {};
+    const where: Prisma.OrganisationWhereInput = {
+      id: { not: 'platform' },
+    };
     if (query.status === 'all' || !query.status) {
       // Include incomplete onboarding attempts in the unfiltered list so
       // Super Admin can see and identify them as drafts.
@@ -457,14 +459,15 @@ export class AdminOrganisationsService {
   }
 
   async summary() {
+    const notPlatform = { id: { not: 'platform' } };
     const [total, active, pending, disabled, draft, pendingSignups] = await Promise.all([
-      this.prisma.organisation.count({ where: { status: { not: 'draft' } } }),
-      this.prisma.organisation.count({ where: { status: 'active' } }),
-      this.prisma.organisation.count({ where: { status: 'pending' } }),
+      this.prisma.organisation.count({ where: { ...notPlatform, status: { not: 'draft' } } }),
+      this.prisma.organisation.count({ where: { ...notPlatform, status: 'active' } }),
+      this.prisma.organisation.count({ where: { ...notPlatform, status: 'pending' } }),
       // Matches the list() "Rejected/Disabled" bucket — both statuses read
       // as "not usable right now" in the Super Admin UI.
-      this.prisma.organisation.count({ where: { status: { in: ['disabled', 'rejected'] } } }),
-      this.prisma.organisation.count({ where: { status: 'draft' } }),
+      this.prisma.organisation.count({ where: { ...notPlatform, status: { in: ['disabled', 'rejected'] } } }),
+      this.prisma.organisation.count({ where: { ...notPlatform, status: 'draft' } }),
       this.prisma.user.count({ where: PENDING_SIGNUP_WHERE }),
     ]);
 

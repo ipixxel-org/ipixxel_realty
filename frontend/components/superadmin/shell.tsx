@@ -40,6 +40,7 @@ export const NAV_MODULE: Record<string, string> = {
   "/admin-console/subscriptions": "admin_subscriptions",
   "/admin-console/coupons": "admin_coupons",
   // "/admin-console/integrations" has no single module — see canAccessAdminNavItem.
+  "/admin-console/marketing/apps": "admin_settings",
   "/admin-console/marketing": "admin_settings",
   "/admin-console/attribution": "admin_settings",
   "/admin-console/audit-logs": "admin_audit_logs",
@@ -124,6 +125,13 @@ export const NAV_GROUPS: NavGroup[] = [
   {
     grp: "Marketing",
     items: [
+      {
+        href: "/admin-console/marketing/apps",
+        icon: "integrations",
+        label: "Connected Apps",
+        tip: "Connect Meta, Instagram, WhatsApp & Google Sheets",
+        activeMatch: ["/admin-console/marketing/apps"],
+      },
       {
         href: "/admin-console/marketing",
         icon: "trending",
@@ -223,6 +231,7 @@ const CRUMB_MAP: Record<string, string> = {
   "/admin-console/subscriptions": "Subscriptions",
   "/admin-console/coupons": "Coupons",
   "/admin-console/integrations": "Integrations",
+  "/admin-console/marketing/apps": "Connected Apps",
   "/admin-console/marketing": "Marketing",
   "/admin-console/attribution": "Lead Attribution",
   "/admin-console/audit-logs": "Audit Logs",
@@ -343,13 +352,29 @@ export function SuperAdminShell({ children }: { children: ReactNode }) {
               <ul className="nav-group" key={group.grp}>
                 <li className="grp">{group.grp}</li>
                 {items.map((item) => {
-                  const isActive =
+                  const matches =
                     item.activeMatch?.some((base) => {
                       if (base === "/admin-console") {
                         return pathname === "/admin-console";
                       }
                       return pathname === base || pathname.startsWith(`${base}/`);
                     }) ?? false;
+                  const longerMatch = matches
+                    ? NAV_GROUPS.some((g) =>
+                        g.items.some(
+                          (other) =>
+                            other.href !== item.href &&
+                            (other.activeMatch || [other.href]).some(
+                              (otherBase) =>
+                                otherBase.length >
+                                  (item.activeMatch?.[0] || item.href).length &&
+                                (pathname === otherBase ||
+                                  pathname.startsWith(`${otherBase}/`)),
+                            ),
+                        ),
+                      )
+                    : false;
+                  const isActive = matches && !longerMatch;
                   const badge =
                     item.href === "/admin-console/organisations"
                       ? (pendingOrgsBadge && pendingOrgsBadge > 0 ? `${pendingOrgsBadge} pending` : undefined)

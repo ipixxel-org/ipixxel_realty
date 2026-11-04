@@ -21,7 +21,7 @@ export const ADMIN_LEAD_STATUS_META: Record<
   follow_up: { label: "Follow-up", color: "#f59e0b" },
   interested: { label: "Interested", color: "#6366f1" },
   not_interested: { label: "Not Interested", color: "#f97316" },
-  converted: { label: "Converted", color: "#16a34a" },
+  converted: { label: "Completed / Converted", color: "#16a34a" },
   lost: { label: "Lost", color: "#e11d48" },
 };
 

@@ -6,6 +6,7 @@ import { useParams } from "next/navigation";
 import { Reveal } from "@/components/superadmin/reveal";
 import { Icon } from "@/components/icons";
 import { LeadStatusPill } from "@/components/superadmin/lead-status-pill";
+import { ConvertLeadModal } from "@/components/superadmin/convert-lead-modal";
 import { useToast } from "@/components/ui/toast";
 import {
   addAdminLeadRemark,
@@ -58,16 +59,12 @@ export default function AdminLeadDetailPage() {
   const [error, setError] = useState<string | null>(null);
 
   const [statusDraft, setStatusDraft] = useState<AdminLeadStatus>("new");
-  const [statusRemark, setStatusRemark] = useState("");
-  const [savingStatus, setSavingStatus] = useState(false);
-
   const [remark, setRemark] = useState("");
-  const [savingRemark, setSavingRemark] = useState(false);
-
   const [followUpAt, setFollowUpAt] = useState("");
   const [reminderAt, setReminderAt] = useState("");
   const [followUpNote, setFollowUpNote] = useState("");
-  const [savingFollowUp, setSavingFollowUp] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [convertModalOpen, setConvertModalOpen] = useState(false);
 
   const load = useCallback(async () => {
     if (!id) return;
@@ -99,10 +96,23 @@ export default function AdminLeadDetailPage() {
   const phone = lead ? leadDisplayPhone(lead) : "";
   const email = lead ? leadDisplayEmail(lead) : "";
   const source = lead ? leadDisplaySource(lead) : "";
+  const isConverted = lead ? lead.status === "converted" || Boolean(lead.convertedOrg) : false;
+
+  const INTERNAL_KEYS = new Set([
+    "unitId",
+    "convertedOrgId",
+    "convertedOrgName",
+    "convertedAt",
+    "convertedUserId",
+    "landing_page_url",
+    "landingPageUrl",
+    "projectId",
+    "orgId",
+  ]);
 
   const capturedFields = lead?.data
     ? Object.entries(lead.data)
-        .filter(([key]) => !["unitId"].includes(key))
+        .filter(([key]) => !INTERNAL_KEYS.has(key))
         .map(([key, value]) => ({ key, value }))
     : [];
 
@@ -110,88 +120,73 @@ export default function AdminLeadDetailPage() {
     ? Object.values(lead.attribution).some((value) => Boolean(value))
     : false;
 
-  async function saveStatus() {
+  async function saveCombinedLead() {
     if (!lead) return;
-    setSavingStatus(true);
+    setSaving(true);
     setError(null);
-    try {
-      const updated = await updateAdminLeadStatus(lead.id, {
-        status: statusDraft,
-        remark: statusRemark.trim() || undefined,
-      });
-      setLead(updated);
-      setStatusRemark("");
-      toast({ title: "Lead status updated", description: ADMIN_LEAD_STATUS_META[statusDraft].label });
-    } catch (e) {
-      const message = e instanceof Error ? e.message : "Could not update status.";
-      setError(message);
-      toast({ title: "Status update failed", description: message, variant: "error" });
-    } finally {
-      setSavingStatus(false);
-    }
-  }
 
-  async function saveRemark() {
-    if (!lead || !remark.trim()) return;
-    setSavingRemark(true);
-    setError(null);
+    const isStatusChanged = statusDraft !== lead.status;
+    const hasRemark = Boolean(remark.trim());
+    const hasFollowUp = Boolean(followUpAt);
+
+    if (!isStatusChanged && !hasRemark && !hasFollowUp) {
+      toast({ title: "No changes to save" });
+      setSaving(false);
+      return;
+    }
+
     try {
-      const activity = await addAdminLeadRemark(lead.id, remark.trim());
-      setLead((prev) =>
-        prev ? { ...prev, activities: [activity, ...prev.activities] } : prev,
-      );
+      let scheduledIso: string | undefined;
+      let reminderIso: string | undefined;
+
+      if (hasFollowUp) {
+        const scheduled = new Date(followUpAt);
+        if (Number.isNaN(scheduled.getTime())) {
+          throw new Error("Follow-up date is invalid.");
+        }
+        scheduledIso = scheduled.toISOString();
+        if (reminderAt) {
+          const reminder = new Date(reminderAt);
+          if (Number.isNaN(reminder.getTime())) {
+            throw new Error("Reminder date is invalid.");
+          }
+          reminderIso = reminder.toISOString();
+        }
+      }
+
+      // 1. Status update (carries remark if changed) - only allowed if not already converted
+      if (isStatusChanged && !isConverted) {
+        await updateAdminLeadStatus(lead.id, {
+          status: statusDraft,
+          remark: hasRemark ? remark.trim() : undefined,
+        });
+      } else if (hasRemark) {
+        // Just add remark
+        await addAdminLeadRemark(lead.id, remark.trim());
+      }
+
+      // 2. Follow-up update if date was set
+      if (hasFollowUp && scheduledIso) {
+        await updateAdminLeadFollowUp(lead.id, {
+          scheduledAt: scheduledIso,
+          reminderAt: reminderIso,
+          note: followUpNote.trim() || undefined,
+        });
+      }
+
+      await load();
       setRemark("");
-      toast({ title: "Remark added" });
-    } catch (e) {
-      const message = e instanceof Error ? e.message : "Could not add remark.";
-      setError(message);
-      toast({ title: "Remark failed", description: message, variant: "error" });
-    } finally {
-      setSavingRemark(false);
-    }
-  }
+      toast({ title: "Lead updated successfully" });
 
-  async function saveFollowUp() {
-    if (!lead) return;
-    if (!followUpAt) {
-      setError("Choose a follow-up date and time.");
-      return;
-    }
-    const scheduled = new Date(followUpAt);
-    if (Number.isNaN(scheduled.getTime())) {
-      setError("Follow-up date is invalid.");
-      return;
-    }
-    const reminder = reminderAt ? new Date(reminderAt) : null;
-    if (reminder && Number.isNaN(reminder.getTime())) {
-      setError("Reminder date is invalid.");
-      return;
-    }
-
-    setSavingFollowUp(true);
-    setError(null);
-    try {
-      const res = await updateAdminLeadFollowUp(lead.id, {
-        scheduledAt: scheduled.toISOString(),
-        reminderAt: reminder ? reminder.toISOString() : undefined,
-        note: followUpNote.trim() || undefined,
-      });
-      setLead((prev) =>
-        prev
-          ? {
-              ...prev,
-              nextAction: res.nextAction,
-              activities: [res.activity, ...prev.activities],
-            }
-          : prev,
-      );
-      toast({ title: lead.nextAction ? "Follow-up updated" : "Follow-up scheduled" });
+      if (statusDraft === "converted" && !lead.convertedOrg) {
+        setConvertModalOpen(true);
+      }
     } catch (e) {
-      const message = e instanceof Error ? e.message : "Could not save follow-up.";
+      const message = e instanceof Error ? e.message : "Could not save updates.";
       setError(message);
-      toast({ title: "Follow-up failed", description: message, variant: "error" });
+      toast({ title: "Update failed", description: message, variant: "error" });
     } finally {
-      setSavingFollowUp(false);
+      setSaving(false);
     }
   }
 
@@ -236,7 +231,40 @@ export default function AdminLeadDetailPage() {
             {formatAdminLeadDate(lead.createdAt)}
           </div>
         </div>
-        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+          {lead.convertedOrg ? (
+            <Link
+              href={`/admin-console/organisation-detail/${lead.convertedOrg.id}`}
+              className="btn btn-sm"
+              style={{
+                background: "#ecfdf5",
+                color: "#059669",
+                border: "1px solid #a7f3d0",
+                fontWeight: 600,
+                display: "inline-flex",
+                alignItems: "center",
+                gap: 6,
+                textDecoration: "none",
+              }}
+            >
+              <Icon name="building" size={14} /> View Organisation: {lead.convertedOrg.name} ↗
+            </Link>
+          ) : lead.status === "converted" ? (
+            <button
+              type="button"
+              className="btn btn-primary btn-sm"
+              style={{
+                background: "linear-gradient(135deg, #10b981, #059669)",
+                borderColor: "#059669",
+                display: "inline-flex",
+                alignItems: "center",
+                gap: 6,
+              }}
+              onClick={() => setConvertModalOpen(true)}
+            >
+              <Icon name="sparkles" size={14} /> Convert to Organisation
+            </button>
+          ) : null}
           <Link href="/admin-console/leads" className="btn btn-ghost btn-sm">
             Back to Leads
           </Link>
@@ -256,6 +284,103 @@ export default function AdminLeadDetailPage() {
       {error ? (
         <div className="form-alert" style={{ marginBottom: 16 }}>
           {error}
+        </div>
+      ) : null}
+
+      {lead.convertedOrg ? (
+        <div
+          style={{
+            background: "#f0fdf4",
+            border: "1px solid #bbf7d0",
+            borderRadius: 12,
+            padding: "14px 18px",
+            marginBottom: 18,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            gap: 16,
+          }}
+        >
+          <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+            <div
+              style={{
+                width: 36,
+                height: 36,
+                borderRadius: 8,
+                background: "#dcfce7",
+                color: "#16a34a",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                flexShrink: 0,
+              }}
+            >
+              <Icon name="check" size={18} />
+            </div>
+            <div>
+              <div style={{ fontWeight: 700, fontSize: 14, color: "#166534" }}>
+                Lead Converted into Organisation: {lead.convertedOrg.name}
+              </div>
+              <div style={{ fontSize: 12.5, color: "#15803d", marginTop: 2 }}>
+                Converted {formatAdminLeadDate(lead.convertedOrg.convertedAt || lead.createdAt)}. You can manage its profile, subscriptions, and templates anytime.
+              </div>
+            </div>
+          </div>
+          <Link
+            href={`/admin-console/organisation-detail/${lead.convertedOrg.id}`}
+            className="btn btn-primary btn-sm"
+            style={{ background: "#16a34a", borderColor: "#16a34a", whiteSpace: "nowrap" }}
+          >
+            Open Organisation Setup →
+          </Link>
+        </div>
+      ) : lead.status === "converted" ? (
+        <div
+          style={{
+            background: "#eff6ff",
+            border: "1px solid #bfdbfe",
+            borderRadius: 12,
+            padding: "14px 18px",
+            marginBottom: 18,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            gap: 16,
+          }}
+        >
+          <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+            <div
+              style={{
+                width: 36,
+                height: 36,
+                borderRadius: 8,
+                background: "#dbeafe",
+                color: "#2563eb",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                flexShrink: 0,
+              }}
+            >
+              <Icon name="sparkles" size={18} />
+            </div>
+            <div>
+              <div style={{ fontWeight: 700, fontSize: 14, color: "#1e40af" }}>
+                Lead Ready for Organisation Conversion
+              </div>
+              <div style={{ fontSize: 12.5, color: "#2563eb", marginTop: 2 }}>
+                This lead is marked as Completed/Converted. Convert it now to generate credentials and configure workspace.
+              </div>
+            </div>
+          </div>
+          <button
+            type="button"
+            className="btn btn-primary btn-sm"
+            style={{ whiteSpace: "nowrap" }}
+            onClick={() => setConvertModalOpen(true)}
+          >
+            Convert to Organisation →
+          </button>
         </div>
       ) : null}
 
@@ -296,55 +421,6 @@ export default function AdminLeadDetailPage() {
           </Reveal>
 
           <Reveal delay={2}>
-            <div className="card">
-              <div className="card-h">
-                <span className="t">Requirement &amp; preferences</span>
-              </div>
-              <div className="card-b">
-                <div className="grid g2" style={{ gap: 24 }}>
-                  <div>
-                    <DetailRow
-                      label="Budget"
-                      value={
-                        lead.details.budgetMin || lead.details.budgetMax
-                          ? [lead.details.budgetMin, lead.details.budgetMax]
-                              .filter((v) => v != null)
-                              .map((v) => Number(v).toLocaleString("en-IN"))
-                              .join(" – ")
-                          : null
-                      }
-                    />
-                    <DetailRow label="Configurations" value={lead.details.configurations} />
-                    <DetailRow label="Purpose" value={lead.details.purpose} />
-                    <DetailRow label="Timeline" value={lead.details.timelineToBuy} />
-                    <DetailRow label="Facing" value={lead.details.facing} />
-                  </div>
-                  <div>
-                    <DetailRow label="Financing" value={lead.details.financing} />
-                    <DetailRow label="Loan status" value={lead.details.loanStatus} />
-                    <DetailRow label="Preferred floor" value={lead.details.preferredFloor} />
-                    <DetailRow label="Parking" value={lead.details.parking} />
-                    <DetailRow label="Temperature" value={lead.details.temperature} />
-                  </div>
-                </div>
-                <div className="divider" />
-                <DetailRow label="Requirement notes" value={lead.details.requirementNotes} />
-                <DetailRow label="Tags" value={lead.details.tags} />
-                <DetailRow
-                  label="Consent"
-                  value={[
-                    lead.details.consentCall ? "Call" : null,
-                    lead.details.consentWhatsapp ? "WhatsApp" : null,
-                    lead.details.consentEmail ? "Email" : null,
-                  ]
-                    .filter(Boolean)
-                    .join(", ")}
-                />
-              </div>
-            </div>
-          </Reveal>
-
-          <Reveal delay={3}>
             <div className="card">
               <div className="card-h">
                 <span className="t">Captured form fields</span>
@@ -412,17 +488,36 @@ export default function AdminLeadDetailPage() {
           <Reveal delay={1}>
             <div className="card">
               <div className="card-h">
-                <span className="t">Update status</span>
+                <span className="t">Update status, remark &amp; follow-up</span>
                 <LeadStatusPill status={lead.status} />
               </div>
-              <div className="card-b">
+              <div className="card-b" style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+                {/* 1. Status Dropdown */}
                 <div className="field">
-                  <label htmlFor="lead-status">Pipeline stage</label>
+                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 4 }}>
+                    <label htmlFor="lead-status" style={{ fontWeight: 600 }}>Pipeline stage</label>
+                    {isConverted ? (
+                      <span style={{ fontSize: 11.5, color: "#16a34a", fontWeight: 600 }}>
+                        Locked (Converted)
+                      </span>
+                    ) : null}
+                  </div>
                   <select
                     id="lead-status"
                     className="inp"
                     value={statusDraft}
                     onChange={(e) => setStatusDraft(e.target.value as AdminLeadStatus)}
+                    disabled={isConverted}
+                    style={
+                      isConverted
+                        ? {
+                            background: "#f8fafc",
+                            color: "#64748b",
+                            cursor: "not-allowed",
+                            opacity: 0.9,
+                          }
+                        : undefined
+                    }
                   >
                     {ADMIN_LEAD_STATUS_ORDER.map((status) => (
                       <option key={status} value={status}>
@@ -430,120 +525,96 @@ export default function AdminLeadDetailPage() {
                       </option>
                     ))}
                   </select>
+                  {isConverted ? (
+                    <div style={{ fontSize: 11.5, color: "#64748b", marginTop: 4 }}>
+                      This lead has reached the terminal converted stage and cannot be changed.
+                    </div>
+                  ) : null}
                 </div>
+
+                {/* 2. Add Remark / Note */}
                 <div className="field">
-                  <label htmlFor="status-remark">Remark</label>
+                  <label htmlFor="lead-remark" style={{ fontWeight: 600 }}>Add remark / Note</label>
                   <textarea
-                    id="status-remark"
+                    id="lead-remark"
                     className="inp"
                     rows={3}
                     maxLength={2000}
-                    placeholder="Optional note for this status change"
-                    value={statusRemark}
-                    onChange={(e) => setStatusRemark(e.target.value)}
-                  />
-                </div>
-                <button
-                  type="button"
-                  className="btn btn-primary"
-                  style={{ width: "100%" }}
-                  disabled={savingStatus}
-                  onClick={() => void saveStatus()}
-                >
-                  {savingStatus ? "Saving…" : "Save status"}
-                </button>
-              </div>
-            </div>
-          </Reveal>
-
-          <Reveal delay={2}>
-            <div className="card">
-              <div className="card-h">
-                <span className="t">Follow-up</span>
-                {lead.nextAction ? (
-                  <span className={`badge ${lead.nextAction.overdue ? "b-rose" : "b-amber"}`}>
-                    {lead.nextAction.overdue ? "Overdue" : "Scheduled"}
-                  </span>
-                ) : (
-                  <span className="badge b-gray">Not scheduled</span>
-                )}
-              </div>
-              <div className="card-b">
-                {lead.nextAction ? (
-                  <div className="form-alert ok" style={{ marginBottom: 14, fontSize: 12.5 }}>
-                    {formatAdminLeadDate(lead.nextAction.scheduledAt)}
-                    {lead.nextAction.note ? ` · ${lead.nextAction.note}` : ""}
-                  </div>
-                ) : null}
-                <div className="field">
-                  <label htmlFor="lead-follow-up">Follow-up at</label>
-                  <input
-                    id="lead-follow-up"
-                    type="datetime-local"
-                    className="inp"
-                    value={followUpAt}
-                    onChange={(e) => setFollowUpAt(e.target.value)}
-                  />
-                </div>
-                <div className="field">
-                  <label htmlFor="lead-reminder">Reminder at</label>
-                  <input
-                    id="lead-reminder"
-                    type="datetime-local"
-                    className="inp"
-                    value={reminderAt}
-                    onChange={(e) => setReminderAt(e.target.value)}
-                  />
-                </div>
-                <div className="field">
-                  <label htmlFor="lead-follow-up-note">Note</label>
-                  <textarea
-                    id="lead-follow-up-note"
-                    className="inp"
-                    rows={2}
-                    maxLength={2000}
-                    placeholder="What should happen on this follow-up?"
-                    value={followUpNote}
-                    onChange={(e) => setFollowUpNote(e.target.value)}
-                  />
-                </div>
-                <button
-                  type="button"
-                  className="btn btn-primary"
-                  style={{ width: "100%" }}
-                  disabled={savingFollowUp}
-                  onClick={() => void saveFollowUp()}
-                >
-                  {savingFollowUp ? "Saving…" : lead.nextAction ? "Update follow-up" : "Schedule follow-up"}
-                </button>
-              </div>
-            </div>
-          </Reveal>
-
-          <Reveal delay={3}>
-            <div className="card">
-              <div className="card-h">
-                <span className="t">Add remark</span>
-              </div>
-              <div className="card-b">
-                <div className="field">
-                  <textarea
-                    className="inp"
-                    rows={4}
-                    maxLength={2000}
-                    placeholder="Add a note to the activity history…"
+                    placeholder="Add a remark or note about this lead…"
                     value={remark}
                     onChange={(e) => setRemark(e.target.value)}
                   />
                 </div>
+
+                {/* 3. Follow-up Section */}
+                {!isConverted ? (
+                  <div style={{ borderTop: "1px solid #f1f5f9", paddingTop: 14 }}>
+                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
+                    <span style={{ fontSize: 13, fontWeight: 700, color: "#1e293b", display: "flex", alignItems: "center", gap: 6 }}>
+                      <Icon name="calendar" size={14} /> Follow-up schedule
+                    </span>
+                    {lead.nextAction ? (
+                      <span className={`badge ${lead.nextAction.overdue ? "b-rose" : "b-amber"}`}>
+                        {lead.nextAction.overdue ? "Overdue" : "Scheduled"}
+                      </span>
+                    ) : (
+                      <span className="badge b-gray">Optional</span>
+                    )}
+                  </div>
+
+                  {lead.nextAction ? (
+                    <div className="form-alert ok" style={{ marginBottom: 12, fontSize: 12 }}>
+                      Next: {formatAdminLeadDate(lead.nextAction.scheduledAt)}
+                      {lead.nextAction.note ? ` · ${lead.nextAction.note}` : ""}
+                    </div>
+                  ) : null}
+
+                  <div className="field">
+                    <label htmlFor="lead-follow-up" style={{ fontSize: 12 }}>Follow-up date &amp; time</label>
+                    <input
+                      id="lead-follow-up"
+                      type="datetime-local"
+                      className="inp"
+                      value={followUpAt}
+                      onChange={(e) => setFollowUpAt(e.target.value)}
+                    />
+                  </div>
+
+                  <div className="grid g2" style={{ gap: 10 }}>
+                    <div className="field">
+                      <label htmlFor="lead-reminder" style={{ fontSize: 12 }}>Reminder date</label>
+                      <input
+                        id="lead-reminder"
+                        type="datetime-local"
+                        className="inp"
+                        value={reminderAt}
+                        onChange={(e) => setReminderAt(e.target.value)}
+                      />
+                    </div>
+                    <div className="field">
+                      <label htmlFor="lead-follow-up-note" style={{ fontSize: 12 }}>Follow-up note</label>
+                      <input
+                        id="lead-follow-up-note"
+                        type="text"
+                        className="inp"
+                        placeholder="e.g. Call for site visit"
+                        value={followUpNote}
+                        onChange={(e) => setFollowUpNote(e.target.value)}
+                      />
+                    </div>
+                  </div>
+                </div>
+                ) : null}
+
+                {/* 4. Single Unified Action Button */}
                 <button
                   type="button"
                   className="btn btn-primary"
-                  style={{ width: "100%" }}
-                  disabled={savingRemark || !remark.trim()}
-                  onClick={() => void saveRemark()}
+                  style={{ width: "100%", height: 40, marginTop: 4, fontWeight: 700 }}
+                  disabled={saving || (isConverted && !remark.trim())}
+                  onClick={() => void saveCombinedLead()}
                 >
-                  {savingRemark ? "Adding…" : "Add remark"}
+                  {saving ? "Saving changes…" : isConverted ? "Add remark" : "Save changes"}
                 </button>
               </div>
             </div>
@@ -603,6 +674,13 @@ export default function AdminLeadDetailPage() {
           ) : null}
         </div>
       </div>
+
+      <ConvertLeadModal
+        isOpen={convertModalOpen}
+        lead={lead}
+        onClose={() => setConvertModalOpen(false)}
+        onSuccess={() => void load()}
+      />
     </>
   );
 }

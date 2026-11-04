@@ -1,11 +1,20 @@
 import {
   BadRequestException,
+  ConflictException,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
+import * as bcrypt from 'bcrypt';
 import type { LeadStatus, Prisma } from '@prisma/client';
 import { PrismaService } from '../../database/prisma.service';
+import { EmailService } from '../email/email.service';
 import { normalizeLeadData } from '../../common/utils/lead-data.util';
+import { generateTempPassword } from '../../common/utils/tokens.util';
+import { generateUniqueOrgSlug } from '../../common/utils/slug.util';
+import {
+  runTeamChatHook,
+  teamChatUserActivated,
+} from '../../common/utils/team-chat-membership.util';
 import type { ListAdminLeadsQueryDto } from './dto/list-admin-leads-query.dto';
 import {
   ADMIN_LEAD_STATUSES,
@@ -14,6 +23,7 @@ import {
 } from './dto/update-admin-lead-status.dto';
 import type { CreateAdminLeadRemarkDto } from './dto/create-admin-lead-remark.dto';
 import type { UpdateAdminLeadFollowUpDto } from './dto/update-admin-lead-follow-up.dto';
+import type { ConvertLeadToOrgDto } from './dto/convert-lead-to-org.dto';
 
 const STATUS_LABEL: Record<AdminLeadStatus, string> = {
   new: 'New',
@@ -42,10 +52,11 @@ const STATUS_ALIASES: Record<AdminLeadStatus, LeadStatus[]> = {
   lost: ['lost'],
 };
 
-const LEGACY_STATUS_MAP: Partial<Record<LeadStatus, AdminLeadStatus>> = {
+const LEGACY_STATUS_MAP: Partial<Record<string, AdminLeadStatus>> = {
   site_visit: 'follow_up',
   negotiation: 'interested',
   won: 'converted',
+  completed: 'converted',
 };
 
 const ACTOR_SELECT = {
@@ -101,7 +112,10 @@ function toActivity(row: {
 
 @Injectable()
 export class AdminLeadsService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly emailService: EmailService,
+  ) {}
 
   private async buildWhere(
     query: ListAdminLeadsQueryDto,
@@ -283,12 +297,25 @@ export class AdminLeadsService {
 
     return {
       data: leads.map((lead) => {
-        const data =
-          lead.data &&
-          typeof lead.data === 'object' &&
-          !Array.isArray(lead.data)
-            ? normalizeLeadData(lead.data)
-            : lead.data;
+        const rawData =
+          lead.data && typeof lead.data === 'object' && !Array.isArray(lead.data)
+            ? (lead.data as Record<string, unknown>)
+            : null;
+        const convertedOrg = rawData?.convertedOrgId
+          ? {
+              id: String(rawData.convertedOrgId),
+              name: String(rawData.convertedOrgName || 'Organisation'),
+              convertedAt: rawData.convertedAt ? String(rawData.convertedAt) : null,
+            }
+          : null;
+        const cleanData = rawData ? { ...rawData } : {};
+        delete cleanData.convertedOrgId;
+        delete cleanData.convertedOrgName;
+        delete cleanData.convertedAt;
+        delete cleanData.convertedUserId;
+        delete cleanData.landing_page_url;
+        delete cleanData.landingPageUrl;
+        const data = normalizeLeadData(cleanData);
         const org = orgById.get(lead.orgId) ?? null;
         const status = normalizeStatus(lead.status);
         return {
@@ -310,6 +337,7 @@ export class AdminLeadsService {
           source: lead.source,
           platform: lead.platform ?? null,
           data,
+          convertedOrg,
           status,
           legacyStatus: status !== lead.status ? lead.status : null,
           assignedTo: lead.assignedTo
@@ -462,10 +490,25 @@ export class AdminLeadsService {
       select: { id: true, name: true, slug: true },
     });
     const status = normalizeStatus(lead.status);
-    const data =
+    const rawData =
       lead.data && typeof lead.data === 'object' && !Array.isArray(lead.data)
-        ? normalizeLeadData(lead.data)
-        : lead.data;
+        ? (lead.data as Record<string, unknown>)
+        : null;
+    const convertedOrg = rawData?.convertedOrgId
+      ? {
+          id: String(rawData.convertedOrgId),
+          name: String(rawData.convertedOrgName || 'Organisation'),
+          convertedAt: rawData.convertedAt ? String(rawData.convertedAt) : null,
+        }
+      : null;
+    const cleanData = rawData ? { ...rawData } : {};
+    delete cleanData.convertedOrgId;
+    delete cleanData.convertedOrgName;
+    delete cleanData.convertedAt;
+    delete cleanData.convertedUserId;
+    delete cleanData.landing_page_url;
+    delete cleanData.landingPageUrl;
+    const data = normalizeLeadData(cleanData);
 
     return {
       id: lead.id,
@@ -483,6 +526,7 @@ export class AdminLeadsService {
       source: lead.source,
       platform: lead.platform ?? null,
       data,
+      convertedOrg,
       status,
       legacyStatus: status !== lead.status ? lead.status : null,
       assignedTo: lead.assignedTo
@@ -565,13 +609,19 @@ export class AdminLeadsService {
   ) {
     const lead = await this.prisma.lead.findUnique({
       where: { id },
-      select: { id: true, orgId: true, status: true },
+      select: { id: true, orgId: true, status: true, data: true },
     });
     if (!lead) throw new NotFoundException('Lead not found');
 
     const previous = normalizeStatus(lead.status);
     const next = normalizeStatus(dto.status);
     const remark = dto.remark?.trim();
+
+    if (previous === 'converted' && next !== 'converted') {
+      throw new BadRequestException(
+        'Lead status cannot be changed once converted.',
+      );
+    }
 
     if (previous === next && !remark) {
       return this.getById(id);
@@ -684,6 +734,176 @@ export class AdminLeadsService {
           : false,
       },
       activity: toActivity(activity),
+    };
+  }
+
+  async convertToOrganisation(
+    leadId: string,
+    dto: ConvertLeadToOrgDto,
+    actorId: string,
+  ) {
+    const lead = await this.prisma.lead.findUnique({
+      where: { id: leadId },
+      include: { project: true },
+    });
+    if (!lead) throw new NotFoundException('Lead not found');
+
+    const leadData =
+      lead.data && typeof lead.data === 'object' && !Array.isArray(lead.data)
+        ? (lead.data as Record<string, unknown>)
+        : {};
+
+    // Prevent duplicate organisation conversion
+    if (leadData.convertedOrgId) {
+      throw new ConflictException(
+        `This lead has already been converted into organisation "${leadData.convertedOrgName || leadData.convertedOrgId}".`,
+      );
+    }
+
+    const email = dto.email.trim().toLowerCase();
+    const phone = dto.phone?.trim() || null;
+    const orgName = dto.orgName.trim();
+    if (!orgName) throw new BadRequestException('Organisation name is required');
+    if (!email) throw new BadRequestException('Administrator email is required');
+
+    // Ensure email is not already registered in User table
+    const existingUser = await this.prisma.user.findUnique({
+      where: { email },
+    });
+    if (existingUser) {
+      throw new ConflictException(
+        `A user with email "${email}" is already registered. Please provide a different email address.`,
+      );
+    }
+
+    // Name resolution
+    let firstName = dto.firstName?.trim();
+    let lastName = dto.lastName?.trim();
+    if (!firstName && !lastName) {
+      const normalized = normalizeLeadData(leadData);
+      const rawFullName = (normalized as Record<string, unknown>)?.fullName ?? lead.altName ?? '';
+      const nameParts = String(rawFullName).trim().split(/\s+/);
+      firstName = nameParts[0] || 'Admin';
+      lastName = nameParts.slice(1).join(' ') || '';
+    }
+
+    const city = dto.city?.trim() || lead.city || 'Bengaluru';
+    const slug = await generateUniqueOrgSlug(this.prisma, orgName);
+
+    const adminRole = await this.prisma.role.findFirstOrThrow({
+      where: { orgId: null, key: 'admin' },
+    });
+
+    // 4. Secure temporary password generation
+    const tempPassword = generateTempPassword(12);
+    const passwordHash = await bcrypt.hash(tempPassword, 10);
+
+    const { organisation, user } = await this.prisma.$transaction(async (tx) => {
+      const org = await tx.organisation.create({
+        data: {
+          name: orgName,
+          slug,
+          city,
+          status: 'active',
+        },
+      });
+
+      const usr = await tx.user.create({
+        data: {
+          orgId: org.id,
+          firstName: firstName || 'Admin',
+          lastName: lastName || '',
+          email,
+          phoneNumber: phone,
+          passwordHash,
+          status: 'active',
+          mustChangePassword: true,
+          onboardingStep: 'completed',
+        },
+      });
+
+      await tx.userRole.create({
+        data: { userId: usr.id, roleId: adminRole.id },
+      });
+
+      const updatedLeadData = {
+        ...leadData,
+        convertedOrgId: org.id,
+        convertedOrgName: org.name,
+        convertedAt: new Date().toISOString(),
+        convertedUserId: usr.id,
+      };
+
+      await tx.lead.update({
+        where: { id: leadId },
+        data: {
+          status: 'converted',
+          data: updatedLeadData as Prisma.InputJsonValue,
+        },
+      });
+
+      await tx.activityEvent.create({
+        data: {
+          orgId: org.id,
+          agentId: actorId,
+          leadId,
+          type: 'status_updated',
+          text: `Lead converted to organisation "${org.name}" (${org.id}). Admin user created for ${email}. Temporary password sent via email.`,
+        },
+      });
+
+      await tx.auditLog.create({
+        data: {
+          orgId: org.id,
+          actorId,
+          action: 'organisation_created_from_lead',
+          entity: 'lead',
+          entityId: leadId,
+          metadata: {
+            leadId,
+            orgId: org.id,
+            orgName: org.name,
+            adminEmail: email,
+            adminPhone: phone,
+          },
+        },
+      });
+
+      return { organisation: org, user: usr };
+    });
+
+    // Founder joins the new org's General channel
+    await runTeamChatHook('org created by lead conversion', () =>
+      teamChatUserActivated(this.prisma, organisation.id, user.id),
+    );
+
+    // Send credentials to confirmed email address
+    void this.emailService.sendInviteEmail({
+      to: user.email,
+      recipientName:
+        [user.firstName, user.lastName].filter(Boolean).join(' ') || undefined,
+      orgName: organisation.name,
+      orgId: organisation.id,
+      role: 'Organisation Admin',
+      tempPassword,
+    });
+
+    return {
+      success: true,
+      organisation: {
+        id: organisation.id,
+        name: organisation.name,
+        slug: organisation.slug,
+        city: organisation.city,
+      },
+      user: {
+        id: user.id,
+        email: user.email,
+        firstName: user.firstName,
+        lastName: user.lastName,
+        phoneNumber: user.phoneNumber,
+      },
+      tempPassword,
     };
   }
 }

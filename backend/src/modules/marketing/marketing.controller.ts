@@ -115,6 +115,10 @@ export class OrgMarketingController {
     private readonly googleSheets: GoogleSheetsService,
   ) {}
 
+  private resolveOrgId(user: JwtPayload): string {
+    return user.orgId || (user.roles?.includes('super_admin') ? 'platform' : '');
+  }
+
   @Get('credentials')
   getCredentials(@CurrentUser() user: JwtPayload) {
     if (!user.roles?.includes('super_admin')) {
@@ -140,17 +144,17 @@ export class OrgMarketingController {
 
   @Get('dashboard')
   dashboard(@CurrentUser() user: JwtPayload) {
-    return this.service.dashboard(user.orgId as string);
+    return this.service.dashboard(this.resolveOrgId(user));
   }
 
   @Get('apps-overview')
   appsOverview(@CurrentUser() user: JwtPayload) {
-    return this.service.appsOverview(user.orgId as string);
+    return this.service.appsOverview(this.resolveOrgId(user));
   }
 
   @Get('platforms')
   platforms(@CurrentUser() user: JwtPayload) {
-    return this.service.listPlatformsForOrg(user.orgId as string);
+    return this.service.listPlatformsForOrg(this.resolveOrgId(user));
   }
 
   @Get('platforms/:key')
@@ -158,7 +162,7 @@ export class OrgMarketingController {
     @CurrentUser() user: JwtPayload,
     @Param('key') key: string,
   ) {
-    return this.service.getPlatformDetail(user.orgId as string, key);
+    return this.service.getPlatformDetail(this.resolveOrgId(user), key);
   }
 
   @Get('platforms/:key/connect')
@@ -166,8 +170,9 @@ export class OrgMarketingController {
     @CurrentUser() user: JwtPayload,
     @Param('key') key: string,
   ) {
+    const orgId = this.resolveOrgId(user);
     return this.service.getConnectUrl(
-      user.orgId as string,
+      orgId,
       user.sub,
       key,
     );
@@ -180,7 +185,7 @@ export class OrgMarketingController {
     @Body() dto: ConnectMarketingCredentialsDto,
   ) {
     return this.service.connectWithCredentials(
-      user.orgId as string,
+      this.resolveOrgId(user),
       user.sub,
       key,
       dto,
@@ -192,7 +197,7 @@ export class OrgMarketingController {
     @CurrentUser() user: JwtPayload,
     @Param('key') key: string,
   ) {
-    return this.service.syncPlatform(user.orgId as string, key);
+    return this.service.syncPlatform(this.resolveOrgId(user), key);
   }
 
   @Post('connections/:id/sync')
@@ -200,7 +205,7 @@ export class OrgMarketingController {
     @CurrentUser() user: JwtPayload,
     @Param('id') id: string,
   ) {
-    return this.service.syncConnection(user.orgId as string, id);
+    return this.service.syncConnection(this.resolveOrgId(user), id);
   }
 
   @Get('sync-logs')
@@ -209,7 +214,7 @@ export class OrgMarketingController {
     @Query('limit') limit?: string,
   ) {
     return this.service.listOrgSyncLogs(
-      user.orgId as string,
+      this.resolveOrgId(user),
       limit ? Number(limit) : 50,
     );
   }
@@ -219,7 +224,7 @@ export class OrgMarketingController {
     @CurrentUser() user: JwtPayload,
     @Query('platformKey') platformKey?: string,
   ) {
-    return this.service.listConnections(user.orgId as string, platformKey);
+    return this.service.listConnections(this.resolveOrgId(user), platformKey);
   }
 
   @Patch('connections/:id')
@@ -228,12 +233,12 @@ export class OrgMarketingController {
     @Param('id') id: string,
     @Body() dto: UpdateMarketingConnectionDto,
   ) {
-    return this.service.updateConnection(user.orgId as string, id, dto);
+    return this.service.updateConnection(this.resolveOrgId(user), id, dto);
   }
 
   @Delete('connections/:id')
   disconnect(@CurrentUser() user: JwtPayload, @Param('id') id: string) {
-    return this.service.disconnect(user.orgId as string, id);
+    return this.service.disconnect(this.resolveOrgId(user), id);
   }
 
   // --- Google Sheets & Drive dedicated endpoints -----------------------------
@@ -244,7 +249,7 @@ export class OrgMarketingController {
     @Body() dto: { title?: string; connectionId?: string; projectId?: string },
   ) {
     return this.googleSheets.createNewSheetForOrg(
-      user.orgId as string,
+      this.resolveOrgId(user),
       dto?.title,
       dto?.projectId,
       dto?.connectionId,
@@ -263,7 +268,7 @@ export class OrgMarketingController {
     },
   ) {
     return this.googleSheets.linkExistingSheet(
-      user.orgId as string,
+      this.resolveOrgId(user),
       dto.sheetInput,
       dto?.sheetName,
       dto?.projectId,
@@ -277,7 +282,7 @@ export class OrgMarketingController {
     @Body() dto?: { projectId?: string; connectionId?: string },
   ) {
     return this.googleSheets.syncAllLeadsToSheet(
-      user.orgId as string,
+      this.resolveOrgId(user),
       dto?.projectId,
       dto?.connectionId,
     );
@@ -294,7 +299,7 @@ export class OrgMarketingController {
     },
   ) {
     return this.googleSheets.importLeadsFromSheet(
-      user.orgId as string,
+      this.resolveOrgId(user),
       dto?.projectId,
       dto?.connectionId,
       dto?.sheetName,
@@ -317,7 +322,7 @@ export class OrgMarketingController {
   ) {
     const { connectionId, ...settings } = dto ?? {};
     return this.googleSheets.updateSettings(
-      user.orgId as string,
+      this.resolveOrgId(user),
       settings,
       connectionId,
     );
@@ -329,7 +334,7 @@ export class OrgMarketingController {
     @Query('connectionId') connectionId?: string,
   ) {
     return this.googleSheets.getWebhookConfig(
-      user.orgId as string,
+      this.resolveOrgId(user),
       connectionId,
     );
   }
@@ -340,7 +345,7 @@ export class OrgMarketingController {
     @Body('connectionId') connectionId?: string,
   ) {
     return this.googleSheets.regenerateWebhookToken(
-      user.orgId as string,
+      this.resolveOrgId(user),
       connectionId,
     );
   }
@@ -351,7 +356,7 @@ export class OrgMarketingController {
     @Body('connectionId') connectionId?: string,
   ) {
     return this.googleSheets.resetSyncStats(
-      user.orgId as string,
+      this.resolveOrgId(user),
       connectionId,
     );
   }
@@ -361,7 +366,7 @@ export class OrgMarketingController {
     @CurrentUser() user: JwtPayload,
     @Query('connectionId') connectionId?: string,
   ) {
-    return this.googleSheets.disconnect(user.orgId as string, connectionId);
+    return this.googleSheets.disconnect(this.resolveOrgId(user), connectionId);
   }
 }
 
@@ -381,8 +386,11 @@ export class MarketingOAuthController {
       /\/$/,
       '',
     );
-    let returnKey = 'google_ads';
-    if (state) {
+    const stateInfo = this.service.infoFromOAuthState(state);
+    const isPlatform = stateInfo.orgId === 'platform';
+    const redirectPrefix = isPlatform ? '/admin-console' : '/org';
+    let returnKey = stateInfo.platformKey || 'google_ads';
+    if (state && !stateInfo.platformKey) {
       try {
         const parsed = JSON.parse(Buffer.from(state, 'base64url').toString('utf8'));
         if (parsed.platformKey === 'google_sheets') returnKey = 'google_sheets';
@@ -391,7 +399,7 @@ export class MarketingOAuthController {
 
     if (error || !code || !state) {
       return res.redirect(
-        `${fe}/org/marketing/apps/${returnKey}?connected=0&message=${encodeURIComponent(error || 'OAuth cancelled')}`,
+        `${fe}${redirectPrefix}/marketing/apps/${returnKey}?connected=0&message=${encodeURIComponent(error || 'OAuth cancelled')}`,
       );
     }
     try {
@@ -400,7 +408,7 @@ export class MarketingOAuthController {
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : 'Google connect failed';
       return res.redirect(
-        `${fe}/org/marketing/apps/${returnKey}?connected=0&message=${encodeURIComponent(message)}`,
+        `${fe}${redirectPrefix}/marketing/apps/${returnKey}?connected=0&message=${encodeURIComponent(message)}`,
       );
     }
   }

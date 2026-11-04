@@ -442,9 +442,11 @@ export class GoogleSheetsService {
       })) as unknown as ConnectionRow;
     }
 
+    const isPlatform = parsed.orgId === 'platform';
+    const redirectPrefix = isPlatform ? '/admin-console' : '/org';
     return {
       connected: 1,
-      redirectTo: `${this.frontendUrl()}/org/marketing/apps/google_sheets?connected=1`,
+      redirectTo: `${this.frontendUrl()}${redirectPrefix}/marketing/apps/google_sheets?connected=1`,
       connection,
     };
   }

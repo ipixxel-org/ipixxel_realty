@@ -451,6 +451,7 @@ export default function SuperAdminOrganisationDetailPage() {
   const [templateRemoveTarget, setTemplateRemoveTarget] = useState<any | null>(null);
   const [templateRemoveBlocked, setTemplateRemoveBlocked] = useState<{ name: string; count: number } | null>(null);
   const [previewTpl, setPreviewTpl] = useState<any | null>(null);
+  const [isConvertedStep2, setIsConvertedStep2] = useState(false);
 
   useEffect(() => {
     if (!authLoading && !accessToken) {
@@ -459,10 +460,13 @@ export default function SuperAdminOrganisationDetailPage() {
   }, [authLoading, accessToken, router]);
 
   useEffect(() => {
-    const requested = new URLSearchParams(window.location.search).get("tab");
+    const search = new URLSearchParams(window.location.search);
+    const requested = search.get("tab");
     const match = TABS.find((t) => t === requested);
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- one-time read of the URL on mount
     if (match) setTab(match);
+    if (search.get("step") === "2" || search.get("converted") === "1") {
+      setIsConvertedStep2(true);
+    }
   }, []);
 
   useFlash(ORG_DETAIL_FLASH_KEY, (flash) => {
@@ -880,6 +884,77 @@ export default function SuperAdminOrganisationDetailPage() {
           </div>
         </div>
       </div>
+
+      {isConvertedStep2 ? (
+        <div
+          style={{
+            background: "linear-gradient(135deg, #ecfdf5 0%, #f0fdf4 100%)",
+            border: "1px solid #a7f3d0",
+            borderRadius: 14,
+            padding: "16px 20px",
+            marginBottom: 20,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            gap: 16,
+            boxShadow: "0 2px 8px rgba(16, 185, 129, 0.08)",
+          }}
+        >
+          <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
+            <div
+              style={{
+                width: 42,
+                height: 42,
+                borderRadius: 12,
+                background: "#10b981",
+                color: "#ffffff",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                fontWeight: 800,
+                fontSize: 20,
+                flexShrink: 0,
+              }}
+            >
+              ✓
+            </div>
+            <div>
+              <div style={{ fontWeight: 800, fontSize: 15, color: "#065f46" }}>
+                Step 1 Complete · Organisation Created & Credentials Sent
+              </div>
+              <div style={{ fontSize: 13, color: "#047857", marginTop: 2 }}>
+                Admin login credentials have been dispatched. You are now on <strong>Step 2 (Organisation Setup & Configuration)</strong> — review company details, assign subscriptions, and assign visual templates below.
+              </div>
+            </div>
+          </div>
+          <div style={{ display: "flex", gap: 8, flexShrink: 0 }}>
+            <button
+              type="button"
+              className="btn btn-sm btn-ghost"
+              style={{ background: "#ffffff", borderColor: "#a7f3d0", color: "#047857" }}
+              onClick={() => setTab("Overview")}
+            >
+              Company Profile
+            </button>
+            <button
+              type="button"
+              className="btn btn-sm btn-primary"
+              style={{ background: "#059669", borderColor: "#059669" }}
+              onClick={() => setTab("Subscription")}
+            >
+              Assign Subscription →
+            </button>
+            <button
+              type="button"
+              style={{ background: "none", border: "none", color: "#059669", cursor: "pointer", padding: "0 6px" }}
+              onClick={() => setIsConvertedStep2(false)}
+              title="Dismiss"
+            >
+              ✕
+            </button>
+          </div>
+        </div>
+      ) : null}
 
       {/* 4 Stat Cards */}
       <div

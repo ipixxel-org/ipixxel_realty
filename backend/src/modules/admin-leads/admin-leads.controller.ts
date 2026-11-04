@@ -17,6 +17,7 @@ import { ListAdminLeadsQueryDto } from './dto/list-admin-leads-query.dto';
 import { UpdateAdminLeadStatusDto } from './dto/update-admin-lead-status.dto';
 import { CreateAdminLeadRemarkDto } from './dto/create-admin-lead-remark.dto';
 import { UpdateAdminLeadFollowUpDto } from './dto/update-admin-lead-follow-up.dto';
+import { ConvertLeadToOrgDto } from './dto/convert-lead-to-org.dto';
 
 @UseGuards(JwtAuthGuard, SuperAdminGuard)
 @Controller('admin/leads')
@@ -63,5 +64,14 @@ export class AdminLeadsController {
     @CurrentUser() user: JwtPayload,
   ) {
     return this.leads.updateFollowUp(id, dto, user.sub);
+  }
+
+  @Post(':id/convert-to-organisation')
+  convertToOrganisation(
+    @Param('id') id: string,
+    @Body() dto: ConvertLeadToOrgDto,
+    @CurrentUser() user: JwtPayload,
+  ) {
+    return this.leads.convertToOrganisation(id, dto, user.sub);
   }
 }

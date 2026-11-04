@@ -382,6 +382,18 @@ export class MetaLeadsService implements OnModuleInit {
   }
 
   /** Decode OAuth state so error redirects land on the right Connected App. */
+  infoFromOAuthState(state: string | undefined): { orgId?: string; platformKey?: string } {
+    if (!state) return { platformKey: 'meta' };
+    try {
+      const parsed = JSON.parse(
+        Buffer.from(state, 'base64url').toString('utf8'),
+      ) as { orgId?: string; platformKey?: string };
+      return parsed;
+    } catch {
+      return { platformKey: 'meta' };
+    }
+  }
+
   platformKeyFromOAuthState(state: string | undefined): string {
     if (!state) return 'meta';
     try {
@@ -511,10 +523,12 @@ export class MetaLeadsService implements OnModuleInit {
       saved.push(this.toPublicConnection(row));
     }
 
+    const isPlatform = parsed.orgId === 'platform';
+    const redirectPrefix = isPlatform ? '/admin-console' : '/org';
     return {
       connected: saved.length,
       pages: saved,
-      redirectTo: `${this.frontendUrl()}/org/marketing/apps/${returnKey}?meta=connected`,
+      redirectTo: `${this.frontendUrl()}${redirectPrefix}/marketing/apps/${returnKey}?meta=connected`,
     };
   }
 

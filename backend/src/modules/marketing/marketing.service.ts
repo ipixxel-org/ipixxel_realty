@@ -679,6 +679,18 @@ export class MarketingService implements OnModuleInit {
     };
   }
 
+  infoFromOAuthState(state: string | undefined): { orgId?: string; platformKey?: string } {
+    if (!state) return { platformKey: 'google_ads' };
+    try {
+      const parsed = JSON.parse(
+        Buffer.from(state, 'base64url').toString('utf8'),
+      ) as { orgId?: string; platformKey?: string };
+      return parsed;
+    } catch {
+      return { platformKey: 'google_ads' };
+    }
+  }
+
   async getConnectUrl(orgId: string, userId: string, platformKey: string) {
     const adapter = this.registry.get(platformKey);
     if (!adapter?.getConnectUrl) {
@@ -913,9 +925,11 @@ export class MarketingService implements OnModuleInit {
       },
     );
     const key = token.platformKey || input.platformKeyFallback;
+    const isPlatform = token.orgId === 'platform';
+    const redirectPrefix = isPlatform ? '/admin-console' : '/org';
     return {
       connection: row,
-      redirectTo: `${this.frontendUrl()}/org/marketing/apps/${key}?connected=1`,
+      redirectTo: `${this.frontendUrl()}${redirectPrefix}/marketing/apps/${key}?connected=1`,
     };
   }
 
