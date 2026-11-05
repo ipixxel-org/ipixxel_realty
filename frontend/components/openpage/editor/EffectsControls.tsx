@@ -1,8 +1,8 @@
 "use client";
 
 import { useState } from "react";
-import { Link2, Link2Off, Sliders, Sparkles, Box, ShieldAlert } from "lucide-react";
 import { ColorInput } from "./shared-components";
+import { BorderRadiusControl } from "./BorderRadiusControl";
 
 interface EffectsControlsProps {
   borderWidth?: string;
@@ -36,27 +36,7 @@ export function EffectsControls({
   opacity,
   onChange,
 }: EffectsControlsProps) {
-  const [radiusLinked, setRadiusLinked] = useState(true);
   const [activeTab, setActiveTab] = useState<"border" | "shadow" | "transform" | "filters">("border");
-
-  // Parse radius values
-  const radiusParts = (borderRadius || "0px").split(" ");
-  const tl = radiusParts[0] || "0px";
-  const tr = radiusParts[1] || tl;
-  const br = radiusParts[2] || tl;
-  const bl = radiusParts[3] || tr;
-
-  const handleRadiusChange = (corner: "tl" | "tr" | "br" | "bl", val: string) => {
-    if (radiusLinked) {
-      onChange({ borderRadius: val });
-    } else {
-      const nextTl = corner === "tl" ? val : tl;
-      const nextTr = corner === "tr" ? val : tr;
-      const nextBr = corner === "br" ? val : br;
-      const nextBl = corner === "bl" ? val : bl;
-      onChange({ borderRadius: `${nextTl} ${nextTr} ${nextBr} ${nextBl}` });
-    }
-  };
 
   // Quick Shadows
   const shadowPresets = [
@@ -150,62 +130,10 @@ export function EffectsControls({
 
           {/* Border Radius */}
           <div>
-            <div className="flex items-center justify-between mb-1">
-              <label className="text-[10px] uppercase font-semibold text-text-3">Border Radius</label>
-              <button
-                type="button"
-                onClick={() => setRadiusLinked(!radiusLinked)}
-                className="text-text-3 hover:text-green p-0.5"
-                title={radiusLinked ? "Unlink corners" : "Link corners"}
-              >
-                {radiusLinked ? <Link2 size={11} /> : <Link2Off size={11} />}
-              </button>
-            </div>
-
-            {radiusLinked ? (
-              <input
-                type="text"
-                value={borderRadius || ""}
-                onChange={(e) => onChange({ borderRadius: e.target.value })}
-                placeholder="e.g. 12px or 9999px"
-                className="w-full px-2.5 py-1.5 rounded-lg bg-bg-2 border border-border-default text-text-0 text-[11px] font-mono outline-none"
-              />
-            ) : (
-              <div className="grid grid-cols-4 gap-1">
-                <input
-                  type="text"
-                  value={tl}
-                  onChange={(e) => handleRadiusChange("tl", e.target.value)}
-                  placeholder="TL"
-                  className="px-1.5 py-1 text-center bg-bg-2 border border-border-default rounded text-[10px] font-mono"
-                  title="Top Left"
-                />
-                <input
-                  type="text"
-                  value={tr}
-                  onChange={(e) => handleRadiusChange("tr", e.target.value)}
-                  placeholder="TR"
-                  className="px-1.5 py-1 text-center bg-bg-2 border border-border-default rounded text-[10px] font-mono"
-                  title="Top Right"
-                />
-                <input
-                  type="text"
-                  value={br}
-                  onChange={(e) => handleRadiusChange("br", e.target.value)}
-                  placeholder="BR"
-                  className="px-1.5 py-1 text-center bg-bg-2 border border-border-default rounded text-[10px] font-mono"
-                  title="Bottom Right"
-                />
-                <input
-                  type="text"
-                  value={bl}
-                  onChange={(e) => handleRadiusChange("bl", e.target.value)}
-                  placeholder="BL"
-                  className="px-1.5 py-1 text-center bg-bg-2 border border-border-default rounded text-[10px] font-mono"
-                  title="Bottom Left"
-                />
-              </div>
-            )}
+            <BorderRadiusControl
+              value={borderRadius}
+              onChange={(val) => onChange({ borderRadius: val })}
+            />
           </div>
         </div>
       )}
