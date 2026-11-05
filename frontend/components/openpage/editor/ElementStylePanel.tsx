@@ -24,6 +24,7 @@ import { resolveBlockStyleForDevice } from "@/lib/openpage/block-style";
 import { isElementHidden } from "@/lib/openpage/element-style";
 import type { Device } from "@/lib/openpage/types";
 import { ColorInput, Section } from "./shared-components";
+import { BorderRadiusControl } from "./BorderRadiusControl";
 import { MediaPicker } from "@/components/media-picker";
 import {
   AlignButtons,
@@ -465,36 +466,12 @@ export function ElementStylePanel({
 
         <Section title="Border & Radius" defaultOpen={false} icon={<Box size={12} />}>
           <div className="space-y-3">
-            <div>
-              <div className="flex items-center justify-between mb-1.5">
-                <label className="text-[10px] font-semibold uppercase tracking-wider text-text-3">
-                  Corner Radius
-                </label>
-                <div className="flex items-center gap-1">
-                  {RADIUS_PRESETS.map((r) => (
-                    <button
-                      key={r}
-                      type="button"
-                      onClick={() => set({ borderRadius: r })}
-                      className={`text-[9px] px-1.5 py-0.5 rounded border transition-all ${
-                        effective.borderRadius === r
-                          ? "bg-green/15 border-green/40 text-green font-medium"
-                          : "border-border-default text-text-3 hover:text-text-1 hover:bg-bg-3"
-                      }`}
-                    >
-                      {r.replace("px", "")}
-                    </button>
-                  ))}
-                </div>
-              </div>
-              <input
-                type="text"
-                value={effective.borderRadius || ""}
-                onChange={(e) => set({ borderRadius: e.target.value })}
-                placeholder="e.g. 12px or 9999px"
-                className="w-full px-2.5 py-1.5 rounded-lg border border-border-default bg-bg-2/80 text-text-0 text-[11px] font-mono outline-none hover:border-border-hover focus:border-green"
-              />
-            </div>
+            <BorderRadiusControl
+              label="Corner Radius"
+              value={effective.borderRadius}
+              onChange={(v) => set({ borderRadius: v })}
+              presets={RADIUS_PRESETS}
+            />
             <div className="grid grid-cols-2 gap-2">
               <DimensionField
                 label="Border Width"

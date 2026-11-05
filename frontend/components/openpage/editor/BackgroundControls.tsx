@@ -247,6 +247,10 @@ export function BackgroundControls({
                 <option value="bottom center">Bottom</option>
                 <option value="center left">Left</option>
                 <option value="center right">Right</option>
+                <option value="top left">Top Left</option>
+                <option value="top right">Top Right</option>
+                <option value="bottom left">Bottom Left</option>
+                <option value="bottom right">Bottom Right</option>
               </select>
             </div>
 
