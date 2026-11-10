@@ -12,6 +12,25 @@ export function mergeFormLibraries(...lists: Array<FormDefinition[] | undefined>
   return [...map.values()];
 }
 
+/**
+ * Forms a widget can render: the page's own copies first, then any library
+ * form the page has no copy of.
+ *
+ * The page copy always wins. Picking a form copies it onto the page, and edits
+ * made in the builder's Forms panel (style, labels, placeholders) live only on
+ * that copy, while the library mirrors the original under the same id. Page
+ * order is kept, so a widget with no form selected still shows the page's
+ * first form.
+ */
+export function pageFormsWithLibraryFallback(
+  pageForms: FormDefinition[] | undefined,
+  library: FormDefinition[] | undefined,
+): FormDefinition[] {
+  const page = mergeFormLibraries(pageForms);
+  const onPage = new Set(page.map((f) => f.id));
+  return [...page, ...mergeFormLibraries(library).filter((f) => !onPage.has(f.id))];
+}
+
 export function resolveEffectiveForm(opts: {
   formId?: string | null;
   pageForm?: SiteConfig["form"];

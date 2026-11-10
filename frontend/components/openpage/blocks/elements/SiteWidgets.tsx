@@ -8,7 +8,7 @@ import { El, useElementEditor } from "../El";
 import { useOpenPageRuntime } from "@/components/openpage/runtime/OpenPageRuntime";
 import { DynamicLeadForm } from "@/components/openpage/dynamic-lead-form";
 import { findFormById, loadFormLibrary } from "@/lib/openpage/forms-store";
-import { mergeFormLibraries } from "@/lib/openpage/resolve-form";
+import { pageFormsWithLibraryFallback } from "@/lib/openpage/resolve-form";
 import { alignClass, clamp, color, flag, list, num, part, safeHref, str } from "./shared";
 
 const TITLE_TAGS = ["h1", "h2", "h3", "h4", "h5", "h6", "p", "div", "span"] as const;
@@ -274,7 +274,7 @@ export function OffCanvasBlock({ block }: { block: BlockConfig }) {
     };
   }, [open, editing]);
 
-  const forms = open ? mergeFormLibraries(runtime.forms, loadFormLibrary()) : runtime.forms;
+  const forms = open ? pageFormsWithLibraryFallback(runtime.forms, loadFormLibrary()) : runtime.forms;
   const formId = str(p.formId);
   const form = showForm ? (formId ? findFormById(formId, forms) : forms[0]) : undefined;
 
