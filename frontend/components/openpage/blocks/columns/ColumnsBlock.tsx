@@ -27,6 +27,7 @@ import {
   stacksItems,
   type FlexLayout,
 } from "@/lib/openpage/flex-layout";
+import { columnStyleCss, hasColumnBackground, readColumnStyle } from "@/lib/openpage/column-style";
 
 /** One column ("div"): its width plus the optional layout of its widgets. */
 type ColumnData = { width: number; mobileWidth?: number; blocks: BlockConfig[] } & FlexLayout;
@@ -299,12 +300,16 @@ function columnBox(col: ColumnData, gap: string, stacked: boolean): { className:
     className: stacked
       ? "min-w-0 max-w-full relative flex flex-col justify-start grow-0 shrink-0 basis-auto w-[var(--op-col-w-sm)] @md:w-[var(--op-col-w)]"
       : "min-w-0 relative flex flex-col justify-start grow-0 shrink-0 basis-[var(--op-col-basis-sm)] @md:basis-[var(--op-col-basis)]",
-    style: (stacked
-      ? { "--op-col-w": `${col.width}%`, "--op-col-w-sm": `${col.mobileWidth ?? 100}%` }
-      : {
-        "--op-col-basis": `calc(${col.width}% - ${gap})`,
-        "--op-col-basis-sm": mobileColumnBasis(col.mobileWidth, gap),
-      }) as Record<string, string> as CSSProperties,
+    style: {
+      // The column's own background / padding / radius (nothing when unset).
+      ...columnStyleCss(col),
+      ...((stacked
+        ? { "--op-col-w": `${col.width}%`, "--op-col-w-sm": `${col.mobileWidth ?? 100}%` }
+        : {
+          "--op-col-basis": `calc(${col.width}% - ${gap})`,
+          "--op-col-basis-sm": mobileColumnBasis(col.mobileWidth, gap),
+        }) as Record<string, string> as CSSProperties),
+    },
   };
 }
 
@@ -331,8 +336,13 @@ function StaticColumn({ col, gap, stacked, emptyHeight }: { col: ColumnData; gap
   const blocks = (col.blocks || []).filter((b) => !b.id.includes("placeholder"));
   const box = columnBox(col, gap, stacked);
   const items = itemsBox(col);
+  // An empty column with its own background keeps the builder's placeholder
+  // height, so its colour / image stays visible on the live page.
+  const minHeight =
+    emptyHeight ??
+    (!blocks.length && hasColumnBackground(col) && !readColumnStyle(col).minHeight ? EMPTY_COLUMN_HEIGHT : undefined);
   return (
-    <div className={box.className} style={emptyHeight ? { ...box.style, minHeight: emptyHeight } : box.style}>
+    <div className={box.className} style={minHeight ? { ...box.style, minHeight } : box.style}>
       {blocks.length ? (
         <div data-op-col-items="" className={items.className} style={items.style}>
           {blocks.map((child) => (
@@ -387,6 +397,9 @@ function DroppableColumn({
   const itemsInRow = items.inRow;
   const isOnlyPlaceholder = realBlocks.length === 0;
   const isHighlight = isOver || dndIsOver || Boolean(draggedItem);
+  // With its own background the empty placeholder is see-through, so the
+  // colour / image shows while editing.
+  const ownBackground = hasColumnBackground(col);
 
   const handleDropData = (payload: DropPayload | null) => {
     if (!payload) return;
@@ -461,7 +474,9 @@ function DroppableColumn({
               ? "border-green bg-green-500/15 scale-[1.01] shadow-[0_0_24px_rgba(34,197,94,0.3)]"
               : isHighlight
                 ? "border-green/50 bg-green-500/5"
-                : "border-border-default hover:border-border-hover bg-bg-2/40"
+                : ownBackground
+                  ? "border-border-default hover:border-border-hover bg-transparent"
+                  : "border-border-default hover:border-border-hover bg-bg-2/40"
             }`}
         >
           <div
