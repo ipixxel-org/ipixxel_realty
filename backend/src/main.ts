@@ -15,16 +15,30 @@ async function bootstrap() {
     bodyParser: false,
   });
 
-  // Security headers & hide backend framework fingerprint
+  // Trust first proxy hop (e.g. Cloudflare, Nginx, ALB) for accurate client IP resolution
+  app.set('trust proxy', 1);
+
+  // Security headers & hide backend framework fingerprint.
+  // Clickjacking protection enabled globally (SAMEORIGIN); embed routes override this below.
   app.use(
     helmet({
       crossOriginResourcePolicy: { policy: 'cross-origin' },
       crossOriginOpenerPolicy: { policy: 'same-origin-allow-popups' },
       contentSecurityPolicy: false,
-      frameguard: false,
+      frameguard: { action: 'sameorigin' },
     }),
   );
   app.disable('x-powered-by');
+
+  // Allow iframe embedding strictly for public lead capture and preview forms
+  app.use((req: Request, res: Response, next: () => void) => {
+    const url = req.path || req.url || '';
+    if (url.startsWith('/embed/') || url.startsWith('/live/') || url.startsWith('/public/forms/')) {
+      res.removeHeader('X-Frame-Options');
+      res.setHeader('Content-Security-Policy', "frame-ancestors *");
+    }
+    next();
+  });
 
   const allowedOrigins = [
     process.env.FRONTEND_URL,
@@ -42,10 +56,9 @@ async function bootstrap() {
       if (!origin) return callback(null, true);
       const isAllowed =
         allowedOrigins.includes(origin) ||
-        origin.endsWith('.ipixxel.org') ||
-        origin.endsWith('.localhost:3000') ||
-        origin.endsWith('.localhost:3001') ||
-        process.env.NODE_ENV !== 'production';
+        /^https?:\/\/([a-z0-9-]+\.)*ipixxel\.org(:[0-9]+)?$/i.test(origin) ||
+        /^https?:\/\/[a-z0-9-]+\.localhost(:[0-9]+)?$/i.test(origin) ||
+        (process.env.NODE_ENV !== 'production' && /^https?:\/\/(localhost|127\.0\.0\.1)(:[0-9]+)?$/i.test(origin));
       if (isAllowed) {
         callback(null, true);
       } else {

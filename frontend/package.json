@@ -19,6 +19,7 @@
     "clsx": "^2.1.1",
     "emoji-picker-react": "^4.22.3",
     "immer": "^11.1.18",
+    "isomorphic-dompurify": "^3.19.0",
     "libphonenumber-js": "^1.13.12",
     "lucide-react": "^1.33.0",
     "next": "16.3.1",
