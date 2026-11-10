@@ -8,7 +8,7 @@ import { ArrowRight, Check, Download, Lock, MapPin, Play } from "lucide-react";
 import { useOpenPageRuntime } from "@/components/openpage/runtime/OpenPageRuntime";
 import { DynamicLeadForm } from "@/components/openpage/dynamic-lead-form";
 import { findFormById, loadFormLibrary } from "@/lib/openpage/forms-store";
-import { mergeFormLibraries } from "@/lib/openpage/resolve-form";
+import { pageFormsWithLibraryFallback } from "@/lib/openpage/resolve-form";
 import { isMediaSrc } from "@/lib/media";
 import { Bullet, isBulletStyle } from "../Bullet";
 import { ImageSlideshow, slideIntervalMs, type Slide } from "../ImageSlideshow";
@@ -18,7 +18,7 @@ import { heroLayoutStyle } from "@/lib/openpage/hero-layout";
 
 function resolveRuntimeForms(runtimeForms: ReturnType<typeof useOpenPageRuntime>["forms"]) {
   const library = typeof window !== "undefined" ? loadFormLibrary() : [];
-  return mergeFormLibraries(runtimeForms, library);
+  return pageFormsWithLibraryFallback(runtimeForms, library);
 }
 
 function str(v: unknown, fallback = ""): string {

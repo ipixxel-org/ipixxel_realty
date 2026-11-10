@@ -4,7 +4,7 @@ import type { BlockConfig } from "../types";
 import { useOpenPageRuntime } from "@/components/openpage/runtime/OpenPageRuntime";
 import { DynamicLeadForm } from "@/components/openpage/dynamic-lead-form";
 import { findFormById, loadFormLibrary } from "@/lib/openpage/forms-store";
-import { mergeFormLibraries } from "@/lib/openpage/resolve-form";
+import { pageFormsWithLibraryFallback } from "@/lib/openpage/resolve-form";
 import { El } from "../El";
 
 export function ContactBlock({ block }: { block: BlockConfig }) {
@@ -13,7 +13,7 @@ export function ContactBlock({ block }: { block: BlockConfig }) {
   const subtitle = typeof block.props.subtitle === "string" ? block.props.subtitle : "";
   const formId = typeof block.props.formId === "string" ? block.props.formId : "";
   const library = typeof window !== "undefined" ? loadFormLibrary() : [];
-  const forms = mergeFormLibraries(runtime.forms, library);
+  const forms = pageFormsWithLibraryFallback(runtime.forms, library);
   const form = formId ? findFormById(formId, forms) : forms[0];
 
   return (

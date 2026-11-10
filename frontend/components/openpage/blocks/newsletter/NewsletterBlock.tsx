@@ -5,7 +5,7 @@ import { Mail } from "lucide-react";
 import { useOpenPageRuntime } from "@/components/openpage/runtime/OpenPageRuntime";
 import { DynamicLeadForm } from "@/components/openpage/dynamic-lead-form";
 import { findFormById, loadFormLibrary } from "@/lib/openpage/forms-store";
-import { mergeFormLibraries } from "@/lib/openpage/resolve-form";
+import { pageFormsWithLibraryFallback } from "@/lib/openpage/resolve-form";
 import { isMediaSrc } from "@/lib/media";
 import { El } from "../El";
 
@@ -18,7 +18,7 @@ export function NewsletterBlock({ block }: { block: BlockConfig }) {
       : "Get updates on this project. No spam.";
   const formId = typeof block.props.formId === "string" ? block.props.formId : "";
   const library = typeof window !== "undefined" ? loadFormLibrary() : [];
-  const forms = mergeFormLibraries(runtime.forms, library);
+  const forms = pageFormsWithLibraryFallback(runtime.forms, library);
   const form = formId ? findFormById(formId, forms) : forms[0];
   // The icon above the title: the default envelope, an uploaded logo/icon, or
   // hidden entirely with "Show icon" off.
