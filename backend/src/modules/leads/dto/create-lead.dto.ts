@@ -49,4 +49,8 @@ export class CreateLeadDto {
   @IsOptional()
   @IsString()
   captchaToken?: string;
+
+  @IsOptional()
+  @IsString()
+  turnstileToken?: string;
 }

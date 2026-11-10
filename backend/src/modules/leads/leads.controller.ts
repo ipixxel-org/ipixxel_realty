@@ -44,8 +44,7 @@ export class LeadsController {
    */
   @Post()
   createPublic(@Body() dto: CreateLeadDto, @Req() req: Request) {
-    const rawIp = req.headers['x-forwarded-for'];
-    const clientIp = typeof rawIp === 'string' ? rawIp.split(',')[0].trim() : req.ip;
+    const clientIp = req.ip || req.socket.remoteAddress || 'unknown';
     return this.service.createFromPublic(dto, clientIp);
   }
 

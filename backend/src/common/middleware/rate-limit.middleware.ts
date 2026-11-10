@@ -23,18 +23,13 @@ const RULES: RateLimitRule[] = [
   { prefix: '/auth/reset-password', windowMs: 60 * 60_000, max: 10 },
   { prefix: '/auth/resend-verification', windowMs: 60 * 60_000, max: 10 },
   { prefix: '/public/site/track', windowMs: 60_000, max: 120 },
+  { prefix: '/org/leads', windowMs: 60_000, max: 30 },
 ];
 
 const buckets = new Map<string, Bucket>();
 
 function clientKey(req: Request): string {
-  if (process.env.TRUST_PROXY === 'true') {
-    const forwarded = req.headers['x-forwarded-for'];
-    const first = Array.isArray(forwarded)
-      ? forwarded[0]
-      : forwarded?.split(',')[0];
-    if (first?.trim()) return first.trim();
-  }
+  // Rely on Express-sanitized req.ip (configured with app.set('trust proxy', 1))
   return req.ip || req.socket.remoteAddress || 'unknown';
 }
 

@@ -13,8 +13,8 @@ export const LOCAL_PRIVATE_ROOT = () =>
   path.join(process.cwd(), 'private-uploads');
 
 function secret(): string {
-  const s = process.env.JWT_SECRET;
-  if (!s) throw new Error('JWT_SECRET is required to sign private file URLs');
+  const s = process.env.STORAGE_SIGNING_SECRET || process.env.JWT_SECRET;
+  if (!s) throw new Error('JWT_SECRET or STORAGE_SIGNING_SECRET is required to sign private file URLs');
   return `private-files:${s}`;
 }
 

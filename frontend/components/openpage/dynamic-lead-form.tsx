@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import DOMPurify from "isomorphic-dompurify";
 import type { CSSProperties } from "react";
 import type { FormLeadField, SiteConfig } from "@/lib/openpage/types";
 import {
@@ -427,7 +428,8 @@ export function DynamicLeadForm({
       return <div style={{ fontSize: 16, fontWeight: 800, color: labelColor }}>{f.label}</div>;
     }
     if (type === "html") {
-      return <div dangerouslySetInnerHTML={{ __html: f.html || f.label }} />;
+      const cleanHtml = DOMPurify.sanitize(f.html || f.label || "");
+      return <div dangerouslySetInnerHTML={{ __html: cleanHtml }} />;
     }
     if (type === "submit") {
       return (
