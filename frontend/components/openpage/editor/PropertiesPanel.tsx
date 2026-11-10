@@ -1126,6 +1126,26 @@ const blockFields: Partial<Record<BlockType, { sections: { title: string; fields
       ]},
     ],
   },
+  'visual-journey': {
+    sections: [
+      { title: 'Content', fields: [
+        { key: 'title', label: 'Heading', type: 'text' },
+        { key: 'description', label: 'Paragraph below heading (optional)', type: 'textarea' },
+        { key: 'showDivider', label: 'Show line under heading', type: 'toggle' },
+        { key: 'images', label: 'Images', type: 'array-items' },
+        { key: 'anchor', label: 'Section ID (menu scroll)', type: 'text' },
+      ]},
+      { title: 'Slider', fields: [
+        { key: 'imageHeight', label: 'Image height (px)', type: 'number' },
+        { key: 'imageRadius', label: 'Image corner radius (px)', type: 'number' },
+        { key: 'accentColor', label: 'Accent colour (heading, line, dot)', type: 'color' },
+        { key: 'arrowColor', label: 'Arrow colour', type: 'color' },
+        { key: 'autoplay', label: 'Autoplay', type: 'toggle' },
+        { key: 'interval', label: 'Autoplay interval (ms)', type: 'number' },
+      ]},
+      { title: 'Button (optional)', fields: ctaFields('button', 'Button', { textKey: 'buttonText', url: true }) },
+    ],
+  },
   'property-carousel': {
     sections: [
       { title: 'Content', fields: [
