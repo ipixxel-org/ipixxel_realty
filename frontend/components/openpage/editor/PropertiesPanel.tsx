@@ -17,6 +17,8 @@ import { CUSTOM_FIELDS_KEY, customFieldKeys } from "@/components/openpage/blocks
 import { FlexItemsControls } from "./FlexItemsControls";
 import { FLEX_LAYOUT_KEYS, readFlexLayout } from "@/lib/openpage/flex-layout";
 import { isDivBlock } from "@/lib/openpage/block-factory";
+import { readColumnStyle } from "@/lib/openpage/column-style";
+import { ColumnBackgroundControls } from "./ColumnBackgroundControls";
 import {
   FLOOR_PLAN_FIELDS,
   AMENITY_FIELDS,
@@ -1903,6 +1905,7 @@ export function PropertiesPanel({ block }: { block: BlockConfig }) {
   const updateColumnWidth = useConfigStore((s) => s.updateColumnWidth)
   const updateColumnMobileWidth = useConfigStore((s) => s.updateColumnMobileWidth)
   const updateColumnLayout = useConfigStore((s) => s.updateColumnLayout)
+  const updateColumnStyle = useConfigStore((s) => s.updateColumnStyle)
   const viewport = useEditorStore((s) => s.viewport)
   const addColumn = useConfigStore((s) => s.addColumn)
   const removeColumn = useConfigStore((s) => s.removeColumn)
@@ -2205,6 +2208,13 @@ export function PropertiesPanel({ block }: { block: BlockConfig }) {
                   className="w-full h-1.5 rounded-full appearance-none bg-slate-200 cursor-pointer accent-green"
                 />
                 <div className="text-[9px] text-text-3 mt-0.5">{col.blocks.length} widget(s) in this column</div>
+                {/* This column's own background, separate from the Div's. */}
+                {!divWidgets && (
+                  <ColumnBackgroundControls
+                    value={readColumnStyle(col)}
+                    onChange={(patch) => updateColumnStyle(block.id, i, patch)}
+                  />
+                )}
                 {/* How this column lays out its own widgets. */}
                 {!divWidgets && (
                 <details className="mt-1.5 group/items" open={Object.values(readFlexLayout(col)).some((v) => v !== undefined) || undefined}>
