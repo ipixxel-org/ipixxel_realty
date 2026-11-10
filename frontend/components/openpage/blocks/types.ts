@@ -88,7 +88,8 @@ export type RealEstateBlockType =
   | "download-brochure"
   | "site-visit"
   | "custom-section"
-  | "property-carousel";
+  | "property-carousel"
+  | "visual-journey";
 
 export type BlockType = GenericBlockType | RealEstateBlockType;
 

@@ -85,6 +85,13 @@ export const ELEMENT_ITEM_FIELDS: Record<string, ItemFieldDef[]> = {
     { key: "url", label: "Link", kind: "text", placeholder: "https://… , mailto: or tel:" },
     { key: "label", label: "Label (tooltip)", kind: "text" },
   ],
+  "visual-journey.images": [
+    { key: "src", label: "Image", kind: "image" },
+    { key: "caption", label: "Image name", kind: "text", placeholder: "e.g. Pickle Ball Court" },
+    { key: "description", label: "Paragraph below image (optional)", kind: "textarea", rows: 3 },
+    { key: "badge", label: "Corner label (optional)", kind: "text", placeholder: "e.g. AI Impression" },
+    { key: "alt", label: "Alt text (optional)", kind: "text" },
+  ],
   "tabs.items": [
     { key: "label", label: "Tab title", kind: "text" },
     { key: "content", label: "Content", kind: "textarea", rows: 4 },
@@ -105,6 +112,7 @@ export const ELEMENT_ITEM_TEMPLATES: Record<string, Record<string, Record<string
   slider: { images: { src: "", alt: "", caption: "" } },
   "social-icons": { icons: { platform: "facebook", url: "", label: "" } },
   tabs: { items: { label: "", content: "" } },
+  "visual-journey": { images: { src: "", caption: "", description: "", badge: "", alt: "" } },
 };
 
 /** Styleable parts of each list item ("Style …" buttons in the list editor). */
@@ -117,4 +125,5 @@ export const ELEMENT_ITEM_SUB_ELEMENTS: Record<string, Record<string, Array<{ ke
   posts: { items: [{ key: "title", label: "Title" }, { key: "excerpt", label: "Summary" }] },
   portfolio: { items: [{ key: "title", label: "Title" }] },
   reviews: { items: [{ key: "text", label: "Review" }, { key: "author", label: "Name" }] },
+  "visual-journey": { images: [{ key: "caption", label: "Image name" }, { key: "description", label: "Paragraph" }, { key: "badge", label: "Corner label" }] },
 };

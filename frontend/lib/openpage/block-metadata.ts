@@ -358,6 +358,34 @@ export const blockMetadata: BlockMeta[] = [
     defaultProps: { buttonText: 'Enquire Now', panelTitle: 'Enquire now', body: '', formId: '', showForm: true, position: 'right', width: 420 },
   },
   {
+    // One large image at a time with left / right arrows, a name under each
+    // image, and an optional paragraph and button.
+    type: 'visual-journey',
+    label: 'Visual Journey',
+    description: 'Image slider with arrows, image names, paragraph and button',
+    category: 'Real Estate',
+    variants: ['default'],
+    defaultProps: {
+      title: 'Visual Journey',
+      description: '',
+      showDivider: true,
+      images: [
+        { src: '', caption: 'Pickle Ball Court', badge: 'AI Impression', description: '', alt: '' },
+        { src: '', caption: 'Clubhouse', badge: 'AI Impression', description: '', alt: '' },
+        { src: '', caption: 'Swimming Pool', badge: 'AI Impression', description: '', alt: '' },
+      ],
+      imageHeight: 420,
+      imageRadius: 14,
+      autoplay: false,
+      interval: 5000,
+      accentColor: '',
+      arrowColor: '',
+      buttonText: '',
+      buttonUrl: '',
+      buttonTarget: '_self',
+    },
+  },
+  {
     type: 'property-carousel',
     label: 'Property Carousel',
     description: 'Property cards in a sliding carousel',

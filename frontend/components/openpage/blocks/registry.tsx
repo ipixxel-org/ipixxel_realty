@@ -77,6 +77,7 @@ import { AlertBlock, AnimatedHeadlineBlock, IconListBlock } from "./elements/Tex
 import { CounterBlock, FlipBoxBlock, HotspotBlock, PriceListBlock, ProgressBarBlock, StarRatingBlock } from "./elements/HighlightWidgets";
 import { BreadcrumbsBlock, OffCanvasBlock, PageTitleBlock, SiteLogoBlock, SiteTitleBlock, TableOfContentsBlock } from "./elements/SiteWidgets";
 import { PortfolioBlock, PostsBlock, PropertyCarouselBlock, ReviewsBlock } from "./elements/ListingWidgets";
+import { VisualJourneyBlock } from "./elements/VisualJourneyBlock";
 import {
   AccordionBlock,
   ImageComparisonBlock,
@@ -192,6 +193,7 @@ const blockRenderers: Record<string, React.ComponentType<{ block: BlockConfig }>
   "table-of-contents": TableOfContentsBlock,
   "off-canvas": OffCanvasBlock,
   "property-carousel": PropertyCarouselBlock,
+  "visual-journey": VisualJourneyBlock,
   posts: PostsBlock,
   portfolio: PortfolioBlock,
   reviews: ReviewsBlock,
