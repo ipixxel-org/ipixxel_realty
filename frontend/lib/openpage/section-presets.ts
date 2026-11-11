@@ -540,6 +540,28 @@ export const SECTION_PRESETS: SectionPreset[] = [
     },
   },
   {
+    id: "location-advantages",
+    category: "Location",
+    name: "Location Advantages",
+    description: "Map with a button, then nearby places grouped by category",
+    type: "location",
+    variant: "advantages",
+    props: {
+      title: "Location Advantages",
+      subtitle: "An Exclusive Address Where The World Comes To You",
+      embedUrl: MAP,
+      ctaText: "Google Map Location",
+      items: [
+        { title: "Hospitals", meta: "", places: ["Global Hospital - 2 Mins", "Ojas Hospital - 3 Mins", "Aditya Birla Hospital - 12 Mins"] },
+        { title: "Transport", meta: "", places: ["Akurdi Railway Station - 4 Mins", "Dehu Road Station - 15 Mins", "Ravet Bus Stop - 2 Mins"] },
+        { title: "Play School", meta: "", places: ["Podar Jumbo Kids - 2 Mins", "Euro Kids Ravet - 3 Mins", "Orchid The International School - 6 Mins"] },
+        { title: "Markets & Malls", meta: "", places: ["D-Mart Ravet - 2 Mins", "Elpro City Square Mall Chinchwad - 12 Mins", "Phoenix Mall Of Millennium Wakad - 15 Mins"] },
+        { title: "Colleges", meta: "", places: ["Dr. D.Y. Patil Institute & Technology - 3 Mins", "PCCOE (Pimpri Chinchwad College of Engineering) - 5 Mins", "SB PATIL (College of Science and Commerce) - 5 Mins"] },
+      ],
+      anchor: "location",
+    },
+  },
+  {
     id: "location-map-only",
     category: "Location",
     name: "Full-width Map",

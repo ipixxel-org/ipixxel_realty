@@ -89,7 +89,8 @@ const ITEM_SUB_ELEMENTS: Partial<Record<string, Record<string, Array<{ key: stri
   're-pricing': { items: [{ key: 'name', label: 'Name' }, { key: 'price', label: 'Price' }, { key: 'meta', label: 'Note' }, { key: 'description', label: 'Description' }, { key: 'cta', label: 'Button' }] },
   testimonials: { items: [{ key: 'quote', label: 'Quote' }, { key: 'name', label: 'Name' }, { key: 'role', label: 'Role' }, { key: 'avatar', label: 'Photo' }] },
   developer: { stats: [{ key: 'value', label: 'Value' }, { key: 'label', label: 'Label' }] },
-  location: { items: [{ key: 'title', label: 'Title' }, { key: 'meta', label: 'Meta' }] },
+  // "Icon" is the category pin in the advantages layout.
+  location: { items: [{ key: 'icon', label: 'Icon' }, { key: 'title', label: 'Title' }, { key: 'meta', label: 'Meta' }] },
   'lead-form': { benefits: [{ key: 'title', label: 'Title' }, { key: 'description', label: 'Description' }] },
   gallery: { images: [{ key: 'image', label: 'Image' }, { key: 'caption', label: 'Caption' }, { key: 'meta', label: 'Meta' }] },
   'icon-box': { items: [{ key: 'icon', label: 'Icon' }, { key: 'title', label: 'Title' }, { key: 'description', label: 'Description' }] },
@@ -658,7 +659,7 @@ const blockFields: Partial<Record<BlockType, { sections: { title: string; fields
   },
   location: {
       sections: [{ title: 'Layout', fields: [
-        { key: 'variant', label: 'Template', type: 'select', options: ['split-map', 'list', 'map-only', 'cards', 'editorial'] },
+        { key: 'variant', label: 'Template', type: 'select', options: ['split-map', 'list', 'map-only', 'cards', 'editorial', 'advantages'] },
         // Bullet before each nearby place; the location pin by default.
         { key: 'bulletStyle', label: 'Nearby bullet', type: 'select', options: ['pin', 'arrow', 'check', 'dot', 'number', 'none'] },
       ]}, { title: 'Content', fields: [
@@ -1383,7 +1384,7 @@ const KNOWN_VARIANTS: Record<string, string[]> = {
   'floor-plans': ['cards', 'list', 'showcase'],
   'unit-config': ['cards', 'listings', 'table'],
   're-pricing': ['cards', 'simple', 'comparison', 'banner'],
-  'location': ['split-map', 'list', 'map-only', 'cards', 'editorial'],
+  'location': ['split-map', 'list', 'map-only', 'cards', 'editorial', 'advantages'],
   'developer': ['default', 'split', 'stats', 'band'],
   'lead-form': ['card', 'split', 'inline', 'default'],
   'download-brochure': ['split', 'card', 'banner', 'minimal'],
@@ -1845,7 +1846,7 @@ function PropertyField({ field, block }: { field: FieldDef; block: BlockConfig }
           'project-overview': { stats: { value: '', label: '' }, highlights: { title: '', description: '', icon: '' }, slides: { image: '', caption: '' } },
           'property-details': { items: { label: '', value: '' } },
           amenities: { items: { title: '', description: '', image: '', icon: '' } },
-          location: { items: { title: '', meta: '' } },
+          location: { items: { title: '', meta: '', places: [] } },
           faq: { items: { question: '', answer: '' } },
           team: { members: { name: '', role: '', avatar: '' } },
           features: { items: { icon: '', title: '', description: '' } },

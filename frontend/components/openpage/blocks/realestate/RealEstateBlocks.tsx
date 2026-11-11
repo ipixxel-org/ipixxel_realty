@@ -2394,8 +2394,24 @@ export function OffersBlock({ block }: { block: BlockConfig }) {
 function locationItem(n: Record<string, unknown>) {
   return {
     title: firstText(n.title, n.place, n.name, n.label),
+    // `places` belongs to the "advantages" layout only; other layouts keep
+    // showing just title + meta, exactly as before it existed.
     meta: firstText(n.meta, n.time, n.distance, n.duration, n.text, n.description),
+    places: locationPlaces(n),
   };
+}
+
+/**
+ * The places listed under one category card in the "advantages" layout,
+ * e.g. ["Global Hospital - 2 Mins", …]. Read from the item's `places` list;
+ * a multi-line `meta` also works (one place per line).
+ */
+function locationPlaces(n: Record<string, unknown>): string[] {
+  if (Array.isArray(n.places)) {
+    return n.places.map((v) => (typeof v === "string" ? v.trim() : "")).filter(Boolean);
+  }
+  const meta = typeof n.meta === "string" ? n.meta : "";
+  return meta.includes("\n") ? meta.split("\n").map((s) => s.trim()).filter(Boolean) : [];
 }
 
 export function LocationBlock({ block }: { block: BlockConfig }) {
@@ -2554,6 +2570,94 @@ export function LocationBlock({ block }: { block: BlockConfig }) {
         </div>
         {embed ? map("aspect-[16/7] max-w-5xl mx-auto") : media("aspect-[16/7] max-w-5xl mx-auto")}
         {cta("mt-8 flex justify-center")}
+      </SectionShell>
+    );
+  }
+
+  // Centred heading with a divider, a wide map (or map image) with a
+  // "Google Map Location" button on it, then one card per category
+  // (Hospitals, Transport, …) listing its nearby places.
+  if (variant === "advantages") {
+    const mapLink = str(p.ctaUrl) || (embed.startsWith("http") ? embed : "");
+    const mapButton = ctaText ? (
+      <CtaButton
+        block={block}
+        id={part(block, "cta")}
+        prefix="cta"
+        label={ctaText}
+        href={mapLink || "#enquire"}
+        target={str(p.ctaTarget) || (mapLink ? "_blank" : "")}
+        icon={null}
+        className="absolute bottom-4 right-4 px-5 py-2.5 rounded-md border-2 border-white bg-black text-white text-sm font-semibold hover:bg-black/80"
+      />
+    ) : null;
+    return (
+      <SectionShell id={str(p.anchor, "location")}>
+        <div className="max-w-6xl mx-auto px-4 text-center mb-8">
+          <El block={block} id={part(block, "title")} as="h2" className={`font-display text-2xl @md:text-3xl font-medium tracking-wide ${onDark ? "text-white" : "text-green"}`}>
+            {str(p.title, "Location Advantages")}
+          </El>
+          <div className="flex items-center justify-center gap-2 my-3" aria-hidden="true">
+            <span className={`h-px w-24 ${onDark ? "bg-white/40" : "bg-green/50"}`} />
+            <span className={`h-1.5 w-1.5 rounded-full ${onDark ? "bg-white/70" : "bg-green"}`} />
+            <span className={`h-px w-24 ${onDark ? "bg-white/40" : "bg-green/50"}`} />
+          </div>
+          {str(p.subtitle) ? (
+            <El block={block} id={part(block, "subtitle")} as="p" className={`text-base @md:text-lg tracking-wide ${onDark ? "text-white/80" : "text-green"}`}>
+              {str(p.subtitle)}
+            </El>
+          ) : null}
+          {address("justify-center mt-3")}
+        </div>
+        <div className="max-w-6xl mx-auto px-4">
+          <div className="relative mb-6">
+            {image ? media("aspect-[16/8] w-full") : map("aspect-[16/8] w-full")}
+            {mapButton}
+          </div>
+          <div className="flex flex-wrap gap-5">
+            {nearby.map((n, i) => {
+              const id = itemPart("items", n);
+              const row = locationItem(n);
+              const list = row.places.length ? row.places : row.meta ? [row.meta] : [];
+              return (
+                <El key={id} block={block} id={id} className={`flex-1 basis-[260px] rounded-xl border ${tone.tile} shadow-[0_6px_24px_rgba(0,0,0,0.06)] p-5 text-left`}>
+                  <El block={block} id={subElementId(id, "title")} as="div" className={`flex items-center gap-2 text-lg font-medium mb-2 ${onDark ? "text-white" : "text-green"}`}>
+                    {/* Own element so its colour can be changed in Style ("Icon"). */}
+                    {bullet !== "none" ? (
+                      <El block={block} id={subElementId(id, "icon")} as="span" className={`inline-flex shrink-0 ${bullet === "pin" || bullet === "check" ? "text-green" : onDark ? "text-white" : "text-text-0"}`}>
+                        <Bullet style={bullet} index={i} size={18} inheritColor />
+                      </El>
+                    ) : null}
+                    <span className="min-w-0">{row.title}</span>
+                  </El>
+                  <El block={block} id={subElementId(id, "meta")} as="ul" className={`space-y-1 text-[13px] ${onDark ? "text-white/80" : "text-text-1"}`}>
+                    {list.map((place, j) => (
+                      <li key={j} className="flex gap-2">
+                        <span aria-hidden="true">•</span>
+                        <span className="min-w-0">{place}</span>
+                      </li>
+                    ))}
+                  </El>
+                </El>
+              );
+            })}
+          </div>
+          {/* The main CTA sits on the map; only the second button goes here. */}
+          {secondText ? (
+            <div className="mt-8 flex justify-center">
+              <CtaButton
+                block={block}
+                id={part(block, "secondaryCta")}
+                prefix="secondaryCta"
+                label={secondText}
+                href={str(p.secondaryCtaUrl) || "#enquire"}
+                target={str(p.secondaryCtaTarget)}
+                icon={null}
+                className="px-6 py-3 rounded-lg border border-border-default bg-bg-1 text-text-0 text-sm font-semibold hover:bg-bg-2"
+              />
+            </div>
+          ) : null}
+        </div>
       </SectionShell>
     );
   }
