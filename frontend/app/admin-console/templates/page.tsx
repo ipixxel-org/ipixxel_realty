@@ -52,6 +52,7 @@ import { TemplateCard } from "@/components/superadmin/templates/template-card";
 import { PlanFilterDropdown } from "@/components/superadmin/templates/plan-filter-dropdown";
 import { CreateTemplateModal } from "@/components/superadmin/templates/create-template-modal";
 import { TemplateCategoriesModal } from "@/components/superadmin/templates/template-categories-modal";
+import { useTemplatePermissions } from "@/components/superadmin/templates/use-template-permissions";
 import { buildTemplateSections } from "@/lib/openpage/data";
 import {
   deleteTemplate,
@@ -59,7 +60,7 @@ import {
   ensurePresetTemplates,
   loadTemplates,
   resetTemplate,
-  saveTemplate,
+  setTemplateStatus,
   loadTemplateCategories,
   type TemplateCategory,
 } from "@/lib/openpage/persist";
@@ -110,6 +111,8 @@ const TEMPLATES_PATH = "/admin-console/templates";
 
 export default function SuperAdminTemplatesPage() {
   const router = useRouter();
+  // Platform Team pills for this module (Super Admin has all of them).
+  const can = useTemplatePermissions();
   const [pages, setPages] = useState<LandingPageData[]>([]);
   const [loading, setLoading] = useState(true);
   const [toast, setToast] = useState<string | null>(null);
@@ -231,11 +234,14 @@ export default function SuperAdminTemplatesPage() {
 
   const setStatus = useCallback(
     async (pageId: string, status: LandingPageData["status"]) => {
-      const page = pages.find((p) => p.id === pageId);
-      if (!page) return;
-      const updated = await saveTemplate({ ...page, status });
-      setPages((prev) => prev.map((p) => (p.id === pageId ? updated : p)));
-      notify(status === "published" ? "Published" : "Unpublished");
+      if (!pages.some((p) => p.id === pageId)) return;
+      try {
+        const updated = await setTemplateStatus(pageId, status);
+        setPages((prev) => prev.map((p) => (p.id === pageId ? updated : p)));
+        notify(status === "published" ? "Published" : "Unpublished");
+      } catch (err) {
+        notify(err instanceof Error && err.message ? err.message : "Could not change the template status");
+      }
     },
     [pages, notify],
   );
@@ -396,23 +402,27 @@ export default function SuperAdminTemplatesPage() {
             <RefreshCw size={14} className={loading ? "animate-spin" : ""} /> Refresh
           </button>
 
-          <button
-            type="button"
-            className="btn btn-ghost"
-            onClick={() => setCategoriesOpen(true)}
-            style={{ display: "inline-flex", alignItems: "center", gap: 6, borderRadius: 10 }}
-          >
-            <Settings2 size={14} /> Categories ({categories.length})
-          </button>
+          {can.categories ? (
+            <button
+              type="button"
+              className="btn btn-ghost"
+              onClick={() => setCategoriesOpen(true)}
+              style={{ display: "inline-flex", alignItems: "center", gap: 6, borderRadius: 10 }}
+            >
+              <Settings2 size={14} /> Categories ({categories.length})
+            </button>
+          ) : null}
 
-          <button
-            type="button"
-            className="btn btn-primary"
-            onClick={() => setCreateFor({})}
-            style={{ display: "inline-flex", alignItems: "center", gap: 6, borderRadius: 10, fontWeight: 700 }}
-          >
-            <Plus size={16} /> Create Template
-          </button>
+          {can.create ? (
+            <button
+              type="button"
+              className="btn btn-primary"
+              onClick={() => setCreateFor({})}
+              style={{ display: "inline-flex", alignItems: "center", gap: 6, borderRadius: 10, fontWeight: 700 }}
+            >
+              <Plus size={16} /> Create Template
+            </button>
+          ) : null}
         </div>
       </div>
 
@@ -506,9 +516,9 @@ export default function SuperAdminTemplatesPage() {
               display: "flex",
               alignItems: "center",
               justifyContent: "space-between",
-              cursor: "pointer",
+              cursor: can.categories ? "pointer" : "default",
             }}
-            onClick={() => setCategoriesOpen(true)}
+            onClick={can.categories ? () => setCategoriesOpen(true) : undefined}
           >
             <div>
               <div style={{ fontSize: 11.5, color: "var(--muted)", fontWeight: 600 }}>Taxonomy</div>
@@ -801,6 +811,7 @@ export default function SuperAdminTemplatesPage() {
             );
           })}
 
+          {can.categories ? (
           <button
             type="button"
             onClick={() => setCategoriesOpen(true)}
@@ -821,6 +832,7 @@ export default function SuperAdminTemplatesPage() {
           >
             <Plus size={12} /> Add Category
           </button>
+          ) : null}
         </div>
       </div>
 
@@ -860,13 +872,15 @@ export default function SuperAdminTemplatesPage() {
             >
               Reset filters
             </button>
-            <button
-              type="button"
-              className="btn btn-primary btn-sm"
-              onClick={() => setCreateFor({})}
-            >
-              <Plus size={14} /> Create template
-            </button>
+            {can.create ? (
+              <button
+                type="button"
+                className="btn btn-primary btn-sm"
+                onClick={() => setCreateFor({})}
+              >
+                <Plus size={14} /> Create template
+              </button>
+            ) : null}
           </div>
         </div>
       ) : viewMode === "table" ? (
@@ -905,7 +919,7 @@ export default function SuperAdminTemplatesPage() {
                     <td>
                       <button
                         type="button"
-                        onClick={() => goToBuilder(r.pageId || r.designId)}
+                        onClick={() => (can.edit ? goToBuilder(r.pageId || r.designId) : setPreviewRow(r))}
                         style={{
                           border: "none",
                           background: "transparent",
@@ -940,13 +954,15 @@ export default function SuperAdminTemplatesPage() {
                     </td>
                     <td style={{ textAlign: "right" }}>
                       <div style={{ display: "inline-flex", gap: 6, alignItems: "center" }}>
-                        <button
-                          type="button"
-                          className="btn btn-soft btn-sm"
-                          onClick={() => goToBuilder(r.pageId || r.designId)}
-                        >
-                          <Edit2 size={12} /> Edit
-                        </button>
+                        {can.edit ? (
+                          <button
+                            type="button"
+                            className="btn btn-soft btn-sm"
+                            onClick={() => goToBuilder(r.pageId || r.designId)}
+                          >
+                            <Edit2 size={12} /> Edit
+                          </button>
+                        ) : null}
                         <button
                           type="button"
                           className="btn btn-ghost btn-sm"
@@ -954,7 +970,7 @@ export default function SuperAdminTemplatesPage() {
                         >
                           <Eye size={12} /> Preview
                         </button>
-                        {r.pageId && (
+                        {r.pageId && can.manageSettings && (
                           <Link href={manageHref(r.pageId)} className="btn btn-ghost btn-sm" title="Settings">
                             <Settings2 size={12} />
                           </Link>
@@ -985,20 +1001,28 @@ export default function SuperAdminTemplatesPage() {
               row={r}
               plans={plans}
               delay={i % 9}
-              onEdit={() => {
-                if (r.pageId) {
-                  goToBuilder(r.pageId);
-                } else {
-                  // Unsaved predefined design — create it first, pre-filled.
-                  setCreateFor({ designId: r.designId, name: r.name });
-                }
-              }}
+              onEdit={
+                // Saved template -> builder (Edit). Unsaved predefined design
+                // -> Create popup, pre-filled (Create).
+                r.pageId
+                  ? can.edit
+                    ? () => goToBuilder(r.pageId!)
+                    : undefined
+                  : can.create
+                    ? () => setCreateFor({ designId: r.designId, name: r.name })
+                    : undefined
+              }
               onPreview={() => window.open(templatePreviewPath(r.pageId || r.designId), "_blank")}
               onQuickPreview={() => setPreviewRow(r)}
-              onDuplicate={() => duplicateRow(r)}
-              onPublish={r.pageId && r.status !== "published" ? () => setStatus(r.pageId!, "published") : undefined}
-              onUnpublish={r.pageId && r.status === "published" ? () => setStatus(r.pageId!, "draft") : undefined}
-              onRemove={r.pageId ? () => setDeleteFor(r) : undefined}
+              canManageSettings={can.manageSettings}
+              onDuplicate={can.duplicate ? () => duplicateRow(r) : undefined}
+              onPublish={can.publish && r.pageId && r.status !== "published" ? () => setStatus(r.pageId!, "published") : undefined}
+              onUnpublish={can.publish && r.pageId && r.status === "published" ? () => setStatus(r.pageId!, "draft") : undefined}
+              onRemove={
+                r.pageId && (r.kind === "preset" ? can.resetToPreset : can.delete)
+                  ? () => setDeleteFor(r)
+                  : undefined
+              }
             />
           ))}
         </div>
@@ -1090,17 +1114,19 @@ export default function SuperAdminTemplatesPage() {
                 <ExternalLink size={13} /> Fullscreen
               </button>
 
-              <button
-                type="button"
-                className="btn btn-primary btn-sm"
-                onClick={() => {
-                  const target = previewRow.pageId || previewRow.designId;
-                  setPreviewRow(null);
-                  goToBuilder(target);
-                }}
-              >
-                <Edit2 size={13} /> Open in Builder
-              </button>
+              {can.edit ? (
+                <button
+                  type="button"
+                  className="btn btn-primary btn-sm"
+                  onClick={() => {
+                    const target = previewRow.pageId || previewRow.designId;
+                    setPreviewRow(null);
+                    goToBuilder(target);
+                  }}
+                >
+                  <Edit2 size={13} /> Open in Builder
+                </button>
+              ) : null}
             </div>
           }
         >
@@ -1148,7 +1174,7 @@ export default function SuperAdminTemplatesPage() {
         </Modal>
       )}
 
-      {createFor ? (
+      {createFor && can.create ? (
         <CreateTemplateModal
           onClose={() => setCreateFor(null)}
           categories={categories}
@@ -1159,7 +1185,7 @@ export default function SuperAdminTemplatesPage() {
       ) : null}
 
       <TemplateCategoriesModal
-        open={categoriesOpen}
+        open={categoriesOpen && can.categories}
         onClose={closeCategories}
         categories={categories}
         rows={rows}
@@ -1183,9 +1209,9 @@ export default function SuperAdminTemplatesPage() {
         destructive={deleteFor?.kind !== "preset"}
         onConfirm={() => {
           if (deleteFor?.kind === "preset") {
-            resetRow(deleteFor);
+            if (can.resetToPreset) resetRow(deleteFor);
           } else if (deleteFor) {
-            deleteRow(deleteFor);
+            if (can.delete) deleteRow(deleteFor);
           }
         }}
         onClose={() => setDeleteFor(null)}

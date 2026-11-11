@@ -61,7 +61,16 @@ type SectionKey = "seo" | "analytics" | "branding" | "typography" | "business" |
 
 type FormPatch = (f: FormDefinition) => FormDefinition;
 
-export function PageSettingsModule({ page, onPage }: { page: LandingPageData; onPage: (patch: Partial<LandingPageData>) => void }) {
+export function PageSettingsModule({
+  page,
+  onPage,
+  canChangeStatus = true,
+}: {
+  page: LandingPageData;
+  onPage: (patch: Partial<LandingPageData>) => void;
+  /** False locks the Page > Status field (Super Admin templates without Publish). */
+  canChangeStatus?: boolean;
+}) {
   const [tab, setTab] = useState<SectionKey>("seo");
   const [copied, setCopied] = useState(false);
   const site = useConfigStore((s) => s.config);
@@ -192,6 +201,7 @@ export function PageSettingsModule({ page, onPage }: { page: LandingPageData; on
               commit={commit}
               onPatchPage={onPage}
               patchPageBag={patchPageBag}
+              canChangeStatus={canChangeStatus}
             />
           )}
           {tab === "conversions" && <ConversionsSection site={site} patchFirstForm={patchFirstForm} patchTracking={patchTracking} />}
@@ -272,13 +282,17 @@ function Select({
   value,
   options,
   on,
+  disabled,
+  title,
 }: {
   value: string;
   options: { value: string; label: string }[];
   on: (v: string) => void;
+  disabled?: boolean;
+  title?: string;
 }) {
   return (
-    <select className="ps-input" value={value ?? ""} onChange={(e) => on(e.target.value)} style={selectStyle}>
+    <select className="ps-input" value={value ?? ""} onChange={(e) => on(e.target.value)} style={selectStyle} disabled={disabled} title={title}>
       {options.map((o) => (
         <option key={o.value} value={o.value}>
           {o.label}
@@ -886,12 +900,14 @@ function PageScopeSection({
   commit,
   onPatchPage,
   patchPageBag,
+  canChangeStatus = true,
 }: {
   page: LandingPageData;
   settings: PageSettings;
   commit: (r: (c: SiteConfig) => SiteConfig) => void;
   onPatchPage: (patch: Partial<LandingPageData>) => void;
   patchPageBag: (patch: Partial<PageSettings["page"]>) => void;
+  canChangeStatus?: boolean;
 }) {
   const slug = (page.slug || page.id?.replace(/^page-/, ""))?.replace(/^\//, "");
   const pathFor = (v: string) => {
@@ -935,6 +951,8 @@ function PageScopeSection({
               { value: "unpublished", label: "Unpublished" },
             ]}
             on={(v) => onPatchPage({ status: v as LandingPageData["status"] })}
+            disabled={!canChangeStatus}
+            title={canChangeStatus ? undefined : "Changing the status needs the Publish permission"}
           />
         </Row>
       </Card>

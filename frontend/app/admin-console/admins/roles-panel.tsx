@@ -62,6 +62,45 @@ const MODULE_PERMISSION_PILLS: Record<string, PermissionPill[]> = {
     },
     { key: "canDelete", permission: "canDelete", label: "Delete" },
   ],
+  // One pill per Templates action, named after the button it unlocks. The
+  // last four are stored on their own backing modules (hidden from the module
+  // list below) so each can be granted on its own. Approve is the Publish
+  // pill and covers both Publish and Unpublish.
+  admin_templates: [
+    { key: "canView", permission: "canView", label: "View", title: "See templates, filters, Preview and Quick Preview, and the template details page." },
+    { key: "canAdd", permission: "canAdd", label: "Create", title: "Create Template button." },
+    { key: "canEdit", permission: "canEdit", label: "Edit", title: "Edit / Open Builder, and in the builder: save, rename, AI Generator, image uploads." },
+    {
+      key: "manageSettings",
+      moduleKey: "admin_templates_settings",
+      permission: "canEdit",
+      label: "Manage Settings",
+      title: "Manage Settings: change and save name, slug, domain, category and plan access.",
+    },
+    {
+      key: "duplicate",
+      moduleKey: "admin_templates_duplicate",
+      permission: "canAdd",
+      label: "Duplicate",
+      title: "Duplicate a template.",
+    },
+    { key: "publish", permission: "canApprove", label: "Publish", title: "Publish and Unpublish: card menu, builder top bar and the Status field in Manage Settings." },
+    {
+      key: "resetToPreset",
+      moduleKey: "admin_templates_reset",
+      permission: "canEdit",
+      label: "Reset to Preset",
+      title: "Reset a predefined template to its original design.",
+    },
+    { key: "canDelete", permission: "canDelete", label: "Delete", title: "Delete a custom template." },
+    {
+      key: "categories",
+      moduleKey: "admin_templates_categories",
+      permission: "canEdit",
+      label: "Categories",
+      title: "Categories button and Add Category: add, rename and delete template categories.",
+    },
+  ],
   // The console dashboard is a read-only overview — there's nothing to add,
   // edit, delete or approve.
   admin_dashboard: [
@@ -134,10 +173,18 @@ function permissionPillsFor(moduleKey: string): PermissionPill[] {
 // Modules that exist purely as backing storage for a pill nested under a
 // different row (see the `moduleKey` override on that pill) — never rendered
 // as a console-module row of their own.
+const TEMPLATE_NESTED_MODULE_KEYS = new Set<string>([
+  "admin_templates_settings",
+  "admin_templates_duplicate",
+  "admin_templates_reset",
+  "admin_templates_categories",
+]);
+
 const HIDDEN_MODULE_KEYS = new Set<string>([
   "admin_org_upgrade_subscription",
   "admin_org_templates_add",
   "admin_org_templates_remove",
+  ...TEMPLATE_NESTED_MODULE_KEYS,
 ]);
 
 export function PlatformRolesPanel({
@@ -234,11 +281,33 @@ export function PlatformRolesPanel({
   ) {
     if (!permRole || permRole.key === "super_admin") return;
     const permissionKey = `${moduleKey}:${action}`;
+    // Removing Templates > View also removes the Templates pills stored on
+    // their own modules (Manage Settings, Duplicate, ...), so none of them is
+    // left on without the page itself.
+    const nestedOff =
+      moduleKey === "admin_templates" && action === "canView" && permRows.find((r) => r.moduleKey === moduleKey)?.canView
+        ? new Map(
+            permissionPillsFor(moduleKey)
+              .filter((pill) => pill.moduleKey)
+              .map((pill) => [pill.moduleKey as string, pill.permission]),
+          )
+        : null;
+    // Turning a nested Templates pill on also turns Templates > View on —
+    // without it the member can't open the Templates page to use the pill.
+    const turnsOnNestedTemplatePill =
+      TEMPLATE_NESTED_MODULE_KEYS.has(moduleKey) &&
+      !permRows.find((r) => r.moduleKey === moduleKey)?.[action];
     const nextRows = permRows.map((item) => {
+      const nestedColumn = nestedOff?.get(item.moduleKey);
+      if (nestedColumn) return { ...item, [nestedColumn]: false, canView: false };
+      if (turnsOnNestedTemplatePill && item.moduleKey === "admin_templates") return { ...item, canView: true };
       if (item.moduleKey !== moduleKey) return item;
       const nextVal = !item[action];
       const updated = { ...item, [action]: nextVal };
       if (nextVal && action !== "canView") updated.canView = true;
+      // A nested Templates row holds a single pill, so its View simply
+      // follows that pill.
+      if (!nextVal && TEMPLATE_NESTED_MODULE_KEYS.has(moduleKey)) updated.canView = false;
       if (!nextVal && action === "canView") {
         updated.canAdd = false;
         updated.canEdit = false;
@@ -276,6 +345,7 @@ export function PlatformRolesPanel({
       if (!cols) return row;
       const patch: Partial<typeof row> = {};
       for (const col of cols) patch[col] = enabled;
+      if (TEMPLATE_NESTED_MODULE_KEYS.has(row.moduleKey)) patch.canView = enabled;
       return { ...row, ...patch };
     });
     await savePermissionRows(
@@ -370,7 +440,7 @@ export function PlatformRolesPanel({
                 </div>
                 {permRows.filter((item) => !HIDDEN_MODULE_KEYS.has(item.moduleKey)).map((item) => (
                   <div
-                    className={`platform-permission-row${item.moduleKey === "admin_subscriptions" ? " platform-permission-row--subscriptions" : ""}`}
+                    className={`platform-permission-row${item.moduleKey === "admin_subscriptions" || item.moduleKey === "admin_templates" ? " platform-permission-row--subscriptions" : ""}`}
                     key={item.moduleKey}
                   >
                     <div className="platform-permission-module">

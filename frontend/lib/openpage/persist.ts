@@ -625,6 +625,21 @@ async function patchTemplate(id: string, record: LandingPageData): Promise<Landi
   return updated;
 }
 
+/** Publish / Unpublish from the templates list: sends only `status`, so the
+ *  server checks the Publish permission and leaves the content as it is. */
+export async function setTemplateStatus(
+  id: string,
+  status: LandingPageData["status"],
+): Promise<LandingPageData> {
+  const raw = await apiFetch<ApiTemplate>(`${TEMPLATES_PATH}/${encodeURIComponent(id)}`, {
+    method: "PATCH",
+    body: JSON.stringify({ status }),
+  });
+  const updated = fromApiTemplate(raw);
+  saveLocalBackup(updated);
+  return updated;
+}
+
 export interface TemplateCategory {
   id: string;
   name: string;

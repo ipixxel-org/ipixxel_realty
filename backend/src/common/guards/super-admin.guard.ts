@@ -166,6 +166,19 @@ export class SuperAdminGuard implements CanActivate {
       }
     }
 
+    // Templates: several pills share one route or one HTTP verb, so the
+    // request method alone can't pick the pill. Work out which pill(s) this
+    // request needs and check them here (see the Templates note on
+    // PLATFORM_PERMISSION_MODULES).
+    const templateRequirements = await this.templateRequirements(request, path);
+    if (templateRequirements) {
+      await this.assertPlatformPermissions(
+        platformRoles.map((role) => role.id),
+        templateRequirements,
+      );
+      return true;
+    }
+
     // Platform Team members are disabled/re-enabled via the same PATCH route
     // used to edit their profile, distinguished only by the request body
     // containing solely `status` — the console UI never sends it alongside a
@@ -219,4 +232,131 @@ export class SuperAdminGuard implements CanActivate {
       `Missing platform permission: ${moduleKey}:${action}`,
     );
   }
+
+  /**
+   * The pills a Templates write request needs, or null when the request
+   * should use the normal route -> module -> HTTP-method check (every GET,
+   * create, delete, and the typography/media routes).
+   *
+   * Each inner array is "any one of these"; every inner array must pass.
+   */
+  private async templateRequirements(
+    request: Request,
+    path: string,
+  ): Promise<PermissionRequirement[][] | null> {
+    const method = request.method.toUpperCase();
+
+    // Category writes (add, rename, delete) -> Categories pill. Reading the
+    // category list stays under Templates > View.
+    if (
+      method !== 'GET' &&
+      method !== 'HEAD' &&
+      /^\/admin\/template-categories(\/[^/]+)?$/.test(path)
+    ) {
+      return [[{ moduleKey: 'admin_templates_categories', action: 'edit' }]];
+    }
+
+    if (method === 'POST') {
+      if (/^\/admin\/templates\/[^/]+\/duplicate$/.test(path)) {
+        return [[{ moduleKey: 'admin_templates_duplicate', action: 'add' }]];
+      }
+      if (/^\/admin\/templates\/[^/]+\/reset$/.test(path)) {
+        return [[{ moduleKey: 'admin_templates_reset', action: 'edit' }]];
+      }
+      // Builder image upload — part of editing in the builder.
+      if (/^\/admin\/templates\/[^/]+\/upload-url$/.test(path)) {
+        return [[{ moduleKey: 'admin_templates', action: 'edit' }]];
+      }
+      return null;
+    }
+
+    const updateMatch = method === 'PATCH' ? path.match(/^\/admin\/templates\/([^/]+)$/) : null;
+    if (!updateMatch) return null;
+
+    // One PATCH serves the builder save, the Manage Settings save and the
+    // Publish / Unpublish actions, so look at what it changes.
+    const body: Record<string, unknown> =
+      request.body && typeof request.body === 'object' ? request.body : {};
+    const otherFields = Object.keys(body).filter(
+      (key) => key !== 'status' && body[key] !== undefined,
+    );
+    const nextStatus = typeof body.status === 'string' ? body.status : undefined;
+
+    let statusChanged = false;
+    if (nextStatus !== undefined) {
+      const current = await this.prisma.template.findUnique({
+        where: { id: updateMatch[1] },
+        select: { status: true },
+      });
+      statusChanged = !!current && current.status !== nextStatus;
+    }
+
+    const publish: PermissionRequirement = { moduleKey: 'admin_templates', action: 'approve' };
+    const edit: PermissionRequirement = { moduleKey: 'admin_templates', action: 'edit' };
+    const settings: PermissionRequirement = { moduleKey: 'admin_templates_settings', action: 'edit' };
+
+    const required: PermissionRequirement[][] = [];
+    // Making a template live always needs Publish. A status-only change is
+    // the Publish / Unpublish action itself, so it needs Publish too. A
+    // content save that moves a live template back to draft (the builder
+    // does this on every edit) stays an Edit, as it always has been.
+    if (statusChanged && (LIVE_TEMPLATE_STATUSES.has(nextStatus!) || otherFields.length === 0)) {
+      required.push([publish]);
+    }
+    // The builder save and the Manage Settings save send the same fields,
+    // so either pill can save them.
+    if (otherFields.length > 0) {
+      required.push([edit, settings]);
+    }
+    // Nothing actually changes (e.g. an unchanged status on its own).
+    if (required.length === 0) {
+      required.push([edit, settings, publish]);
+    }
+    return required;
+  }
+
+  /** Throws unless the platform roles pass every group of requirements. */
+  private async assertPlatformPermissions(
+    roleIds: string[],
+    groups: PermissionRequirement[][],
+  ): Promise<void> {
+    const moduleKeys = [...new Set(groups.flat().map((r) => r.moduleKey))];
+    const rows = await this.prisma.roleModulePermission.findMany({
+      where: {
+        orgId: SYSTEM_ORG_ID,
+        roleId: { in: roleIds },
+        moduleKey: { in: moduleKeys },
+      },
+    });
+    const has = (required: PermissionRequirement) =>
+      rows.some(
+        (row) =>
+          row.moduleKey === required.moduleKey &&
+          row[ACTION_COLUMN[required.action]] === true,
+      );
+    const missing = groups.find((group) => !group.some(has));
+    if (missing) {
+      throw new ForbiddenException(
+        `Missing platform permission: ${missing
+          .map((r) => `${r.moduleKey}:${r.action}`)
+          .join(' or ')}`,
+      );
+    }
+  }
 }
+
+type PermissionRequirement = {
+  moduleKey: string;
+  action: 'view' | 'add' | 'edit' | 'delete' | 'approve';
+};
+
+const ACTION_COLUMN = {
+  view: 'canView',
+  add: 'canAdd',
+  edit: 'canEdit',
+  delete: 'canDelete',
+  approve: 'canApprove',
+} as const;
+
+/** Template statuses that make a template visible to organisations. */
+const LIVE_TEMPLATE_STATUSES = new Set(['published', 'scheduled', 'password']);

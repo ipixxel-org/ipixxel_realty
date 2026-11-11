@@ -252,7 +252,25 @@ export const PLATFORM_PERMISSION_MODULES: ModuleDefinition[] = [
   // which is confusing to configure; View/Edit/Delete/Add apply identically
   // to both tabs (see PLATFORM_ROUTE_MODULES below).
   { key: 'admin_platform_team', label: 'Platform team', description: 'Invite and manage Super Admin console users, and the platform roles assigned to them' },
+  // Templates row pills, each named after the action it unlocks:
+  //   View            -> admin_templates.canView
+  //   Create          -> admin_templates.canAdd
+  //   Edit            -> admin_templates.canEdit    (builder, rename, save, uploads)
+  //   Delete          -> admin_templates.canDelete  (delete a custom template)
+  //   Publish         -> admin_templates.canApprove (publish and unpublish)
+  //   Manage Settings -> admin_templates_settings.canEdit
+  //   Duplicate       -> admin_templates_duplicate.canAdd
+  //   Reset to Preset -> admin_templates_reset.canEdit
+  //   Categories      -> admin_templates_categories.canEdit (add, rename, delete)
+  // The last four are backing storage only: the frontend roles matrix shows
+  // them as pills under the Templates row, never as rows of their own (same
+  // pattern as admin_org_upgrade_subscription). See SuperAdminGuard for how
+  // each template route maps to these.
   { key: 'admin_templates', label: 'Templates', description: 'Site templates, typography and landing pages' },
+  { key: 'admin_templates_settings', label: 'Templates — Manage Settings', description: "Shows 'Manage Settings' on a template and lets the settings be saved" },
+  { key: 'admin_templates_duplicate', label: 'Templates — Duplicate', description: "Shows the 'Duplicate' action on a template" },
+  { key: 'admin_templates_reset', label: 'Templates — Reset to Preset', description: "Shows the 'Reset to Preset' action on a predefined template" },
+  { key: 'admin_templates_categories', label: 'Templates — Categories', description: 'Add, rename and delete template categories' },
   { key: 'admin_forms', label: 'Forms', description: 'Platform lead forms builder and library' },
   { key: 'admin_leads', label: 'Leads', description: 'View leads captured across all organisations' },
   { key: 'admin_domains', label: 'Domains', description: 'Platform domains and organisation domain requests' },

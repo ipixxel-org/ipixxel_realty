@@ -200,3 +200,129 @@ describe('SuperAdminGuard — Platform roles routes share the Platform Team modu
     ).rejects.toBeInstanceOf(ForbiddenException);
   });
 });
+
+describe('SuperAdminGuard — Templates pills', () => {
+  const jwt = () => ({
+    sub: 'u1',
+    orgId: null,
+    roles: ['platform_operator'],
+    iat: Math.floor(Date.now() / 1000),
+  });
+  const platformRoles = [{ id: 'r1', key: 'platform_operator' }];
+  const row = (moduleKey: string, grants: Record<string, boolean>) => ({
+    moduleKey,
+    canView: true,
+    canAdd: false,
+    canEdit: false,
+    canDelete: false,
+    canApprove: false,
+    ...grants,
+  });
+  function guardWith(rows: Array<Record<string, unknown>>, currentStatus = 'draft') {
+    const { guard, prisma } = makeGuard(activeSuperAdmin, { platformRoles, grantRows: rows });
+    prisma.template = { findUnique: jest.fn().mockResolvedValue({ status: currentStatus }) };
+    return guard;
+  }
+  const run = (guard: SuperAdminGuard, method: string, path: string, body?: Record<string, unknown>) =>
+    guard.canActivate(ctx(jwt(), { method, path, body }));
+
+  it('Publish: a status-only PATCH to published needs Publish, not Edit', async () => {
+    await expect(
+      run(guardWith([row('admin_templates', { canEdit: true })]), 'PATCH', '/admin/templates/t1', { status: 'published' }),
+    ).rejects.toBeInstanceOf(ForbiddenException);
+    await expect(
+      run(guardWith([row('admin_templates', { canApprove: true })]), 'PATCH', '/admin/templates/t1', { status: 'published' }),
+    ).resolves.toBe(true);
+  });
+
+  it('Publish: a status-only Unpublish needs Publish', async () => {
+    await expect(
+      run(guardWith([row('admin_templates', { canEdit: true })], 'published'), 'PATCH', '/admin/templates/t1', { status: 'draft' }),
+    ).rejects.toBeInstanceOf(ForbiddenException);
+  });
+
+  it('Publish: a builder save that goes live needs both Edit and Publish', async () => {
+    const body = { name: 'X', status: 'published', content: {} };
+    await expect(
+      run(guardWith([row('admin_templates', { canEdit: true })]), 'PATCH', '/admin/templates/t1', body),
+    ).rejects.toBeInstanceOf(ForbiddenException);
+    await expect(
+      run(guardWith([row('admin_templates', { canEdit: true, canApprove: true })]), 'PATCH', '/admin/templates/t1', body),
+    ).resolves.toBe(true);
+  });
+
+  it('Edit: a builder autosave that moves a live template back to draft only needs Edit', async () => {
+    await expect(
+      run(
+        guardWith([row('admin_templates', { canEdit: true })], 'published'),
+        'PATCH',
+        '/admin/templates/t1',
+        { name: 'X', status: 'draft', content: {} },
+      ),
+    ).resolves.toBe(true);
+  });
+
+  it('Manage Settings: can save settings without Edit, but not change the status', async () => {
+    const settings = [row('admin_templates_settings', { canEdit: true })];
+    await expect(
+      run(guardWith(settings, 'published'), 'PATCH', '/admin/templates/t1', { name: 'X', status: 'published' }),
+    ).resolves.toBe(true);
+    await expect(
+      run(guardWith(settings, 'draft'), 'PATCH', '/admin/templates/t1', { name: 'X', status: 'published' }),
+    ).rejects.toBeInstanceOf(ForbiddenException);
+  });
+
+  it('View only: cannot save', async () => {
+    await expect(
+      run(guardWith([row('admin_templates', {})]), 'PATCH', '/admin/templates/t1', { name: 'X' }),
+    ).rejects.toBeInstanceOf(ForbiddenException);
+  });
+
+  it('Duplicate needs the Duplicate pill, not Create', async () => {
+    await expect(
+      run(guardWith([row('admin_templates', { canAdd: true })]), 'POST', '/admin/templates/t1/duplicate'),
+    ).rejects.toBeInstanceOf(ForbiddenException);
+    await expect(
+      run(guardWith([row('admin_templates_duplicate', { canAdd: true })]), 'POST', '/admin/templates/t1/duplicate'),
+    ).resolves.toBe(true);
+  });
+
+  it('Reset to Preset needs the Reset to Preset pill', async () => {
+    await expect(
+      run(guardWith([row('admin_templates', { canAdd: true, canDelete: true })]), 'POST', '/admin/templates/t1/reset', {}),
+    ).rejects.toBeInstanceOf(ForbiddenException);
+    await expect(
+      run(guardWith([row('admin_templates_reset', { canEdit: true })]), 'POST', '/admin/templates/t1/reset', {}),
+    ).resolves.toBe(true);
+  });
+
+  it('Builder image upload needs Edit', async () => {
+    await expect(
+      run(guardWith([row('admin_templates', { canAdd: true })]), 'POST', '/admin/templates/t1/upload-url', {}),
+    ).rejects.toBeInstanceOf(ForbiddenException);
+    await expect(
+      run(guardWith([row('admin_templates', { canEdit: true })]), 'POST', '/admin/templates/t1/upload-url', {}),
+    ).resolves.toBe(true);
+  });
+
+  it('Categories: writes need the Categories pill, reading stays under View', async () => {
+    const viewOnly = [row('admin_templates', {})];
+    await expect(run(guardWith(viewOnly), 'GET', '/admin/template-categories')).resolves.toBe(true);
+    await expect(
+      run(guardWith(viewOnly), 'POST', '/admin/template-categories', { name: 'A' }),
+    ).rejects.toBeInstanceOf(ForbiddenException);
+    const cats = [row('admin_templates_categories', { canEdit: true })];
+    await expect(run(guardWith(cats), 'POST', '/admin/template-categories', { name: 'A' })).resolves.toBe(true);
+    await expect(run(guardWith(cats), 'PATCH', '/admin/template-categories/c1', { name: 'B' })).resolves.toBe(true);
+    await expect(run(guardWith(cats), 'DELETE', '/admin/template-categories/c1')).resolves.toBe(true);
+  });
+
+  it('Create and Delete keep using the Templates row', async () => {
+    await expect(
+      run(guardWith([row('admin_templates', { canAdd: true })]), 'POST', '/admin/templates', { name: 'A' }),
+    ).resolves.toBe(true);
+    await expect(
+      run(guardWith([row('admin_templates', { canDelete: true })]), 'DELETE', '/admin/templates/t1'),
+    ).resolves.toBe(true);
+  });
+});
