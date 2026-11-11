@@ -2596,12 +2596,14 @@ export function LocationBlock({ block }: { block: BlockConfig }) {
         <div className="max-w-6xl mx-auto px-4 text-center mb-8">
           <El block={block} id={part(block, "title")} as="h2" className={`font-display text-2xl @md:text-3xl font-medium tracking-wide ${onDark ? "text-white" : "text-green"}`}>
             {str(p.title, "Location Advantages")}
+            {/* Divider lives inside the heading and uses its text colour
+                (bg-current), so recolouring the heading recolours it too. */}
+            <span className="flex items-center justify-center gap-2 mt-3 mb-1" aria-hidden="true">
+              <span className="block h-px w-24 bg-current opacity-50" />
+              <span className="block h-1.5 w-1.5 rounded-full bg-current" />
+              <span className="block h-px w-24 bg-current opacity-50" />
+            </span>
           </El>
-          <div className="flex items-center justify-center gap-2 my-3" aria-hidden="true">
-            <span className={`h-px w-24 ${onDark ? "bg-white/40" : "bg-green/50"}`} />
-            <span className={`h-1.5 w-1.5 rounded-full ${onDark ? "bg-white/70" : "bg-green"}`} />
-            <span className={`h-px w-24 ${onDark ? "bg-white/40" : "bg-green/50"}`} />
-          </div>
           {str(p.subtitle) ? (
             <El block={block} id={part(block, "subtitle")} as="p" className={`text-base @md:text-lg tracking-wide ${onDark ? "text-white/80" : "text-green"}`}>
               {str(p.subtitle)}
@@ -2614,13 +2616,15 @@ export function LocationBlock({ block }: { block: BlockConfig }) {
             {image ? media("aspect-[16/8] w-full") : map("aspect-[16/8] w-full")}
             {mapButton}
           </div>
+          {/* At most 3 cards per row (2 on tablet, 1 on mobile); a shorter
+              last row stretches to fill the width. gap-5 = 20px. */}
           <div className="flex flex-wrap gap-5">
             {nearby.map((n, i) => {
               const id = itemPart("items", n);
               const row = locationItem(n);
               const list = row.places.length ? row.places : row.meta ? [row.meta] : [];
               return (
-                <El key={id} block={block} id={id} className={`flex-1 basis-[260px] rounded-xl border ${tone.tile} shadow-[0_6px_24px_rgba(0,0,0,0.06)] p-5 text-left`}>
+                <El key={id} block={block} id={id} className={`grow basis-full @lg:basis-[calc(50%-10px)] @3xl:basis-[calc((100%-40px)/3)] rounded-xl border ${tone.tile} shadow-[0_6px_24px_rgba(0,0,0,0.06)] p-5 text-left`}>
                   <El block={block} id={subElementId(id, "title")} as="div" className={`flex items-center gap-2 text-lg font-medium mb-2 ${onDark ? "text-white" : "text-green"}`}>
                     {/* Own element so its colour can be changed in Style ("Icon"). */}
                     {bullet !== "none" ? (
