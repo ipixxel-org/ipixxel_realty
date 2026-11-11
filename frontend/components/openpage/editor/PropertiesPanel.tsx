@@ -129,7 +129,8 @@ function ctaFields(
   return fields
 }
 
-const blockFields: Partial<Record<BlockType, { sections: { title: string; fields: FieldDef[] }[] }>> = {
+// `variants`: show that section only for these templates (omit = always shown).
+const blockFields: Partial<Record<BlockType, { sections: { title: string; fields: FieldDef[]; variants?: string[] }[] }>> = {
   navbar: {
     sections: [
       {
@@ -295,7 +296,15 @@ const blockFields: Partial<Record<BlockType, { sections: { title: string; fields
     // Every template shows each field below once it has a value.
     sections: [
       { title: 'Layout', fields: [
-        { key: 'variant', label: 'Template', type: 'select', options: ['simple', 'multi-column', 'minimal', 'premium', 'contact'] },
+        { key: 'variant', label: 'Template', type: 'select', options: ['simple', 'multi-column', 'minimal', 'premium', 'contact', 'disclaimer'] },
+      ]},
+      // Only the "disclaimer" template uses these; hidden for the others.
+      { title: 'Disclaimer Footer', variants: ['disclaimer'], fields: [
+        { key: 'leftLogoImage', label: 'Left logo (optional)', type: 'image' },
+        { key: 'rightLogoImage', label: 'Right logo (optional)', type: 'image' },
+        { key: 'qrImage', label: 'QR code image', type: 'image' },
+        { key: 'reraText', label: 'RERA number line (clear to hide)', type: 'text' },
+        { key: 'disclaimer', label: 'Disclaimer text (clear to hide)', type: 'textarea' },
       ]},
       { title: 'Brand', fields: [
         { key: 'logoImage', label: 'Logo', type: 'image' },
@@ -1395,7 +1404,7 @@ const KNOWN_VARIANTS: Record<string, string[]> = {
   'cta': ['simple', 'split', 'booking', 'banner', 'strip', 'card'],
   'icon-box': ['card', 'horizontal', 'minimal', 'centered'],
   'button': ['solid', 'outline', 'pill', 'glass'],
-  'footer': ['simple', 'multi-column', 'minimal', 'premium', 'contact'],
+  'footer': ['simple', 'multi-column', 'minimal', 'premium', 'contact', 'disclaimer'],
   'posts': ['grid', 'list'],
 };
 
@@ -2128,7 +2137,7 @@ export function PropertiesPanel({ block }: { block: BlockConfig }) {
       )}
 
       {/* Predefined Schema Sections */}
-      {schema?.sections.map((section) => (
+      {schema?.sections.filter((section) => !section.variants || section.variants.includes(block.variant ?? '')).map((section) => (
         <Section key={section.title} title={section.title}>
           {section.fields.map((field) => (
             <PropertyField key={field.key} field={field} block={block} />

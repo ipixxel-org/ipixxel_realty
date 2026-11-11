@@ -719,7 +719,7 @@ export const blockMetadata: BlockMeta[] = [
     label: 'Footer',
     description: 'Company info, links and legal',
     category: 'Core',
-    variants: ['multi-column', 'simple', 'minimal', 'premium', 'contact'],
+    variants: ['multi-column', 'simple', 'minimal', 'premium', 'contact', 'disclaimer'],
     defaultProps: { logo: 'Project', logoImage: '', copyright: 'All rights reserved.', links: ['Privacy Policy', 'Terms'] },
   },
   {
