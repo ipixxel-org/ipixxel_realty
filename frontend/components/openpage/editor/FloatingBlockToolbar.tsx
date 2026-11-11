@@ -25,6 +25,7 @@ import { blockMetadata } from "@/lib/openpage/block-metadata";
 import { isDivBlock } from "@/lib/openpage/block-factory";
 import type { DraggableAttributes, DraggableSyntheticListeners } from "@dnd-kit/core";
 import { SectionAiAssistant } from "./SectionAiAssistant";
+import { useIsTemplateBuilder } from "@/lib/openpage/use-builder-scope";
 
 interface FloatingBlockToolbarProps {
   block: BlockConfig;
@@ -51,6 +52,8 @@ export function FloatingBlockToolbar({
   const { selectedBlockId, selectBlock, setRightSidebarTab, viewport } = useEditorStore();
   const [showVariantMenu, setShowVariantMenu] = useState(false);
   const [showAiModal, setShowAiModal] = useState(false);
+  // AI Assistant is hidden for org admins; only Super Admin templates keep it.
+  const showAiAssistant = useIsTemplateBuilder();
 
   const isFirst = index === 0;
   const isLast = index === totalBlocks - 1;
@@ -179,7 +182,8 @@ export function FloatingBlockToolbar({
         <Palette size={13} />
       </button>
 
-      {/* AI Assistant */}
+      {/* AI Assistant — hidden for org admins, kept for Super Admin (?scope=template). */}
+      {showAiAssistant && (
       <button
         type="button"
         onClick={() => {
@@ -191,6 +195,7 @@ export function FloatingBlockToolbar({
       >
         <Sparkles size={13} className="text-purple-400" />
       </button>
+      )}
 
       {/* Add Section Below */}
       <button

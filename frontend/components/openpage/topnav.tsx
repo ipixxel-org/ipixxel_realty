@@ -31,6 +31,7 @@ import {
 import { useEditorStore, type Viewport } from "@/components/openpage/store/editorStore";
 import type { ModuleKey } from "@/lib/openpage/types";
 import { BRAND } from "@/lib/openpage/data";
+import { useIsTemplateBuilder } from "@/lib/openpage/use-builder-scope";
 
 export function OpenPageMark({
   size = 30,
@@ -258,6 +259,8 @@ export function TopNav({
   isSwitchingCompanion?: boolean;
 }) {
   const [moduleMenuOpen, setModuleMenuOpen] = useState(false);
+  // AI Generator is hidden for org admins; only Super Admin templates keep it.
+  const showAiGenerator = useIsTemplateBuilder();
   const published = pageStatus === "published";
   const headerRef = useRef<HTMLElement>(null);
   const leftRef = useRef<HTMLDivElement>(null);
@@ -571,6 +574,8 @@ export function TopNav({
               className="ps-builder-actions-wide"
               style={{ display: "flex", alignItems: "center", gap: 8 }}
             >
+              {/* Hidden for org admins — kept for Super Admin (?scope=template). */}
+              {showAiGenerator && (
               <button
                 type="button"
                 onClick={() => useEditorStore.getState().openAiModal()}
@@ -587,6 +592,7 @@ export function TopNav({
                 <Sparkles size={14} />
                 <span className="ps-btn-label">AI Generator</span>
               </button>
+              )}
               <button
                 type="button"
                 onClick={onSave}

@@ -30,6 +30,7 @@ import type { BlockType } from "@/components/openpage/blocks/types";
 import { EMPTY_GLOBAL_WIDGETS } from "./AdvancedPanel";
 import { FormBuilder } from "./FormBuilder";
 import { NavigatorTree } from "./NavigatorTree";
+import { useIsTemplateBuilder } from "@/lib/openpage/use-builder-scope";
 
 const blockIcons: Partial<Record<BlockType, typeof Layout>> = {
   section: Square,
@@ -686,9 +687,13 @@ export function LayersPanel() {
   const { addBlock } = useConfigStore()
   const { selectBlock, toggleLeftSidebar } = useEditorStore()
   const [showPopover, setShowPopover] = useState(false)
-  const tab = useEditorStore((s) => s.leftTab)
+  // "AI Gen" tab is hidden for org admins; only Super Admin templates keep it.
+  const showAiTab = useIsTemplateBuilder()
+  const tabDefs = showAiTab ? TAB_DEFS : TAB_DEFS.filter((t) => t.id !== 'ai')
+  const storedTab = useEditorStore((s) => s.leftTab)
+  const tab: Tab = !showAiTab && storedTab === 'ai' ? 'components' : storedTab
   const setTab = useEditorStore((s) => s.setLeftTab)
-  const activeDef = TAB_DEFS.find((t) => t.id === tab) ?? TAB_DEFS.find((t) => t.id === 'components')!
+  const activeDef = tabDefs.find((t) => t.id === tab) ?? tabDefs.find((t) => t.id === 'components')!
 
   function handleAddBlock(type: BlockType) {
     const meta = blockMetadata.find((b) => b.type === type)
@@ -705,7 +710,7 @@ export function LayersPanel() {
     <div className="flex flex-1 min-h-0 overflow-hidden relative">
       {/* Icon nav rail */}
       <nav className="w-[60px] shrink-0 h-full bg-bg-1 border-r border-border-default flex flex-col items-center py-2.5 gap-1 z-10" aria-label="Builder tools">
-        {TAB_DEFS.map(({ id, label, icon: Icon }) => {
+        {tabDefs.map(({ id, label, icon: Icon }) => {
           const isActive = tab === id
           return (
             <button
