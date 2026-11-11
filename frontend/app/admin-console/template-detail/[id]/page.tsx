@@ -30,6 +30,7 @@ import { ensureConfig } from "@/lib/openpage/site-config";
 import type { LandingPageData } from "@/lib/openpage/types";
 import { apiFetch } from "@/lib/api";
 import type { Plan } from "@/lib/types";
+import { useTemplatePermissions } from "@/components/superadmin/templates/use-template-permissions";
 
 type Tab = "overview" | "settings" | "preview";
 const TABS: { key: Tab; label: string }[] = [
@@ -43,6 +44,8 @@ const STATUS_OPTIONS: LandingPageData["status"][] = ["draft", "published", "unpu
 export default function SuperAdminTemplateDetailPage() {
   const params = useParams<{ id: string }>();
   const router = useRouter();
+  // Platform Team pills for this module (Super Admin has all of them).
+  const can = useTemplatePermissions();
 
   const [template, setTemplate] = useState<LandingPageData | null>(null);
   const [loaded, setLoaded] = useState(false);
@@ -235,17 +238,21 @@ export default function SuperAdminTemplateDetailPage() {
           <a className="btn btn-ghost" href={previewHref} target="_blank" rel="noreferrer">
             <Eye size={15} /> Preview
           </a>
-          <button type="button" className="btn btn-ghost" disabled={duplicating} onClick={() => void duplicate()}>
-            <Copy size={15} /> {duplicating ? "Duplicating…" : "Duplicate"}
-          </button>
-          <a className="btn btn-primary" href={builderPath(template.id)}>
-            <Pencil size={15} /> Edit in builder
-          </a>
+          {can.duplicate ? (
+            <button type="button" className="btn btn-ghost" disabled={duplicating} onClick={() => void duplicate()}>
+              <Copy size={15} /> {duplicating ? "Duplicating…" : "Duplicate"}
+            </button>
+          ) : null}
+          {can.edit ? (
+            <a className="btn btn-primary" href={builderPath(template.id)}>
+              <Pencil size={15} /> Edit in builder
+            </a>
+          ) : null}
         </div>
       </div>
 
       <div className="tabs reveal in">
-        {TABS.map((t) => (
+        {TABS.filter((t) => t.key !== "settings" || can.manageSettings).map((t) => (
           <a key={t.key} className={tab === t.key ? "active" : ""} onClick={() => setTab(t.key)} role="button">
             {t.label}
           </a>
@@ -312,7 +319,7 @@ export default function SuperAdminTemplateDetailPage() {
         </div>
       ) : null}
 
-      {tab === "settings" ? (
+      {tab === "settings" && can.manageSettings ? (
         <Reveal>
           <div className="grid g-2-1">
             <div className="card">
@@ -332,7 +339,13 @@ export default function SuperAdminTemplateDetailPage() {
                 <div className="row2">
                   <div className="field">
                     <label>Status</label>
-                    <select className="inp" value={status} onChange={(e) => setStatus(e.target.value as LandingPageData["status"])}>
+                    <select
+                      className="inp"
+                      value={status}
+                      onChange={(e) => setStatus(e.target.value as LandingPageData["status"])}
+                      disabled={!can.publish}
+                      title={can.publish ? undefined : "Changing the status needs the Publish permission"}
+                    >
                       {STATUS_OPTIONS.map((s) => (
                         <option key={s} value={s}>
                           {statusStyle(s).label}
