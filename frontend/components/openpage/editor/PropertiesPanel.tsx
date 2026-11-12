@@ -35,6 +35,7 @@ import {
   type ItemFieldDef,
 } from "./field-helpers";
 import { ELEMENT_ITEM_FIELDS, ELEMENT_ITEM_SUB_ELEMENTS, ELEMENT_ITEM_TEMPLATES } from "./element-fields";
+import { IPX_INSPECTOR_FIELDS, IPX_KNOWN_VARIANTS } from "@/lib/openpage/ipixxel-blocks";
 
 /** Explicit item fields for a block's list, keyed `${blockType}.${propKey}`. */
 const ITEM_FIELDS: Record<string, ItemFieldDef[]> = {
@@ -1146,6 +1147,79 @@ const blockFields: Partial<Record<BlockType, { sections: { title: string; fields
       { title: 'Button (optional)', fields: ctaFields('button', 'Button', { textKey: 'buttonText', url: true }) },
     ],
   },
+  'ipixxel-hero': {
+    sections: [
+      { title: 'Layout', fields: [
+        { key: 'variant', label: 'Template', type: 'select', options: ['grand-band', 'skyline', 'offer-slider'] },
+        { key: 'accentColor', label: 'Accent colour (band / gold lines / buttons)', type: 'color' },
+      ]},
+      { title: 'Content', fields: [
+        { key: 'image', label: 'Background image (first slide)', type: 'image' },
+        { key: 'logo', label: 'Logo image', type: 'image' },
+        { key: 'logoText', label: 'Logo text (when no logo image)', type: 'text' },
+        { key: 'location', label: 'Location', type: 'text' },
+        { key: 'phone', label: 'Phone number', type: 'text' },
+        { key: 'disclaimer', label: 'Disclaimer', type: 'text' },
+        { key: 'anchor', label: 'Section ID (menu scroll)', type: 'text' },
+      ]},
+      { title: 'Grand band (template 1)', fields: [
+        { key: 'brandName', label: 'Brand name', type: 'text' },
+        { key: 'brandColor', label: 'Brand name colour', type: 'color' },
+        { key: 'brandNumber', label: 'Big number', type: 'text' },
+        { key: 'brandTitle', label: 'Project title', type: 'text' },
+        { key: 'brandSubtitle', label: 'Project subtitle', type: 'text' },
+        { key: 'headline', label: 'Tagline', type: 'text' },
+        { key: 'legalText', label: 'RERA / legal text (top right)', type: 'textarea' },
+        { key: 'qrImage', label: 'QR code image', type: 'image' },
+        { key: 'bandText', label: 'Price band text', type: 'text' },
+        { key: 'offerLabel', label: 'Offer card label', type: 'textarea' },
+        { key: 'offerValue', label: 'Offer card value', type: 'text' },
+      ]},
+      { title: 'Skyline (template 2)', fields: [
+        { key: 'logo2', label: 'Second logo image', type: 'image' },
+        { key: 'skylineTitle', label: 'Title', type: 'text' },
+        { key: 'stat1Label', label: 'Left stat label', type: 'text' },
+        { key: 'stat1Value', label: 'Left stat value', type: 'text' },
+        { key: 'stat2Label', label: 'Right stat label', type: 'text' },
+        { key: 'stat2Value', label: 'Right stat value', type: 'text' },
+        { key: 'tourText', label: 'Virtual tour text', type: 'text' },
+        { key: 'tourUrl', label: 'Virtual tour URL', type: 'text' },
+        { key: 'callText', label: 'Call text', type: 'text' },
+        { key: 'menuAnchor', label: 'Menu icon scrolls to (section ID)', type: 'text' },
+        { key: 'galleryText', label: 'Gallery button text', type: 'text' },
+        { key: 'galleryUrl', label: 'Gallery button URL (empty = #gallery)', type: 'text' },
+      ]},
+      { title: 'Enquire tab (template 2)', fields: [
+        ...ctaFields('primaryCta', 'Enquire tab', { textKey: 'primaryCta', url: true }),
+        { key: 'primaryAnchor', label: 'Scrolls to section ID (when no URL)', type: 'text' },
+      ]},
+      { title: 'Offer slider (template 3)', fields: [
+        { key: 'logoTagline', label: 'Logo tagline', type: 'text' },
+        { key: 'offerTitle', label: 'Title', type: 'text' },
+        { key: 'highlightText', label: 'Highlight (black box)', type: 'text' },
+        { key: 'benefitText', label: 'Benefit text', type: 'text' },
+        { key: 'benefitValue', label: 'Benefit amount', type: 'text' },
+        { key: 'benefitNote', label: 'Benefit note', type: 'text' },
+        { key: 'configText', label: 'Configuration tab', type: 'text' },
+        { key: 'priceText', label: 'Price', type: 'text' },
+        { key: 'validLabel', label: 'Validity label', type: 'text' },
+        { key: 'validValue', label: 'Validity date', type: 'text' },
+        { key: 'offerBadgeImage', label: 'Offer badge image (replaces text badge)', type: 'image' },
+        { key: 'badgeTop', label: 'Badge small text', type: 'text' },
+        { key: 'badgeTitle', label: 'Badge title', type: 'text' },
+        { key: 'badgeScript', label: 'Badge script text', type: 'text' },
+        { key: 'slides', label: 'More slides', type: 'array-items' },
+        { key: 'textOnAllSlides', label: 'Show offer text on every slide', type: 'toggle' },
+        { key: 'autoplay', label: 'Autoplay', type: 'toggle' },
+        { key: 'interval', label: 'Autoplay interval (ms)', type: 'number' },
+        { key: 'whatsapp', label: 'WhatsApp number', type: 'text' },
+        { key: 'showFloatingButtons', label: 'Show call / WhatsApp buttons', type: 'toggle' },
+      ]},
+      { title: 'Header button (template 3)', fields: [
+        ...ctaFields('headerCta', 'Header button', { textKey: 'headerCta', url: true }),
+      ]},
+    ],
+  },
   'property-carousel': {
     sections: [
       { title: 'Content', fields: [
@@ -1374,8 +1448,13 @@ const TYPE_ALIASES: Record<string, BlockType> = {
   're-contact': 'contact',
 };
 
+// iPixxel Realty section widgets keep their inspector fields in one place.
+Object.assign(blockFields, IPX_INSPECTOR_FIELDS as typeof blockFields);
+
 const KNOWN_VARIANTS: Record<string, string[]> = {
   'project-banner': ['split-form', 'overlay', 'centered', 'editorial', 'framed', 'asymmetric', 'info-bar', 'framed-center', 'split-curve', 'stats'],
+  'ipixxel-hero': ['grand-band', 'skyline', 'offer-slider'],
+  ...IPX_KNOWN_VARIANTS,
   'project-overview': ['split', 'centered', 'cards', 'timeline'],
   'property-details': ['grid', 'table', 'two-column', 'checklist'],
   'project-highlights': ['grid', 'table', 'two-column', 'checklist'],

@@ -1,4 +1,5 @@
 import type { ItemFieldDef } from "./field-helpers";
+import { IPX_ITEM_FIELDS, IPX_ITEM_TEMPLATES } from "@/lib/openpage/ipixxel-blocks";
 
 /**
  * List-item fields for the Elementor-style elements
@@ -92,10 +93,16 @@ export const ELEMENT_ITEM_FIELDS: Record<string, ItemFieldDef[]> = {
     { key: "badge", label: "Corner label (optional)", kind: "text", placeholder: "e.g. AI Impression" },
     { key: "alt", label: "Alt text (optional)", kind: "text" },
   ],
+  "ipixxel-hero.slides": [
+    { key: "src", label: "Slide image", kind: "image" },
+    { key: "alt", label: "Alt text (optional)", kind: "text" },
+  ],
   "tabs.items": [
     { key: "label", label: "Tab title", kind: "text" },
     { key: "content", label: "Content", kind: "textarea", rows: 4 },
   ],
+  // iPixxel Realty section widgets.
+  ...IPX_ITEM_FIELDS,
 };
 
 /** Blank item used by "Add item" when a list is empty. */
@@ -113,6 +120,8 @@ export const ELEMENT_ITEM_TEMPLATES: Record<string, Record<string, Record<string
   "social-icons": { icons: { platform: "facebook", url: "", label: "" } },
   tabs: { items: { label: "", content: "" } },
   "visual-journey": { images: { src: "", caption: "", description: "", badge: "", alt: "" } },
+  "ipixxel-hero": { slides: { src: "", alt: "" } },
+  ...IPX_ITEM_TEMPLATES,
 };
 
 /** Styleable parts of each list item ("Style …" buttons in the list editor). */
