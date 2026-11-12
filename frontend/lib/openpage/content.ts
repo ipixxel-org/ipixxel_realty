@@ -10,6 +10,7 @@ const FORM_BLOCK_TYPES = new Set([
   "lead-form",
   "site-visit",
   "project-banner",
+  "ipx-form",
   "contact",
   "newsletter",
   "download-brochure",

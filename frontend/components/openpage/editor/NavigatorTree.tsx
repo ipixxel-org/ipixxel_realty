@@ -58,7 +58,7 @@ function iconElement(block: BlockConfig) {
   if (["heading", "text", "button", "tabs"].includes(type)) {
     return <Type size={12} className="shrink-0 text-[#6d5dfc]" />;
   }
-  if (["image", "gallery", "image-box", "project-banner"].includes(type)) {
+  if (["image", "gallery", "image-box", "project-banner", "ipixxel-hero"].includes(type)) {
     return <ImageIcon size={12} className="shrink-0 text-[#6d5dfc]" />;
   }
   return <Layers size={12} className="shrink-0 text-[#6d5dfc]" />;

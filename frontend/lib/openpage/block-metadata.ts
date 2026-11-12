@@ -1,4 +1,6 @@
 import type { BlockType } from "@/components/openpage/blocks/types";
+// Relative on purpose: mcp-dev-template imports this file without the @ alias.
+import { IPX_BLOCK_METADATA } from "./ipixxel-blocks";
 
 export interface BlockMeta {
   type: BlockType
@@ -383,6 +385,86 @@ export const blockMetadata: BlockMeta[] = [
       buttonText: '',
       buttonUrl: '',
       buttonTarget: '_self',
+    },
+  },
+  {
+    // iPixxel Realty → Hero: ready-made hero designs picked from the Template
+    // dropdown. All templates share these props, so switching keeps content;
+    // each template's own heading has its own key so it looks right at once.
+    type: 'ipixxel-hero',
+    label: 'Hero',
+    description: 'Ready-made real estate hero designs (iPixxel Realty)',
+    category: 'Real Estate',
+    variants: ['grand-band', 'skyline', 'offer-slider', 'emerald-slider'],
+    defaultProps: {
+      image: '',
+      logo: '',
+      logoText: 'BRAND',
+      location: 'Sector 150, Noida',
+      disclaimer: '*T&C Apply | Artistic Impression',
+      anchor: 'hero',
+      accentColor: '',
+      // Template 1 — Grand band
+      brandColor: '',
+      brandName: 'AURUM',
+      brandNumber: '9',
+      brandTitle: 'VISTA',
+      brandSubtitle: 'RESIDENCES',
+      headline: 'Terraces to Forever Greens',
+      legalText: 'RERA REG. NO.: UPRERAPRJ000000/01/2026\nWEBSITE: WWW.UP-RERA.IN\nLAUNCH DATE: 1ST JANUARY 2026',
+      qrImage: '',
+      bandText: '3 & 4 BR Oxy-rich Residences Starting ₹ 2.37 Cr*',
+      offerLabel: 'Exclusive\nPayment Plan',
+      offerValue: '30:40:30*',
+      // Template 2 — Skyline
+      logo2: '',
+      skylineTitle: 'Four-side Open Residences',
+      stat1Label: 'Typology',
+      stat1Value: '4BHK',
+      stat2Label: 'Starting Price',
+      stat2Value: '₹ 9.7 Cr*',
+      tourText: 'Instant Virtual Tour',
+      tourUrl: '',
+      callText: 'Call Now',
+      phone: '+91 90000 00000',
+      menuAnchor: 'overview',
+      galleryText: 'Gallery',
+      galleryUrl: '',
+      primaryCta: 'Enquire Now',
+      primaryCtaUrl: '',
+      primaryCtaTarget: '_self',
+      primaryAnchor: 'enquire',
+      // Template 3 — Offer slider
+      logoTagline: 'luxury line',
+      headerCta: 'Get Price & Brochure',
+      headerCtaUrl: '',
+      headerCtaTarget: '_self',
+      offerTitle: 'Book Your Dream Home',
+      highlightText: 'Drive Your Dream Car',
+      benefitText: 'Assured Benefits Upto',
+      benefitValue: '₹20 LAKHS',
+      benefitNote: 'On every booking',
+      configText: '3 & 4 BHKs',
+      priceText: '₹2.40 CR*',
+      validLabel: 'Valid till',
+      validValue: '30th Sep',
+      offerBadgeImage: '',
+      badgeTop: 'Property',
+      badgeTitle: 'Privilege',
+      badgeScript: 'fest',
+      slides: [],
+      autoplay: true,
+      interval: 5000,
+      textOnAllSlides: false,
+      whatsapp: '',
+      showFloatingButtons: true,
+      // Template 4 — Emerald slider
+      emeraldTitle: 'Emerald Heights',
+      emeraldConfig: '3 & 4 BHK Apartments',
+      emeraldPriceLabel: 'Starting From',
+      emeraldPrice: '₹ 1.85 Cr*',
+      emeraldPlan: 'Payment Plan: 30:40:30',
+      emeraldRibbon: 'Offer valid for the first 25 bookings only*',
     },
   },
   {
@@ -817,6 +899,8 @@ export const blockMetadata: BlockMeta[] = [
       queryParam: 'q',
     },
   },
+  // iPixxel Realty section widgets (see ipixxel-blocks.ts).
+  ...(IPX_BLOCK_METADATA as BlockMeta[]),
 ]
 
 export const categories = [...new Set(blockMetadata.map((b) => b.category))]
