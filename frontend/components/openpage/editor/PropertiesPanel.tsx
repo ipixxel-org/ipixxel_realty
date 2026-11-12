@@ -35,7 +35,7 @@ import {
   type ItemFieldDef,
 } from "./field-helpers";
 import { ELEMENT_ITEM_FIELDS, ELEMENT_ITEM_SUB_ELEMENTS, ELEMENT_ITEM_TEMPLATES } from "./element-fields";
-import { IPX_INSPECTOR_FIELDS, IPX_KNOWN_VARIANTS } from "@/lib/openpage/ipixxel-blocks";
+import { IPX_FIELD_VARIANTS, IPX_INSPECTOR_FIELDS, IPX_KNOWN_VARIANTS } from "@/lib/openpage/ipixxel-blocks";
 
 /** Explicit item fields for a block's list, keyed `${blockType}.${propKey}`. */
 const ITEM_FIELDS: Record<string, ItemFieldDef[]> = {
@@ -1224,7 +1224,9 @@ const blockFields: Partial<Record<BlockType, { sections: { title: string; fields
         { key: 'textOnAllSlides', label: 'Show offer text on every slide', type: 'toggle' },
         { key: 'autoplay', label: 'Autoplay', type: 'toggle' },
         { key: 'interval', label: 'Autoplay interval (ms)', type: 'number' },
-        { key: 'whatsapp', label: 'WhatsApp number', type: 'text' },
+        { key: 'whatsapp', label: 'WhatsApp number (empty = phone number)', type: 'text' },
+        { key: 'whatsappIcon', label: 'WhatsApp icon (upload SVG / PNG; replaces the built-in icon)', type: 'image' },
+        { key: 'whatsappSize', label: 'WhatsApp icon size (px, 24–120; empty = auto)', type: 'number' },
         { key: 'showFloatingButtons', label: 'Show call / WhatsApp buttons', type: 'toggle' },
       ]},
       { title: 'Emerald slider (template 4)', fields: [
@@ -1237,6 +1239,7 @@ const blockFields: Partial<Record<BlockType, { sections: { title: string; fields
       ]},
       { title: 'Header button (template 3)', fields: [
         ...ctaFields('headerCta', 'Header button', { textKey: 'headerCta', url: true }),
+        { key: 'headerCtaAnchor', label: 'Scrolls to section ID (when no URL)', type: 'text' },
       ]},
     ],
   },
@@ -2049,6 +2052,26 @@ export function PropertiesPanel({ block }: { block: BlockConfig }) {
   const variants = KNOWN_VARIANTS[normalizedType] || KNOWN_VARIANTS[block.type]
   const hasVariantInSchema = predefinedKeys.has("variant")
 
+  // Widgets with per-template fields (iPixxel Realty) show only the fields the
+  // chosen template uses; hidden keys stay in predefinedKeys so they never
+  // reappear under "Additional Properties".
+  const fieldVariants = IPX_FIELD_VARIANTS[normalizedType] || IPX_FIELD_VARIANTS[block.type]
+  const activeVariant = variants?.length
+    ? (block.variant && variants.includes(block.variant) ? block.variant : variants[0])
+    : block.variant
+  const filterFields = Boolean(fieldVariants && activeVariant)
+  const visibleSections = (schema?.sections ?? [])
+    // Sections tied to particular variants (section.variants) show only for those.
+    .filter((section) => !section.variants || section.variants.includes(block.variant ?? ''))
+    .map((section) => ({
+      ...section,
+      fields: filterFields
+        ? section.fields.filter((f) => !fieldVariants![f.key] || fieldVariants![f.key].includes(activeVariant!))
+        : section.fields,
+    }))
+    // A section left with no fields after per-template filtering is hidden.
+    .filter((section) => !filterFields || section.fields.length > 0)
+
   // Discover all extra properties from block.props that aren't in schema
   const extraFields: FieldDef[] = []
   const propsObj = (block.props || {}) as Record<string, unknown>
@@ -2225,8 +2248,8 @@ export function PropertiesPanel({ block }: { block: BlockConfig }) {
         </Section>
       )}
 
-      {/* Predefined Schema Sections */}
-      {schema?.sections.filter((section) => !section.variants || section.variants.includes(block.variant ?? '')).map((section) => (
+      {/* Predefined Schema Sections (variant sections + only the fields the chosen template uses) */}
+      {visibleSections.map((section) => (
         <Section key={section.title} title={section.title}>
           {section.fields.map((field) => (
             <PropertyField key={field.key} field={field} block={block} />

@@ -885,5 +885,117 @@ export const IPX_ITEM_TEMPLATES: Record<string, Record<string, Record<string, un
   IPX_WIDGETS.filter((w) => Object.keys(w.itemTemplates).length).map((w) => [w.type, w.itemTemplates]),
 );
 
+/** Marks each key as used only by the given templates. */
+function only(variants: string[], keys: string[]): Record<string, string[]> {
+  return Object.fromEntries(keys.map((k) => [k, variants]));
+}
+
+/**
+ * Inspector fields that only some templates use, per widget type: field key →
+ * templates that show it. The Content tab hides the others for the chosen
+ * template (a section with nothing left is hidden too). Keys not listed are
+ * used by every template. Checked by __tests__/ipixxel-inspector.test.tsx.
+ */
+export const IPX_FIELD_VARIANTS: Record<string, Record<string, string[]>> = {
+  "ipixxel-hero": {
+    ...only(["skyline", "offer-slider", "emerald-slider"], ["logoText", "phone"]),
+    ...only(["grand-band", "skyline", "emerald-slider"], ["location"]),
+    ...only(["grand-band", "skyline"], ["disclaimer"]),
+    ...only(["grand-band"], ["brandName", "brandColor", "brandNumber", "brandTitle", "brandSubtitle", "headline", "legalText", "qrImage", "bandText", "offerLabel", "offerValue"]),
+    ...only(["skyline"], ["logo2", "skylineTitle", "stat1Label", "stat1Value", "stat2Label", "stat2Value", "tourText", "tourUrl", "callText", "menuAnchor", "galleryText", "galleryUrl", "primaryAnchor", "primaryCta", "primaryCtaUrl", "primaryCtaTarget", "primaryCtaColor", "primaryCtaTextColor", "primaryCtaHoverColor", "primaryCtaHoverTextColor", "primaryCtaBorderColor", "primaryCtaRadius"]),
+    ...only(["offer-slider"], ["logoTagline", "offerTitle", "highlightText", "benefitText", "benefitValue", "benefitNote", "configText", "priceText", "validLabel", "validValue", "offerBadgeImage", "badgeTop", "badgeTitle", "badgeScript", "headerCta", "headerCtaUrl", "headerCtaTarget", "headerCtaColor", "headerCtaTextColor", "headerCtaHoverColor", "headerCtaHoverTextColor", "headerCtaBorderColor", "headerCtaRadius", "headerCtaAnchor"]),
+    ...only(["offer-slider", "emerald-slider"], ["slides", "textOnAllSlides", "autoplay", "interval", "whatsapp", "whatsappIcon", "whatsappSize", "showFloatingButtons"]),
+    ...only(["emerald-slider"], ["emeraldTitle", "emeraldConfig", "emeraldPriceLabel", "emeraldPrice", "emeraldPlan", "emeraldRibbon"]),
+  },
+  "ipx-overview": {
+    ...only(["burgundy-features", "emerald-overview"], ["eyebrow", "titleAccent"]),
+    ...only(["eldeco-overview"], ["subtitle"]),
+    ...only(["eldeco-overview", "tarc-story", "tarc-wellness", "emerald-overview"], ["image", "imageCaption", "buttonText", "buttonUrl", "buttonTarget", "buttonAnchor", "buttonColor", "buttonTextColor", "buttonHoverColor", "buttonHoverTextColor", "buttonBorderColor", "buttonRadius"]),
+    ...only(["tarc-story"], ["imageSide", "decorImage"]),
+    ...only(["tarc-wellness"], ["watermark"]),
+    ...only(["burgundy-features"], ["items"]),
+  },
+  "ipx-highlights": {
+    ...only(["eldeco-icons", "tarc-compass", "emerald-list"], ["title", "subtitle"]),
+    ...only(["eldeco-icons"], ["tabs", "tabLabel"]),
+    ...only(["burgundy-offers", "eldeco-icons", "emerald-list"], ["items"]),
+    ...only(["tarc-compass"], ["centerImage", "imageCaption", "directions"]),
+    ...only(["emerald-offer"], ["logo", "logoText", "offerText", "planValue", "planLabel", "configText", "configNote", "priceLabel", "price", "address"]),
+    ...only(["emerald-offer", "emerald-list"], ["image"]),
+    ...only(["emerald-list"], ["image2"]),
+    ...only(["eldeco-icons", "emerald-list"], ["buttonText", "buttonUrl", "buttonTarget", "buttonAnchor", "buttonColor", "buttonTextColor", "buttonHoverColor", "buttonHoverTextColor", "buttonBorderColor", "buttonRadius"]),
+  },
+  "ipx-amenities": {
+    ...only(["burgundy-list"], ["eyebrow"]),
+    ...only(["burgundy-list", "emerald-cards"], ["titleAccent", "description"]),
+    ...only(["eldeco-tiles", "tarc-carousel"], ["subtitle"]),
+    ...only(["eldeco-tiles"], ["highlightFirst"]),
+    ...only(["emerald-cards"], ["bgImage"]),
+    ...only(["tarc-carousel"], ["imageCaption"]),
+    ...only(["tarc-carousel", "emerald-cards"], ["autoplay", "interval"]),
+    ...only(["eldeco-tiles", "emerald-cards"], ["buttonText", "buttonUrl", "buttonTarget", "buttonAnchor", "buttonColor", "buttonTextColor", "buttonHoverColor", "buttonHoverTextColor", "buttonBorderColor", "buttonRadius"]),
+  },
+  "ipx-pricing": {
+    ...only(["burgundy-cards"], ["eyebrow"]),
+    ...only(["burgundy-cards", "emerald-rows"], ["titleAccent", "description"]),
+    ...only(["eldeco-cards"], ["subtitle"]),
+    ...only(["eldeco-cards", "emerald-rows"], ["priceLabel"]),
+    ...only(["emerald-rows"], ["typologyLabel", "sizeLabel", "bgImage"]),
+  },
+  "ipx-floorplans": {
+    ...only(["burgundy-tabs"], ["eyebrow"]),
+    ...only(["burgundy-tabs", "emerald-tabs"], ["titleAccent", "description"]),
+    ...only(["tarc-details"], ["subtitle", "priceLabel", "decorImage"]),
+    ...only(["tarc-details", "emerald-tabs"], ["buttonText", "buttonUrl", "buttonTarget", "buttonAnchor", "buttonColor", "buttonTextColor", "buttonHoverColor", "buttonHoverTextColor", "buttonBorderColor", "buttonRadius"]),
+  },
+  "ipx-masterplan": {
+    ...only(["tarc-master"], ["imageCaption"]),
+  },
+  "ipx-gallery": {
+    ...only(["burgundy-carousel"], ["eyebrow"]),
+    ...only(["burgundy-carousel", "emerald-rows"], ["titleAccent", "description"]),
+    ...only(["eldeco-grid", "tarc-journey"], ["subtitle"]),
+    ...only(["burgundy-carousel", "eldeco-grid", "tarc-journey"], ["imageCaption"]),
+    ...only(["tarc-journey"], ["decorImage"]),
+    ...only(["tarc-journey", "emerald-rows"], ["autoplay", "interval"]),
+    ...only(["emerald-rows"], ["buttonText", "buttonUrl", "buttonTarget", "buttonAnchor", "buttonColor", "buttonTextColor", "buttonHoverColor", "buttonHoverTextColor", "buttonBorderColor", "buttonRadius"]),
+  },
+  "ipx-location": {
+    ...only(["burgundy-map"], ["eyebrow"]),
+    ...only(["burgundy-map", "emerald-map"], ["titleAccent", "description"]),
+    ...only(["eldeco-map", "tarc-map"], ["subtitle"]),
+    ...only(["tarc-map"], ["address"]),
+    ...only(["burgundy-map", "eldeco-map", "emerald-map"], ["buttonText", "buttonUrl", "buttonTarget", "buttonAnchor", "buttonColor", "buttonTextColor", "buttonHoverColor", "buttonHoverTextColor", "buttonBorderColor", "buttonRadius"]),
+  },
+  "ipx-about": {
+    ...only(["burgundy-stats"], ["eyebrow"]),
+    ...only(["burgundy-stats", "tarc-banner", "emerald-about"], ["title"]),
+    ...only(["burgundy-stats", "emerald-about"], ["titleAccent"]),
+    ...only(["tarc-banner", "emerald-about"], ["subtitle", "image", "buttonText", "buttonUrl", "buttonTarget", "buttonAnchor", "buttonColor", "buttonTextColor", "buttonHoverColor", "buttonHoverTextColor", "buttonBorderColor", "buttonRadius"]),
+    ...only(["eldeco-stats", "tarc-banner", "emerald-about"], ["logo", "logoText"]),
+    ...only(["eldeco-stats"], ["brandColor"]),
+    ...only(["emerald-about"], ["missionTitle", "missionText", "visionTitle", "visionText"]),
+    ...only(["tarc-banner"], ["imageCaption"]),
+  },
+  "ipx-cta": {
+    ...only(["burgundy-cta"], ["eyebrow", "titleAccent", "description"]),
+    ...only(["tarc-tour"], ["subtitle", "decorImage"]),
+    ...only(["tarc-club", "tarc-tour"], ["image"]),
+    ...only(["tarc-club"], ["imageCaption"]),
+  },
+  "ipx-form": {
+    ...only(["burgundy-split"], ["eyebrow", "bullets", "formTitle", "formSubtitle"]),
+    ...only(["burgundy-split", "emerald-form"], ["titleAccent", "description", "formNote"]),
+    ...only(["tarc-quote", "emerald-form"], ["image"]),
+  },
+  "ipx-footer": {
+    ...only(["burgundy-footer", "tarc-footer", "emerald-footer"], ["title"]),
+    ...only(["emerald-footer"], ["title2", "readMoreText"]),
+    ...only(["burgundy-footer"], ["address", "website", "qrCodes", "callText", "phone", "buttonText", "buttonUrl", "buttonTarget", "buttonAnchor", "buttonColor", "buttonTextColor", "buttonHoverColor", "buttonHoverTextColor", "buttonBorderColor", "buttonRadius"]),
+    ...only(["eldeco-footer", "tarc-footer", "emerald-footer"], ["linkText", "linkUrl", "credit"]),
+    ...only(["eldeco-footer"], ["bandColor"]),
+  },
+};
+
 /** Template options per widget type (inspector "known variants"). */
 export const IPX_KNOWN_VARIANTS: Record<string, string[]> = Object.fromEntries(IPX_WIDGETS.map((w) => [w.type, w.variants]));

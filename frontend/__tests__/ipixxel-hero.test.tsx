@@ -42,14 +42,17 @@ describe("iPixxel Realty → Hero widget", () => {
   });
 
   it("offer slider shows the offer stack, price band and header button", () => {
-    render(<RenderBlock block={make("offer-slider")} />);
+    const { container } = render(<RenderBlock block={make("offer-slider")} />);
     expect(screen.getByText("Book Your Dream Home")).toBeTruthy();
     expect(screen.getByText("Drive Your Dream Car")).toBeTruthy();
     expect(screen.getByText("₹20 LAKHS")).toBeTruthy();
-    expect(screen.getByText("₹2.40 CR*")).toBeTruthy();
+    expect(container.textContent).toContain("₹2.40 CR*");
+    expect(container.textContent).toContain("30th Sep");
     expect(screen.getByText("Get Price & Brochure")).toBeTruthy();
-    // One slide: no arrows.
-    expect(screen.queryByLabelText("Next slide")).toBeNull();
+    // Arrows, dots and WhatsApp (falls back to the phone) show as in the design.
+    expect((screen.getByLabelText("Next slide") as HTMLButtonElement).disabled).toBe(true);
+    expect(screen.getByLabelText("Go to slide 1")).toBeTruthy();
+    expect(screen.getByLabelText("WhatsApp").getAttribute("href")).toBe("https://wa.me/919000000000");
   });
 
   it("offer slider arrows move between slides; offer text stays on the first slide only", () => {
@@ -107,5 +110,25 @@ describe("iPixxel Realty → Hero widget", () => {
     rerender(<RenderBlock block={make("emerald-slider")} />);
     rerender(<RenderBlock block={make("offer-slider")} />);
     expect(container.querySelector("section")).toBeTruthy();
+  });
+
+  it("an uploaded WhatsApp icon replaces the built-in one; unsafe values are ignored", () => {
+    const { rerender } = render(<RenderBlock block={make("offer-slider", { whatsappIcon: "https://cdn.test/whatsapp.svg" })} />);
+    expect(screen.getByLabelText("WhatsApp").querySelector("img")?.getAttribute("src")).toBe("https://cdn.test/whatsapp.svg");
+    rerender(<RenderBlock block={make("offer-slider", { whatsappIcon: "javascript:alert(1)" })} />);
+    expect(screen.getByLabelText("WhatsApp").querySelector("img")).toBeNull();
+    expect(screen.getByLabelText("WhatsApp").querySelector("svg")).toBeTruthy();
+  });
+
+  it("WhatsApp icon size from the inspector is applied and kept within 24-120px", () => {
+    const btn = () => screen.getByLabelText("WhatsApp") as HTMLElement;
+    const { rerender } = render(<RenderBlock block={make("offer-slider", { whatsappSize: 80 })} />);
+    expect(btn().style.width).toBe("80px");
+    rerender(<RenderBlock block={make("offer-slider", { whatsappSize: "500" })} />);
+    expect(btn().style.width).toBe("120px");
+    rerender(<RenderBlock block={make("offer-slider", { whatsappSize: "abc" })} />);
+    expect(btn().style.width).toBe("");
+    rerender(<RenderBlock block={make("emerald-slider", { whatsappSize: 64, whatsapp: "+91 90000 11111" })} />);
+    expect(btn().style.height).toBe("64px");
   });
 });
