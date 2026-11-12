@@ -644,7 +644,8 @@ function OfferSliderHero(ctx: HeroCtx) {
           <El
             block={block}
             id={part(block, "offerBadge")}
-            className="hidden @3xl:flex absolute z-20 right-[2%] bottom-[5.5%] flex-col items-center"
+            // The text badge's title box rests on the band's top edge (13%); "fest" hangs below it.
+            className={`hidden @3xl:flex absolute z-20 right-[2%] flex-col items-center ${badgeImage ? "bottom-[5.5%]" : "bottom-[13%]"}`}
           >
             {badgeImage ? (
               <Img src={badgeImage} alt={str(p.badgeTitle)} className="w-[20cqw] h-auto object-contain" />
@@ -664,7 +665,7 @@ function OfferSliderHero(ctx: HeroCtx) {
                 <Text
                   ctx={ctx}
                   k="badgeScript"
-                  className="italic text-white leading-none -mt-[0.18em] text-[clamp(22px,4.6cqw,110px)] [text-shadow:0_2px_6px_rgba(0,0,0,0.35)]"
+                  className="absolute left-1/2 top-full -translate-x-1/2 -mt-[0.18em] whitespace-nowrap italic text-white leading-none text-[clamp(22px,4.6cqw,110px)] [text-shadow:0_2px_6px_rgba(0,0,0,0.35)]"
                   style={{ fontFamily: SERIF, WebkitTextStroke: "1px #5a5a5a" }}
                 />
               </>
@@ -755,7 +756,7 @@ function OfferSliderHero(ctx: HeroCtx) {
             target="_blank"
             rel="noopener noreferrer"
             aria-label="WhatsApp"
-            className={`absolute z-30 right-3 top-3 @3xl:top-auto @3xl:right-[calc(3.6%-clamp(42px,4.4cqw,104px)/2)] @3xl:bottom-[calc(13%-0.4cqw-clamp(42px,4.4cqw,104px)/2)] grid place-items-center w-12 h-12 @3xl:w-[clamp(42px,4.4cqw,104px)] @3xl:h-[clamp(42px,4.4cqw,104px)] rounded-full overflow-hidden hover:brightness-110 ${whatsAppSkin(p.whatsappIcon, "bg-[#25d366] border-2 border-white text-white shadow-lg")}`}
+            className={`absolute z-30 right-3 top-3 @3xl:top-auto @3xl:right-[1.6%] @3xl:bottom-[calc(13%-clamp(42px,4.4cqw,104px)*0.9)] grid place-items-center w-12 h-12 @3xl:w-[clamp(42px,4.4cqw,104px)] @3xl:h-[clamp(42px,4.4cqw,104px)] rounded-full overflow-hidden hover:brightness-110 ${whatsAppSkin(p.whatsappIcon, "bg-[#25d366] border-2 border-white text-white shadow-lg")}`}
             style={whatsAppSize(p.whatsappSize)}
           >
             <WhatsAppIcon src={p.whatsappIcon} size={24} />
