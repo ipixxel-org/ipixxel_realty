@@ -47,8 +47,8 @@ describe("iPixxel Realty section widgets", () => {
         const { container } = render(<RenderBlock block={make(w.type, v)} />);
         expect(crashed(container), `${w.type}/${v}`).toBe(false);
         const title = String(w.defaultProps.title ?? "");
-        // These designs have no visible title (offer ribbon, logo-led stats, disclaimer band).
-        const noTitle = ["burgundy-offers", "eldeco-stats", "eldeco-footer"];
+        // These designs have no visible title (offer ribbon / band, logo-led stats, disclaimer band).
+        const noTitle = ["burgundy-offers", "eldeco-stats", "eldeco-footer", "emerald-offer"];
         if (title && !noTitle.includes(v)) {
           expect(container.textContent).toContain(title);
         }
@@ -111,5 +111,58 @@ describe("iPixxel Realty section widgets", () => {
     const link = screen.getByText("Disclaimer & Privacy Policy");
     expect(link.getAttribute("href")).toBeNull();
     expect(container.innerHTML).not.toContain("javascript:");
+  });
+
+  it("switching template on a live widget keeps React happy (hook order)", () => {
+    const { container, rerender } = render(<RenderBlock block={make("ipx-floorplans", "tarc-details")} />);
+    for (const v of ["emerald-tabs", "burgundy-tabs", "emerald-tabs", "tarc-details"]) {
+      rerender(<RenderBlock block={make("ipx-floorplans", v)} />);
+      expect(crashed(container), v).toBe(false);
+    }
+  });
+
+  it("emerald floor plan tabs switch the plan", () => {
+    render(<RenderBlock block={make("ipx-floorplans", "emerald-tabs")} />);
+    const tab = screen.getByRole("tab", { name: "4 BHK" });
+    expect(tab.getAttribute("aria-selected")).toBe("false");
+    fireEvent.click(tab);
+    expect(tab.getAttribute("aria-selected")).toBe("true");
+  });
+
+  it("emerald offer band shows the offer and price", () => {
+    const { container } = render(<RenderBlock block={make("ipx-highlights", "emerald-offer")} />);
+    expect(container.textContent).toContain("Free Club Membership");
+    expect(container.textContent).toContain("30:40:30");
+    expect(container.textContent).toContain("₹ 1.85 Cr*");
+  });
+
+  it("emerald location puts the first place above the map and splits the rest", () => {
+    const { container } = render(<RenderBlock block={make("ipx-location", "emerald-map")} />);
+    expect(container.querySelectorAll("li")).toHaveLength(7);
+    expect(container.textContent).toContain("City Hospital");
+  });
+
+  it("emerald specifications list each point", () => {
+    const { container } = render(<RenderBlock block={make("ipx-specs", "emerald-specs", { items: [{ title: "Kitchen", text: "RO unit\nGranite top" }] })} />);
+    expect(screen.getByText("Granite top")).toBeTruthy();
+    expect(container.textContent).toContain("Project Specifications");
+  });
+
+  it("emerald footer expands the disclaimer and keeps the link safe", () => {
+    render(<RenderBlock block={make("ipx-footer", "emerald-footer", { linkUrl: "javascript:alert(1)" })} />);
+    fireEvent.click(screen.getByRole("button", { name: "Read more" }));
+    expect(screen.queryByRole("button", { name: "Read more" })).toBeNull();
+    expect(screen.getByText("Disclaimer & Privacy Policy").getAttribute("href")).toBeNull();
+  });
+
+  it("emerald price rows button colour comes from the inspector", () => {
+    const { container } = render(<RenderBlock block={make("ipx-pricing", "emerald-rows", { cardButtonColor: "#112233" })} />);
+    const section = container.querySelector("section") as HTMLElement;
+    expect(section.style.getPropertyValue("--ipx-btn-bg")).toBe("#112233");
+  });
+
+  it("dark templates set white as the section text colour", () => {
+    const { container } = render(<RenderBlock block={make("ipx-about", "emerald-about")} />);
+    expect((container.querySelector("section") as HTMLElement).style.color).toBe("rgb(255, 255, 255)");
   });
 });

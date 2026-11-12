@@ -99,6 +99,7 @@ export type RealEstateBlockType =
   | "ipx-pricing"
   | "ipx-floorplans"
   | "ipx-masterplan"
+  | "ipx-specs"
   | "ipx-gallery"
   | "ipx-location"
   | "ipx-about"

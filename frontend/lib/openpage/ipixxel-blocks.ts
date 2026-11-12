@@ -2,7 +2,7 @@
  * iPixxel Realty section widgets (Blocks panel → "iPixxel Realty").
  *
  * One widget per section type; its Template dropdown holds that section from
- * each design family (burgundy / eldeco / tarc). Everything the builder needs
+ * each design family (burgundy / eldeco / tarc / emerald). Everything the builder needs
  * — Blocks-panel metadata, default content, inspector fields and list-item
  * fields — lives here so the core editor files only spread these in.
  *
@@ -75,8 +75,8 @@ const buttonDefaults = (text: string, prefix = "button", textKey = `${prefix}Tex
 const OVERVIEW: IpxWidget = {
   type: "ipx-overview",
   label: "Overview",
-  description: "About the project: feature cards, overview with image, story splits",
-  variants: ["burgundy-features", "eldeco-overview", "tarc-story", "tarc-wellness"],
+  description: "About the project: feature cards, overview with image, story splits, green overview",
+  variants: ["burgundy-features", "eldeco-overview", "tarc-story", "tarc-wellness", "emerald-overview"],
   defaultProps: {
     anchor: "overview",
     accentColor: "",
@@ -102,7 +102,7 @@ const OVERVIEW: IpxWidget = {
     ],
   },
   sections: [
-    layout(["burgundy-features", "eldeco-overview", "tarc-story", "tarc-wellness"]),
+    layout(["burgundy-features", "eldeco-overview", "tarc-story", "tarc-wellness", "emerald-overview"]),
     {
       title: "Content",
       fields: [
@@ -136,8 +136,8 @@ const OVERVIEW: IpxWidget = {
 const HIGHLIGHTS: IpxWidget = {
   type: "ipx-highlights",
   label: "Highlights",
-  description: "Offer ribbon, tabbed icon grid or four-directions compass",
-  variants: ["burgundy-offers", "eldeco-icons", "tarc-compass"],
+  description: "Offer ribbon, icon grid, compass, green offer band or key-highlights list",
+  variants: ["burgundy-offers", "eldeco-icons", "tarc-compass", "emerald-offer", "emerald-list"],
   defaultProps: {
     anchor: "highlights",
     accentColor: "",
@@ -145,6 +145,18 @@ const HIGHLIGHTS: IpxWidget = {
     subtitle: "Indulgence in the rare – crafted once, remembered always",
     tabs: "Key Planning Features\nSpecifications",
     tabLabel: "Apartment Design Highlights",
+    logo: "",
+    logoText: "EMERALD HEIGHTS",
+    offerText: "Free Club Membership +\nFree Fire Fighting Charges",
+    image: "",
+    image2: "",
+    planValue: "30:40:30",
+    planLabel: "Easy Payment Plan",
+    configText: "3 & 4 BHK",
+    configNote: "Luxury Apartments",
+    priceLabel: "Starts at",
+    price: "₹ 1.85 Cr*",
+    address: "Sector 150, Noida",
     centerImage: "",
     imageCaption: "Image for representation",
     ...buttonDefaults("Know More"),
@@ -162,7 +174,7 @@ const HIGHLIGHTS: IpxWidget = {
     ],
   },
   sections: [
-    layout(["burgundy-offers", "eldeco-icons", "tarc-compass"]),
+    layout(["burgundy-offers", "eldeco-icons", "tarc-compass", "emerald-offer", "emerald-list"]),
     {
       title: "Content",
       fields: [
@@ -182,7 +194,24 @@ const HIGHLIGHTS: IpxWidget = {
         { key: "directions", label: "Directions (North, East, South, West)", type: "array-items" },
       ],
     },
-    { title: "Button (icon grid)", fields: buttonFields("button", "Button") },
+    {
+      title: "Offer band (emerald)",
+      fields: [
+        { key: "logo", label: "Logo image", type: "image" },
+        { key: "logoText", label: "Logo text (when no logo image)", type: "text" },
+        { key: "offerText", label: "Offer text", type: "textarea" },
+        { key: "image", label: "Oval photo (offer band) / left photo (key highlights)", type: "image" },
+        { key: "image2", label: "Right photo (key highlights)", type: "image" },
+        { key: "planValue", label: "Payment plan value", type: "text" },
+        { key: "planLabel", label: "Payment plan label", type: "text" },
+        { key: "configText", label: "Configuration", type: "text" },
+        { key: "configNote", label: "Configuration note", type: "text" },
+        { key: "priceLabel", label: "Price label", type: "text" },
+        { key: "price", label: "Price", type: "text" },
+        { key: "address", label: "Location line", type: "text" },
+      ],
+    },
+    { title: "Button (icon grid / key highlights)", fields: buttonFields("button", "Button") },
   ],
   itemFields: {
     items: [
@@ -203,8 +232,8 @@ const HIGHLIGHTS: IpxWidget = {
 const AMENITIES: IpxWidget = {
   type: "ipx-amenities",
   label: "Amenities",
-  description: "Amenity list cards, icon tiles or image carousel",
-  variants: ["burgundy-list", "eldeco-tiles", "tarc-carousel"],
+  description: "Amenity list cards, icon tiles, image carousel or green photo cards",
+  variants: ["burgundy-list", "eldeco-tiles", "tarc-carousel", "emerald-cards"],
   defaultProps: {
     anchor: "amenities",
     accentColor: "",
@@ -215,6 +244,7 @@ const AMENITIES: IpxWidget = {
     description: "From rooftop infinity pools to private theatres — every detail has been curated for those who accept nothing less than the finest.",
     highlightFirst: true,
     imageCaption: "Artistic impression",
+    bgImage: "",
     autoplay: false,
     interval: 5000,
     ...buttonDefaults("View All Amenities"),
@@ -228,7 +258,7 @@ const AMENITIES: IpxWidget = {
     ],
   },
   sections: [
-    layout(["burgundy-list", "eldeco-tiles", "tarc-carousel"]),
+    layout(["burgundy-list", "eldeco-tiles", "tarc-carousel", "emerald-cards"]),
     {
       title: "Content",
       fields: [
@@ -239,18 +269,19 @@ const AMENITIES: IpxWidget = {
         { key: "description", label: "Paragraph", type: "textarea" },
         { key: "items", label: "Amenities", type: "array-items" },
         { key: "highlightFirst", label: "Highlight the first tile (icon tiles)", type: "toggle" },
+        { key: "bgImage", label: "Background image (emerald template)", type: "image" },
         { key: "imageCaption", label: "Photo caption (carousel)", type: "text" },
-        { key: "autoplay", label: "Autoplay (carousel)", type: "toggle" },
+        { key: "autoplay", label: "Autoplay (carousel / photo cards)", type: "toggle" },
         { key: "interval", label: "Autoplay interval (ms)", type: "number" },
         anchor,
       ],
     },
-    { title: "Button (icon tiles)", fields: buttonFields("button", "Button") },
+    { title: "Button (icon tiles / photo cards)", fields: buttonFields("button", "Button") },
   ],
   itemFields: {
     items: [
-      { key: "image", label: "Photo (list / carousel)", kind: "image" },
-      { key: "icon", label: "Icon (tiles)", kind: "icon" },
+      { key: "image", label: "Photo (list / carousel / photo cards)", kind: "image" },
+      { key: "icon", label: "Icon (tiles / photo cards)", kind: "icon" },
       { key: "category", label: "Category (list)", kind: "text" },
       { key: "title", label: "Name", kind: "text" },
       { key: "text", label: "Description (list)", kind: "textarea", rows: 2 },
@@ -263,8 +294,8 @@ const AMENITIES: IpxWidget = {
 const GALLERY: IpxWidget = {
   type: "ipx-gallery",
   label: "Gallery",
-  description: "Tabbed carousel, tabbed grid or large visual-journey slider",
-  variants: ["burgundy-carousel", "eldeco-grid", "tarc-journey"],
+  description: "Tabbed carousel, tabbed grid, visual-journey slider or two-row photo slider",
+  variants: ["burgundy-carousel", "eldeco-grid", "tarc-journey", "emerald-rows"],
   defaultProps: {
     anchor: "gallery",
     accentColor: "",
@@ -277,6 +308,7 @@ const GALLERY: IpxWidget = {
     decorImage: "",
     autoplay: false,
     interval: 5000,
+    ...buttonDefaults("Get Exclusive Brochure"),
     images: [
       { src: "", category: "Exterior", caption: "", alt: "" },
       { src: "", category: "Exterior", caption: "", alt: "" },
@@ -289,7 +321,7 @@ const GALLERY: IpxWidget = {
     ],
   },
   sections: [
-    layout(["burgundy-carousel", "eldeco-grid", "tarc-journey"]),
+    layout(["burgundy-carousel", "eldeco-grid", "tarc-journey", "emerald-rows"]),
     {
       title: "Content",
       fields: [
@@ -301,11 +333,12 @@ const GALLERY: IpxWidget = {
         { key: "images", label: "Images (Tab = Exterior / Interior …)", type: "array-items" },
         { key: "imageCaption", label: "Default photo caption", type: "text" },
         { key: "decorImage", label: "Decorative motif (visual journey)", type: "image" },
-        { key: "autoplay", label: "Autoplay (visual journey)", type: "toggle" },
+        { key: "autoplay", label: "Autoplay (visual journey / two-row slider)", type: "toggle" },
         { key: "interval", label: "Autoplay interval (ms)", type: "number" },
         anchor,
       ],
     },
+    { title: "Button (two-row slider)", fields: buttonFields("button", "Button") },
   ],
   itemFields: {
     images: [
@@ -353,8 +386,8 @@ const MASTERPLAN: IpxWidget = {
 const FLOORPLANS: IpxWidget = {
   type: "ipx-floorplans",
   label: "Floor Plans",
-  description: "Tabbed floor plans or plan with areas and starting price",
-  variants: ["burgundy-tabs", "tarc-details"],
+  description: "Tabbed floor plans, plan with areas and price, or green plan tabs",
+  variants: ["burgundy-tabs", "tarc-details", "emerald-tabs"],
   defaultProps: {
     anchor: "plans",
     accentColor: "",
@@ -382,7 +415,7 @@ const FLOORPLANS: IpxWidget = {
     ],
   },
   sections: [
-    layout(["burgundy-tabs", "tarc-details"]),
+    layout(["burgundy-tabs", "tarc-details", "emerald-tabs"]),
     {
       title: "Content",
       fields: [
@@ -397,7 +430,7 @@ const FLOORPLANS: IpxWidget = {
         anchor,
       ],
     },
-    { title: "Button (details template)", fields: buttonFields("button", "Button") },
+    { title: "Button (details / green tabs)", fields: buttonFields("button", "Button") },
   ],
   itemFields: {
     plans: [
@@ -413,8 +446,8 @@ const FLOORPLANS: IpxWidget = {
 const PRICING: IpxWidget = {
   type: "ipx-pricing",
   label: "Pricing",
-  description: "Unit cards with features, or simple starting-price cards",
-  variants: ["burgundy-cards", "eldeco-cards"],
+  description: "Unit cards with features, simple price cards or green price rows",
+  variants: ["burgundy-cards", "eldeco-cards", "emerald-rows"],
   defaultProps: {
     anchor: "pricing",
     accentColor: "",
@@ -424,6 +457,9 @@ const PRICING: IpxWidget = {
     subtitle: "",
     description: "Distinct configurations — each a masterclass in space, light and luxury living. All priced on carpet area, all RERA-compliant.",
     priceLabel: "Starting Price",
+    typologyLabel: "Typology",
+    sizeLabel: "Size",
+    bgImage: "",
     note: "* All areas as per RERA norms. Dimensions indicative.",
     ...buttonDefaults("Get Price for This Unit", "cardButton", "cardButtonText"),
     units: [
@@ -446,7 +482,7 @@ const PRICING: IpxWidget = {
     ],
   },
   sections: [
-    layout(["burgundy-cards", "eldeco-cards"]),
+    layout(["burgundy-cards", "eldeco-cards", "emerald-rows"]),
     {
       title: "Content",
       fields: [
@@ -456,12 +492,15 @@ const PRICING: IpxWidget = {
         { key: "subtitle", label: "Subtitle", type: "text" },
         { key: "description", label: "Paragraph", type: "textarea" },
         { key: "units", label: "Units", type: "array-items" },
-        { key: "priceLabel", label: "Price label (simple cards)", type: "text" },
+        { key: "priceLabel", label: "Price label (simple cards / price rows)", type: "text" },
+        { key: "typologyLabel", label: "Typology label (price rows)", type: "text" },
+        { key: "sizeLabel", label: "Size label (price rows)", type: "text" },
+        { key: "bgImage", label: "Background image (emerald template)", type: "image" },
         { key: "note", label: "Note under the cards", type: "text" },
         anchor,
       ],
     },
-    { title: "Card button", fields: buttonFields("cardButton", "Card button", "cardButtonText") },
+    { title: "Card button (price rows: one button below)", fields: buttonFields("cardButton", "Card button", "cardButtonText") },
   ],
   itemFields: {
     units: [
@@ -480,7 +519,7 @@ const LOCATION: IpxWidget = {
   type: "ipx-location",
   label: "Location / Map",
   description: "Map with nearby places and distances",
-  variants: ["burgundy-map", "eldeco-map", "tarc-map"],
+  variants: ["burgundy-map", "eldeco-map", "tarc-map", "emerald-map"],
   defaultProps: {
     anchor: "location",
     accentColor: "",
@@ -505,7 +544,7 @@ const LOCATION: IpxWidget = {
     ],
   },
   sections: [
-    layout(["burgundy-map", "eldeco-map", "tarc-map"]),
+    layout(["burgundy-map", "eldeco-map", "tarc-map", "emerald-map"]),
     {
       title: "Content",
       fields: [
@@ -523,7 +562,7 @@ const LOCATION: IpxWidget = {
       fields: [
         { key: "mapImage", label: "Map image", type: "image" },
         { key: "mapEmbed", label: "Or a live Google Map (place link, embed code or address)", type: "textarea" },
-        { key: "places", label: "Nearby places", type: "array-items" },
+        { key: "places", label: "Nearby places (emerald: first one sits above the map)", type: "array-items" },
       ],
     },
     { title: "Button", fields: buttonFields("button", "Button") },
@@ -541,8 +580,8 @@ const LOCATION: IpxWidget = {
 const ABOUT: IpxWidget = {
   type: "ipx-about",
   label: "About Developer",
-  description: "Developer stats or full-image about banner",
-  variants: ["burgundy-stats", "eldeco-stats", "tarc-banner"],
+  description: "Developer stats, full-image about banner or green about with mission & vision",
+  variants: ["burgundy-stats", "eldeco-stats", "tarc-banner", "emerald-about"],
   defaultProps: {
     anchor: "about",
     accentColor: "",
@@ -557,6 +596,10 @@ const ABOUT: IpxWidget = {
     brandColor: "",
     image: "",
     imageCaption: "Artistic impression",
+    missionTitle: "Mission",
+    missionText: "To create exceptional living spaces that combine innovative architecture, uncompromising quality and community-centric planning.",
+    visionTitle: "Vision",
+    visionText: "To go beyond construction by building sustainable communities that inspire better living for generations.",
     ...buttonDefaults("Know More"),
     stats: [
       { value: "19", label: "Years in Real Estate" },
@@ -568,7 +611,7 @@ const ABOUT: IpxWidget = {
     ],
   },
   sections: [
-    layout(["burgundy-stats", "eldeco-stats", "tarc-banner"]),
+    layout(["burgundy-stats", "eldeco-stats", "tarc-banner", "emerald-about"]),
     {
       title: "Content",
       fields: [
@@ -580,13 +623,17 @@ const ABOUT: IpxWidget = {
         { key: "logo", label: "Logo image", type: "image" },
         { key: "logoText", label: "Logo text (when no logo image)", type: "text" },
         { key: "brandColor", label: "Logo / numbers colour (stats grid)", type: "color" },
-        { key: "image", label: "Background image (banner)", type: "image" },
+        { key: "image", label: "Background image (banner / emerald)", type: "image" },
+        { key: "missionTitle", label: "Mission heading (emerald)", type: "text" },
+        { key: "missionText", label: "Mission text (emerald)", type: "textarea" },
+        { key: "visionTitle", label: "Vision heading (emerald)", type: "text" },
+        { key: "visionText", label: "Vision text (emerald)", type: "textarea" },
         { key: "imageCaption", label: "Image caption", type: "text" },
         { key: "stats", label: "Stats", type: "array-items" },
         anchor,
       ],
     },
-    { title: "Button (banner)", fields: buttonFields("button", "Button") },
+    { title: "Button (banner / emerald)", fields: buttonFields("button", "Button") },
   ],
   itemFields: {
     stats: [
@@ -641,7 +688,7 @@ const FORM: IpxWidget = {
   type: "ipx-form",
   label: "Enquiry Form",
   description: "Section layout around a Form Builder form",
-  variants: ["burgundy-split", "eldeco-bar", "tarc-quote"],
+  variants: ["burgundy-split", "eldeco-bar", "tarc-quote", "emerald-form"],
   defaultProps: {
     anchor: "enquire",
     accentColor: "",
@@ -658,7 +705,7 @@ const FORM: IpxWidget = {
     image: "",
   },
   sections: [
-    layout(["burgundy-split", "eldeco-bar", "tarc-quote"]),
+    layout(["burgundy-split", "eldeco-bar", "tarc-quote", "emerald-form"]),
     {
       title: "Content",
       fields: [
@@ -667,7 +714,7 @@ const FORM: IpxWidget = {
         { key: "titleAccent", label: "Title second line (italic)", type: "text" },
         { key: "description", label: "Paragraph", type: "textarea" },
         { key: "bullets", label: "Points, one per line (split template)", type: "textarea" },
-        { key: "image", label: "Side illustration (quote template)", type: "image" },
+        { key: "image", label: "Side illustration (quote / emerald template)", type: "image" },
         anchor,
       ],
     },
@@ -688,12 +735,14 @@ const FORM: IpxWidget = {
 const FOOTER: IpxWidget = {
   type: "ipx-footer",
   label: "Footer",
-  description: "RERA QR footer, disclaimer band or RERA disclaimer footer",
-  variants: ["burgundy-footer", "eldeco-footer", "tarc-footer"],
+  description: "RERA QR footer, disclaimer band, RERA disclaimer footer or green RERA footer",
+  variants: ["burgundy-footer", "eldeco-footer", "tarc-footer", "emerald-footer"],
   defaultProps: {
     anchor: "",
     accentColor: "",
     title: "RERA NO. XX/XXX/0000/00",
+    title2: "Project RERA NO. XXXXXXXX/00/0000",
+    readMoreText: "Read more",
     address: "Sector 150, Noida, Uttar Pradesh",
     website: "www.example.com",
     disclaimer:
@@ -711,14 +760,16 @@ const FOOTER: IpxWidget = {
     ],
   },
   sections: [
-    layout(["burgundy-footer", "eldeco-footer", "tarc-footer"]),
+    layout(["burgundy-footer", "eldeco-footer", "tarc-footer", "emerald-footer"]),
     {
       title: "Content",
       fields: [
         { key: "title", label: "Title / RERA line", type: "text" },
+        { key: "title2", label: "Second RERA line (emerald)", type: "text" },
         { key: "address", label: "Address (QR footer)", type: "text" },
         { key: "website", label: "Website (QR footer)", type: "text" },
         { key: "disclaimer", label: "Disclaimer", type: "textarea" },
+        { key: "readMoreText", label: "Read more text (emerald; empty shows full text)", type: "text" },
         { key: "linkText", label: "Link text", type: "text" },
         { key: "linkUrl", label: "Link URL", type: "text" },
         { key: "credit", label: "Credit / copyright text", type: "text" },
@@ -745,6 +796,52 @@ const FOOTER: IpxWidget = {
   itemTemplates: { qrCodes: { image: "", title: "", text: "" } },
 };
 
+const SPECS: IpxWidget = {
+  type: "ipx-specs",
+  label: "Specifications",
+  description: "Two-column project specifications with gold titles",
+  variants: ["emerald-specs"],
+  defaultProps: {
+    anchor: "specifications",
+    accentColor: "",
+    title: "Project Specifications",
+    description: "",
+    bgImage: "",
+    ...buttonDefaults("Read More"),
+    items: [
+      { title: "Kitchen", text: "Individual RO water unit" },
+      { title: "External Wall", text: "Texture paint" },
+      { title: "Doors & Windows", text: "Laminated flush door shutters" },
+      { title: "Railings", text: "MS / glass railing in balconies" },
+      { title: "Floor to Floor Height", text: "3.30 m (11'-0\")" },
+      { title: "Toilets", text: "Ceramic sanitary ware, wall tiles" },
+      { title: "Structure", text: "Earthquake-resistant frame structure" },
+      { title: "Electrical", text: "Modular switches, ISI-mark wiring" },
+    ],
+  },
+  sections: [
+    layout(["emerald-specs"]),
+    {
+      title: "Content",
+      fields: [
+        { key: "title", label: "Title", type: "text" },
+        { key: "description", label: "Paragraph", type: "textarea" },
+        { key: "items", label: "Specifications", type: "array-items" },
+        { key: "bgImage", label: "Background image", type: "image" },
+        anchor,
+      ],
+    },
+    { title: "Button", fields: buttonFields("button", "Button") },
+  ],
+  itemFields: {
+    items: [
+      { key: "title", label: "Title", kind: "text" },
+      { key: "text", label: "Points, one per line", kind: "textarea", rows: 3 },
+    ],
+  },
+  itemTemplates: { items: { title: "", text: "" } },
+};
+
 export const IPX_WIDGETS: IpxWidget[] = [
   OVERVIEW,
   HIGHLIGHTS,
@@ -752,6 +849,7 @@ export const IPX_WIDGETS: IpxWidget[] = [
   PRICING,
   FLOORPLANS,
   MASTERPLAN,
+  SPECS,
   GALLERY,
   LOCATION,
   ABOUT,

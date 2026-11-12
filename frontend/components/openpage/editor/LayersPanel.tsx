@@ -58,6 +58,7 @@ const blockIcons: Partial<Record<BlockType, typeof Layout>> = {
   "ipx-pricing": DollarSign,
   "ipx-floorplans": LayoutGrid,
   "ipx-masterplan": Layout,
+  "ipx-specs": ClipboardList,
   "ipx-gallery": Images,
   "ipx-location": MapPin,
   "ipx-about": Building2,
@@ -174,7 +175,7 @@ export const PICKER_GROUPS: { id: string; title: string; defaultOpen: boolean; t
     defaultOpen: true,
     types: [
       "ipixxel-hero", "ipx-overview", "ipx-highlights", "ipx-amenities", "ipx-pricing", "ipx-floorplans",
-      "ipx-masterplan", "ipx-gallery", "ipx-location", "ipx-about", "ipx-cta", "ipx-form", "ipx-footer",
+      "ipx-masterplan", "ipx-specs", "ipx-gallery", "ipx-location", "ipx-about", "ipx-cta", "ipx-form", "ipx-footer",
     ],
   },
   {
@@ -226,6 +227,7 @@ const GRID_LABELS: Partial<Record<BlockType, string>> = {
   "ipx-pricing": "Pricing",
   "ipx-floorplans": "Floor Plans",
   "ipx-masterplan": "Master / Site Plan",
+  "ipx-specs": "Specifications",
   "ipx-gallery": "Gallery",
   "ipx-location": "Location / Map",
   "ipx-about": "About Developer",
@@ -345,6 +347,7 @@ const WIDGET_COLORS: Partial<Record<BlockType, string>> = {
   "ipx-pricing": "#6d5dfc",
   "ipx-floorplans": "#6d5dfc",
   "ipx-masterplan": "#6d5dfc",
+  "ipx-specs": "#6d5dfc",
   "ipx-gallery": "#6d5dfc",
   "ipx-location": "#6d5dfc",
   "ipx-about": "#6d5dfc",

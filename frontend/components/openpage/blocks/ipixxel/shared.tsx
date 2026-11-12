@@ -16,30 +16,37 @@ import { isMediaSrc } from "@/lib/media";
  *   - "burgundy" — serif headings with an italic accent line, cream / wine
  *   - "eldeco"   — spaced capital titles, bronze gradient buttons
  *   - "tarc"     — light sans titles, gold accents, circled "Know More" arrows
+ *   - "emerald"  — deep green sections, gold Cinzel titles, gold gradient buttons
  *
  * Every text is an {@link El} keyed `${type}:${prop}` (lists: per item), so it
  * can be restyled from the Element tab; the section itself takes the Style tab.
  */
 
-export type Family = "burgundy" | "eldeco" | "tarc";
+export type Family = "burgundy" | "eldeco" | "tarc" | "emerald";
 
 export const SERIF = "'Times New Roman', Tinos, Times, Georgia, serif";
 export const MONTSERRAT = "'Montserrat', 'Helvetica Neue', Arial, sans-serif";
 export const HELVETICA = "'Helvetica Neue', Helvetica, Arial, sans-serif";
+export const CINZEL = "'Cinzel', 'Trajan Pro', Georgia, serif";
+export const POPPINS = "'Poppins', 'Helvetica Neue', Arial, sans-serif";
 
 export const FAMILY: Record<Family, { accent: string; cream: string; ink: string; body: string; font: string }> = {
   burgundy: { accent: "#6b0f2a", cream: "#f8f4ef", ink: "#3b3b3b", body: "#555555", font: HELVETICA },
   eldeco: { accent: "#8a5a3c", cream: "#fbf8f1", ink: "#2b2b2b", body: "#333333", font: MONTSERRAT },
   tarc: { accent: "#b08d57", cream: "#f3ece2", ink: "#222222", body: "#2b2b2b", font: HELVETICA },
+  emerald: { accent: "#c9a45c", cream: "#0b3b31", ink: "#ffffff", body: "rgba(255,255,255,0.88)", font: POPPINS },
 };
 
 export const BURGUNDY_GOLD = "#c9a36a";
 export const BRONZE = "linear-gradient(100deg, #8b5a2b 0%, #b5814f 45%, #93613a 70%, #7e4f26 100%)";
+/** Emerald family gold button. */
+export const GOLD_GRADIENT = "linear-gradient(90deg, #f8e7bd 0%, #e2c38d 35%, #bd915a 75%, #a97b45 100%)";
 
 /** Which design family a template belongs to, from its name prefix. */
 export function familyOf(variant: string): Family {
   if (variant.startsWith("eldeco")) return "eldeco";
   if (variant.startsWith("tarc")) return "tarc";
+  if (variant.startsWith("emerald")) return "emerald";
   return "burgundy";
 }
 
@@ -61,6 +68,21 @@ export function useIpxFonts() {
     link.rel = "stylesheet";
     link.href = FONTS_URL;
     link.setAttribute("data-ipixxel-hero-fonts", "");
+    document.head.appendChild(link);
+  }, []);
+}
+
+const EMERALD_FONTS_URL = "https://fonts.googleapis.com/css2?family=Cinzel:wght@400;500;600;700&family=Poppins:wght@300;400;500;600&display=swap";
+
+/** Adds the Cinzel / Poppins stylesheet (emerald templates) once per page. */
+export function useEmeraldFonts() {
+  useEffect(() => {
+    if (typeof document === "undefined") return;
+    if (document.querySelector("link[data-ipixxel-emerald-fonts]")) return;
+    const link = document.createElement("link");
+    link.rel = "stylesheet";
+    link.href = EMERALD_FONTS_URL;
+    link.setAttribute("data-ipixxel-emerald-fonts", "");
     document.head.appendChild(link);
   }, []);
 }
@@ -91,7 +113,7 @@ export function Shell({
   children: ReactNode;
 }) {
   // Dark sections pass "text-white"; the family ink colour must not override it.
-  const light = /(^|s)text-white(s|$)/.test(className);
+  const light = /(^|\s)text-white(\s|$)/.test(className);
   return (
     <section
       id={str(ctx.p.anchor) || undefined}

@@ -1150,7 +1150,7 @@ const blockFields: Partial<Record<BlockType, { sections: { title: string; fields
   'ipixxel-hero': {
     sections: [
       { title: 'Layout', fields: [
-        { key: 'variant', label: 'Template', type: 'select', options: ['grand-band', 'skyline', 'offer-slider'] },
+        { key: 'variant', label: 'Template', type: 'select', options: ['grand-band', 'skyline', 'offer-slider', 'emerald-slider'] },
         { key: 'accentColor', label: 'Accent colour (band / gold lines / buttons)', type: 'color' },
       ]},
       { title: 'Content', fields: [
@@ -1208,12 +1208,22 @@ const blockFields: Partial<Record<BlockType, { sections: { title: string; fields
         { key: 'badgeTop', label: 'Badge small text', type: 'text' },
         { key: 'badgeTitle', label: 'Badge title', type: 'text' },
         { key: 'badgeScript', label: 'Badge script text', type: 'text' },
+      ]},
+      { title: 'Slides & floating buttons (templates 3 & 4)', fields: [
         { key: 'slides', label: 'More slides', type: 'array-items' },
         { key: 'textOnAllSlides', label: 'Show offer text on every slide', type: 'toggle' },
         { key: 'autoplay', label: 'Autoplay', type: 'toggle' },
         { key: 'interval', label: 'Autoplay interval (ms)', type: 'number' },
         { key: 'whatsapp', label: 'WhatsApp number', type: 'text' },
         { key: 'showFloatingButtons', label: 'Show call / WhatsApp buttons', type: 'toggle' },
+      ]},
+      { title: 'Emerald slider (template 4)', fields: [
+        { key: 'emeraldTitle', label: 'Title', type: 'text' },
+        { key: 'emeraldConfig', label: 'Configuration (left)', type: 'text' },
+        { key: 'emeraldPriceLabel', label: 'Price label', type: 'text' },
+        { key: 'emeraldPrice', label: 'Price', type: 'text' },
+        { key: 'emeraldPlan', label: 'Payment plan (right)', type: 'text' },
+        { key: 'emeraldRibbon', label: 'Offer ribbon', type: 'text' },
       ]},
       { title: 'Header button (template 3)', fields: [
         ...ctaFields('headerCta', 'Header button', { textKey: 'headerCta', url: true }),
@@ -1453,7 +1463,7 @@ Object.assign(blockFields, IPX_INSPECTOR_FIELDS as typeof blockFields);
 
 const KNOWN_VARIANTS: Record<string, string[]> = {
   'project-banner': ['split-form', 'overlay', 'centered', 'editorial', 'framed', 'asymmetric', 'info-bar', 'framed-center', 'split-curve', 'stats'],
-  'ipixxel-hero': ['grand-band', 'skyline', 'offer-slider'],
+  'ipixxel-hero': ['grand-band', 'skyline', 'offer-slider', 'emerald-slider'],
   ...IPX_KNOWN_VARIANTS,
   'project-overview': ['split', 'centered', 'cards', 'timeline'],
   'property-details': ['grid', 'table', 'two-column', 'checklist'],

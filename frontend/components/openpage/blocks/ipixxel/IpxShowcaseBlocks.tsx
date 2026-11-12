@@ -33,6 +33,7 @@ import {
   type Ctx,
   type Item,
 } from "./shared";
+import { EmeraldAmenityCards, EmeraldFloorPlans, EmeraldGalleryRows } from "./IpxEmeraldBlocks";
 
 /** Burgundy's deep wine backdrop, tinted by the accent colour. */
 function wine(accent: string): string {
@@ -84,7 +85,7 @@ function GoldArrow({ dir, onClick, className = "" }: { dir: "prev" | "next"; onC
 /* Amenities                                                                 */
 /* ========================================================================= */
 
-export const AMENITIES_VARIANTS = ["burgundy-list", "eldeco-tiles", "tarc-carousel"] as const;
+export const AMENITIES_VARIANTS = ["burgundy-list", "eldeco-tiles", "tarc-carousel", "emerald-cards"] as const;
 
 export function IpxAmenitiesBlock({ block }: { block: BlockConfig }) {
   useIpxFonts();
@@ -92,6 +93,7 @@ export function IpxAmenitiesBlock({ block }: { block: BlockConfig }) {
   const ctx = makeCtx(block, variant);
   if (variant === "eldeco-tiles") return <EldecoTiles {...ctx} />;
   if (variant === "tarc-carousel") return <TarcAmenityCarousel {...ctx} />;
+  if (variant === "emerald-cards") return <EmeraldAmenityCards block={block} />;
   return <BurgundyAmenityList {...ctx} />;
 }
 
@@ -196,7 +198,7 @@ function TarcAmenityCarousel(ctx: Ctx) {
 /* Gallery                                                                   */
 /* ========================================================================= */
 
-export const GALLERY_VARIANTS = ["burgundy-carousel", "eldeco-grid", "tarc-journey"] as const;
+export const GALLERY_VARIANTS = ["burgundy-carousel", "eldeco-grid", "tarc-journey", "emerald-rows"] as const;
 
 export function IpxGalleryBlock({ block }: { block: BlockConfig }) {
   useIpxFonts();
@@ -204,6 +206,7 @@ export function IpxGalleryBlock({ block }: { block: BlockConfig }) {
   const ctx = makeCtx(block, variant);
   if (variant === "eldeco-grid") return <EldecoGrid {...ctx} />;
   if (variant === "tarc-journey") return <TarcJourney {...ctx} />;
+  if (variant === "emerald-rows") return <EmeraldGalleryRows block={block} />;
   return <BurgundyCarousel {...ctx} />;
 }
 
@@ -400,7 +403,7 @@ export function IpxMasterPlanBlock({ block }: { block: BlockConfig }) {
 /* Floor plans                                                               */
 /* ========================================================================= */
 
-export const FLOORPLAN_VARIANTS = ["burgundy-tabs", "tarc-details"] as const;
+export const FLOORPLAN_VARIANTS = ["burgundy-tabs", "tarc-details", "emerald-tabs"] as const;
 
 /** "Label | Value" lines of a plan's specs. */
 function specs(raw: string): Array<{ label: string; value: string }> {
@@ -425,6 +428,8 @@ export function IpxFloorPlansBlock({ block }: { block: BlockConfig }) {
     ) : (
       <Pic src="" className="w-full aspect-[560/320]" />
     );
+
+  if (variant === "emerald-tabs") return <EmeraldFloorPlans block={block} />;
 
   if (variant === "tarc-details") {
     const decor = str(ctx.p.decorImage);

@@ -7,7 +7,7 @@ import { El } from "../El";
 import { CtaButton } from "../CtaButton";
 import { color, flag, part, safeHref, str } from "../elements/shared";
 import { isMediaSrc } from "@/lib/media";
-import { resolveMapEmbed } from "../realestate/RealEstateBlocks";
+import { MapArea } from "./parts";
 import { bronzeVar, BRONZE_BTN } from "./IpxStoryBlocks";
 import {
   BURGUNDY_GOLD,
@@ -34,12 +34,13 @@ import {
   useIpxFonts,
   type Ctx,
 } from "./shared";
+import { EmeraldAbout, EmeraldLocation, EmeraldPriceRows } from "./IpxEmeraldBlocks";
 
 /* ========================================================================= */
 /* Pricing                                                                   */
 /* ========================================================================= */
 
-export const PRICING_VARIANTS = ["burgundy-cards", "eldeco-cards"] as const;
+export const PRICING_VARIANTS = ["burgundy-cards", "eldeco-cards", "emerald-rows"] as const;
 
 /** The shared per-card button (same text / link / colours on every card). */
 function CardButton({ ctx, className }: { ctx: Ctx; className: string }) {
@@ -66,6 +67,8 @@ export function IpxPricingBlock({ block }: { block: BlockConfig }) {
   const variant = pickVariant(block, PRICING_VARIANTS);
   const ctx = makeCtx(block, variant);
   const units = items(ctx, "units");
+
+  if (variant === "emerald-rows") return <EmeraldPriceRows block={block} />;
 
   if (variant === "eldeco-cards") {
     return (
@@ -147,28 +150,15 @@ export function IpxPricingBlock({ block }: { block: BlockConfig }) {
 /* Location / map                                                            */
 /* ========================================================================= */
 
-export const LOCATION_VARIANTS = ["burgundy-map", "eldeco-map", "tarc-map"] as const;
-
-/** A live Google map (https embed only) when a map link is set, else the map image. */
-function MapArea({ ctx, className }: { ctx: Ctx; className: string }) {
-  const embed = str(ctx.p.mapEmbed).trim();
-  const src = embed ? resolveMapEmbed(embed).src : "";
-  return (
-    <El block={ctx.block} id={part(ctx.block, "map")} className={`relative overflow-hidden ${className}`}>
-      {src.startsWith("https://") ? (
-        <iframe title={str(ctx.p.title) || "Map"} src={src} className="absolute inset-0 w-full h-full border-0" loading="lazy" referrerPolicy="no-referrer-when-downgrade" allowFullScreen />
-      ) : (
-        <Pic src={str(ctx.p.mapImage)} alt={str(ctx.p.title)} fit="contain" className="absolute inset-0 w-full h-full" />
-      )}
-    </El>
-  );
-}
+export const LOCATION_VARIANTS = ["burgundy-map", "eldeco-map", "tarc-map", "emerald-map"] as const;
 
 export function IpxLocationBlock({ block }: { block: BlockConfig }) {
   useIpxFonts();
   const variant = pickVariant(block, LOCATION_VARIANTS);
   const ctx = makeCtx(block, variant);
   const places = items(ctx, "places");
+
+  if (variant === "emerald-map") return <EmeraldLocation block={block} />;
 
   if (variant === "eldeco-map") {
     return (
@@ -264,7 +254,7 @@ export function IpxLocationBlock({ block }: { block: BlockConfig }) {
 /* About the developer                                                       */
 /* ========================================================================= */
 
-export const ABOUT_VARIANTS = ["burgundy-stats", "eldeco-stats", "tarc-banner"] as const;
+export const ABOUT_VARIANTS = ["burgundy-stats", "eldeco-stats", "tarc-banner", "emerald-about"] as const;
 
 function Logo({ ctx, className, textClass, textStyle }: { ctx: Ctx; className: string; textClass: string; textStyle?: CSSProperties }) {
   const logo = str(ctx.p.logo);
@@ -284,6 +274,8 @@ export function IpxAboutBlock({ block }: { block: BlockConfig }) {
   const variant = pickVariant(block, ABOUT_VARIANTS);
   const ctx = makeCtx(block, variant);
   const stats = items(ctx, "stats");
+
+  if (variant === "emerald-about") return <EmeraldAbout block={block} />;
 
   if (variant === "eldeco-stats") {
     const brand = color(ctx.p.brandColor) ?? "#0d6b45";

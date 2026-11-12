@@ -83,6 +83,7 @@ import { IpxHighlightsBlock, IpxOverviewBlock } from "./ipixxel/IpxStoryBlocks";
 import { IpxAmenitiesBlock, IpxFloorPlansBlock, IpxGalleryBlock, IpxMasterPlanBlock } from "./ipixxel/IpxShowcaseBlocks";
 import { IpxAboutBlock, IpxLocationBlock, IpxPricingBlock } from "./ipixxel/IpxDetailBlocks";
 import { IpxCtaBlock, IpxFooterBlock, IpxFormBlock } from "./ipixxel/IpxActionBlocks";
+import { IpxSpecsBlock } from "./ipixxel/IpxEmeraldBlocks";
 import {
   AccordionBlock,
   ImageComparisonBlock,
@@ -206,6 +207,7 @@ const blockRenderers: Record<string, React.ComponentType<{ block: BlockConfig }>
   "ipx-pricing": IpxPricingBlock,
   "ipx-floorplans": IpxFloorPlansBlock,
   "ipx-masterplan": IpxMasterPlanBlock,
+  "ipx-specs": IpxSpecsBlock,
   "ipx-gallery": IpxGalleryBlock,
   "ipx-location": IpxLocationBlock,
   "ipx-about": IpxAboutBlock,

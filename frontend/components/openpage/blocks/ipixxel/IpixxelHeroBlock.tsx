@@ -8,6 +8,7 @@ import { CtaButton } from "../CtaButton";
 import { clamp, color, flag, list, num, part, prefersReducedMotion, safeHref, str } from "../elements/shared";
 import { useDevice } from "@/components/openpage/runtime/device";
 import { overlayLayer, resolveBlockStyleForDevice } from "@/lib/openpage/block-style";
+import { CINZEL, GOLD_GRADIENT, POPPINS, useEmeraldFonts, useSlider } from "./shared";
 
 /**
  * iPixxel Realty → Hero.
@@ -23,7 +24,7 @@ import { overlayLayer, resolveBlockStyleForDevice } from "@/lib/openpage/block-s
  * designs switch to a stacked layout.
  */
 
-export const IPIXXEL_HERO_VARIANTS = ["grand-band", "skyline", "offer-slider"] as const;
+export const IPIXXEL_HERO_VARIANTS = ["grand-band", "skyline", "offer-slider", "emerald-slider"] as const;
 
 const SERIF = "'Playfair Display', Georgia, 'Times New Roman', serif";
 const SANS = "'Montserrat', 'Helvetica Neue', Arial, sans-serif";
@@ -50,6 +51,7 @@ const DEFAULT_ACCENT: Record<string, string> = {
   "grand-band": "#8a6a3a",
   skyline: "#d6a645",
   "offer-slider": "#6b0f2a",
+  "emerald-slider": "#c9a45c",
 };
 
 const GOLD_TEXT: CSSProperties = {
@@ -100,6 +102,7 @@ export function IpixxelHeroBlock({ block }: { block: BlockConfig }) {
 
   if (variant === "skyline") return <SkylineHero {...ctx} />;
   if (variant === "offer-slider") return <OfferSliderHero {...ctx} />;
+  if (variant === "emerald-slider") return <EmeraldSliderHero {...ctx} />;
   return <GrandBandHero {...ctx} />;
 }
 
@@ -733,6 +736,147 @@ function OfferSliderHero(ctx: HeroCtx) {
           >
             <MessageCircle size={24} />
           </a>
+        ) : null}
+      </div>
+    </section>
+  );
+}
+
+/* ------------------------------------------------------------------------- */
+/* Template 4 — "Emerald slider": full-bleed photo slides under a tinted     */
+/* logo / phone bar, gold title, price row and an offer ribbon.              */
+/* ------------------------------------------------------------------------- */
+
+function EmeraldSliderHero(ctx: HeroCtx) {
+  useEmeraldFonts();
+  const { block, p, accent } = ctx;
+  const logo = str(p.logo);
+  const phone = phoneDigits(p.phone);
+  const whatsapp = phoneDigits(p.whatsapp).replace(/^\+/, "");
+  const showFloating = flag(p.showFloatingButtons, true);
+  const slides = [
+    { src: str(p.image), alt: "" },
+    ...list(p.slides)
+      .filter((s) => !s.hidden && str(s.src))
+      .map((s) => ({ src: str(s.src), alt: str(s.alt) })),
+  ];
+  const slider = useSlider(slides.length, {
+    autoplay: flag(p.autoplay, true),
+    interval: clamp(num(p.interval, 5000), 2000, 20000),
+  });
+  const current = slider.start;
+  const slide = slides[current] ?? slides[0];
+  const showText = current === 0 || flag(p.textOnAllSlides, false);
+  const hasPrice = Boolean(str(p.emeraldPriceLabel) || str(p.emeraldPrice));
+  const gold: CSSProperties = { fontFamily: CINZEL, color: accent };
+
+  return (
+    <section
+      className="relative bg-[#04241a] text-white"
+      id={str(p.anchor) || undefined}
+      style={{ "--ipx-accent": accent, fontFamily: POPPINS } as CSSProperties}
+    >
+      <style>{`@keyframes ipxHeroFade{from{opacity:0}to{opacity:1}}`}</style>
+      <div className="relative flex flex-col @3xl:block @3xl:aspect-[1245/552] overflow-hidden" {...slider.handlers}>
+        {/* Photo, header bar, dots and WhatsApp */}
+        <div className="relative aspect-[4/3] @md:aspect-[16/10] @3xl:absolute @3xl:inset-0 @3xl:aspect-auto overflow-hidden">
+          <div key={current} className="absolute inset-0" style={{ animation: "ipxHeroFade .6s ease" }}>
+            <Cover ctx={ctx} src={slide.src} alt={slide.alt} placeholder="linear-gradient(160deg,#b9cdc4 0%,#6f8f82 50%,#1f3d31 100%)" />
+          </div>
+          {showText ? (
+            <div
+              aria-hidden
+              className="hidden @3xl:block absolute inset-x-0 bottom-0 h-[48%] pointer-events-none"
+              style={{ background: "linear-gradient(180deg, transparent 0%, rgba(0,0,0,0.5) 45%, rgba(0,0,0,0.72) 100%)" }}
+            />
+          ) : null}
+          <El
+            block={block}
+            id={part(block, "header")}
+            className="absolute inset-x-0 top-0 z-20 flex items-center justify-between gap-3 px-4 py-2.5 bg-[#0d3b2b]/60 @3xl:h-[17%] @3xl:px-[7%] @3xl:py-0"
+          >
+            {logo ? (
+              <Img src={logo} alt={str(p.logoText)} className="h-11 @3xl:h-[6cqw] max-h-[84px] w-auto object-contain" />
+            ) : (
+              <Text ctx={ctx} k="logoText" as="span" className="uppercase font-semibold tracking-[0.3em] text-[15px] @3xl:text-[clamp(14px,1.5cqw,22px)]" style={gold} />
+            )}
+            {str(p.phone) ? (
+              <El
+                block={block}
+                id={part(block, "phone")}
+                as="a"
+                href={phone ? `tel:${phone}` : undefined}
+                className="inline-flex items-center gap-2 border border-white/70 px-3 py-1.5 text-[12px] tracking-[0.04em] text-white @3xl:px-[1.2cqw] @3xl:py-[0.6cqw] @3xl:text-[clamp(11px,1.2cqw,17px)] hover:bg-white/10"
+              >
+                <Phone aria-hidden size={14} fill="currentColor" style={{ color: accent }} />
+                {str(p.phone)}
+              </El>
+            ) : null}
+          </El>
+          {slides.length > 1 ? (
+            <div className="absolute z-20 left-1/2 bottom-2.5 @3xl:bottom-[2%] flex -translate-x-1/2 items-center gap-1.5">
+              {slides.map((_, i) => (
+                <button
+                  key={i}
+                  type="button"
+                  aria-label={`Go to slide ${i + 1}`}
+                  aria-current={i === current}
+                  onClick={() => slider.setIndex(i)}
+                  className={`h-3 w-5 @3xl:h-[1.6cqw] @3xl:w-[2.3cqw] max-h-[24px] max-w-[34px] transition-colors ${i === current ? "bg-white" : "bg-white/40 hover:bg-white/60"}`}
+                />
+              ))}
+            </div>
+          ) : null}
+          {showFloating && whatsapp ? (
+            <a
+              href={`https://wa.me/${whatsapp}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              aria-label="WhatsApp"
+              className="absolute z-30 right-3 bottom-3 @3xl:right-[2.5%] @3xl:bottom-[10%] grid place-items-center w-11 h-11 @3xl:w-[3.4cqw] @3xl:h-[3.4cqw] max-w-[52px] max-h-[52px] rounded-full bg-white text-[#1b1b1b] shadow-lg hover:scale-105 transition-transform"
+            >
+              <MessageCircle size={22} />
+            </a>
+          ) : null}
+        </div>
+
+        {/* Location, title, price row and ribbon */}
+        {showText ? (
+          <El
+            block={block}
+            id={part(block, "info")}
+            className="relative z-20 flex flex-col items-center gap-3 px-5 py-7 text-center @3xl:absolute @3xl:inset-x-0 @3xl:bottom-[7%] @3xl:gap-[0.9cqw] @3xl:p-0"
+          >
+            {str(p.location) ? (
+              <p className="inline-flex items-center gap-1.5 text-[13px] text-white/90 @3xl:text-[clamp(11px,1.15cqw,16px)]">
+                <MapPin aria-hidden size={15} />
+                <Text ctx={ctx} k="location" as="span" />
+              </p>
+            ) : null}
+            <Text
+              ctx={ctx}
+              k="emeraldTitle"
+              as="h1"
+              className="font-semibold uppercase leading-tight tracking-[0.04em] text-[24px] @3xl:text-[clamp(20px,2.6cqw,38px)]"
+              style={gold}
+            />
+            <div className="flex w-full flex-col items-center gap-2 @md:flex-row @md:justify-center @md:gap-6 @3xl:w-[76%] @3xl:justify-between">
+              <Text ctx={ctx} k="emeraldConfig" className="text-[14px] text-white/90 @3xl:text-[clamp(12px,1.25cqw,18px)] @3xl:w-[30%] @3xl:text-left" />
+              {hasPrice ? (
+                <p className="inline-flex items-baseline gap-2">
+                  <Text ctx={ctx} k="emeraldPriceLabel" as="span" className="text-[14px] text-white/90 @3xl:text-[clamp(12px,1.25cqw,18px)]" />
+                  <Text ctx={ctx} k="emeraldPrice" as="span" className="font-semibold text-[26px] @3xl:text-[clamp(20px,2.4cqw,34px)]" style={gold} />
+                </p>
+              ) : null}
+              <Text ctx={ctx} k="emeraldPlan" className="text-[14px] text-white/90 @3xl:text-[clamp(12px,1.25cqw,18px)] @3xl:w-[30%] @3xl:text-right" />
+            </div>
+            <Text
+              ctx={ctx}
+              k="emeraldRibbon"
+              className="mt-1 px-5 py-2 uppercase font-medium tracking-[0.12em] text-[#1b1b1b] text-[11px] @3xl:px-[3cqw] @3xl:py-[0.6cqw] @3xl:text-[clamp(10px,1.15cqw,16px)]"
+              style={{ background: GOLD_GRADIENT }}
+            />
+          </El>
         ) : null}
       </div>
     </section>

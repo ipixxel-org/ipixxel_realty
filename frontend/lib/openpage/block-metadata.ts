@@ -395,7 +395,7 @@ export const blockMetadata: BlockMeta[] = [
     label: 'Hero',
     description: 'Ready-made real estate hero designs (iPixxel Realty)',
     category: 'Real Estate',
-    variants: ['grand-band', 'skyline', 'offer-slider'],
+    variants: ['grand-band', 'skyline', 'offer-slider', 'emerald-slider'],
     defaultProps: {
       image: '',
       logo: '',
@@ -458,6 +458,13 @@ export const blockMetadata: BlockMeta[] = [
       textOnAllSlides: false,
       whatsapp: '',
       showFloatingButtons: true,
+      // Template 4 — Emerald slider
+      emeraldTitle: 'Emerald Heights',
+      emeraldConfig: '3 & 4 BHK Apartments',
+      emeraldPriceLabel: 'Starting From',
+      emeraldPrice: '₹ 1.85 Cr*',
+      emeraldPlan: 'Payment Plan: 30:40:30',
+      emeraldRibbon: 'Offer valid for the first 25 bookings only*',
     },
   },
   {

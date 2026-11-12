@@ -80,4 +80,32 @@ describe("iPixxel Realty → Hero widget", () => {
     const { container } = render(<RenderBlock block={{ ...block, variant: "nope", props: {} }} />);
     expect(container.querySelector("section")).toBeTruthy();
   });
+
+  it("emerald slider shows the title, price row, plan, ribbon and phone", () => {
+    render(<RenderBlock block={make("emerald-slider", { whatsapp: "+91 90000 11111" })} />);
+    expect(screen.getByText("Emerald Heights")).toBeTruthy();
+    expect(screen.getByText("3 & 4 BHK Apartments")).toBeTruthy();
+    expect(screen.getByText("₹ 1.85 Cr*")).toBeTruthy();
+    expect(screen.getByText("Payment Plan: 30:40:30")).toBeTruthy();
+    expect(screen.getByText("Offer valid for the first 25 bookings only*")).toBeTruthy();
+    expect(screen.getByText("+91 90000 00000").closest("a")?.getAttribute("href")).toBe("tel:+919000000000");
+    expect(screen.getByLabelText("WhatsApp").getAttribute("href")).toBe("https://wa.me/919000011111");
+    // One slide: no dots.
+    expect(screen.queryByLabelText("Go to slide 1")).toBeNull();
+  });
+
+  it("emerald slider dots switch slides; text stays on the first slide only", () => {
+    render(<RenderBlock block={make("emerald-slider", { image: "a.jpg", slides: [{ src: "b.jpg" }] })} />);
+    fireEvent.click(screen.getByLabelText("Go to slide 2"));
+    expect(screen.queryByText("Emerald Heights")).toBeNull();
+    fireEvent.click(screen.getByLabelText("Go to slide 1"));
+    expect(screen.getByText("Emerald Heights")).toBeTruthy();
+  });
+
+  it("switching between slider templates keeps working", () => {
+    const { container, rerender } = render(<RenderBlock block={make("offer-slider")} />);
+    rerender(<RenderBlock block={make("emerald-slider")} />);
+    rerender(<RenderBlock block={make("offer-slider")} />);
+    expect(container.querySelector("section")).toBeTruthy();
+  });
 });
