@@ -1,13 +1,14 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState, type CSSProperties, type ReactNode, type TouchEvent } from "react";
-import { ChevronLeft, ChevronRight, Images, MapPin, Menu, MessageCircle, Phone, Video } from "lucide-react";
+import { ChevronLeft, ChevronRight, Images, MapPin, Menu, MessageCircle, Phone, PhoneCall, Video } from "lucide-react";
 import type { BlockConfig } from "../types";
 import { El, useElementEditor } from "../El";
 import { CtaButton } from "../CtaButton";
 import { clamp, color, flag, list, num, part, prefersReducedMotion, safeHref, str } from "../elements/shared";
 import { useDevice } from "@/components/openpage/runtime/device";
 import { overlayLayer, resolveBlockStyleForDevice } from "@/lib/openpage/block-style";
+import { isMediaSrc } from "@/lib/media";
 import { CINZEL, GOLD_GRADIENT, POPPINS, useEmeraldFonts, useSlider } from "./shared";
 
 /**
@@ -69,6 +70,25 @@ function scrollToAnchor(id: string) {
 /** Digits and a leading + only, for tel: / wa.me links. */
 function phoneDigits(v: unknown): string {
   return str(v).replace(/[^\d+]/g, "");
+}
+
+/** The uploaded WhatsApp icon (shown as-is), else the built-in chat icon. */
+function WhatsAppIcon({ src, size }: { src: unknown; size: number }) {
+  if (isMediaSrc(src)) return <Img src={src} alt="" className="w-full h-full object-contain" />;
+  return <MessageCircle size={size} className="w-1/2 h-1/2" />;
+}
+
+/** Fixed WhatsApp button size from the inspector (24–120px), or undefined for auto. */
+function whatsAppSize(v: unknown): CSSProperties | undefined {
+  const px = num(v, 0);
+  if (!px || px <= 0) return undefined;
+  const size = clamp(Math.round(px), 24, 120);
+  return { width: size, height: size, maxWidth: "none", maxHeight: "none" };
+}
+
+/** Circle styles for the WhatsApp button; an uploaded icon brings its own look. */
+function whatsAppSkin(src: unknown, builtIn: string): string {
+  return isMediaSrc(src) ? "bg-transparent" : builtIn;
 }
 
 function Img({ src, alt = "", className, style }: { src: string; alt?: string; className?: string; style?: CSSProperties }) {
@@ -459,7 +479,8 @@ function OfferSliderHero(ctx: HeroCtx) {
   const editing = useElementEditor()?.isEditing === true;
   const logo = str(p.logo);
   const phone = phoneDigits(p.phone);
-  const whatsapp = phoneDigits(p.whatsapp).replace(/^\+/, "");
+  // WhatsApp uses the phone number until its own number is set.
+  const whatsapp = (phoneDigits(p.whatsapp) || phone).replace(/^\+/, "");
   const showFloating = flag(p.showFloatingButtons, true);
   const textOnAll = flag(p.textOnAllSlides, false);
   const autoplay = flag(p.autoplay, true);
@@ -558,7 +579,7 @@ function OfferSliderHero(ctx: HeroCtx) {
             label={str(p.headerCta)}
             href={safeHref(p.headerCtaUrl)}
             target={str(p.headerCtaTarget)}
-            onClick={ctx.onPrimary}
+            onClick={() => scrollToAnchor(str(p.headerCtaAnchor) || str(p.primaryAnchor, "enquire"))}
             brand={null}
             icon={null}
             className="uppercase font-semibold tracking-[0.08em] bg-[var(--ipx-accent)] text-white text-[11px] px-3 py-2 @3xl:text-[clamp(10px,1.1cqw,15px)] @3xl:px-[1.9cqw] @3xl:py-[0.9cqw] hover:brightness-110"
@@ -623,28 +644,29 @@ function OfferSliderHero(ctx: HeroCtx) {
           <El
             block={block}
             id={part(block, "offerBadge")}
-            className="hidden @3xl:flex absolute z-20 right-[2.5%] bottom-[3%] flex-col items-center"
+            // The text badge's title box rests on the band's top edge (13%); "fest" hangs below it.
+            className={`hidden @3xl:flex absolute z-20 right-[2%] flex-col items-center ${badgeImage ? "bottom-[5.5%]" : "bottom-[13%]"}`}
           >
             {badgeImage ? (
-              <Img src={badgeImage} alt={str(p.badgeTitle)} className="w-[19cqw] max-w-[280px] h-auto object-contain" />
+              <Img src={badgeImage} alt={str(p.badgeTitle)} className="w-[20cqw] h-auto object-contain" />
             ) : (
               <>
                 <Text
                   ctx={ctx}
                   k="badgeTop"
-                  className="border border-[#1b1b1b]/50 bg-white px-[1cqw] uppercase tracking-[0.25em] text-[clamp(8px,1cqw,14px)] -mb-[0.4cqw] relative z-10"
+                  className="bg-white px-[0.8cqw] uppercase tracking-[0.3em] text-[#8a8a8a] text-[clamp(8px,1cqw,22px)] -mb-[0.55em] relative z-10"
                 />
                 <Text
                   ctx={ctx}
                   k="badgeTitle"
-                  className="bg-white border border-[#1b1b1b]/30 px-[1cqw] uppercase font-black leading-none text-[clamp(18px,3.4cqw,50px)]"
-                  style={{ fontFamily: SERIF, backgroundImage: `linear-gradient(180deg, color-mix(in srgb, ${accent} 60%, #c25b84), ${accent})`, WebkitBackgroundClip: "text", backgroundClip: "text", color: "transparent" }}
+                  className="bg-white border border-[#1b1b1b]/30 px-[0.45em] pt-[0.3em] pb-[0.12em] uppercase font-black leading-none tracking-[0.01em] text-[clamp(18px,3.5cqw,84px)]"
+                  style={{ fontFamily: SERIF, filter: "drop-shadow(1px 1px 0 #a3a3a3)", backgroundImage: `linear-gradient(180deg, color-mix(in srgb, ${accent} 60%, #c25b84), ${accent})`, WebkitBackgroundClip: "text", backgroundClip: "text", color: "transparent" }}
                 />
                 <Text
                   ctx={ctx}
                   k="badgeScript"
-                  className="italic text-white leading-none -mt-[0.3cqw] text-[clamp(22px,4.4cqw,64px)] [text-shadow:0_2px_6px_rgba(0,0,0,0.35)]"
-                  style={{ fontFamily: SERIF }}
+                  className="absolute left-1/2 top-full -translate-x-1/2 -mt-[0.18em] whitespace-nowrap italic text-white leading-none text-[clamp(22px,4.6cqw,110px)] [text-shadow:0_2px_6px_rgba(0,0,0,0.35)]"
+                  style={{ fontFamily: SERIF, WebkitTextStroke: "1px #5a5a5a" }}
                 />
               </>
             )}
@@ -663,45 +685,47 @@ function OfferSliderHero(ctx: HeroCtx) {
               <Text
                 ctx={ctx}
                 k="configText"
-                className="absolute left-0 bottom-full mb-0 whitespace-nowrap bg-white text-[#1b1b1b] border border-[#1b1b1b]/20 border-b-0 rounded-tr-[28px] pl-3 pr-8 py-1.5 font-medium text-[18px] @3xl:rounded-tr-[3.6cqw] @3xl:pl-[2cqw] @3xl:pr-[3cqw] @3xl:py-[0.7cqw] @3xl:text-[clamp(14px,2.3cqw,33px)] @3xl:-translate-y-[0.4cqw]"
+                className="absolute left-0 bottom-full mb-0 whitespace-nowrap bg-white text-[#1b1b1b] border border-[#1b1b1b]/20 border-b-0 rounded-tr-[28px] pl-3 pr-8 py-1.5 font-medium text-[18px] @3xl:rounded-tr-[3.6cqw] @3xl:pl-[4.6cqw] @3xl:pr-[3cqw] @3xl:py-[0.7cqw] @3xl:text-[clamp(14px,2.3cqw,56px)] @3xl:-translate-y-[0.4cqw]"
                 style={{ fontFamily: SERIF }}
               />
               <Text
                 ctx={ctx}
                 k="priceText"
-                className="bg-[#111] text-white font-bold px-3 py-1 text-[26px] @3xl:px-[1.3cqw] @3xl:py-[0.2cqw] @3xl:text-[clamp(18px,3.1cqw,44px)]"
+                className="bg-[#111] text-white font-bold px-3 py-1 text-[26px] @3xl:px-[1.3cqw] @3xl:py-[0.2cqw] @3xl:text-[clamp(18px,3.1cqw,74px)]"
                 style={{ fontFamily: SERIF }}
               />
             </div>
             {str(p.validLabel) || str(p.validValue) ? (
               <El block={block} id={part(block, "validity")} className="flex flex-col pr-4 border-r border-white/60 leading-tight">
-                <Text ctx={ctx} k="validLabel" as="span" className="uppercase tracking-[0.2em] text-[10px] @3xl:text-[clamp(8px,0.95cqw,13px)]" />
-                <Text ctx={ctx} k="validValue" as="span" className="uppercase font-semibold tracking-[0.04em] text-[18px] @3xl:text-[clamp(14px,2cqw,28px)]" style={{ fontFamily: SERIF }} />
+                <Text ctx={ctx} k="validLabel" as="span" className="uppercase tracking-[0.2em] text-[10px] @3xl:text-[clamp(8px,0.95cqw,22px)]" />
+                <Text ctx={ctx} k="validValue" as="span" className="uppercase font-semibold tracking-[0.04em] text-[18px] @3xl:text-[clamp(14px,2cqw,48px)]" style={{ fontFamily: SERIF }} />
               </El>
             ) : null}
           </El>
         ) : null}
 
-        {/* Arrows + dots */}
-        {count > 1 ? (
+        {/* Arrows + dots (always shown, as in the design) */}
+        {count > 0 ? (
           <>
             <button
               type="button"
               aria-label="Previous slide"
+              disabled={count < 2}
               onClick={() => go(-1)}
-              className="absolute z-30 left-3 @3xl:left-[1.6%] top-[30%] @3xl:top-1/2 -translate-y-1/2 grid place-items-center w-9 h-9 @3xl:w-[3.4cqw] @3xl:h-[3.4cqw] max-w-[48px] max-h-[48px] rounded-full bg-black/70 text-white hover:bg-black/85"
+              className="absolute z-30 left-3 @3xl:left-[1.6%] top-[37.5cqw] @3xl:top-1/2 -translate-y-1/2 grid place-items-center w-9 h-9 @3xl:w-[3.4cqw] @3xl:h-[3.4cqw] max-w-[48px] max-h-[48px] rounded-full bg-black/70 text-white hover:bg-black/85"
             >
               <ChevronLeft size={18} />
             </button>
             <button
               type="button"
               aria-label="Next slide"
+              disabled={count < 2}
               onClick={() => go(1)}
-              className="absolute z-30 right-3 @3xl:right-[1.6%] top-[30%] @3xl:top-1/2 -translate-y-1/2 grid place-items-center w-9 h-9 @3xl:w-[3.4cqw] @3xl:h-[3.4cqw] max-w-[48px] max-h-[48px] rounded-full bg-[#555]/80 text-white hover:bg-[#555]"
+              className="absolute z-30 right-3 @3xl:right-[1.6%] top-[37.5cqw] @3xl:top-1/2 -translate-y-1/2 grid place-items-center w-9 h-9 @3xl:w-[3.4cqw] @3xl:h-[3.4cqw] max-w-[48px] max-h-[48px] rounded-full bg-[#555]/80 text-white hover:bg-[#555]"
             >
               <ChevronRight size={18} />
             </button>
-            <div className="absolute z-30 left-1/2 -translate-x-1/2 bottom-[2%] flex items-center gap-1.5 rounded-full bg-black/40 px-2 py-1.5">
+            <div className="absolute z-30 left-1/2 -translate-x-1/2 top-[calc(75cqw-2.25rem)] @3xl:top-auto @3xl:bottom-[3.5%] flex items-center gap-1.5 rounded-full bg-black/35 px-2.5 py-1.5">
               {slides.map((_, i) => (
                 <button
                   key={i}
@@ -721,9 +745,9 @@ function OfferSliderHero(ctx: HeroCtx) {
           <a
             href={`tel:${phone}`}
             aria-label="Call"
-            className="absolute z-30 left-3 top-3 @3xl:top-auto @3xl:left-[2%] @3xl:bottom-[24%] grid place-items-center w-12 h-12 rounded-full bg-[#5cc84a] text-white shadow-lg hover:brightness-110"
+            className="absolute z-30 left-3 top-3 @3xl:top-auto @3xl:left-[calc(3.3%-clamp(42px,4.4cqw,104px)/2)] @3xl:bottom-[calc(13%+1.6cqw-clamp(42px,4.4cqw,104px)/2)] grid place-items-center w-12 h-12 @3xl:w-[clamp(42px,4.4cqw,104px)] @3xl:h-[clamp(42px,4.4cqw,104px)] rounded-full bg-[#5cc84a] border-2 border-white/80 text-white shadow-lg hover:brightness-110"
           >
-            <Phone size={22} fill="currentColor" />
+            <PhoneCall className="w-1/2 h-1/2" fill="currentColor" strokeWidth={1.6} />
           </a>
         ) : null}
         {showFloating && whatsapp ? (
@@ -732,9 +756,10 @@ function OfferSliderHero(ctx: HeroCtx) {
             target="_blank"
             rel="noopener noreferrer"
             aria-label="WhatsApp"
-            className="absolute z-30 right-3 top-3 @3xl:top-auto @3xl:right-[2%] @3xl:bottom-[24%] grid place-items-center w-12 h-12 rounded-full bg-[#25d366] text-white shadow-lg hover:brightness-110"
+            className={`absolute z-30 right-3 top-3 @3xl:top-auto @3xl:right-[1.6%] @3xl:bottom-[calc(13%-clamp(42px,4.4cqw,104px)*0.9)] grid place-items-center w-12 h-12 @3xl:w-[clamp(42px,4.4cqw,104px)] @3xl:h-[clamp(42px,4.4cqw,104px)] rounded-full overflow-hidden hover:brightness-110 ${whatsAppSkin(p.whatsappIcon, "bg-[#25d366] border-2 border-white text-white shadow-lg")}`}
+            style={whatsAppSize(p.whatsappSize)}
           >
-            <MessageCircle size={24} />
+            <WhatsAppIcon src={p.whatsappIcon} size={24} />
           </a>
         ) : null}
       </div>
@@ -833,9 +858,10 @@ function EmeraldSliderHero(ctx: HeroCtx) {
               target="_blank"
               rel="noopener noreferrer"
               aria-label="WhatsApp"
-              className="absolute z-30 right-3 bottom-3 @3xl:right-[2.5%] @3xl:bottom-[10%] grid place-items-center w-11 h-11 @3xl:w-[3.4cqw] @3xl:h-[3.4cqw] max-w-[52px] max-h-[52px] rounded-full bg-white text-[#1b1b1b] shadow-lg hover:scale-105 transition-transform"
+              className={`absolute z-30 right-3 bottom-3 @3xl:right-[2.5%] @3xl:bottom-[10%] grid place-items-center w-11 h-11 @3xl:w-[clamp(40px,3.4cqw,52px)] @3xl:h-[clamp(40px,3.4cqw,52px)] rounded-full overflow-hidden hover:scale-105 transition-transform ${whatsAppSkin(p.whatsappIcon, "bg-white text-[#1b1b1b] shadow-lg")}`}
+              style={whatsAppSize(p.whatsappSize)}
             >
-              <MessageCircle size={22} />
+              <WhatsAppIcon src={p.whatsappIcon} size={22} />
             </a>
           ) : null}
         </div>

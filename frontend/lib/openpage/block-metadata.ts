@@ -439,6 +439,7 @@ export const blockMetadata: BlockMeta[] = [
       headerCta: 'Get Price & Brochure',
       headerCtaUrl: '',
       headerCtaTarget: '_self',
+      headerCtaAnchor: '',
       offerTitle: 'Book Your Dream Home',
       highlightText: 'Drive Your Dream Car',
       benefitText: 'Assured Benefits Upto',
@@ -457,6 +458,8 @@ export const blockMetadata: BlockMeta[] = [
       interval: 5000,
       textOnAllSlides: false,
       whatsapp: '',
+      whatsappIcon: '',
+      whatsappSize: '',
       showFloatingButtons: true,
       // Template 4 — Emerald slider
       emeraldTitle: 'Emerald Heights',
