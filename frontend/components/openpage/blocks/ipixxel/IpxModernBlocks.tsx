@@ -48,18 +48,24 @@ function paragraphs(v: unknown): string[] {
     .filter(Boolean);
 }
 
-/** "Label | URL" lines → links (unsafe URLs are dropped, label kept). */
-export function parseLinks(v: unknown): { label: string; href: string; heading: boolean }[] {
+/**
+ * "Label | URL" lines → links (unsafe URLs are dropped, label kept). An
+ * optional third part "new" / "same" forces the link target; without it
+ * https:// links open in a new tab.
+ */
+export function parseLinks(v: unknown): { label: string; href: string; heading: boolean; newTab?: boolean }[] {
   return lines(v).map((line) => {
     if (line.startsWith("# ")) return { label: line.slice(2).trim(), href: "", heading: true };
-    const [label, url = ""] = line.split("|").map((s) => s.trim());
-    return { label, href: safeHref(url), heading: false };
+    const [label, url = "", flag = ""] = line.split("|").map((s) => s.trim());
+    const f = flag.toLowerCase();
+    const link = { label, href: safeHref(url), heading: false };
+    return f === "new" ? { ...link, newTab: true } : f === "same" ? { ...link, newTab: false } : link;
   });
 }
 
-function LinkText({ href, children, className }: { href: string; children: ReactNode; className: string }) {
+function LinkText({ href, children, className, newTab }: { href: string; children: ReactNode; className: string; newTab?: boolean }) {
   if (!href) return <span className={className}>{children}</span>;
-  const external = /^https?:/i.test(href);
+  const external = newTab ?? /^https?:/i.test(href);
   return (
     <a href={href} target={external ? "_blank" : undefined} rel={external ? "noopener noreferrer" : undefined} className={`${className} hover:underline`}>
       {children}
@@ -592,7 +598,7 @@ export function ModernFooter({ block }: { block: BlockConfig }) {
                       </li>
                     ) : (
                       <li key={i}>
-                        <LinkText href={l.href} className="text-[13px] text-white/60">
+                        <LinkText href={l.href} newTab={l.newTab} className="text-[13px] text-white/60">
                           {l.label}
                         </LinkText>
                       </li>
@@ -610,7 +616,7 @@ export function ModernFooter({ block }: { block: BlockConfig }) {
             {bottom.map((l, i) => (
               <span key={i}>
                 {str(ctx.p.credit) || i ? " · " : ""}
-                <LinkText href={l.href} className="text-white">
+                <LinkText href={l.href} newTab={l.newTab} className="text-white">
                   {l.label}
                 </LinkText>
               </span>

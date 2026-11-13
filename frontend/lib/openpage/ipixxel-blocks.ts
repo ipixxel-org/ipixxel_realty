@@ -10,7 +10,7 @@
  */
 import type { ItemFieldDef } from "@/components/openpage/editor/field-helpers";
 
-type FieldType = "text" | "textarea" | "select" | "image" | "icon" | "form-select" | "toggle" | "number" | "color" | "array-items";
+type FieldType = "text" | "textarea" | "select" | "image" | "icon" | "form-select" | "toggle" | "number" | "color" | "array-items" | "link-lines";
 export interface IpxField {
   key: string;
   label: string;
@@ -297,11 +297,11 @@ const AMENITIES: IpxWidget = {
   ],
   itemFields: {
     items: [
-      { key: "image", label: "Photo (list / carousel / photo cards)", kind: "image" },
-      { key: "icon", label: "Icon (tiles / photo cards)", kind: "icon" },
-      { key: "category", label: "Category (list)", kind: "text" },
+      { key: "image", label: "Photo", kind: "image" },
+      { key: "icon", label: "Icon", kind: "icon" },
+      { key: "category", label: "Category", kind: "text" },
       { key: "title", label: "Name", kind: "text" },
-      { key: "text", label: "Description (list)", kind: "textarea", rows: 2 },
+      { key: "text", label: "Description", kind: "textarea", rows: 2 },
       { key: "highlight", label: "Highlight this tile", kind: "toggle" },
     ],
   },
@@ -819,7 +819,7 @@ const FOOTER: IpxWidget = {
         { key: "bandColor", label: "Band colour (disclaimer band; empty = bronze)", type: "color" },
         { key: "qrCodes", label: "RERA QR codes (QR footer)", type: "array-items" },
         { key: "columns", label: "Link columns (modern footer)", type: "array-items" },
-        { key: "bottomLinks", label: "Bottom links, one per line: Label | URL (modern footer)", type: "textarea" },
+        { key: "bottomLinks", label: "Bottom links (modern footer)", type: "link-lines" },
       ],
     },
     {
@@ -1066,6 +1066,30 @@ export const IPX_FIELD_VARIANTS: Record<string, Record<string, string[]>> = {
     ...only(["modern-columns"], ["columns", "bottomLinks"]),
   },
 };
+
+/**
+ * List-item fields that only some templates use, keyed `${type}.${listKey}` →
+ * item field key → templates that show it. The list editor hides the others
+ * for the chosen template. Keys not listed are used by every template.
+ */
+export const IPX_ITEM_FIELD_VARIANTS: Record<string, Record<string, string[]>> = {
+  "ipx-amenities.items": {
+    ...only(["burgundy-list", "tarc-carousel", "emerald-cards"], ["image"]),
+    ...only(["eldeco-tiles", "emerald-cards", "modern-pills"], ["icon"]),
+    ...only(["burgundy-list"], ["category", "text"]),
+    ...only(["eldeco-tiles"], ["highlight"]),
+  },
+};
+
+/** Item fields for a list, minus those the chosen template doesn't render. */
+export function ipxItemFieldsFor<T extends { key: string }>(type: string, listKey: string, variant: string | undefined, fields: T[] | undefined): T[] | undefined {
+  const map = IPX_ITEM_FIELD_VARIANTS[`${type}.${listKey}`];
+  if (!map || !fields) return fields;
+  const variants = IPX_KNOWN_VARIANTS[type] ?? [];
+  const active = variant && variants.includes(variant) ? variant : variants[0];
+  if (!active) return fields;
+  return fields.filter((f) => !map[f.key] || map[f.key].includes(active));
+}
 
 /** Template options per widget type (inspector "known variants"). */
 export const IPX_KNOWN_VARIANTS: Record<string, string[]> = Object.fromEntries(IPX_WIDGETS.map((w) => [w.type, w.variants]));
