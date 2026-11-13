@@ -1,5 +1,22 @@
 import type { ItemFieldDef } from "./field-helpers";
+import { createElement } from "react";
 import { IPX_ITEM_FIELDS, IPX_ITEM_TEMPLATES } from "@/lib/openpage/ipixxel-blocks";
+import { LinkLinesField } from "./LinkLinesField";
+
+/**
+ * Modern footer link columns: the "Links" textarea becomes a Label / URL /
+ * Link target list (like the header menu); it still stores the same text.
+ */
+const IPX_FOOTER_COLUMN_FIELDS: ItemFieldDef[] = (IPX_ITEM_FIELDS["ipx-footer.columns"] ?? []).map((f) =>
+  f.key === "links"
+    ? {
+        ...f,
+        label: "Links",
+        render: (value, update) =>
+          createElement(LinkLinesField, { value: typeof value === "string" ? value : "", onChange: update, allowHeadings: true }),
+      }
+    : f,
+);
 
 /**
  * List-item fields for the Elementor-style elements
@@ -103,6 +120,7 @@ export const ELEMENT_ITEM_FIELDS: Record<string, ItemFieldDef[]> = {
   ],
   // iPixxel Realty section widgets.
   ...IPX_ITEM_FIELDS,
+  "ipx-footer.columns": IPX_FOOTER_COLUMN_FIELDS,
 };
 
 /** Blank item used by "Add item" when a list is empty. */

@@ -36,7 +36,8 @@ import {
 } from "./field-helpers";
 import { ELEMENT_ITEM_FIELDS, ELEMENT_ITEM_SUB_ELEMENTS, ELEMENT_ITEM_TEMPLATES } from "./element-fields";
 import { parseNavLines, serializeNavLines, type NavLine } from "@/lib/openpage/nav-lines";
-import { IPX_FIELD_VARIANTS, IPX_INSPECTOR_FIELDS, IPX_KNOWN_VARIANTS } from "@/lib/openpage/ipixxel-blocks";
+import { LinkLinesField } from "./LinkLinesField";
+import { IPX_FIELD_VARIANTS, IPX_INSPECTOR_FIELDS, IPX_KNOWN_VARIANTS, ipxItemFieldsFor } from "@/lib/openpage/ipixxel-blocks";
 
 /** Explicit item fields for a block's list, keyed `${blockType}.${propKey}`. */
 const ITEM_FIELDS: Record<string, ItemFieldDef[]> = {
@@ -58,7 +59,7 @@ const ITEM_FIELDS: Record<string, ItemFieldDef[]> = {
 interface FieldDef {
   key: string
   label: string
-  type: 'text' | 'textarea' | 'select' | 'array-strings' | 'array-items' | 'image' | 'icon' | 'form-select' | 'toggle' | 'nav-menu' | 'nav-lines' | 'number' | 'color'
+  type: 'text' | 'textarea' | 'select' | 'array-strings' | 'array-items' | 'image' | 'icon' | 'form-select' | 'toggle' | 'nav-menu' | 'nav-lines' | 'link-lines' | 'number' | 'color'
   options?: string[]
 }
 
@@ -1751,6 +1752,15 @@ function PropertyField({ field, block }: { field: FieldDef; block: BlockConfig }
         />
       )
 
+    case 'link-lines':
+      return (
+        <LinkLinesField
+          label={field.label}
+          value={typeof value === 'string' ? value : ''}
+          onChange={onChange}
+        />
+      )
+
     case 'nav-menu': {
       // Prefer structured menuItems; migrate legacy string links on first edit.
       const rawItems = Array.isArray(value) ? value : []
@@ -2111,7 +2121,8 @@ function PropertyField({ field, block }: { field: FieldDef; block: BlockConfig }
         return defaults || { title: '', description: '' }
       }
 
-      const customItemFields = ITEM_FIELDS[`${block.type}.${field.key}`];
+      // iPixxel widgets hide item fields the chosen template never renders.
+      const customItemFields = ipxItemFieldsFor(block.type, field.key, block.variant, ITEM_FIELDS[`${block.type}.${field.key}`]);
 
       // Delegated to the shared list editor so every dynamic list in the
       // builder gets add / duplicate / delete / hide / drag-reorder plus a
