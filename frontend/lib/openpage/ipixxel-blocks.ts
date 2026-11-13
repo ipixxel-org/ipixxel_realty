@@ -195,7 +195,7 @@ const HIGHLIGHTS: IpxWidget = {
         { key: "title", label: "Title", type: "text" },
         { key: "subtitle", label: "Subtitle", type: "text" },
         { key: "eyebrow", label: "Small label above the title (modern grid)", type: "text" },
-        { key: "titleAccent", label: "Title second line (modern grid)", type: "text" },
+        { key: "titleAccent", label: "Title second line (modern grid / emerald key highlights)", type: "text" },
         { key: "tabs", label: "Tab buttons, one per line (icon grid)", type: "textarea" },
         { key: "tabLabel", label: "Boxed label above the icons (icon grid)", type: "text" },
         { key: "items", label: "Highlights", type: "array-items" },

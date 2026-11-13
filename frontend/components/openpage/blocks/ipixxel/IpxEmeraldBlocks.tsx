@@ -161,6 +161,7 @@ function Heading({
   accentKey = "titleAccent",
   descKey = "description",
   center = false,
+  stack = false,
   className = "",
 }: {
   ctx: Ctx;
@@ -168,6 +169,8 @@ function Heading({
   accentKey?: string;
   descKey?: string;
   center?: boolean;
+  /** Put the second title line on its own line below the title. */
+  stack?: boolean;
   className?: string;
 }) {
   const title = str(ctx.p[k]);
@@ -178,8 +181,8 @@ function Heading({
         <div className={`flex items-center gap-5 @3xl:gap-8 ${center ? "justify-center" : ""}`}>
           <h2 className="font-semibold leading-tight tracking-[0.02em] text-[21px] @3xl:text-[26px]" style={{ fontFamily: CINZEL, color: "var(--ipx-accent)" }}>
             <Txt ctx={ctx} k={k} as="span" />
-            {title && accent ? " " : null}
-            {accent ? <Txt ctx={ctx} k={accentKey} as="span" /> : null}
+            {title && accent && !stack ? " " : null}
+            {accent ? <Txt ctx={ctx} k={accentKey} as="span" className={stack ? "block" : undefined} /> : null}
           </h2>
           <Rule />
         </div>
@@ -396,7 +399,7 @@ export function EmeraldKeyHighlights({ block }: { block: BlockConfig }) {
       <Mandala className="-right-[70px] -top-[30px] w-[240px] @3xl:w-[290px] opacity-35" />
       <Mandala className="-left-[90px] -bottom-[70px] w-[240px] @3xl:w-[290px] opacity-35" />
       <Wrap>
-        <Heading ctx={ctx} descKey="subtitle" />
+        <Heading ctx={ctx} descKey="subtitle" stack />
       </Wrap>
       {/* Desktop: photo | line | centred list | line | photo (right photo sits lower). */}
       <div className="relative mt-10 @3xl:mt-12 grid grid-cols-1 @3xl:grid-cols-[min(23.5%,400px)_minmax(0,1fr)_min(23.5%,400px)] items-start gap-10 @3xl:gap-0">
