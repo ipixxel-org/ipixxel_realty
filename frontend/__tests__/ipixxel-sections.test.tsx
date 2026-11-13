@@ -216,6 +216,29 @@ describe("iPixxel Realty section widgets", () => {
     expect(screen.getByText("Privacy").getAttribute("href")).toBe("/privacy");
   });
 
+  it("emerald form uses an uploaded background image; unsafe values are ignored", () => {
+    const { container, rerender } = render(<RenderBlock block={make("ipx-form", "emerald-form", { bgImage: "https://cdn.test/tower.jpg" })} />);
+    expect(container.querySelector('img[src="https://cdn.test/tower.jpg"]')).toBeTruthy();
+    rerender(<RenderBlock block={make("ipx-form", "emerald-form", { bgImage: "javascript:alert(1)" })} />);
+    expect(container.innerHTML).not.toContain("javascript:");
+    expect(container.querySelector("img")).toBeNull();
+  });
+
+  it("emerald overview shows an uploaded image at its own height (no crop)", () => {
+    const { container } = render(<RenderBlock block={make("ipx-overview", "emerald-overview", { image: "https://cdn.test/poster.jpg" })} />);
+    const img = container.querySelector('img[src="https://cdn.test/poster.jpg"]') as HTMLElement;
+    expect(img.className).toContain("h-auto");
+    expect(img.parentElement?.className).not.toContain("aspect-");
+  });
+
+  it("emerald highlights and offer band accept a background image", () => {
+    for (const v of ["emerald-list", "emerald-offer"]) {
+      const { container, unmount } = render(<RenderBlock block={make("ipx-highlights", v, { bgImage: "https://cdn.test/leaves.jpg" })} />);
+      expect(container.querySelector('img[src="https://cdn.test/leaves.jpg"]'), v).toBeTruthy();
+      unmount();
+    }
+  });
+
   it("modern overview shows its stats card", () => {
     const { container } = render(<RenderBlock block={make("ipx-overview", "modern-overview")} />);
     expect(container.textContent).toContain("48");

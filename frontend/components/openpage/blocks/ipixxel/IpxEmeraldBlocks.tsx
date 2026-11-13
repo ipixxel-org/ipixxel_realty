@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, type CSSProperties } from "react";
+import { useId, useState, type CSSProperties } from "react";
 import { ArrowLeft, ArrowRight, IndianRupee, MapPin, Sparkles } from "lucide-react";
 import type { BlockConfig } from "../types";
 import { El } from "../El";
@@ -121,6 +121,39 @@ function Backdrop({ src, overlay, fallback }: { src: string; overlay: string; fa
   );
 }
 
+/** Uploaded full-section background photo with a tint; nothing until one is set. */
+function BgPhoto({ src, overlay, className = "object-cover" }: { src: unknown; overlay: string; className?: string }) {
+  if (!isMediaSrc(src)) return null;
+  return (
+    <>
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img src={src} alt="" aria-hidden draggable={false} className={`absolute inset-0 w-full h-full pointer-events-none ${className}`} />
+      <div aria-hidden className="absolute inset-0 pointer-events-none" style={{ background: overlay }} />
+    </>
+  );
+}
+
+/** Faint wavy "wood grain" lines, as in the design's dark panels. */
+function Grain({ className = "", opacity = 0.05 }: { className?: string; opacity?: number }) {
+  const id = `ipx-grain-${useId().replace(/[^a-zA-Z0-9_-]/g, "")}`;
+  return (
+    <svg aria-hidden className={`pointer-events-none absolute ${className}`} preserveAspectRatio="none">
+      <defs>
+        <pattern id={id} width="520" height="36" patternUnits="userSpaceOnUse">
+          <path
+            d="M0 6 C90 1 170 11 260 6 S430 1 520 6 M0 18 C110 13 200 24 300 18 S450 12 520 18 M0 30 C80 26 190 35 270 30 S440 25 520 30"
+            fill="none"
+            stroke="#ffffff"
+            strokeOpacity={opacity}
+            strokeWidth="1"
+          />
+        </pattern>
+      </defs>
+      <rect width="100%" height="100%" fill={`url(#${id})`} />
+    </svg>
+  );
+}
+
 /** Gold Cinzel title + rule, then the paragraph. */
 function Heading({
   ctx,
@@ -209,9 +242,15 @@ export function EmeraldOverview({ block }: { block: BlockConfig }) {
   useEmeraldFonts();
   const ctx = makeCtx(block, "emerald-overview");
   const subtitle = [str(ctx.p.title), str(ctx.p.titleAccent)].filter(Boolean);
+  const image = str(ctx.p.image);
+  const hasImage = isMediaSrc(image);
   return (
     <Shell ctx={ctx} className="text-white py-16 @3xl:py-24" style={{ background: LEAF_BG, ...goldVar(ctx) }}>
-      <div aria-hidden className="hidden @3xl:block absolute left-0 top-[8%] w-[64%] h-[70%] bg-white/[0.035] shadow-[0_30px_60px_rgba(0,0,0,0.35)]" />
+      <BgPhoto src={ctx.p.bgImage} overlay="linear-gradient(160deg, rgba(4,40,24,0.55) 0%, rgba(2,22,13,0.75) 100%)" />
+      <Grain className="inset-0 w-full h-full" opacity={0.035} />
+      <div aria-hidden className="hidden @3xl:block absolute left-0 top-[8%] w-[64%] h-[70%] bg-white/[0.035] shadow-[0_30px_60px_rgba(0,0,0,0.35)] overflow-hidden">
+        <Grain className="inset-0 w-full h-full" opacity={0.06} />
+      </div>
       <Wrap className="grid grid-cols-1 @3xl:grid-cols-[1.3fr_1fr] gap-12 @3xl:gap-16 items-center">
         <div>
           <Heading ctx={ctx} k="eyebrow" accentKey="" descKey="" />
@@ -235,8 +274,13 @@ export function EmeraldOverview({ block }: { block: BlockConfig }) {
         </div>
         <div className="relative mx-auto w-full max-w-[420px]">
           <div aria-hidden className="absolute inset-0 translate-x-3 translate-y-3 border" style={{ borderColor: "color-mix(in srgb, var(--ipx-accent) 55%, transparent)" }} />
-          <div className="relative aspect-[412/568] overflow-hidden bg-white/5">
-            <Pic src={str(ctx.p.image)} alt={str(ctx.p.title)} tone="dark" className="absolute inset-0 w-full h-full" />
+          {/* An uploaded image keeps its own height so nothing is cropped. */}
+          <div className={`relative overflow-hidden bg-white/5 ${hasImage ? "" : "aspect-[412/568]"}`}>
+            {hasImage ? (
+              <Pic src={image} alt={str(ctx.p.title)} className="block w-full h-auto max-h-[900px]" fit="contain" />
+            ) : (
+              <Pic src="" tone="dark" className="absolute inset-0 w-full h-full" />
+            )}
             <Caption text={str(ctx.p.imageCaption)} />
           </div>
         </div>
@@ -256,6 +300,8 @@ export function EmeraldOfferBand({ block }: { block: BlockConfig }) {
   const hasConfig = Boolean(str(ctx.p.configText) || str(ctx.p.configNote));
   return (
     <Shell ctx={ctx} className="text-white" style={{ background: LEAF_BG }}>
+      <BgPhoto src={ctx.p.bgImage} overlay="linear-gradient(90deg, rgba(3,40,24,0.35) 0%, rgba(3,30,18,0.55) 100%)" />
+      <Sparkle className="hidden @3xl:block absolute right-[4%] bottom-[7%] w-[54px]" style={{ color: "color-mix(in srgb, var(--ipx-accent) 80%, white)" }} />
       <div className="relative mx-auto grid max-w-[1245px] grid-cols-1 @3xl:grid-cols-[0.95fr_1fr_1.15fr] items-center gap-8 @3xl:gap-6 px-5 py-10 @3xl:px-10 @3xl:py-0 @3xl:min-h-[260px]">
         <div className="flex flex-col items-center text-center @3xl:items-start @3xl:text-left">
           <div className="@3xl:w-full @3xl:flex @3xl:justify-center @3xl:pr-10">
@@ -264,13 +310,15 @@ export function EmeraldOfferBand({ block }: { block: BlockConfig }) {
           <Txt ctx={ctx} k="offerText" as="h2" className="mt-5 whitespace-pre-line font-normal leading-[1.3] text-white text-[22px] @3xl:text-[26px]" />
         </div>
 
-        <div className="relative mx-auto w-[280px] @md:w-[340px] @3xl:w-full max-w-[380px] aspect-[38/25]">
-          <div aria-hidden className="absolute inset-0 rounded-[50%] border -rotate-[12deg]" style={{ borderColor: "var(--ipx-accent)" }} />
-          <div className="absolute inset-[5%] overflow-hidden rounded-[50%] -rotate-[12deg]">
-            <Pic src={str(ctx.p.image)} tone="dark" className="absolute inset-[-12%] w-[124%] h-[124%] rotate-[12deg]" />
-          </div>
-          <Sparkle className="absolute -left-1 top-[30%] w-3" style={{ color: "var(--ipx-accent)" }} />
-          <Sparkle className="absolute right-[2%] top-[6%] w-3" style={{ color: "var(--ipx-accent)" }} />
+        {/* Oval photo tilted down to the right inside a thin gold ring, as in the design. */}
+        <div className="relative mx-auto w-[280px] @md:w-[340px] @3xl:w-full max-w-[380px] aspect-[3/2] @3xl:my-4">
+          <div aria-hidden className="absolute inset-0 rounded-[50%] border rotate-[16deg]" style={{ borderColor: "var(--ipx-accent)" }} />
+          <El block={ctx.block} id={part(ctx.block, "ovalPhoto")} className="absolute left-[4%] right-[4%] top-[3%] bottom-[8%] overflow-hidden rounded-[50%] rotate-[16deg] bg-black/20">
+            {/* Counter-rotated and oversized so the photo stays upright and fills the oval. */}
+            <Pic src={str(ctx.p.image)} tone="dark" className="absolute left-[-15%] top-[-25%] w-[130%] h-[150%] max-w-none -rotate-[16deg]" />
+          </El>
+          <Sparkle className="absolute -left-1.5 top-[24%] w-3" style={{ color: "var(--ipx-accent)" }} />
+          <Sparkle className="absolute right-[14%] top-[30%] w-3" style={{ color: "var(--ipx-accent)" }} />
         </div>
 
         <div className="flex flex-col items-center gap-5 text-center @3xl:items-start @3xl:text-left">
@@ -312,12 +360,27 @@ export function EmeraldOfferBand({ block }: { block: BlockConfig }) {
   );
 }
 
-function FramedPhoto({ src, className = "" }: { src: string; className?: string }) {
+/** Photo with a thin gold frame nudged towards the centre of the section. */
+function FramedPhoto({ src, side, className = "" }: { src: string; side: "left" | "right"; className?: string }) {
   return (
     <div className={`relative ${className}`}>
-      <div aria-hidden className="absolute inset-0 translate-x-2 -translate-y-2 border" style={{ borderColor: "color-mix(in srgb, var(--ipx-accent) 50%, transparent)" }} />
+      <div
+        aria-hidden
+        className={`absolute inset-y-0 border ${side === "left" ? "left-0 -right-2.5" : "-left-2.5 right-0"}`}
+        style={{ borderColor: "color-mix(in srgb, var(--ipx-accent) 55%, transparent)" }}
+      />
       <Pic src={src} tone="dark" className="relative w-full h-full" />
     </div>
+  );
+}
+
+/** Thin vertical gold line with a sparkle in its middle (key highlights). */
+function SideLine({ side }: { side: "left" | "right" }) {
+  return (
+    <span aria-hidden className={`hidden @3xl:block absolute -top-4 -bottom-4 w-px ${side === "left" ? "left-0" : "right-0"}`}>
+      <span className="absolute inset-0 bg-gradient-to-b from-transparent via-[color:var(--ipx-accent)] to-transparent opacity-70" />
+      <Sparkle className="absolute left-1/2 top-1/2 w-7 -translate-x-1/2 -translate-y-1/2" style={{ color: "var(--ipx-accent)" }} />
+    </span>
   );
 }
 
@@ -329,32 +392,31 @@ export function EmeraldKeyHighlights({ block }: { block: BlockConfig }) {
   const right = str(ctx.p.image2);
   return (
     <Shell ctx={ctx} className="text-white py-14 @3xl:py-20" style={{ backgroundColor: EM.teal, ...goldVar(ctx) }}>
-      <Mandala className="-right-20 -top-16 w-[260px] opacity-30" />
-      <Mandala className="-left-24 -bottom-20 w-[260px] opacity-30" />
+      <BgPhoto src={ctx.p.bgImage} overlay="rgba(11,59,49,0.6)" />
+      <Mandala className="-right-[70px] -top-[30px] w-[240px] @3xl:w-[290px] opacity-35" />
+      <Mandala className="-left-[90px] -bottom-[70px] w-[240px] @3xl:w-[290px] opacity-35" />
       <Wrap>
         <Heading ctx={ctx} descKey="subtitle" />
       </Wrap>
-      <div className="relative mt-10 grid grid-cols-1 @3xl:grid-cols-[minmax(0,300px)_1fr_minmax(0,300px)] items-center gap-10 @3xl:gap-0">
-        <FramedPhoto src={left} className="hidden @3xl:block aspect-[292/384]" />
-        <div className="relative px-5 @3xl:px-[8%]">
-          <span aria-hidden className="hidden @3xl:block absolute left-0 top-0 bottom-0 w-px bg-gradient-to-b from-transparent via-[color:var(--ipx-accent)] to-transparent opacity-60" />
-          <span aria-hidden className="hidden @3xl:block absolute right-0 top-0 bottom-0 w-px bg-gradient-to-b from-transparent via-[color:var(--ipx-accent)] to-transparent opacity-60" />
-          <Sparkle className="hidden @3xl:block absolute -left-3 top-1/2 w-6 -translate-y-1/2" style={{ color: "var(--ipx-accent)" }} />
-          <Sparkle className="hidden @3xl:block absolute -right-3 top-1/2 w-6 -translate-y-1/2" style={{ color: "var(--ipx-accent)" }} />
+      {/* Desktop: photo | line | centred list | line | photo (right photo sits lower). */}
+      <div className="relative mt-10 @3xl:mt-12 grid grid-cols-1 @3xl:grid-cols-[min(23.5%,400px)_minmax(0,1fr)_min(23.5%,400px)] items-start gap-10 @3xl:gap-0">
+        <FramedPhoto src={left} side="left" className="hidden @3xl:block aspect-[292/384] mr-2.5" />
+        <div className="relative px-5 @3xl:self-stretch @3xl:mx-[clamp(16px,2.2cqw,40px)] @3xl:px-[clamp(20px,4cqw,80px)]">
+          <SideLine side="left" />
+          <SideLine side="right" />
           {list.length ? (
-            <ul className="flex flex-col gap-7 @3xl:gap-8">
+            <ul className="mx-auto flex w-full max-w-[460px] flex-col gap-6 @3xl:gap-[26px]">
               {list.map((it) => (
-                <El key={it.id} block={ctx.block} id={it.id} as="li" className="relative pl-8">
-                  <Sparkle className="absolute left-0 top-[0.9em] w-4" style={{ color: "var(--ipx-accent)" }} />
-                  <ITxt ctx={ctx} item={it} k="title" as="h3" className="font-semibold tracking-[0.03em] text-[17px] @3xl:text-[19px]" style={{ fontFamily: CINZEL, color: "var(--ipx-accent)" }} />
-                  <ITxt ctx={ctx} item={it} k="text" className="mt-1.5 text-[14px] @3xl:text-[15px] tracking-[0.03em] text-white/90" />
+                <El key={it.id} block={ctx.block} id={it.id} as="li" className="relative pl-[26px]">
+                  <Sparkle className="absolute left-0 top-1/2 w-[15px] -translate-y-1/2" style={{ color: "var(--ipx-accent)" }} />
+                  <ITxt ctx={ctx} item={it} k="title" as="h3" className="font-semibold leading-[1.45] tracking-[0.03em] text-[16px] @3xl:text-[18px]" style={{ fontFamily: CINZEL, color: "var(--ipx-accent)" }} />
+                  <ITxt ctx={ctx} item={it} k="text" className="mt-1 text-[13.5px] @3xl:text-[14.5px] leading-[1.6] tracking-[0.03em] text-white/90" />
                 </El>
               ))}
             </ul>
           ) : null}
-          <GoldButton ctx={ctx} />
         </div>
-        <FramedPhoto src={right} className="hidden @3xl:block aspect-[292/384] @3xl:mt-12" />
+        <FramedPhoto src={right} side="right" className="hidden @3xl:block aspect-[292/384] ml-2.5 @3xl:mt-[clamp(28px,3.9cqw,60px)]" />
         {isMediaSrc(left) || isMediaSrc(right) ? (
           <div className="@3xl:hidden grid grid-cols-2 gap-3 px-5">
             {[left, right].filter(isMediaSrc).map((src, i) => (
@@ -363,6 +425,7 @@ export function EmeraldKeyHighlights({ block }: { block: BlockConfig }) {
           </div>
         ) : null}
       </div>
+      <GoldButton ctx={ctx} />
     </Shell>
   );
 }
@@ -799,8 +862,15 @@ export function EmeraldForm({ block }: { block: BlockConfig }) {
   useEmeraldFonts();
   const ctx = makeCtx(block, "emerald-form");
   const image = str(ctx.p.image);
+  const hasBg = isMediaSrc(ctx.p.bgImage);
   return (
     <Shell ctx={ctx} className="text-white py-14 @3xl:py-20" style={{ backgroundColor: EM.night }}>
+      {/* Background photo: anchored right, fading into the dark green behind the form. */}
+      <BgPhoto
+        src={ctx.p.bgImage}
+        className="object-cover object-[75%_center] @3xl:object-right"
+        overlay={`linear-gradient(90deg, ${EM.night} 0%, rgba(2,26,17,0.92) 38%, rgba(2,26,17,0.35) 70%, rgba(2,26,17,0.1) 100%), linear-gradient(0deg, rgba(2,26,17,0.6) 0%, transparent 30%)`}
+      />
       <Wrap className="grid grid-cols-1 @3xl:grid-cols-[1.15fr_1fr] gap-10 items-stretch">
         <div>
           <Heading ctx={ctx} />
@@ -812,7 +882,7 @@ export function EmeraldForm({ block }: { block: BlockConfig }) {
           <Txt ctx={ctx} k="formNote" className="mt-4 max-w-[560px] whitespace-pre-line text-[11.5px] leading-[1.6] text-white/50" />
         </div>
         <div className="relative hidden @3xl:block min-h-[420px]">
-          {isMediaSrc(image) ? <Pic src={image} fit="contain" className="absolute inset-0 w-full h-full object-bottom" /> : <TowerSketch />}
+          {isMediaSrc(image) ? <Pic src={image} fit="contain" className="absolute inset-0 w-full h-full object-bottom" /> : hasBg ? null : <TowerSketch />}
         </div>
       </Wrap>
     </Shell>
