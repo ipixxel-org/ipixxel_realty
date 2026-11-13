@@ -48,7 +48,7 @@ describe("iPixxel Realty section widgets", () => {
         expect(crashed(container), `${w.type}/${v}`).toBe(false);
         const title = String(w.defaultProps.title ?? "");
         // These designs have no visible title (offer ribbon / band, logo-led stats, disclaimer band).
-        const noTitle = ["burgundy-offers", "eldeco-stats", "eldeco-footer", "emerald-offer"];
+        const noTitle = ["burgundy-offers", "eldeco-stats", "eldeco-footer", "emerald-offer", "modern-columns"];
         if (title && !noTitle.includes(v)) {
           expect(container.textContent).toContain(title);
         }
@@ -164,5 +164,45 @@ describe("iPixxel Realty section widgets", () => {
   it("dark templates set white as the section text colour", () => {
     const { container } = render(<RenderBlock block={make("ipx-about", "emerald-about")} />);
     expect((container.querySelector("section") as HTMLElement).style.color).toBe("rgb(255, 255, 255)");
+  });
+
+  it("modern landscape tabs switch between categories", () => {
+    render(
+      <RenderBlock
+        block={make("ipx-gallery", "modern-tabs", {
+          images: [
+            { src: "", category: "Temperate", caption: "Temperate Enclave", text: "Leisure and wellness" },
+            { src: "", category: "Tropical", caption: "Tropical Court", text: "Palms and pools" },
+          ],
+        })}
+      />,
+    );
+    expect(screen.getByText("Temperate Enclave")).toBeTruthy();
+    fireEvent.click(screen.getByRole("tab", { name: "Tropical" }));
+    expect(screen.getByText("Tropical Court")).toBeTruthy();
+    expect(screen.queryByText("Temperate Enclave")).toBeNull();
+  });
+
+  it("modern footer columns keep only safe links", () => {
+    const { container } = render(
+      <RenderBlock
+        block={make("ipx-footer", "modern-columns", {
+          columns: [{ title: "Contact", links: "Call | tel:+911234\nBad | javascript:alert(1)\n# Projects\nSite | https://example.com" }],
+          bottomLinks: "Privacy | /privacy",
+        })}
+      />,
+    );
+    expect(container.innerHTML).not.toContain("javascript:");
+    expect(screen.getByText("Call").getAttribute("href")).toBe("tel:+911234");
+    expect(screen.getByText("Bad").getAttribute("href")).toBeNull();
+    expect(screen.getByText("Site").getAttribute("target")).toBe("_blank");
+    expect(screen.getByText("Projects").tagName).toBe("LI");
+    expect(screen.getByText("Privacy").getAttribute("href")).toBe("/privacy");
+  });
+
+  it("modern overview shows its stats card", () => {
+    const { container } = render(<RenderBlock block={make("ipx-overview", "modern-overview")} />);
+    expect(container.textContent).toContain("48");
+    expect(container.textContent).toContain("Towers");
   });
 });

@@ -34,6 +34,7 @@ import {
   type Item,
 } from "./shared";
 import { EmeraldAmenityCards, EmeraldFloorPlans, EmeraldGalleryRows } from "./IpxEmeraldBlocks";
+import { ModernAmenityPills, ModernBento, ModernLandscapeTabs, ModernMasterPlan, ModernResidences } from "./IpxModernBlocks";
 
 /** Burgundy's deep wine backdrop, tinted by the accent colour. */
 function wine(accent: string): string {
@@ -85,7 +86,7 @@ function GoldArrow({ dir, onClick, className = "" }: { dir: "prev" | "next"; onC
 /* Amenities                                                                 */
 /* ========================================================================= */
 
-export const AMENITIES_VARIANTS = ["burgundy-list", "eldeco-tiles", "tarc-carousel", "emerald-cards"] as const;
+export const AMENITIES_VARIANTS = ["burgundy-list", "eldeco-tiles", "tarc-carousel", "emerald-cards", "modern-pills"] as const;
 
 export function IpxAmenitiesBlock({ block }: { block: BlockConfig }) {
   useIpxFonts();
@@ -94,6 +95,7 @@ export function IpxAmenitiesBlock({ block }: { block: BlockConfig }) {
   if (variant === "eldeco-tiles") return <EldecoTiles {...ctx} />;
   if (variant === "tarc-carousel") return <TarcAmenityCarousel {...ctx} />;
   if (variant === "emerald-cards") return <EmeraldAmenityCards block={block} />;
+  if (variant === "modern-pills") return <ModernAmenityPills block={block} />;
   return <BurgundyAmenityList {...ctx} />;
 }
 
@@ -198,7 +200,7 @@ function TarcAmenityCarousel(ctx: Ctx) {
 /* Gallery                                                                   */
 /* ========================================================================= */
 
-export const GALLERY_VARIANTS = ["burgundy-carousel", "eldeco-grid", "tarc-journey", "emerald-rows"] as const;
+export const GALLERY_VARIANTS = ["burgundy-carousel", "eldeco-grid", "tarc-journey", "emerald-rows", "modern-tabs", "modern-bento"] as const;
 
 export function IpxGalleryBlock({ block }: { block: BlockConfig }) {
   useIpxFonts();
@@ -207,6 +209,8 @@ export function IpxGalleryBlock({ block }: { block: BlockConfig }) {
   if (variant === "eldeco-grid") return <EldecoGrid {...ctx} />;
   if (variant === "tarc-journey") return <TarcJourney {...ctx} />;
   if (variant === "emerald-rows") return <EmeraldGalleryRows block={block} />;
+  if (variant === "modern-tabs") return <ModernLandscapeTabs block={block} />;
+  if (variant === "modern-bento") return <ModernBento block={block} />;
   return <BurgundyCarousel {...ctx} />;
 }
 
@@ -349,11 +353,12 @@ function TarcJourney(ctx: Ctx) {
 /* Master / Site plan                                                        */
 /* ========================================================================= */
 
-export const MASTERPLAN_VARIANTS = ["eldeco-site", "tarc-master"] as const;
+export const MASTERPLAN_VARIANTS = ["eldeco-site", "tarc-master", "modern-plan"] as const;
 
 export function IpxMasterPlanBlock({ block }: { block: BlockConfig }) {
   useIpxFonts();
   const variant = pickVariant(block, MASTERPLAN_VARIANTS);
+  if (variant === "modern-plan") return <ModernMasterPlan block={block} />;
   const ctx = makeCtx(block, variant);
   const src = str(ctx.p.image);
   const plan = (placeholder: string) =>
@@ -403,7 +408,7 @@ export function IpxMasterPlanBlock({ block }: { block: BlockConfig }) {
 /* Floor plans                                                               */
 /* ========================================================================= */
 
-export const FLOORPLAN_VARIANTS = ["burgundy-tabs", "tarc-details", "emerald-tabs"] as const;
+export const FLOORPLAN_VARIANTS = ["burgundy-tabs", "tarc-details", "emerald-tabs", "modern-cards"] as const;
 
 /** "Label | Value" lines of a plan's specs. */
 function specs(raw: string): Array<{ label: string; value: string }> {
@@ -430,6 +435,7 @@ export function IpxFloorPlansBlock({ block }: { block: BlockConfig }) {
     );
 
   if (variant === "emerald-tabs") return <EmeraldFloorPlans block={block} />;
+  if (variant === "modern-cards") return <ModernResidences block={block} />;
 
   if (variant === "tarc-details") {
     const decor = str(ctx.p.decorImage);

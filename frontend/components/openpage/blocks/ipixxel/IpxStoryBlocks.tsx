@@ -28,12 +28,13 @@ import {
   type Ctx,
 } from "./shared";
 import { EmeraldKeyHighlights, EmeraldOfferBand, EmeraldOverview } from "./IpxEmeraldBlocks";
+import { ModernHighlights, ModernOverview } from "./IpxModernBlocks";
 
 /* ========================================================================= */
 /* Overview                                                                  */
 /* ========================================================================= */
 
-export const OVERVIEW_VARIANTS = ["burgundy-features", "eldeco-overview", "tarc-story", "tarc-wellness", "emerald-overview"] as const;
+export const OVERVIEW_VARIANTS = ["burgundy-features", "eldeco-overview", "tarc-story", "tarc-wellness", "emerald-overview", "modern-overview"] as const;
 
 export function IpxOverviewBlock({ block }: { block: BlockConfig }) {
   useIpxFonts();
@@ -43,6 +44,7 @@ export function IpxOverviewBlock({ block }: { block: BlockConfig }) {
   if (variant === "tarc-story") return <TarcStory {...ctx} />;
   if (variant === "tarc-wellness") return <TarcWellness {...ctx} />;
   if (variant === "emerald-overview") return <EmeraldOverview block={block} />;
+  if (variant === "modern-overview") return <ModernOverview block={block} />;
   return <BurgundyFeatures {...ctx} />;
 }
 
@@ -169,7 +171,7 @@ function TarcWellness(ctx: Ctx) {
 /* Highlights                                                                */
 /* ========================================================================= */
 
-export const HIGHLIGHTS_VARIANTS = ["burgundy-offers", "eldeco-icons", "tarc-compass", "emerald-offer", "emerald-list"] as const;
+export const HIGHLIGHTS_VARIANTS = ["burgundy-offers", "eldeco-icons", "tarc-compass", "emerald-offer", "emerald-list", "modern-grid"] as const;
 
 export function IpxHighlightsBlock({ block }: { block: BlockConfig }) {
   useIpxFonts();
@@ -179,6 +181,7 @@ export function IpxHighlightsBlock({ block }: { block: BlockConfig }) {
   if (variant === "tarc-compass") return <TarcCompass {...ctx} />;
   if (variant === "emerald-offer") return <EmeraldOfferBand block={block} />;
   if (variant === "emerald-list") return <EmeraldKeyHighlights block={block} />;
+  if (variant === "modern-grid") return <ModernHighlights block={block} />;
   return <BurgundyOffers {...ctx} />;
 }
 

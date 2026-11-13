@@ -17,24 +17,28 @@ import { isMediaSrc } from "@/lib/media";
  *   - "eldeco"   — spaced capital titles, bronze gradient buttons
  *   - "tarc"     — light sans titles, gold accents, circled "Know More" arrows
  *   - "emerald"  — deep green sections, gold Cinzel titles, gold gradient buttons
+ *   - "modern"   — clean white / black sections, tight sans titles, rounded cards, pill buttons
  *
  * Every text is an {@link El} keyed `${type}:${prop}` (lists: per item), so it
  * can be restyled from the Element tab; the section itself takes the Style tab.
  */
 
-export type Family = "burgundy" | "eldeco" | "tarc" | "emerald";
+export type Family = "burgundy" | "eldeco" | "tarc" | "emerald" | "modern";
 
 export const SERIF = "'Times New Roman', Tinos, Times, Georgia, serif";
 export const MONTSERRAT = "'Montserrat', 'Helvetica Neue', Arial, sans-serif";
 export const HELVETICA = "'Helvetica Neue', Helvetica, Arial, sans-serif";
 export const CINZEL = "'Cinzel', 'Trajan Pro', Georgia, serif";
 export const POPPINS = "'Poppins', 'Helvetica Neue', Arial, sans-serif";
+export const INTER = "'Inter', 'Helvetica Neue', Arial, sans-serif";
+export const INTER_TIGHT = "'Inter Tight', 'Inter', 'Helvetica Neue', Arial, sans-serif";
 
 export const FAMILY: Record<Family, { accent: string; cream: string; ink: string; body: string; font: string }> = {
   burgundy: { accent: "#6b0f2a", cream: "#f8f4ef", ink: "#3b3b3b", body: "#555555", font: HELVETICA },
   eldeco: { accent: "#8a5a3c", cream: "#fbf8f1", ink: "#2b2b2b", body: "#333333", font: MONTSERRAT },
   tarc: { accent: "#b08d57", cream: "#f3ece2", ink: "#222222", body: "#2b2b2b", font: HELVETICA },
   emerald: { accent: "#c9a45c", cream: "#0b3b31", ink: "#ffffff", body: "rgba(255,255,255,0.88)", font: POPPINS },
+  modern: { accent: "#8a877d", cream: "#f4f4f4", ink: "#0b0b0b", body: "#4b4b4b", font: INTER },
 };
 
 export const BURGUNDY_GOLD = "#c9a36a";
@@ -47,6 +51,7 @@ export function familyOf(variant: string): Family {
   if (variant.startsWith("eldeco")) return "eldeco";
   if (variant.startsWith("tarc")) return "tarc";
   if (variant.startsWith("emerald")) return "emerald";
+  if (variant.startsWith("modern")) return "modern";
   return "burgundy";
 }
 
@@ -83,6 +88,22 @@ export function useEmeraldFonts() {
     link.rel = "stylesheet";
     link.href = EMERALD_FONTS_URL;
     link.setAttribute("data-ipixxel-emerald-fonts", "");
+    document.head.appendChild(link);
+  }, []);
+}
+
+const MODERN_FONTS_URL =
+  "https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Inter+Tight:wght@500;600;700&display=swap";
+
+/** Adds the Inter / Inter Tight stylesheet (modern templates) once per page. */
+export function useModernFonts() {
+  useEffect(() => {
+    if (typeof document === "undefined") return;
+    if (document.querySelector("link[data-ipixxel-modern-fonts]")) return;
+    const link = document.createElement("link");
+    link.rel = "stylesheet";
+    link.href = MODERN_FONTS_URL;
+    link.setAttribute("data-ipixxel-modern-fonts", "");
     document.head.appendChild(link);
   }, []);
 }

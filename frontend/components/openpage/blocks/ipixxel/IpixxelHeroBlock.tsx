@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState, type CSSProperties, type ReactNode, type TouchEvent } from "react";
-import { ChevronLeft, ChevronRight, Images, MapPin, Menu, MessageCircle, Phone, PhoneCall, Video } from "lucide-react";
+import { ArrowUpRight, ChevronLeft, ChevronRight, Images, MapPin, Menu, MessageCircle, Phone, PhoneCall, Video } from "lucide-react";
 import type { BlockConfig } from "../types";
 import { El, useElementEditor } from "../El";
 import { CtaButton } from "../CtaButton";
@@ -9,7 +9,8 @@ import { clamp, color, flag, list, num, part, prefersReducedMotion, safeHref, st
 import { useDevice } from "@/components/openpage/runtime/device";
 import { overlayLayer, resolveBlockStyleForDevice } from "@/lib/openpage/block-style";
 import { isMediaSrc } from "@/lib/media";
-import { CINZEL, GOLD_GRADIENT, POPPINS, useEmeraldFonts, useSlider } from "./shared";
+import { CINZEL, GOLD_GRADIENT, INTER, INTER_TIGHT, POPPINS, makeCtx, useEmeraldFonts, useModernFonts, useSlider } from "./shared";
+import { LeadForm } from "./parts";
 
 /**
  * iPixxel Realty → Hero.
@@ -25,7 +26,7 @@ import { CINZEL, GOLD_GRADIENT, POPPINS, useEmeraldFonts, useSlider } from "./sh
  * designs switch to a stacked layout.
  */
 
-export const IPIXXEL_HERO_VARIANTS = ["grand-band", "skyline", "offer-slider", "emerald-slider"] as const;
+export const IPIXXEL_HERO_VARIANTS = ["grand-band", "skyline", "offer-slider", "emerald-slider", "modern-form"] as const;
 
 const SERIF = "'Playfair Display', Georgia, 'Times New Roman', serif";
 const SANS = "'Montserrat', 'Helvetica Neue', Arial, sans-serif";
@@ -53,6 +54,7 @@ const DEFAULT_ACCENT: Record<string, string> = {
   skyline: "#d6a645",
   "offer-slider": "#6b0f2a",
   "emerald-slider": "#c9a45c",
+  "modern-form": "#8a877d",
 };
 
 const GOLD_TEXT: CSSProperties = {
@@ -123,6 +125,7 @@ export function IpixxelHeroBlock({ block }: { block: BlockConfig }) {
   if (variant === "skyline") return <SkylineHero {...ctx} />;
   if (variant === "offer-slider") return <OfferSliderHero {...ctx} />;
   if (variant === "emerald-slider") return <EmeraldSliderHero {...ctx} />;
+  if (variant === "modern-form") return <ModernFormHero {...ctx} />;
   return <GrandBandHero {...ctx} />;
 }
 
@@ -904,6 +907,136 @@ function EmeraldSliderHero(ctx: HeroCtx) {
             />
           </El>
         ) : null}
+      </div>
+    </section>
+  );
+}
+
+/* ------------------------------------------------------------------------- */
+/* Template 5 — "Modern form": floating white navbar, big tight title with   */
+/* two buttons on the left and a Form Builder enquiry card on the right.     */
+/* ------------------------------------------------------------------------- */
+
+/** Navbar lines "Label" or "Label | target" → in-page or safe links. */
+function navLinks(v: unknown): { label: string; href: string }[] {
+  return str(v)
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .map((line) => {
+      const [label, target = ""] = line.split("|").map((s) => s.trim());
+      const href = target
+        ? /^[a-z0-9-]+$/i.test(target)
+          ? `#${target}`
+          : safeHref(target)
+        : `#${label.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "")}`;
+      return { label, href };
+    })
+    .filter((l) => l.label);
+}
+
+function ModernFormHero(ctx: HeroCtx) {
+  useModernFonts();
+  const { block, p } = ctx;
+  const logo = str(p.logo);
+  const links = navLinks(p.modernNav);
+  const formCtx = makeCtx(block, "modern-form");
+  const arrow = <ArrowUpRight aria-hidden size={15} strokeWidth={1.8} />;
+
+  return (
+    <section
+      className="relative overflow-hidden bg-[#141414] text-white"
+      id={str(p.anchor) || undefined}
+      style={{ fontFamily: INTER, "--ipx-accent": ctx.accent } as CSSProperties}
+    >
+      <Cover ctx={ctx} src={str(p.image)} placeholder="linear-gradient(160deg,#3a3f3a 0%,#1d211d 60%,#0f120f 100%)" />
+      <div aria-hidden className="absolute inset-0 pointer-events-none" style={{ background: "linear-gradient(90deg, rgba(0,0,0,0.55) 0%, rgba(0,0,0,0.25) 55%, rgba(0,0,0,0.05) 100%)" }} />
+
+      {/* Navbar */}
+      <El
+        block={block}
+        id={part(block, "header")}
+        className="relative z-20 mx-4 mt-4 flex items-center justify-between gap-4 rounded-[14px] bg-white/95 px-4 py-2.5 text-[#0b0b0b] @3xl:mx-[5.5%] @3xl:mt-[1.6cqw] @3xl:px-5 @3xl:py-3"
+      >
+        {logo ? (
+          <Img src={logo} alt={str(p.logoText)} className="h-8 @3xl:h-9 w-auto object-contain" />
+        ) : (
+          <Text ctx={ctx} k="logoText" as="span" className="text-[17px] @3xl:text-[18px] font-bold tracking-[-0.02em]" style={{ fontFamily: INTER_TIGHT }} />
+        )}
+        {links.length ? (
+          <nav className="hidden @3xl:flex items-center gap-[2cqw] text-[12.5px]">
+            {links.map((l, i) => (
+              <a key={i} href={l.href || undefined} className="hover:opacity-70">
+                {l.label}
+              </a>
+            ))}
+          </nav>
+        ) : null}
+        {str(p.modernNavCta) ? (
+          <CtaButton
+            block={block}
+            id={part(block, "modernNavCta")}
+            prefix="modernNavCta"
+            label={str(p.modernNavCta)}
+            href={safeHref(p.modernNavCtaUrl)}
+            target={str(p.modernNavCtaTarget)}
+            onClick={() => scrollToAnchor(str(p.modernNavCtaAnchor, "enquire"))}
+            brand={null}
+            icon={arrow}
+            className="inline-flex items-center gap-2 rounded-full bg-[#0b0b0b] px-4 py-2 text-[12px] text-white @3xl:px-5 @3xl:py-2.5 hover:opacity-90"
+          />
+        ) : null}
+      </El>
+
+      {/* Copy + form */}
+      <div className="relative z-10 grid grid-cols-1 items-center gap-10 px-5 pt-14 pb-10 @3xl:grid-cols-[1fr_minmax(0,360px)] @3xl:gap-[4cqw] @3xl:px-[5.5%] @3xl:pt-[8cqw] @3xl:pb-[5.5cqw]">
+        <El block={block} id={part(block, "copy")}>
+          <Text ctx={ctx} k="modernEyebrow" className="uppercase tracking-[0.22em] text-[10.5px] @3xl:text-[11px] text-white/85" />
+          <Text
+            ctx={ctx}
+            k="modernTitle"
+            as="h1"
+            className="mt-5 whitespace-pre-line font-semibold leading-[0.98] tracking-[-0.05em] text-[44px] @md:text-[56px] @3xl:text-[clamp(44px,6cqw,92px)]"
+            style={{ fontFamily: INTER_TIGHT }}
+          />
+          <Text ctx={ctx} k="modernText" className="mt-7 max-w-[400px] whitespace-pre-line text-[14px] leading-[1.75] text-white/90" />
+          <div className="mt-9 flex flex-wrap items-center gap-6">
+            {str(p.modernCta) ? (
+              <CtaButton
+                block={block}
+                id={part(block, "modernCta")}
+                prefix="modernCta"
+                label={str(p.modernCta)}
+                href={safeHref(p.modernCtaUrl)}
+                target={str(p.modernCtaTarget)}
+                onClick={() => scrollToAnchor(str(p.modernCtaAnchor, "enquire"))}
+                brand={null}
+                icon={arrow}
+                className="inline-flex items-center gap-5 rounded-full bg-white px-5 py-3 text-[12.5px] text-[#0b0b0b] hover:opacity-90"
+              />
+            ) : null}
+            {str(p.modernLink) ? (
+              <CtaButton
+                block={block}
+                id={part(block, "modernLink")}
+                prefix="modernLink"
+                label={str(p.modernLink)}
+                href={safeHref(p.modernLinkUrl)}
+                target={str(p.modernLinkTarget)}
+                onClick={() => scrollToAnchor(str(p.modernLinkAnchor, "enquire"))}
+                brand={null}
+                icon={arrow}
+                className="inline-flex items-center gap-3 border-b border-white/70 pb-1.5 text-[12px] text-white hover:border-white"
+              />
+            ) : null}
+          </div>
+        </El>
+        <El block={block} id={part(block, "formCard")} className="rounded-[18px] bg-white p-5 text-[#0b0b0b] shadow-[0_20px_50px_rgba(0,0,0,0.25)] @3xl:p-6">
+          <Text ctx={ctx} k="modernFormTitle" as="h2" className="mb-4 text-[18px] tracking-[-0.01em]" />
+          <El block={block} id={part(block, "form")}>
+            <LeadForm ctx={formCtx} />
+          </El>
+        </El>
       </div>
     </section>
   );
