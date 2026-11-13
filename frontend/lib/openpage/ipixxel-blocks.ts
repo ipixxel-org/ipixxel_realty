@@ -379,7 +379,6 @@ const MASTERPLAN: IpxWidget = {
     imageCaption: "Map is not to scale. The developer reserves all rights to add, remove or change any amenity or specification.",
     eyebrow: "Master Plan",
     titleAccent: "",
-    showCompass: true,
     ...buttonDefaults("View All"),
   },
   sections: [
@@ -393,7 +392,6 @@ const MASTERPLAN: IpxWidget = {
         { key: "imageCaption", label: "Caption over the plan (master plan)", type: "textarea" },
         { key: "eyebrow", label: "Small label above the title (modern)", type: "text" },
         { key: "titleAccent", label: "Title second line (modern)", type: "text" },
-        { key: "showCompass", label: "Show north compass (modern)", type: "toggle" },
         anchor,
       ],
     },
@@ -994,12 +992,13 @@ export const IPX_FIELD_VARIANTS: Record<string, Record<string, string[]>> = {
   "ipx-floorplans": {
     ...only(["burgundy-tabs", "modern-cards"], ["eyebrow"]),
     ...only(["burgundy-tabs", "emerald-tabs", "modern-cards"], ["titleAccent", "description"]),
-    ...only(["tarc-details"], ["subtitle", "priceLabel", "decorImage"]),
+    ...only(["tarc-details"], ["subtitle", "decorImage"]),
+    ...only(["tarc-details", "modern-cards"], ["priceLabel"]),
     ...only(["tarc-details", "emerald-tabs", "modern-cards"], ["buttonText", "buttonUrl", "buttonTarget", "buttonAnchor", "buttonColor", "buttonTextColor", "buttonHoverColor", "buttonHoverTextColor", "buttonBorderColor", "buttonRadius"]),
   },
   "ipx-masterplan": {
     ...only(["tarc-master"], ["imageCaption"]),
-    ...only(["modern-plan"], ["eyebrow", "titleAccent", "showCompass"]),
+    ...only(["modern-plan"], ["eyebrow", "titleAccent"]),
     ...only(["eldeco-site", "tarc-master"], ["buttonText", "buttonUrl", "buttonTarget", "buttonAnchor", "buttonColor", "buttonTextColor", "buttonHoverColor", "buttonHoverTextColor", "buttonBorderColor", "buttonRadius"]),
   },
   "ipx-gallery": {

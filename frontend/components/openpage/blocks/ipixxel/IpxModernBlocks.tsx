@@ -4,7 +4,7 @@ import { useState, type ReactNode } from "react";
 import { ArrowUpRight, Building, Building2, Compass, Leaf, MapPin, Sparkles, Users } from "lucide-react";
 import type { BlockConfig } from "../types";
 import { El } from "../El";
-import { flag, part, safeHref, str } from "../elements/shared";
+import { part, safeHref, str } from "../elements/shared";
 import { isMediaSrc } from "@/lib/media";
 import { LeadForm, MapArea } from "./parts";
 import {
@@ -247,6 +247,14 @@ function ArrowCircle() {
   );
 }
 
+/** "Label | Value" lines of a plan's areas; a line without "|" is a note. */
+function planSpecs(raw: string): Array<{ label: string; value: string }> {
+  return lines(raw).map((l) => {
+    const [label, ...rest] = l.split("|");
+    return { label: label.trim(), value: rest.join("|").trim() };
+  });
+}
+
 export function ModernResidences({ block }: { block: BlockConfig }) {
   useModernFonts();
   const ctx = makeCtx(block, "modern-cards");
@@ -267,6 +275,26 @@ export function ModernResidences({ block }: { block: BlockConfig }) {
                     <ITxt ctx={ctx} item={pl} k="title" as="h3" className="text-[17px] font-medium text-[#0b0b0b]" style={{ fontFamily: INTER_TIGHT }} />
                     <ArrowCircle />
                   </div>
+                  {pl.get("price") ? (
+                    <div className="mt-3 flex items-baseline gap-2">
+                      <span className="text-[11px] uppercase tracking-[0.08em] text-[#8a8a8a]">{str(ctx.p.priceLabel, "Starting Price")}</span>
+                      <ITxt ctx={ctx} item={pl} k="price" as="span" className="text-[17px] font-medium text-[#0b0b0b]" style={{ fontFamily: INTER_TIGHT }} />
+                    </div>
+                  ) : null}
+                  {planSpecs(pl.get("specs")).length ? (
+                    <div className="mt-4 border-t border-black/10">
+                      {planSpecs(pl.get("specs")).map((sp, n) =>
+                        sp.value ? (
+                          <div key={n} className="py-2.5 border-b border-black/10">
+                            <div className="text-[11px] uppercase tracking-[0.06em] text-[#8a8a8a]">{sp.label}</div>
+                            <div className="mt-0.5 text-[12.5px] leading-[1.5] text-[#0b0b0b]">{sp.value}</div>
+                          </div>
+                        ) : (
+                          <div key={n} className="pt-2 text-[11px] text-[#8a8a8a]">{sp.label}</div>
+                        ),
+                      )}
+                    </div>
+                  ) : null}
                   <ITxt ctx={ctx} item={pl} k="text" className="mt-4 text-[12.5px] leading-[1.65] text-[#4b4b4b]" />
                 </div>
               </El>
@@ -292,14 +320,6 @@ export function ModernMasterPlan({ block }: { block: BlockConfig }) {
         <SplitHead ctx={ctx} descKey="subtitle" />
         <El block={ctx.block} id={part(ctx.block, "plan")} className="relative mt-12 @3xl:mt-16 overflow-hidden rounded-[28px] aspect-[4/3] @md:aspect-[1137/516] bg-[#e9ece6]">
           <Pic src={str(ctx.p.image)} alt={str(ctx.p.title)} className="absolute inset-0 w-full h-full" />
-          {flag(ctx.p.showCompass, true) ? (
-            <span aria-hidden className="absolute right-[5%] top-[5%] flex flex-col items-center text-white [filter:drop-shadow(0_1px_3px_rgba(0,0,0,0.5))]">
-              <span className="relative block w-7 h-7 @3xl:w-8 @3xl:h-8 rounded-full border-2 border-white">
-                <span className="absolute left-1/2 top-0 h-1/2 w-0.5 -translate-x-1/2 bg-white" />
-              </span>
-              <span className="mt-1 text-[15px] @3xl:text-[18px] font-bold leading-none">N</span>
-            </span>
-          ) : null}
         </El>
       </MWrap>
     </Shell>
