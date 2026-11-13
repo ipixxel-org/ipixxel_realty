@@ -392,6 +392,103 @@ function FooterContact({ block, p, data }: FooterViewProps) {
   )
 }
 
+const DISCLAIMER_SAMPLE =
+  'This is only for information purposes and does not constitute any offer or contract. Customers are advised to have their independent evaluation. Artistic impressions shown are indicative only and actual may differ. All information, plans and specifications are subject to change as may be decided by the Promoter or any competent authority.'
+
+/** Optional side logo for the disclaimer footer; nothing renders until an image is set. */
+function SideLogo({ block, id, src, className }: { block: BlockConfig; id: string; src: string; className: string }) {
+  return src ? (
+    <El block={block} id={id} className={className}>
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img src={src} alt="" className="max-h-16 w-auto object-contain" />
+    </El>
+  ) : null
+}
+
+/**
+ * Real-estate legal footer: big phone number between two rules, QR code, RERA
+ * number, disclaimer paragraph and a bottom line of links + credit. Optional
+ * logos on the left and right. Sample text shows until a field is set (even to
+ * empty, which hides it).
+ */
+function FooterDisclaimer({ block, p, data }: FooterViewProps) {
+  const phone = optionalText(p.phone, '+91 98765 43210')
+  const rera = optionalText(p.reraText, 'Project RERA No. P0000000000000')
+  const disclaimer = optionalText(p.disclaimer, DISCLAIMER_SAMPLE)
+  const qr = str(p.qrImage)
+  const leftLogo = str(p.leftLogoImage)
+  const rightLogo = str(p.rightLogoImage)
+  const copyright = str(p.copyright)
+  const hasLogos = Boolean(leftLogo || rightLogo)
+
+  return (
+    <footer className="px-6 @md:px-10 py-12 bg-bg-2/60 text-center">
+      {/* Shared footer fields, only when the user set them (not in the design by default). */}
+      {str(p.logo) || str(p.logoImage) ? (
+        <div className="mb-3 flex justify-center"><Brand block={block} p={p} size="md" /></div>
+      ) : null}
+      <Tagline block={block} p={p} sample={false} className="text-[12px] text-text-3 leading-relaxed max-w-2xl mx-auto mb-6" />
+      <div className={`max-w-5xl mx-auto ${hasLogos ? 'grid grid-cols-2 @3xl:grid-cols-[1fr_minmax(0,3fr)_1fr] items-center gap-6' : ''}`}>
+        <SideLogo block={block} id="footer:leftLogo" src={leftLogo} className="flex justify-start @3xl:justify-center" />
+        <div className={hasLogos ? 'col-span-2 @3xl:col-span-1 row-start-2 @3xl:row-start-1 @3xl:col-start-2' : ''}>
+          {phone ? (
+            // The two lines around the phone are their own element ("Divider"),
+            // so Style → Border colour recolours them.
+            <El block={block} id="footer:divider" className="border-y border-border-default py-4">
+              <El block={block} id="footer:phone" as="a" href={`tel:${phone.replace(/[^\d+]/g, '')}`} className="block font-display text-3xl @md:text-4xl font-semibold tracking-wider text-green">
+                {phone}
+              </El>
+            </El>
+          ) : null}
+          {qr ? (
+            <El block={block} id="footer:qr" className="flex justify-center mt-4">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src={qr} alt="QR code" className="w-16 h-16 object-contain" />
+            </El>
+          ) : null}
+        </div>
+        <SideLogo block={block} id="footer:rightLogo" src={rightLogo} className="flex justify-end @3xl:justify-center @3xl:col-start-3 @3xl:row-start-1" />
+      </div>
+
+      {str(p.address) || str(p.email) ? (
+        <div className="mt-5 flex flex-wrap items-center justify-center gap-x-4 gap-y-1 text-[12px] text-text-2">
+          {str(p.address) ? <El block={block} id="footer:address" as="span" className="whitespace-pre-line">{str(p.address)}</El> : null}
+          {str(p.email) ? <El block={block} id="footer:email" as="span">{str(p.email)}</El> : null}
+        </div>
+      ) : null}
+      {rera ? (
+        <El block={block} id="footer:rera" as="p" className="mt-6 text-[12px] tracking-wide text-text-2">
+          {rera}
+        </El>
+      ) : null}
+      {disclaimer ? (
+        <El block={block} id="footer:disclaimer" as="p" className="mt-6 max-w-6xl mx-auto text-[11.5px] leading-relaxed tracking-wide text-text-3 whitespace-pre-line">
+          {disclaimer}
+        </El>
+      ) : null}
+      {data.links.length || copyright ? (
+        <div className="mt-6 flex flex-wrap items-center justify-center gap-x-2 gap-y-1 text-[12px] tracking-wide text-text-2">
+          {data.links.map((link, i) => (
+            <span key={link.id} className="inline-flex items-center gap-2">
+              {i > 0 ? <span aria-hidden="true">|</span> : null}
+              <El block={block} id={link.id} as="a" {...linkProps(link.url)} className="hover:text-text-0 transition-colors">
+                {link.label}
+              </El>
+            </span>
+          ))}
+          {copyright ? (
+            <span className="inline-flex items-center gap-2">
+              {data.links.length ? <span aria-hidden="true">|</span> : null}
+              <Copyright block={block} p={p} className="" />
+            </span>
+          ) : null}
+        </div>
+      ) : null}
+      {data.socials.length ? <div className="mt-4 flex justify-center"><Socials block={block} socials={data.socials} round /></div> : null}
+    </footer>
+  )
+}
+
 export function FooterBlock({ block }: { block: BlockConfig }) {
   const p = block.props as Record<string, unknown>
   const view = { block, p, data: footerData(p) }
@@ -405,6 +502,8 @@ export function FooterBlock({ block }: { block: BlockConfig }) {
       return <FooterPremium {...view} />
     case 'contact':
       return <FooterContact {...view} />
+    case 'disclaimer':
+      return <FooterDisclaimer {...view} />
     default:
       return <FooterSimple {...view} />
   }

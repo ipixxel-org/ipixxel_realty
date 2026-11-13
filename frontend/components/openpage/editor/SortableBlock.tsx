@@ -21,6 +21,7 @@ const blockLabels: Record<string, string> = {
   navbar: "Header",
   footer: "Footer",
   "project-banner": "Hero",
+  "ipixxel-hero": "Hero",
   "property-details": "Highlights",
   "project-overview": "About",
   "unit-config": "Unit types",

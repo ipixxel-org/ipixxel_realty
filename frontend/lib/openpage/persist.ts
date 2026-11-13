@@ -444,6 +444,23 @@ export async function loadTemplate(id: string, resource: Resource = "template"):
   }
 }
 
+/**
+ * Published template for anyone (no login) — GET /templates/:id.
+ * The backend only returns published landing templates here, never drafts or
+ * thank-you pages. No localStorage fallback: visitors always see the live copy.
+ * Returns null when the template is missing or not published.
+ */
+export async function loadPublicTemplate(id: string): Promise<LandingPageData | null> {
+  if (!id) return null;
+  try {
+    const raw = await apiFetch<ApiTemplate>(`/templates/${encodeURIComponent(id)}`);
+    applyLandingPagePropertyFromConfig(null);
+    return fromApiTemplate(raw);
+  } catch {
+    return null;
+  }
+}
+
 export interface CreateTemplateInput {
   name: string;
   slug?: string;
@@ -619,6 +636,21 @@ async function patchTemplate(id: string, record: LandingPageData): Promise<Landi
       category: record.category,
       content: toContentBody(record),
     }),
+  });
+  const updated = fromApiTemplate(raw);
+  saveLocalBackup(updated);
+  return updated;
+}
+
+/** Publish / Unpublish from the templates list: sends only `status`, so the
+ *  server checks the Publish permission and leaves the content as it is. */
+export async function setTemplateStatus(
+  id: string,
+  status: LandingPageData["status"],
+): Promise<LandingPageData> {
+  const raw = await apiFetch<ApiTemplate>(`${TEMPLATES_PATH}/${encodeURIComponent(id)}`, {
+    method: "PATCH",
+    body: JSON.stringify({ status }),
   });
   const updated = fromApiTemplate(raw);
   saveLocalBackup(updated);

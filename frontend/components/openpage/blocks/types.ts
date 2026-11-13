@@ -88,7 +88,24 @@ export type RealEstateBlockType =
   | "download-brochure"
   | "site-visit"
   | "custom-section"
-  | "property-carousel";
+  | "property-carousel"
+  | "visual-journey"
+  // iPixxel Realty → Hero (ready-made hero designs, picked by variant).
+  | "ipixxel-hero"
+  // iPixxel Realty section widgets (lib/openpage/ipixxel-blocks.ts).
+  | "ipx-overview"
+  | "ipx-highlights"
+  | "ipx-amenities"
+  | "ipx-pricing"
+  | "ipx-floorplans"
+  | "ipx-masterplan"
+  | "ipx-specs"
+  | "ipx-gallery"
+  | "ipx-location"
+  | "ipx-about"
+  | "ipx-cta"
+  | "ipx-form"
+  | "ipx-footer";
 
 export type BlockType = GenericBlockType | RealEstateBlockType;
 

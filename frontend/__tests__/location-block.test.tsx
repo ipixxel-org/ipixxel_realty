@@ -77,4 +77,47 @@ describe("LocationBlock", () => {
     expect(screen.getByRole("heading", { name: "Advantages" }).className).toContain("text-white");
     expect(screen.getByText("Noida-Greater Noida Expressway").className).toContain("text-white");
   });
+
+  it("advantages layout groups places under category cards with a map button", () => {
+    render(
+      <LocationBlock
+        block={locationBlock(
+          {
+            title: "Location Advantages",
+            subtitle: "An Exclusive Address",
+            embedUrl: "https://www.google.com/maps/place/Ravet",
+            ctaText: "Google Map Location",
+            items: [
+              { _id: "it_1", title: "Hospitals", meta: "", places: ["Global Hospital - 2 Mins", "Ojas Hospital - 3 Mins"] },
+              { _id: "it_2", title: "Transport", meta: "", places: ["Akurdi Railway Station - 4 Mins"] },
+            ],
+          },
+          {},
+          "advantages",
+        )}
+      />,
+    );
+
+    expect(screen.getByRole("heading", { name: "Location Advantages" })).toBeTruthy();
+    expect(screen.getByText("Hospitals")).toBeTruthy();
+    expect(screen.getByText("Global Hospital - 2 Mins")).toBeTruthy();
+    expect(screen.getByText("Ojas Hospital - 3 Mins")).toBeTruthy();
+    expect(screen.getByText("Akurdi Railway Station - 4 Mins")).toBeTruthy();
+    expect(screen.getByRole("link", { name: /Google Map Location/ }).getAttribute("href")).toBe(
+      "https://www.google.com/maps/place/Ravet",
+    );
+  });
+
+  it("other layouts ignore the advantages-only places list", () => {
+    render(
+      <LocationBlock
+        block={locationBlock({
+          items: [{ _id: "it_1", title: "Hospitals", meta: "", places: ["Global Hospital - 2 Mins", "Ojas Hospital - 3 Mins"] }],
+        })}
+      />,
+    );
+
+    expect(screen.getByText("Hospitals")).toBeTruthy();
+    expect(screen.queryByText(/Global Hospital/)).toBeNull();
+  });
 });

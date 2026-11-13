@@ -1,4 +1,22 @@
 import type { ItemFieldDef } from "./field-helpers";
+import { createElement } from "react";
+import { IPX_ITEM_FIELDS, IPX_ITEM_TEMPLATES } from "@/lib/openpage/ipixxel-blocks";
+import { LinkLinesField } from "./LinkLinesField";
+
+/**
+ * Modern footer link columns: the "Links" textarea becomes a Label / URL /
+ * Link target list (like the header menu); it still stores the same text.
+ */
+const IPX_FOOTER_COLUMN_FIELDS: ItemFieldDef[] = (IPX_ITEM_FIELDS["ipx-footer.columns"] ?? []).map((f) =>
+  f.key === "links"
+    ? {
+        ...f,
+        label: "Links",
+        render: (value, update) =>
+          createElement(LinkLinesField, { value: typeof value === "string" ? value : "", onChange: update, allowHeadings: true }),
+      }
+    : f,
+);
 
 /**
  * List-item fields for the Elementor-style elements
@@ -85,10 +103,24 @@ export const ELEMENT_ITEM_FIELDS: Record<string, ItemFieldDef[]> = {
     { key: "url", label: "Link", kind: "text", placeholder: "https://… , mailto: or tel:" },
     { key: "label", label: "Label (tooltip)", kind: "text" },
   ],
+  "visual-journey.images": [
+    { key: "src", label: "Image", kind: "image" },
+    { key: "caption", label: "Image name", kind: "text", placeholder: "e.g. Pickle Ball Court" },
+    { key: "description", label: "Paragraph below image (optional)", kind: "textarea", rows: 3 },
+    { key: "badge", label: "Corner label (optional)", kind: "text", placeholder: "e.g. AI Impression" },
+    { key: "alt", label: "Alt text (optional)", kind: "text" },
+  ],
+  "ipixxel-hero.slides": [
+    { key: "src", label: "Slide image", kind: "image" },
+    { key: "alt", label: "Alt text (optional)", kind: "text" },
+  ],
   "tabs.items": [
     { key: "label", label: "Tab title", kind: "text" },
     { key: "content", label: "Content", kind: "textarea", rows: 4 },
   ],
+  // iPixxel Realty section widgets.
+  ...IPX_ITEM_FIELDS,
+  "ipx-footer.columns": IPX_FOOTER_COLUMN_FIELDS,
 };
 
 /** Blank item used by "Add item" when a list is empty. */
@@ -105,6 +137,9 @@ export const ELEMENT_ITEM_TEMPLATES: Record<string, Record<string, Record<string
   slider: { images: { src: "", alt: "", caption: "" } },
   "social-icons": { icons: { platform: "facebook", url: "", label: "" } },
   tabs: { items: { label: "", content: "" } },
+  "visual-journey": { images: { src: "", caption: "", description: "", badge: "", alt: "" } },
+  "ipixxel-hero": { slides: { src: "", alt: "" } },
+  ...IPX_ITEM_TEMPLATES,
 };
 
 /** Styleable parts of each list item ("Style …" buttons in the list editor). */
@@ -117,4 +152,5 @@ export const ELEMENT_ITEM_SUB_ELEMENTS: Record<string, Record<string, Array<{ ke
   posts: { items: [{ key: "title", label: "Title" }, { key: "excerpt", label: "Summary" }] },
   portfolio: { items: [{ key: "title", label: "Title" }] },
   reviews: { items: [{ key: "text", label: "Review" }, { key: "author", label: "Name" }] },
+  "visual-journey": { images: [{ key: "caption", label: "Image name" }, { key: "description", label: "Paragraph" }, { key: "badge", label: "Corner label" }] },
 };

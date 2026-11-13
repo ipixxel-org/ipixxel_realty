@@ -82,18 +82,30 @@ export function OpenPageStudio({ resource = "template" }: { resource?: Resource 
   const returnUrl = searchParams.get("returnUrl") || searchParams.get("returnTo") || null;
   const router = useRouter();
   const { user: authUser, hasPermission } = useAuth();
-  // Org landing pages follow the Landing Pages pills; Super Admin templates
-  // are gated by the admin console, so every action stays available there.
+  // Org landing pages follow the Landing Pages pills. Super Admin templates
+  // follow the Platform Team Templates pills: Edit opens the builder (save,
+  // rename, uploads), Publish covers Publish and Unpublish. Super Admin has
+  // every pill.
   const isOrgPage = resource === "landing-page";
-  const canEditPage = !isOrgPage || hasPermission("landing_pages", "edit");
-  const canPublishPage = !isOrgPage || hasPermission("landing_pages", "activate");
-  const canUnpublishPage = !isOrgPage || hasPermission("landing_pages", "deactivate");
+  const canEditTemplate =
+    hasPermission("admin_templates", "view") && hasPermission("admin_templates", "edit");
+  const canPublishTemplate =
+    hasPermission("admin_templates", "view") && hasPermission("admin_templates", "approve");
+  const canEditPage = isOrgPage ? hasPermission("landing_pages", "edit") : canEditTemplate;
+  const canPublishPage = isOrgPage ? hasPermission("landing_pages", "activate") : canPublishTemplate;
+  const canUnpublishPage = isOrgPage ? hasPermission("landing_pages", "deactivate") : canPublishTemplate;
+  // Platform permissions arrive with the session; don't send a member away
+  // before they are known.
+  const permissionsKnown =
+    isOrgPage ||
+    Boolean(authUser?.platformUnrestricted || authUser?.roleKeys?.includes("super_admin")) ||
+    Object.keys(authUser?.permissions ?? {}).length > 0;
 
-  // Editing (saving, uploads) needs Landing Pages > Edit — send anyone
-  // without it back to the list instead of into a builder that can't save.
+  // Editing (saving, uploads) needs Edit — send anyone without it back to
+  // the list instead of into a builder that can't save.
   useEffect(() => {
-    if (authUser && !canEditPage) router.replace("/org/landing-pages");
-  }, [authUser, canEditPage, router]);
+    if (authUser && permissionsKnown && !canEditPage) router.replace(HOME_PATH[resource]);
+  }, [authUser, permissionsKnown, canEditPage, router, resource]);
   const [module, setModule] = useState<ModuleKey>("builder");
   const [canUndo, setCanUndo] = useState(false);
   const [canRedo, setCanRedo] = useState(false);
@@ -573,7 +585,11 @@ export function OpenPageStudio({ resource = "template" }: { resource?: Resource 
         );
       case "settings":
         return activePage ? (
-          <PageSettingsModule page={activePage} onPage={(patch) => patchPage(activePage.id, patch)} />
+          <PageSettingsModule
+            page={activePage}
+            onPage={(patch) => patchPage(activePage.id, patch)}
+            canChangeStatus={isOrgPage || canPublishTemplate}
+          />
         ) : (
           <div className="ps-studio-boot">{pageReady ? "This page could not be opened." : "Opening page…"}</div>
         );

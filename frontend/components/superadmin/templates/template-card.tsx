@@ -34,20 +34,28 @@ export function TemplateCard({
   onUnpublish,
   onRemove,
   onQuickPreview,
+  canManageSettings = true,
 }: {
   row: TemplateRow;
   plans?: (TemplatePlan & { id?: string })[];
   delay?: number;
-  onEdit: () => void;
+  /** Left out when the viewer can't edit: Edit / Open Builder are hidden and
+   *  the title opens the preview instead. */
+  onEdit?: () => void;
   onPreview: () => void;
   onDuplicate?: () => void;
   onPublish?: () => void;
   onUnpublish?: () => void;
   onRemove?: () => void;
   onQuickPreview?: () => void;
+  canManageSettings?: boolean;
 }) {
   const isPreset = row.kind === "preset";
   const published = row.status === "published";
+  const showManageSettings = canManageSettings && Boolean(row.pageId || isPreset);
+  const showPublishToggle = published ? Boolean(onUnpublish) : Boolean(onPublish);
+  // Hide the ⋮ button when the viewer has none of its actions.
+  const hasMenu = showManageSettings || Boolean(onDuplicate) || showPublishToggle || Boolean(onRemove);
   const [menuOpen, setMenuOpen] = useState(false);
   const [hovered, setHovered] = useState(false);
 
@@ -145,6 +153,7 @@ export function TemplateCard({
                 padding: 16,
               }}
             >
+              {onEdit ? (
               <button
                 type="button"
                 onClick={onEdit}
@@ -171,6 +180,7 @@ export function TemplateCard({
               >
                 <Pencil size={14} /> Open Builder
               </button>
+              ) : null}
 
               <button
                 type="button"
@@ -217,7 +227,7 @@ export function TemplateCard({
             <div style={{ minWidth: 0, flex: 1 }}>
               <button
                 type="button"
-                onClick={onEdit}
+                onClick={onEdit ?? onQuickPreview ?? onPreview}
                 style={{
                   border: "none",
                   background: "transparent",
@@ -310,6 +320,7 @@ export function TemplateCard({
               position: "relative",
             }}
           >
+            {onEdit ? (
             <button
               type="button"
               onClick={onEdit}
@@ -326,6 +337,7 @@ export function TemplateCard({
             >
               <Pencil size={13} /> Edit
             </button>
+            ) : null}
 
             <button
               type="button"
@@ -345,6 +357,7 @@ export function TemplateCard({
             </button>
 
             {/* Kebab More Menu */}
+            {hasMenu ? (
             <div style={{ position: "relative" }}>
               <button
                 type="button"
@@ -380,7 +393,7 @@ export function TemplateCard({
                     gap: 2,
                   }}
                 >
-                  {row.pageId || isPreset ? (
+                  {showManageSettings ? (
                     <Link
                       href={manageHref(row.pageId || row.key)}
                       className="btn btn-ghost btn-sm"
@@ -455,6 +468,7 @@ export function TemplateCard({
                 </div>
               )}
             </div>
+            ) : null}
           </div>
         </div>
       </div>

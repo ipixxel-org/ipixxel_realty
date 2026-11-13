@@ -22,6 +22,7 @@ import type { Device } from "@/lib/openpage/types";
 import { newElementId, migrateBlocksListIds, ancestorItemIds, itemAt, listElementId, resolveList, type ListRef } from "@/lib/openpage/element-style";
 import { applyBlocksDefaults } from "@/lib/openpage/block-factory";
 import { FLEX_LAYOUT_KEYS, normalizeLayoutValue, type FlexLayoutPatch } from "@/lib/openpage/flex-layout";
+import { COLUMN_STYLE_KEYS, type ColumnStyle } from "@/lib/openpage/column-style";
 
 export type { ListRef };
 
@@ -95,6 +96,8 @@ interface ConfigState {
   updateColumnMobileWidth: (sectionBlockId: string, colIndex: number, width: number) => void
   /** Set (or clear with `undefined`) a column's Items layout: direction / justifyContent / alignItems. */
   updateColumnLayout: (sectionBlockId: string, colIndex: number, patch: FlexLayoutPatch) => void
+  /** Set (or clear with "" / undefined) one column's own background, padding and radius. */
+  updateColumnStyle: (sectionBlockId: string, colIndex: number, patch: ColumnStyle) => void
   addColumn: (sectionBlockId: string) => void
   removeColumn: (sectionBlockId: string, colIndex: number) => void
   addPage: (name: string, path: string) => string
@@ -946,6 +949,27 @@ export const useConfigStore = create<ConfigState>()((set, get) => ({
               // store nothing for it.
               const value = normalizeLayoutValue(key, patch[key])
               if (value !== undefined) cols[colIndex][key] = value
+              else delete cols[colIndex][key]
+            }
+            draft.blocks = page.blocks
+          }),
+        })),
+
+      updateColumnStyle: (sectionBlockId, colIndex, patch) =>
+        set((state) => ({
+          ...pushUndo(state, 'Update column style'),
+          config: produce(withPages(state.config), (draft) => {
+            const page = draft.pages!.find((p) => p.id === state.activePageId)
+            if (!page) return
+            const section = findSectionBlock(page.blocks, sectionBlockId)
+            if (!section || section.type !== 'columns') return
+            const cols = section.props.columns as Array<Record<string, unknown>> | undefined
+            if (!cols || !cols[colIndex]) return
+            for (const key of COLUMN_STYLE_KEYS) {
+              if (!(key in patch)) continue
+              const raw = patch[key]
+              const value = typeof raw === 'string' ? raw.trim() : ''
+              if (value) cols[colIndex][key] = value
               else delete cols[colIndex][key]
             }
             draft.blocks = page.blocks

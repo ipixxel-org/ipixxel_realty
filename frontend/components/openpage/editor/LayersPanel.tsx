@@ -30,6 +30,7 @@ import type { BlockType } from "@/components/openpage/blocks/types";
 import { EMPTY_GLOBAL_WIDGETS } from "./AdvancedPanel";
 import { FormBuilder } from "./FormBuilder";
 import { NavigatorTree } from "./NavigatorTree";
+import { useIsTemplateBuilder } from "@/lib/openpage/use-builder-scope";
 
 const blockIcons: Partial<Record<BlockType, typeof Layout>> = {
   section: Square,
@@ -49,6 +50,21 @@ const blockIcons: Partial<Record<BlockType, typeof Layout>> = {
   countdown: Timer,
   "off-canvas": PanelRightOpen,
   "property-carousel": GalleryHorizontal,
+  "visual-journey": Images,
+  "ipixxel-hero": Home,
+  "ipx-overview": FileText,
+  "ipx-highlights": Sparkles,
+  "ipx-amenities": Trees,
+  "ipx-pricing": DollarSign,
+  "ipx-floorplans": LayoutGrid,
+  "ipx-masterplan": Layout,
+  "ipx-specs": ClipboardList,
+  "ipx-gallery": Images,
+  "ipx-location": MapPin,
+  "ipx-about": Building2,
+  "ipx-cta": Megaphone,
+  "ipx-form": ClipboardList,
+  "ipx-footer": PanelBottom,
   portfolio: Briefcase,
   posts: Newspaper,
   reviews: MessageSquareQuote,
@@ -149,7 +165,18 @@ export const PICKER_GROUPS: { id: string; title: string; defaultOpen: boolean; t
     id: "re",
     title: "Real Estate",
     defaultOpen: true,
-    types: ["project-banner", "project-overview", "property-details", "unit-config", "amenities", "floor-plans", "location", "re-pricing", "developer", "testimonials"],
+    types: ["project-banner", "project-overview", "property-details", "unit-config", "amenities", "floor-plans", "location", "re-pricing", "developer", "testimonials", "visual-journey"],
+  },
+  {
+    // Ready-made iPixxel Realty section designs (pick one from the widget's
+    // Template dropdown, then override any style).
+    id: "ipixxel",
+    title: "iPixxel Realty",
+    defaultOpen: true,
+    types: [
+      "ipixxel-hero", "ipx-overview", "ipx-highlights", "ipx-amenities", "ipx-pricing", "ipx-floorplans",
+      "ipx-masterplan", "ipx-specs", "ipx-gallery", "ipx-location", "ipx-about", "ipx-cta", "ipx-form", "ipx-footer",
+    ],
   },
   {
     id: "highlights",
@@ -193,6 +220,20 @@ const GRID_LABELS: Partial<Record<BlockType, string>> = {
   location: "Google Maps",
   "html-code": "HTML",
   "project-banner": "Hero / Banner",
+  "ipixxel-hero": "Hero",
+  "ipx-overview": "Overview",
+  "ipx-highlights": "Highlights",
+  "ipx-amenities": "Amenities",
+  "ipx-pricing": "Pricing",
+  "ipx-floorplans": "Floor Plans",
+  "ipx-masterplan": "Master / Site Plan",
+  "ipx-specs": "Specifications",
+  "ipx-gallery": "Gallery",
+  "ipx-location": "Location / Map",
+  "ipx-about": "About Developer",
+  "ipx-cta": "CTA / Banner",
+  "ipx-form": "Enquiry Form",
+  "ipx-footer": "Footer",
   "unit-config": "Property Listing",
   "image-box": "Property Card",
   "property-search": "Search Form",
@@ -224,6 +265,7 @@ export const blockLabels: Partial<Record<BlockType, string>> = {
   countdown: 'Countdown',
   'off-canvas': 'Off-canvas',
   'property-carousel': 'Property carousel',
+  'visual-journey': 'Visual Journey',
   portfolio: 'Portfolio',
   posts: 'Updates / blog',
   reviews: 'Reviews',
@@ -297,6 +339,21 @@ const WIDGET_COLORS: Partial<Record<BlockType, string>> = {
   "flip-box": "#a78bfa",
   "off-canvas": "#f472b6",
   "property-carousel": "#22d3ee",
+  "visual-journey": "#22d3ee",
+  "ipixxel-hero": "#6d5dfc",
+  "ipx-overview": "#6d5dfc",
+  "ipx-highlights": "#6d5dfc",
+  "ipx-amenities": "#6d5dfc",
+  "ipx-pricing": "#6d5dfc",
+  "ipx-floorplans": "#6d5dfc",
+  "ipx-masterplan": "#6d5dfc",
+  "ipx-specs": "#6d5dfc",
+  "ipx-gallery": "#6d5dfc",
+  "ipx-location": "#6d5dfc",
+  "ipx-about": "#6d5dfc",
+  "ipx-cta": "#6d5dfc",
+  "ipx-form": "#6d5dfc",
+  "ipx-footer": "#6d5dfc",
   portfolio: "#a78bfa",
   posts: "#a78bfa",
   reviews: "#34d399",
@@ -683,9 +740,13 @@ export function LayersPanel() {
   const { addBlock } = useConfigStore()
   const { selectBlock, toggleLeftSidebar } = useEditorStore()
   const [showPopover, setShowPopover] = useState(false)
-  const tab = useEditorStore((s) => s.leftTab)
+  // "AI Gen" tab is hidden for org admins; only Super Admin templates keep it.
+  const showAiTab = useIsTemplateBuilder()
+  const tabDefs = showAiTab ? TAB_DEFS : TAB_DEFS.filter((t) => t.id !== 'ai')
+  const storedTab = useEditorStore((s) => s.leftTab)
+  const tab: Tab = !showAiTab && storedTab === 'ai' ? 'components' : storedTab
   const setTab = useEditorStore((s) => s.setLeftTab)
-  const activeDef = TAB_DEFS.find((t) => t.id === tab) ?? TAB_DEFS.find((t) => t.id === 'components')!
+  const activeDef = tabDefs.find((t) => t.id === tab) ?? tabDefs.find((t) => t.id === 'components')!
 
   function handleAddBlock(type: BlockType) {
     const meta = blockMetadata.find((b) => b.type === type)
@@ -702,7 +763,7 @@ export function LayersPanel() {
     <div className="flex flex-1 min-h-0 overflow-hidden relative">
       {/* Icon nav rail */}
       <nav className="w-[60px] shrink-0 h-full bg-bg-1 border-r border-border-default flex flex-col items-center py-2.5 gap-1 z-10" aria-label="Builder tools">
-        {TAB_DEFS.map(({ id, label, icon: Icon }) => {
+        {tabDefs.map(({ id, label, icon: Icon }) => {
           const isActive = tab === id
           return (
             <button

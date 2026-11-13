@@ -17,6 +17,8 @@ import { CUSTOM_FIELDS_KEY, customFieldKeys } from "@/components/openpage/blocks
 import { FlexItemsControls } from "./FlexItemsControls";
 import { FLEX_LAYOUT_KEYS, readFlexLayout } from "@/lib/openpage/flex-layout";
 import { isDivBlock } from "@/lib/openpage/block-factory";
+import { readColumnStyle } from "@/lib/openpage/column-style";
+import { ColumnBackgroundControls } from "./ColumnBackgroundControls";
 import {
   FLOOR_PLAN_FIELDS,
   AMENITY_FIELDS,
@@ -33,6 +35,9 @@ import {
   type ItemFieldDef,
 } from "./field-helpers";
 import { ELEMENT_ITEM_FIELDS, ELEMENT_ITEM_SUB_ELEMENTS, ELEMENT_ITEM_TEMPLATES } from "./element-fields";
+import { parseNavLines, serializeNavLines, type NavLine } from "@/lib/openpage/nav-lines";
+import { LinkLinesField } from "./LinkLinesField";
+import { IPX_FIELD_VARIANTS, IPX_INSPECTOR_FIELDS, IPX_KNOWN_VARIANTS, ipxItemFieldsFor } from "@/lib/openpage/ipixxel-blocks";
 
 /** Explicit item fields for a block's list, keyed `${blockType}.${propKey}`. */
 const ITEM_FIELDS: Record<string, ItemFieldDef[]> = {
@@ -54,7 +59,7 @@ const ITEM_FIELDS: Record<string, ItemFieldDef[]> = {
 interface FieldDef {
   key: string
   label: string
-  type: 'text' | 'textarea' | 'select' | 'array-strings' | 'array-items' | 'image' | 'icon' | 'form-select' | 'toggle' | 'nav-menu' | 'number' | 'color'
+  type: 'text' | 'textarea' | 'select' | 'array-strings' | 'array-items' | 'image' | 'icon' | 'form-select' | 'toggle' | 'nav-menu' | 'nav-lines' | 'link-lines' | 'number' | 'color'
   options?: string[]
 }
 
@@ -87,7 +92,8 @@ const ITEM_SUB_ELEMENTS: Partial<Record<string, Record<string, Array<{ key: stri
   're-pricing': { items: [{ key: 'name', label: 'Name' }, { key: 'price', label: 'Price' }, { key: 'meta', label: 'Note' }, { key: 'description', label: 'Description' }, { key: 'cta', label: 'Button' }] },
   testimonials: { items: [{ key: 'quote', label: 'Quote' }, { key: 'name', label: 'Name' }, { key: 'role', label: 'Role' }, { key: 'avatar', label: 'Photo' }] },
   developer: { stats: [{ key: 'value', label: 'Value' }, { key: 'label', label: 'Label' }] },
-  location: { items: [{ key: 'title', label: 'Title' }, { key: 'meta', label: 'Meta' }] },
+  // "Icon" is the category pin in the advantages layout.
+  location: { items: [{ key: 'icon', label: 'Icon' }, { key: 'title', label: 'Title' }, { key: 'meta', label: 'Meta' }] },
   'lead-form': { benefits: [{ key: 'title', label: 'Title' }, { key: 'description', label: 'Description' }] },
   gallery: { images: [{ key: 'image', label: 'Image' }, { key: 'caption', label: 'Caption' }, { key: 'meta', label: 'Meta' }] },
   'icon-box': { items: [{ key: 'icon', label: 'Icon' }, { key: 'title', label: 'Title' }, { key: 'description', label: 'Description' }] },
@@ -126,7 +132,8 @@ function ctaFields(
   return fields
 }
 
-const blockFields: Partial<Record<BlockType, { sections: { title: string; fields: FieldDef[] }[] }>> = {
+// `variants`: show that section only for these templates (omit = always shown).
+const blockFields: Partial<Record<BlockType, { sections: { title: string; fields: FieldDef[]; variants?: string[] }[] }>> = {
   navbar: {
     sections: [
       {
@@ -292,7 +299,15 @@ const blockFields: Partial<Record<BlockType, { sections: { title: string; fields
     // Every template shows each field below once it has a value.
     sections: [
       { title: 'Layout', fields: [
-        { key: 'variant', label: 'Template', type: 'select', options: ['simple', 'multi-column', 'minimal', 'premium', 'contact'] },
+        { key: 'variant', label: 'Template', type: 'select', options: ['simple', 'multi-column', 'minimal', 'premium', 'contact', 'disclaimer'] },
+      ]},
+      // Only the "disclaimer" template uses these; hidden for the others.
+      { title: 'Disclaimer Footer', variants: ['disclaimer'], fields: [
+        { key: 'leftLogoImage', label: 'Left logo (optional)', type: 'image' },
+        { key: 'rightLogoImage', label: 'Right logo (optional)', type: 'image' },
+        { key: 'qrImage', label: 'QR code image', type: 'image' },
+        { key: 'reraText', label: 'RERA number line (clear to hide)', type: 'text' },
+        { key: 'disclaimer', label: 'Disclaimer text (clear to hide)', type: 'textarea' },
       ]},
       { title: 'Brand', fields: [
         { key: 'logoImage', label: 'Logo', type: 'image' },
@@ -656,7 +671,7 @@ const blockFields: Partial<Record<BlockType, { sections: { title: string; fields
   },
   location: {
       sections: [{ title: 'Layout', fields: [
-        { key: 'variant', label: 'Template', type: 'select', options: ['split-map', 'list', 'map-only', 'cards', 'editorial'] },
+        { key: 'variant', label: 'Template', type: 'select', options: ['split-map', 'list', 'map-only', 'cards', 'editorial', 'advantages'] },
         // Bullet before each nearby place; the location pin by default.
         { key: 'bulletStyle', label: 'Nearby bullet', type: 'select', options: ['pin', 'arrow', 'check', 'dot', 'number', 'none'] },
       ]}, { title: 'Content', fields: [
@@ -1124,6 +1139,132 @@ const blockFields: Partial<Record<BlockType, { sections: { title: string; fields
       ]},
     ],
   },
+  'visual-journey': {
+    sections: [
+      { title: 'Content', fields: [
+        { key: 'title', label: 'Heading', type: 'text' },
+        { key: 'description', label: 'Paragraph below heading (optional)', type: 'textarea' },
+        { key: 'showDivider', label: 'Show line under heading', type: 'toggle' },
+        { key: 'images', label: 'Images', type: 'array-items' },
+        { key: 'anchor', label: 'Section ID (menu scroll)', type: 'text' },
+      ]},
+      { title: 'Slider', fields: [
+        { key: 'imageHeight', label: 'Image height (px)', type: 'number' },
+        { key: 'imageRadius', label: 'Image corner radius (px)', type: 'number' },
+        { key: 'accentColor', label: 'Accent colour (heading, line, dot)', type: 'color' },
+        { key: 'arrowColor', label: 'Arrow colour', type: 'color' },
+        { key: 'autoplay', label: 'Autoplay', type: 'toggle' },
+        { key: 'interval', label: 'Autoplay interval (ms)', type: 'number' },
+      ]},
+      { title: 'Button (optional)', fields: ctaFields('button', 'Button', { textKey: 'buttonText', url: true }) },
+    ],
+  },
+  'ipixxel-hero': {
+    sections: [
+      { title: 'Layout', fields: [
+        { key: 'variant', label: 'Template', type: 'select', options: ['grand-band', 'skyline', 'offer-slider', 'emerald-slider', 'modern-form'] },
+        { key: 'accentColor', label: 'Accent colour (band / gold lines / buttons)', type: 'color' },
+      ]},
+      { title: 'Content', fields: [
+        { key: 'image', label: 'Background image (first slide)', type: 'image' },
+        { key: 'logo', label: 'Logo image', type: 'image' },
+        { key: 'logoText', label: 'Logo text (when no logo image)', type: 'text' },
+        { key: 'location', label: 'Location', type: 'text' },
+        { key: 'phone', label: 'Phone number', type: 'text' },
+        { key: 'disclaimer', label: 'Disclaimer', type: 'text' },
+        { key: 'anchor', label: 'Section ID (menu scroll)', type: 'text' },
+      ]},
+      { title: 'Grand band (template 1)', fields: [
+        { key: 'brandName', label: 'Brand name', type: 'text' },
+        { key: 'brandColor', label: 'Brand name colour', type: 'color' },
+        { key: 'brandNumber', label: 'Big number', type: 'text' },
+        { key: 'brandTitle', label: 'Project title', type: 'text' },
+        { key: 'brandSubtitle', label: 'Project subtitle', type: 'text' },
+        { key: 'headline', label: 'Tagline', type: 'text' },
+        { key: 'legalText', label: 'RERA / legal text (top right)', type: 'textarea' },
+        { key: 'qrImage', label: 'QR code image', type: 'image' },
+        { key: 'bandText', label: 'Price band text', type: 'text' },
+        { key: 'offerLabel', label: 'Offer card label', type: 'textarea' },
+        { key: 'offerValue', label: 'Offer card value', type: 'text' },
+      ]},
+      { title: 'Skyline (template 2)', fields: [
+        { key: 'logo2', label: 'Second logo image', type: 'image' },
+        { key: 'skylineTitle', label: 'Title', type: 'text' },
+        { key: 'stat1Label', label: 'Left stat label', type: 'text' },
+        { key: 'stat1Value', label: 'Left stat value', type: 'text' },
+        { key: 'stat2Label', label: 'Right stat label', type: 'text' },
+        { key: 'stat2Value', label: 'Right stat value', type: 'text' },
+        { key: 'tourText', label: 'Virtual tour text', type: 'text' },
+        { key: 'tourUrl', label: 'Virtual tour URL', type: 'text' },
+        { key: 'callText', label: 'Call text', type: 'text' },
+        { key: 'menuAnchor', label: 'Menu icon scrolls to (section ID)', type: 'text' },
+        { key: 'galleryText', label: 'Gallery button text', type: 'text' },
+        { key: 'galleryUrl', label: 'Gallery button URL (empty = #gallery)', type: 'text' },
+      ]},
+      { title: 'Enquire tab (template 2)', fields: [
+        ...ctaFields('primaryCta', 'Enquire tab', { textKey: 'primaryCta', url: true }),
+        { key: 'primaryAnchor', label: 'Scrolls to section ID (when no URL)', type: 'text' },
+      ]},
+      { title: 'Offer slider (template 3)', fields: [
+        { key: 'logoTagline', label: 'Logo tagline', type: 'text' },
+        { key: 'offerTitle', label: 'Title', type: 'text' },
+        { key: 'highlightText', label: 'Highlight (black box)', type: 'text' },
+        { key: 'benefitText', label: 'Benefit text', type: 'text' },
+        { key: 'benefitValue', label: 'Benefit amount', type: 'text' },
+        { key: 'benefitNote', label: 'Benefit note', type: 'text' },
+        { key: 'configText', label: 'Configuration tab', type: 'text' },
+        { key: 'priceText', label: 'Price', type: 'text' },
+        { key: 'validLabel', label: 'Validity label', type: 'text' },
+        { key: 'validValue', label: 'Validity date', type: 'text' },
+        { key: 'offerBadgeImage', label: 'Offer badge image (replaces text badge)', type: 'image' },
+        { key: 'badgeTop', label: 'Badge small text', type: 'text' },
+        { key: 'badgeTitle', label: 'Badge title', type: 'text' },
+        { key: 'badgeScript', label: 'Badge script text', type: 'text' },
+      ]},
+      { title: 'Slides & floating buttons (templates 3 & 4)', fields: [
+        { key: 'slides', label: 'More slides', type: 'array-items' },
+        { key: 'textOnAllSlides', label: 'Show offer text on every slide', type: 'toggle' },
+        { key: 'autoplay', label: 'Autoplay', type: 'toggle' },
+        { key: 'interval', label: 'Autoplay interval (ms)', type: 'number' },
+        { key: 'whatsapp', label: 'WhatsApp number (empty = phone number)', type: 'text' },
+        { key: 'whatsappIcon', label: 'WhatsApp icon (upload SVG / PNG; replaces the built-in icon)', type: 'image' },
+        { key: 'whatsappSize', label: 'WhatsApp icon size (px, 24–120; empty = auto)', type: 'number' },
+        { key: 'showFloatingButtons', label: 'Show call / WhatsApp buttons', type: 'toggle' },
+      ]},
+      { title: 'Emerald slider (template 4)', fields: [
+        { key: 'emeraldTitle', label: 'Title', type: 'text' },
+        { key: 'emeraldConfig', label: 'Configuration (left)', type: 'text' },
+        { key: 'emeraldPriceLabel', label: 'Price label', type: 'text' },
+        { key: 'emeraldPrice', label: 'Price', type: 'text' },
+        { key: 'emeraldPlan', label: 'Payment plan (right)', type: 'text' },
+        { key: 'emeraldRibbon', label: 'Offer ribbon', type: 'text' },
+      ]},
+      { title: 'Modern form (template 5)', fields: [
+        { key: 'modernNav', label: 'Menu items', type: 'nav-lines' },
+        { key: 'modernEyebrow', label: 'Small label above the title', type: 'text' },
+        { key: 'modernTitle', label: 'Title (new line = new line)', type: 'textarea' },
+        { key: 'modernText', label: 'Paragraph', type: 'textarea' },
+        { key: 'modernFormTitle', label: 'Form card title', type: 'text' },
+        { key: 'formId', label: 'Form (Form Builder)', type: 'form-select' },
+      ]},
+      { title: 'Menu button (template 5)', fields: [
+        ...ctaFields('modernNavCta', 'Menu button', { textKey: 'modernNavCta', url: true }),
+        { key: 'modernNavCtaAnchor', label: 'Scrolls to section ID (when no URL)', type: 'text' },
+      ]},
+      { title: 'Main button (template 5)', fields: [
+        ...ctaFields('modernCta', 'Main button', { textKey: 'modernCta', url: true }),
+        { key: 'modernCtaAnchor', label: 'Scrolls to section ID (when no URL)', type: 'text' },
+      ]},
+      { title: 'Second link (template 5)', fields: [
+        ...ctaFields('modernLink', 'Second link', { textKey: 'modernLink', url: true }),
+        { key: 'modernLinkAnchor', label: 'Scrolls to section ID (when no URL)', type: 'text' },
+      ]},
+      { title: 'Header button (template 3)', fields: [
+        ...ctaFields('headerCta', 'Header button', { textKey: 'headerCta', url: true }),
+        { key: 'headerCtaAnchor', label: 'Scrolls to section ID (when no URL)', type: 'text' },
+      ]},
+    ],
+  },
   'property-carousel': {
     sections: [
       { title: 'Content', fields: [
@@ -1352,8 +1493,13 @@ const TYPE_ALIASES: Record<string, BlockType> = {
   're-contact': 'contact',
 };
 
+// iPixxel Realty section widgets keep their inspector fields in one place.
+Object.assign(blockFields, IPX_INSPECTOR_FIELDS as typeof blockFields);
+
 const KNOWN_VARIANTS: Record<string, string[]> = {
   'project-banner': ['split-form', 'overlay', 'centered', 'editorial', 'framed', 'asymmetric', 'info-bar', 'framed-center', 'split-curve', 'stats'],
+  'ipixxel-hero': ['grand-band', 'skyline', 'offer-slider', 'emerald-slider', 'modern-form'],
+  ...IPX_KNOWN_VARIANTS,
   'project-overview': ['split', 'centered', 'cards', 'timeline'],
   'property-details': ['grid', 'table', 'two-column', 'checklist'],
   'project-highlights': ['grid', 'table', 'two-column', 'checklist'],
@@ -1361,7 +1507,7 @@ const KNOWN_VARIANTS: Record<string, string[]> = {
   'floor-plans': ['cards', 'list', 'showcase'],
   'unit-config': ['cards', 'listings', 'table'],
   're-pricing': ['cards', 'simple', 'comparison', 'banner'],
-  'location': ['split-map', 'list', 'map-only', 'cards', 'editorial'],
+  'location': ['split-map', 'list', 'map-only', 'cards', 'editorial', 'advantages'],
   'developer': ['default', 'split', 'stats', 'band'],
   'lead-form': ['card', 'split', 'inline', 'default'],
   'download-brochure': ['split', 'card', 'banner', 'minimal'],
@@ -1372,7 +1518,7 @@ const KNOWN_VARIANTS: Record<string, string[]> = {
   'cta': ['simple', 'split', 'booking', 'banner', 'strip', 'card'],
   'icon-box': ['card', 'horizontal', 'minimal', 'centered'],
   'button': ['solid', 'outline', 'pill', 'glass'],
-  'footer': ['simple', 'multi-column', 'minimal', 'premium', 'contact'],
+  'footer': ['simple', 'multi-column', 'minimal', 'premium', 'contact', 'disclaimer'],
   'posts': ['grid', 'list'],
 };
 
@@ -1425,6 +1571,95 @@ function StyleFieldButton({ block, fieldKey }: { block: BlockConfig; fieldKey: s
     >
       <Palette size={10} /> Style
     </button>
+  )
+}
+
+function NavLinesField({
+  label,
+  value,
+  onChange,
+}: {
+  label: string
+  value: string
+  onChange: (v: string) => void
+}) {
+  // Local list so half-filled rows (e.g. a just-added empty item) don't vanish.
+  // If the saved value changed from outside (undo, AI rewrite), it wins.
+  const [draft, setItems] = useState<NavLine[]>(() => parseNavLines(value))
+  const items = serializeNavLines(draft) === value ? draft : parseNavLines(value)
+
+  function commit(next: NavLine[]) {
+    setItems(next)
+    const s = serializeNavLines(next)
+    if (s !== value) onChange(s)
+  }
+  function patch(i: number, p: Partial<NavLine>) {
+    commit(items.map((it, idx) => (idx === i ? { ...it, ...p } : it)))
+  }
+
+  const input = 'w-full px-1.5 py-1 rounded border border-border-subtle bg-bg-3 text-text-0 text-[11px] outline-none focus:border-green'
+
+  return (
+    <div className="mb-2.5">
+      <label className="block text-[11.5px] text-text-2 mb-1 font-medium">{label}</label>
+      <p className="text-[10px] text-text-3 mb-2 leading-relaxed">
+        Link to a section with <code className="text-green">#section-id</code> (match the Section ID field on that
+        section) or to a page with <code className="text-green">https://…</code>. Leave the URL empty to scroll to
+        the section named like the label.
+      </p>
+      {items.map((item, i) => (
+        <div key={i} className="bg-bg-2 border border-border-default rounded p-2 mb-1.5 space-y-1.5">
+          <div className="flex items-center justify-between">
+            <span className="text-[10px] text-text-3 font-medium">Item {i + 1}</span>
+            <button
+              type="button"
+              onClick={() => commit(items.filter((_, idx) => idx !== i))}
+              className="text-[10px] text-text-3 hover:text-status-red transition-colors"
+            >
+              Remove
+            </button>
+          </div>
+          <div>
+            <label className="block text-[10px] text-text-3 mb-0.5">Label</label>
+            <input
+              type="text"
+              value={item.label}
+              placeholder="e.g. Amenities"
+              onChange={(e) => patch(i, { label: e.target.value })}
+              className={input}
+            />
+          </div>
+          <div>
+            <label className="block text-[10px] text-text-3 mb-0.5">URL</label>
+            <input
+              type="text"
+              value={item.href}
+              placeholder="https://… or #section-id"
+              onChange={(e) => patch(i, { href: e.target.value })}
+              className={input}
+            />
+          </div>
+          <div>
+            <label className="block text-[10px] text-text-3 mb-0.5">Link target</label>
+            <select
+              value={item.newTab ? '_blank' : '_self'}
+              onChange={(e) => patch(i, { newTab: e.target.value === '_blank' })}
+              className={`${input} cursor-pointer`}
+            >
+              <option value="_self">Same tab</option>
+              <option value="_blank">New tab</option>
+            </select>
+          </div>
+        </div>
+      ))}
+      <button
+        type="button"
+        onClick={() => commit([...items, { label: '', href: '', newTab: false }])}
+        className="text-[10px] text-green hover:text-green-dim transition-colors mt-0.5"
+      >
+        + Add menu item
+      </button>
+    </div>
   )
 }
 
@@ -1508,6 +1743,24 @@ function PropertyField({ field, block }: { field: FieldDef; block: BlockConfig }
   })()
 
   switch (field.type) {
+    case 'nav-lines':
+      return (
+        <NavLinesField
+          label={field.label}
+          value={typeof value === 'string' ? value : ''}
+          onChange={onChange}
+        />
+      )
+
+    case 'link-lines':
+      return (
+        <LinkLinesField
+          label={field.label}
+          value={typeof value === 'string' ? value : ''}
+          onChange={onChange}
+        />
+      )
+
     case 'nav-menu': {
       // Prefer structured menuItems; migrate legacy string links on first edit.
       const rawItems = Array.isArray(value) ? value : []
@@ -1823,7 +2076,7 @@ function PropertyField({ field, block }: { field: FieldDef; block: BlockConfig }
           'project-overview': { stats: { value: '', label: '' }, highlights: { title: '', description: '', icon: '' }, slides: { image: '', caption: '' } },
           'property-details': { items: { label: '', value: '' } },
           amenities: { items: { title: '', description: '', image: '', icon: '' } },
-          location: { items: { title: '', meta: '' } },
+          location: { items: { title: '', meta: '', places: [] } },
           faq: { items: { question: '', answer: '' } },
           team: { members: { name: '', role: '', avatar: '' } },
           features: { items: { icon: '', title: '', description: '' } },
@@ -1868,7 +2121,8 @@ function PropertyField({ field, block }: { field: FieldDef; block: BlockConfig }
         return defaults || { title: '', description: '' }
       }
 
-      const customItemFields = ITEM_FIELDS[`${block.type}.${field.key}`];
+      // iPixxel widgets hide item fields the chosen template never renders.
+      const customItemFields = ipxItemFieldsFor(block.type, field.key, block.variant, ITEM_FIELDS[`${block.type}.${field.key}`]);
 
       // Delegated to the shared list editor so every dynamic list in the
       // builder gets add / duplicate / delete / hide / drag-reorder plus a
@@ -1903,6 +2157,7 @@ export function PropertiesPanel({ block }: { block: BlockConfig }) {
   const updateColumnWidth = useConfigStore((s) => s.updateColumnWidth)
   const updateColumnMobileWidth = useConfigStore((s) => s.updateColumnMobileWidth)
   const updateColumnLayout = useConfigStore((s) => s.updateColumnLayout)
+  const updateColumnStyle = useConfigStore((s) => s.updateColumnStyle)
   const viewport = useEditorStore((s) => s.viewport)
   const addColumn = useConfigStore((s) => s.addColumn)
   const removeColumn = useConfigStore((s) => s.removeColumn)
@@ -1926,6 +2181,26 @@ export function PropertiesPanel({ block }: { block: BlockConfig }) {
   // Check if variant switcher is already present in schema
   const variants = KNOWN_VARIANTS[normalizedType] || KNOWN_VARIANTS[block.type]
   const hasVariantInSchema = predefinedKeys.has("variant")
+
+  // Widgets with per-template fields (iPixxel Realty) show only the fields the
+  // chosen template uses; hidden keys stay in predefinedKeys so they never
+  // reappear under "Additional Properties".
+  const fieldVariants = IPX_FIELD_VARIANTS[normalizedType] || IPX_FIELD_VARIANTS[block.type]
+  const activeVariant = variants?.length
+    ? (block.variant && variants.includes(block.variant) ? block.variant : variants[0])
+    : block.variant
+  const filterFields = Boolean(fieldVariants && activeVariant)
+  const visibleSections = (schema?.sections ?? [])
+    // Sections tied to particular variants (section.variants) show only for those.
+    .filter((section) => !section.variants || section.variants.includes(block.variant ?? ''))
+    .map((section) => ({
+      ...section,
+      fields: filterFields
+        ? section.fields.filter((f) => !fieldVariants![f.key] || fieldVariants![f.key].includes(activeVariant!))
+        : section.fields,
+    }))
+    // A section left with no fields after per-template filtering is hidden.
+    .filter((section) => !filterFields || section.fields.length > 0)
 
   // Discover all extra properties from block.props that aren't in schema
   const extraFields: FieldDef[] = []
@@ -2103,8 +2378,8 @@ export function PropertiesPanel({ block }: { block: BlockConfig }) {
         </Section>
       )}
 
-      {/* Predefined Schema Sections */}
-      {schema?.sections.map((section) => (
+      {/* Predefined Schema Sections (variant sections + only the fields the chosen template uses) */}
+      {visibleSections.map((section) => (
         <Section key={section.title} title={section.title}>
           {section.fields.map((field) => (
             <PropertyField key={field.key} field={field} block={block} />
@@ -2205,6 +2480,13 @@ export function PropertiesPanel({ block }: { block: BlockConfig }) {
                   className="w-full h-1.5 rounded-full appearance-none bg-slate-200 cursor-pointer accent-green"
                 />
                 <div className="text-[9px] text-text-3 mt-0.5">{col.blocks.length} widget(s) in this column</div>
+                {/* This column's own background, separate from the Div's. */}
+                {!divWidgets && (
+                  <ColumnBackgroundControls
+                    value={readColumnStyle(col)}
+                    onChange={(patch) => updateColumnStyle(block.id, i, patch)}
+                  />
+                )}
                 {/* How this column lays out its own widgets. */}
                 {!divWidgets && (
                 <details className="mt-1.5 group/items" open={Object.values(readFlexLayout(col)).some((v) => v !== undefined) || undefined}>
