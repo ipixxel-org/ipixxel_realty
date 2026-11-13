@@ -131,4 +131,18 @@ describe("iPixxel Realty → Hero widget", () => {
     rerender(<RenderBlock block={make("emerald-slider", { whatsappSize: 64, whatsapp: "+91 90000 11111" })} />);
     expect(btn().style.height).toBe("64px");
   });
+
+  it("modern hero shows the menu, title, buttons and form card; menu links stay safe", () => {
+    const { container } = render(
+      <RenderBlock block={make("modern-form", { modernNav: "Overview\nPlans | floor-plans\nBad | javascript:alert(1)\nSite | https://example.com" })} />,
+    );
+    expect(container.textContent).toContain("Life, considered");
+    expect(screen.getByText("Get price & availability")).toBeTruthy();
+    expect(screen.getByText("The Residences, Sector 150")).toBeTruthy();
+    expect(screen.getByText("Overview").getAttribute("href")).toBe("#overview");
+    expect(screen.getByText("Plans").getAttribute("href")).toBe("#floor-plans");
+    expect(screen.getByText("Bad").getAttribute("href")).toBeNull();
+    expect(screen.getByText("Site").getAttribute("href")).toBe("https://example.com");
+    expect(container.innerHTML).not.toContain("javascript:");
+  });
 });

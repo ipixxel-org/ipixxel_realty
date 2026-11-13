@@ -35,6 +35,7 @@ import {
   type Ctx,
 } from "./shared";
 import { EmeraldAbout, EmeraldLocation, EmeraldPriceRows } from "./IpxEmeraldBlocks";
+import { ModernLocation } from "./IpxModernBlocks";
 
 /* ========================================================================= */
 /* Pricing                                                                   */
@@ -150,7 +151,7 @@ export function IpxPricingBlock({ block }: { block: BlockConfig }) {
 /* Location / map                                                            */
 /* ========================================================================= */
 
-export const LOCATION_VARIANTS = ["burgundy-map", "eldeco-map", "tarc-map", "emerald-map"] as const;
+export const LOCATION_VARIANTS = ["burgundy-map", "eldeco-map", "tarc-map", "emerald-map", "modern-list"] as const;
 
 export function IpxLocationBlock({ block }: { block: BlockConfig }) {
   useIpxFonts();
@@ -159,6 +160,7 @@ export function IpxLocationBlock({ block }: { block: BlockConfig }) {
   const places = items(ctx, "places");
 
   if (variant === "emerald-map") return <EmeraldLocation block={block} />;
+  if (variant === "modern-list") return <ModernLocation block={block} />;
 
   if (variant === "eldeco-map") {
     return (

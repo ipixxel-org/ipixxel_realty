@@ -1160,7 +1160,7 @@ const blockFields: Partial<Record<BlockType, { sections: { title: string; fields
   'ipixxel-hero': {
     sections: [
       { title: 'Layout', fields: [
-        { key: 'variant', label: 'Template', type: 'select', options: ['grand-band', 'skyline', 'offer-slider', 'emerald-slider'] },
+        { key: 'variant', label: 'Template', type: 'select', options: ['grand-band', 'skyline', 'offer-slider', 'emerald-slider', 'modern-form'] },
         { key: 'accentColor', label: 'Accent colour (band / gold lines / buttons)', type: 'color' },
       ]},
       { title: 'Content', fields: [
@@ -1236,6 +1236,26 @@ const blockFields: Partial<Record<BlockType, { sections: { title: string; fields
         { key: 'emeraldPrice', label: 'Price', type: 'text' },
         { key: 'emeraldPlan', label: 'Payment plan (right)', type: 'text' },
         { key: 'emeraldRibbon', label: 'Offer ribbon', type: 'text' },
+      ]},
+      { title: 'Modern form (template 5)', fields: [
+        { key: 'modernNav', label: 'Menu links, one per line (Label or Label | section ID / URL)', type: 'textarea' },
+        { key: 'modernEyebrow', label: 'Small label above the title', type: 'text' },
+        { key: 'modernTitle', label: 'Title (new line = new line)', type: 'textarea' },
+        { key: 'modernText', label: 'Paragraph', type: 'textarea' },
+        { key: 'modernFormTitle', label: 'Form card title', type: 'text' },
+        { key: 'formId', label: 'Form (Form Builder)', type: 'form-select' },
+      ]},
+      { title: 'Menu button (template 5)', fields: [
+        ...ctaFields('modernNavCta', 'Menu button', { textKey: 'modernNavCta', url: true }),
+        { key: 'modernNavCtaAnchor', label: 'Scrolls to section ID (when no URL)', type: 'text' },
+      ]},
+      { title: 'Main button (template 5)', fields: [
+        ...ctaFields('modernCta', 'Main button', { textKey: 'modernCta', url: true }),
+        { key: 'modernCtaAnchor', label: 'Scrolls to section ID (when no URL)', type: 'text' },
+      ]},
+      { title: 'Second link (template 5)', fields: [
+        ...ctaFields('modernLink', 'Second link', { textKey: 'modernLink', url: true }),
+        { key: 'modernLinkAnchor', label: 'Scrolls to section ID (when no URL)', type: 'text' },
       ]},
       { title: 'Header button (template 3)', fields: [
         ...ctaFields('headerCta', 'Header button', { textKey: 'headerCta', url: true }),
@@ -1476,7 +1496,7 @@ Object.assign(blockFields, IPX_INSPECTOR_FIELDS as typeof blockFields);
 
 const KNOWN_VARIANTS: Record<string, string[]> = {
   'project-banner': ['split-form', 'overlay', 'centered', 'editorial', 'framed', 'asymmetric', 'info-bar', 'framed-center', 'split-curve', 'stats'],
-  'ipixxel-hero': ['grand-band', 'skyline', 'offer-slider', 'emerald-slider'],
+  'ipixxel-hero': ['grand-band', 'skyline', 'offer-slider', 'emerald-slider', 'modern-form'],
   ...IPX_KNOWN_VARIANTS,
   'project-overview': ['split', 'centered', 'cards', 'timeline'],
   'property-details': ['grid', 'table', 'two-column', 'checklist'],

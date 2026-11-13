@@ -2,7 +2,7 @@
  * iPixxel Realty section widgets (Blocks panel → "iPixxel Realty").
  *
  * One widget per section type; its Template dropdown holds that section from
- * each design family (burgundy / eldeco / tarc / emerald). Everything the builder needs
+ * each design family (burgundy / eldeco / tarc / emerald / modern). Everything the builder needs
  * — Blocks-panel metadata, default content, inspector fields and list-item
  * fields — lives here so the core editor files only spread these in.
  *
@@ -76,7 +76,7 @@ const OVERVIEW: IpxWidget = {
   type: "ipx-overview",
   label: "Overview",
   description: "About the project: feature cards, overview with image, story splits, green overview",
-  variants: ["burgundy-features", "eldeco-overview", "tarc-story", "tarc-wellness", "emerald-overview"],
+  variants: ["burgundy-features", "eldeco-overview", "tarc-story", "tarc-wellness", "emerald-overview", "modern-overview"],
   defaultProps: {
     anchor: "overview",
     accentColor: "",
@@ -91,6 +91,10 @@ const OVERVIEW: IpxWidget = {
     imageSide: "left",
     decorImage: "",
     watermark: "Revitalizing\nthe Spirit",
+    stats: [
+      { value: "48", label: "Acres" },
+      { value: "14", label: "Towers" },
+    ],
     ...buttonDefaults("Enquire Now"),
     items: [
       { icon: "", number: "", title: "Riverside Living", text: "Wake up to panoramic views from your private balcony." },
@@ -102,7 +106,7 @@ const OVERVIEW: IpxWidget = {
     ],
   },
   sections: [
-    layout(["burgundy-features", "eldeco-overview", "tarc-story", "tarc-wellness", "emerald-overview"]),
+    layout(["burgundy-features", "eldeco-overview", "tarc-story", "tarc-wellness", "emerald-overview", "modern-overview"]),
     {
       title: "Content",
       fields: [
@@ -116,6 +120,7 @@ const OVERVIEW: IpxWidget = {
         { key: "imageSide", label: "Image side (story template)", type: "select", options: ["left", "right"] },
         { key: "decorImage", label: "Decorative motif image (story template)", type: "image" },
         { key: "watermark", label: "Big faded text (wellness template)", type: "textarea" },
+        { key: "stats", label: "Stats card (modern template)", type: "array-items" },
         anchor,
       ],
     },
@@ -129,20 +134,26 @@ const OVERVIEW: IpxWidget = {
       { key: "title", label: "Title", kind: "text" },
       { key: "text", label: "Text", kind: "textarea", rows: 3 },
     ],
+    stats: [
+      { key: "value", label: "Number", kind: "text" },
+      { key: "label", label: "Label", kind: "text" },
+    ],
   },
-  itemTemplates: { items: { icon: "", number: "", title: "", text: "" } },
+  itemTemplates: { items: { icon: "", number: "", title: "", text: "" }, stats: { value: "", label: "" } },
 };
 
 const HIGHLIGHTS: IpxWidget = {
   type: "ipx-highlights",
   label: "Highlights",
   description: "Offer ribbon, icon grid, compass, green offer band or key-highlights list",
-  variants: ["burgundy-offers", "eldeco-icons", "tarc-compass", "emerald-offer", "emerald-list"],
+  variants: ["burgundy-offers", "eldeco-icons", "tarc-compass", "emerald-offer", "emerald-list", "modern-grid"],
   defaultProps: {
     anchor: "highlights",
     accentColor: "",
     title: "Highlights",
     subtitle: "Indulgence in the rare – crafted once, remembered always",
+    eyebrow: "Project Highlights",
+    titleAccent: "",
     tabs: "Key Planning Features\nSpecifications",
     tabLabel: "Apartment Design Highlights",
     logo: "",
@@ -174,12 +185,14 @@ const HIGHLIGHTS: IpxWidget = {
     ],
   },
   sections: [
-    layout(["burgundy-offers", "eldeco-icons", "tarc-compass", "emerald-offer", "emerald-list"]),
+    layout(["burgundy-offers", "eldeco-icons", "tarc-compass", "emerald-offer", "emerald-list", "modern-grid"]),
     {
       title: "Content",
       fields: [
         { key: "title", label: "Title", type: "text" },
         { key: "subtitle", label: "Subtitle", type: "text" },
+        { key: "eyebrow", label: "Small label above the title (modern grid)", type: "text" },
+        { key: "titleAccent", label: "Title second line (modern grid)", type: "text" },
         { key: "tabs", label: "Tab buttons, one per line (icon grid)", type: "textarea" },
         { key: "tabLabel", label: "Boxed label above the icons (icon grid)", type: "text" },
         { key: "items", label: "Highlights", type: "array-items" },
@@ -233,7 +246,7 @@ const AMENITIES: IpxWidget = {
   type: "ipx-amenities",
   label: "Amenities",
   description: "Amenity list cards, icon tiles, image carousel or green photo cards",
-  variants: ["burgundy-list", "eldeco-tiles", "tarc-carousel", "emerald-cards"],
+  variants: ["burgundy-list", "eldeco-tiles", "tarc-carousel", "emerald-cards", "modern-pills"],
   defaultProps: {
     anchor: "amenities",
     accentColor: "",
@@ -258,7 +271,7 @@ const AMENITIES: IpxWidget = {
     ],
   },
   sections: [
-    layout(["burgundy-list", "eldeco-tiles", "tarc-carousel", "emerald-cards"]),
+    layout(["burgundy-list", "eldeco-tiles", "tarc-carousel", "emerald-cards", "modern-pills"]),
     {
       title: "Content",
       fields: [
@@ -295,7 +308,7 @@ const GALLERY: IpxWidget = {
   type: "ipx-gallery",
   label: "Gallery",
   description: "Tabbed carousel, tabbed grid, visual-journey slider or two-row photo slider",
-  variants: ["burgundy-carousel", "eldeco-grid", "tarc-journey", "emerald-rows"],
+  variants: ["burgundy-carousel", "eldeco-grid", "tarc-journey", "emerald-rows", "modern-tabs", "modern-bento"],
   defaultProps: {
     anchor: "gallery",
     accentColor: "",
@@ -321,7 +334,7 @@ const GALLERY: IpxWidget = {
     ],
   },
   sections: [
-    layout(["burgundy-carousel", "eldeco-grid", "tarc-journey", "emerald-rows"]),
+    layout(["burgundy-carousel", "eldeco-grid", "tarc-journey", "emerald-rows", "modern-tabs", "modern-bento"]),
     {
       title: "Content",
       fields: [
@@ -346,16 +359,17 @@ const GALLERY: IpxWidget = {
       { key: "category", label: "Tab (e.g. Exterior; empty = every tab)", kind: "text" },
       { key: "caption", label: "Caption (empty = default)", kind: "text" },
       { key: "alt", label: "Alt text", kind: "text" },
+      { key: "text", label: "Description (landscape tabs)", kind: "textarea", rows: 2 },
     ],
   },
-  itemTemplates: { images: { src: "", category: "", caption: "", alt: "" } },
+  itemTemplates: { images: { src: "", category: "", caption: "", alt: "", text: "" } },
 };
 
 const MASTERPLAN: IpxWidget = {
   type: "ipx-masterplan",
   label: "Master / Site Plan",
   description: "Full-width site plan or framed master plan",
-  variants: ["eldeco-site", "tarc-master"],
+  variants: ["eldeco-site", "tarc-master", "modern-plan"],
   defaultProps: {
     anchor: "master-plan",
     accentColor: "",
@@ -363,10 +377,13 @@ const MASTERPLAN: IpxWidget = {
     subtitle: "An inspired blueprint for the life you have always envisioned.",
     image: "",
     imageCaption: "Map is not to scale. The developer reserves all rights to add, remove or change any amenity or specification.",
+    eyebrow: "Master Plan",
+    titleAccent: "",
+    showCompass: true,
     ...buttonDefaults("View All"),
   },
   sections: [
-    layout(["eldeco-site", "tarc-master"]),
+    layout(["eldeco-site", "tarc-master", "modern-plan"]),
     {
       title: "Content",
       fields: [
@@ -374,6 +391,9 @@ const MASTERPLAN: IpxWidget = {
         { key: "subtitle", label: "Subtitle", type: "text" },
         { key: "image", label: "Plan image", type: "image" },
         { key: "imageCaption", label: "Caption over the plan (master plan)", type: "textarea" },
+        { key: "eyebrow", label: "Small label above the title (modern)", type: "text" },
+        { key: "titleAccent", label: "Title second line (modern)", type: "text" },
+        { key: "showCompass", label: "Show north compass (modern)", type: "toggle" },
         anchor,
       ],
     },
@@ -387,7 +407,7 @@ const FLOORPLANS: IpxWidget = {
   type: "ipx-floorplans",
   label: "Floor Plans",
   description: "Tabbed floor plans, plan with areas and price, or green plan tabs",
-  variants: ["burgundy-tabs", "tarc-details", "emerald-tabs"],
+  variants: ["burgundy-tabs", "tarc-details", "emerald-tabs", "modern-cards"],
   defaultProps: {
     anchor: "plans",
     accentColor: "",
@@ -405,17 +425,19 @@ const FLOORPLANS: IpxWidget = {
         image: "",
         price: "₹ 2.4 Cr*",
         specs: "Carpet Area | 140 sq.m. / 1,504 sq.ft. (Approx.)\nTotal Balcony Area | 18 sq.m. / 195 sq.ft. (Approx.)\n1 Sq M - 10.764 Sq Ft",
+        text: "Spacious family residences with generous living areas and thoughtfully planned private spaces.",
       },
       {
         title: "4 BHK",
         image: "",
         price: "₹ 3.9 Cr*",
         specs: "Carpet Area | 194 sq.m. / 2,087 sq.ft. (Approx.)\nTotal Balcony Area | 26 sq.m. / 280 sq.ft. (Approx.)\n1 Sq M - 10.764 Sq Ft",
+        text: "Larger residences for families seeking additional space, comfort and an elevated lifestyle.",
       },
     ],
   },
   sections: [
-    layout(["burgundy-tabs", "tarc-details", "emerald-tabs"]),
+    layout(["burgundy-tabs", "tarc-details", "emerald-tabs", "modern-cards"]),
     {
       title: "Content",
       fields: [
@@ -438,9 +460,10 @@ const FLOORPLANS: IpxWidget = {
       { key: "image", label: "Plan image", kind: "image" },
       { key: "price", label: "Starting price", kind: "text" },
       { key: "specs", label: "Areas, one per line: Label | Value", kind: "textarea", rows: 4 },
+      { key: "text", label: "Short description (modern cards)", kind: "textarea", rows: 3 },
     ],
   },
-  itemTemplates: { plans: { title: "", image: "", price: "", specs: "" } },
+  itemTemplates: { plans: { title: "", image: "", price: "", specs: "", text: "" } },
 };
 
 const PRICING: IpxWidget = {
@@ -519,7 +542,7 @@ const LOCATION: IpxWidget = {
   type: "ipx-location",
   label: "Location / Map",
   description: "Map with nearby places and distances",
-  variants: ["burgundy-map", "eldeco-map", "tarc-map", "emerald-map"],
+  variants: ["burgundy-map", "eldeco-map", "tarc-map", "emerald-map", "modern-list"],
   defaultProps: {
     anchor: "location",
     accentColor: "",
@@ -544,7 +567,7 @@ const LOCATION: IpxWidget = {
     ],
   },
   sections: [
-    layout(["burgundy-map", "eldeco-map", "tarc-map", "emerald-map"]),
+    layout(["burgundy-map", "eldeco-map", "tarc-map", "emerald-map", "modern-list"]),
     {
       title: "Content",
       fields: [
@@ -572,9 +595,10 @@ const LOCATION: IpxWidget = {
       { key: "icon", label: "Icon (map-list template)", kind: "icon" },
       { key: "title", label: "Place", kind: "text" },
       { key: "value", label: "Distance / time", kind: "text" },
+      { key: "text", label: "Subtitle (modern list)", kind: "text" },
     ],
   },
-  itemTemplates: { places: { icon: "", title: "", value: "" } },
+  itemTemplates: { places: { icon: "", title: "", value: "", text: "" } },
 };
 
 const ABOUT: IpxWidget = {
@@ -648,7 +672,7 @@ const CTA: IpxWidget = {
   type: "ipx-cta",
   label: "CTA / Banner",
   description: "Call-to-action, full-image banner or virtual tour",
-  variants: ["burgundy-cta", "tarc-club", "tarc-tour"],
+  variants: ["burgundy-cta", "tarc-club", "tarc-tour", "modern-banner"],
   defaultProps: {
     anchor: "",
     accentColor: "",
@@ -661,9 +685,11 @@ const CTA: IpxWidget = {
     decorImage: "",
     imageCaption: "Artistic impression",
     ...buttonDefaults("Book Private Preview"),
+    ...buttonDefaults("Schedule a site visit", "second"),
+    note: "48 Acres · 14 Towers · 3,484 Residences · 60+ Amenities",
   },
   sections: [
-    layout(["burgundy-cta", "tarc-club", "tarc-tour"]),
+    layout(["burgundy-cta", "tarc-club", "tarc-tour", "modern-banner"]),
     {
       title: "Content",
       fields: [
@@ -675,10 +701,12 @@ const CTA: IpxWidget = {
         { key: "image", label: "Image (banner background / tour device)", type: "image" },
         { key: "decorImage", label: "Decorative motif (virtual tour)", type: "image" },
         { key: "imageCaption", label: "Image caption", type: "text" },
+        { key: "note", label: "Small line under the buttons (modern banner)", type: "text" },
         anchor,
       ],
     },
     { title: "Button", fields: buttonFields("button", "Button") },
+    { title: "Second link (modern banner)", fields: buttonFields("second", "Second link") },
   ],
   itemFields: {},
   itemTemplates: {},
@@ -688,7 +716,7 @@ const FORM: IpxWidget = {
   type: "ipx-form",
   label: "Enquiry Form",
   description: "Section layout around a Form Builder form",
-  variants: ["burgundy-split", "eldeco-bar", "tarc-quote", "emerald-form"],
+  variants: ["burgundy-split", "eldeco-bar", "tarc-quote", "emerald-form", "modern-split"],
   defaultProps: {
     anchor: "enquire",
     accentColor: "",
@@ -701,11 +729,12 @@ const FORM: IpxWidget = {
     formTitle: "Request Exclusive Details",
     formSubtitle: "Response guaranteed within 60 minutes",
     formId: "",
+    imageLabel: "The Residences\nSector 150, Noida",
     formNote: "By submitting, you agree to be contacted regarding this project. Your information is confidential and will not be shared with third parties.",
     image: "",
   },
   sections: [
-    layout(["burgundy-split", "eldeco-bar", "tarc-quote", "emerald-form"]),
+    layout(["burgundy-split", "eldeco-bar", "tarc-quote", "emerald-form", "modern-split"]),
     {
       title: "Content",
       fields: [
@@ -714,7 +743,8 @@ const FORM: IpxWidget = {
         { key: "titleAccent", label: "Title second line (italic)", type: "text" },
         { key: "description", label: "Paragraph", type: "textarea" },
         { key: "bullets", label: "Points, one per line (split template)", type: "textarea" },
-        { key: "image", label: "Side illustration (quote / emerald template)", type: "image" },
+        { key: "image", label: "Side illustration (quote / emerald / modern template)", type: "image" },
+        { key: "imageLabel", label: "Label on the photo, one line each (modern)", type: "textarea" },
         anchor,
       ],
     },
@@ -736,7 +766,7 @@ const FOOTER: IpxWidget = {
   type: "ipx-footer",
   label: "Footer",
   description: "RERA QR footer, disclaimer band, RERA disclaimer footer or green RERA footer",
-  variants: ["burgundy-footer", "eldeco-footer", "tarc-footer", "emerald-footer"],
+  variants: ["burgundy-footer", "eldeco-footer", "tarc-footer", "emerald-footer", "modern-columns"],
   defaultProps: {
     anchor: "",
     accentColor: "",
@@ -751,6 +781,13 @@ const FOOTER: IpxWidget = {
     linkUrl: "",
     credit: "Copyright © 2026. All Rights Reserved",
     bandColor: "",
+    columns: [
+      { title: "Contact", links: "+91 90000 00000 | tel:+919000000000\n# About Us\nOur Story\nCareers" },
+      { title: "Residences", links: "1 BHK\n2 BHK\n3 BHK\n4 BHK" },
+      { title: "Explore", links: "Overview | #overview\nAmenities | #amenities\nLocation | #location\nGallery | #gallery" },
+      { title: "Connect", links: "Instagram\nFacebook\nLinkedIn\nYouTube" },
+    ],
+    bottomLinks: "Disclaimer\nPrivacy Policy\nTerms of Use",
     callText: "Call Now",
     phone: "+91 90000 00000",
     ...buttonDefaults("Get Brochure"),
@@ -760,7 +797,7 @@ const FOOTER: IpxWidget = {
     ],
   },
   sections: [
-    layout(["burgundy-footer", "eldeco-footer", "tarc-footer", "emerald-footer"]),
+    layout(["burgundy-footer", "eldeco-footer", "tarc-footer", "emerald-footer", "modern-columns"]),
     {
       title: "Content",
       fields: [
@@ -775,6 +812,8 @@ const FOOTER: IpxWidget = {
         { key: "credit", label: "Credit / copyright text", type: "text" },
         { key: "bandColor", label: "Band colour (disclaimer band; empty = bronze)", type: "color" },
         { key: "qrCodes", label: "RERA QR codes (QR footer)", type: "array-items" },
+        { key: "columns", label: "Link columns (modern footer)", type: "array-items" },
+        { key: "bottomLinks", label: "Bottom links, one per line: Label | URL (modern footer)", type: "textarea" },
       ],
     },
     {
@@ -792,8 +831,12 @@ const FOOTER: IpxWidget = {
       { key: "title", label: "Title", kind: "text" },
       { key: "text", label: "Text", kind: "textarea", rows: 3 },
     ],
+    columns: [
+      { key: "title", label: "Column heading", kind: "text" },
+      { key: "links", label: "Links, one per line: Label | URL (start a line with # for a sub-heading)", kind: "textarea", rows: 6 },
+    ],
   },
-  itemTemplates: { qrCodes: { image: "", title: "", text: "" } },
+  itemTemplates: { qrCodes: { image: "", title: "", text: "" }, columns: { title: "", links: "" } },
 };
 
 const SPECS: IpxWidget = {
@@ -898,27 +941,33 @@ function only(variants: string[], keys: string[]): Record<string, string[]> {
  */
 export const IPX_FIELD_VARIANTS: Record<string, Record<string, string[]>> = {
   "ipixxel-hero": {
-    ...only(["skyline", "offer-slider", "emerald-slider"], ["logoText", "phone"]),
+    ...only(["skyline", "offer-slider", "emerald-slider", "modern-form"], ["logoText"]),
     ...only(["grand-band", "skyline", "emerald-slider"], ["location"]),
+    ...only(["skyline", "offer-slider", "emerald-slider"], ["phone"]),
     ...only(["grand-band", "skyline"], ["disclaimer"]),
     ...only(["grand-band"], ["brandName", "brandColor", "brandNumber", "brandTitle", "brandSubtitle", "headline", "legalText", "qrImage", "bandText", "offerLabel", "offerValue"]),
     ...only(["skyline"], ["logo2", "skylineTitle", "stat1Label", "stat1Value", "stat2Label", "stat2Value", "tourText", "tourUrl", "callText", "menuAnchor", "galleryText", "galleryUrl", "primaryAnchor", "primaryCta", "primaryCtaUrl", "primaryCtaTarget", "primaryCtaColor", "primaryCtaTextColor", "primaryCtaHoverColor", "primaryCtaHoverTextColor", "primaryCtaBorderColor", "primaryCtaRadius"]),
-    ...only(["offer-slider"], ["logoTagline", "offerTitle", "highlightText", "benefitText", "benefitValue", "benefitNote", "configText", "priceText", "validLabel", "validValue", "offerBadgeImage", "badgeTop", "badgeTitle", "badgeScript", "headerCta", "headerCtaUrl", "headerCtaTarget", "headerCtaColor", "headerCtaTextColor", "headerCtaHoverColor", "headerCtaHoverTextColor", "headerCtaBorderColor", "headerCtaRadius", "headerCtaAnchor"]),
-    ...only(["offer-slider", "emerald-slider"], ["slides", "textOnAllSlides", "autoplay", "interval", "whatsapp", "whatsappIcon", "whatsappSize", "showFloatingButtons"]),
+    ...only(["offer-slider"], ["logoTagline", "offerTitle", "highlightText", "benefitText", "benefitValue", "benefitNote", "configText", "priceText", "validLabel", "validValue", "offerBadgeImage", "badgeTop", "badgeTitle", "badgeScript", "whatsappIcon", "whatsappSize", "headerCtaAnchor", "headerCta", "headerCtaUrl", "headerCtaTarget", "headerCtaColor", "headerCtaTextColor", "headerCtaHoverColor", "headerCtaHoverTextColor", "headerCtaBorderColor", "headerCtaRadius"]),
+    ...only(["offer-slider", "emerald-slider"], ["slides", "textOnAllSlides", "autoplay", "interval", "whatsapp", "showFloatingButtons"]),
     ...only(["emerald-slider"], ["emeraldTitle", "emeraldConfig", "emeraldPriceLabel", "emeraldPrice", "emeraldPlan", "emeraldRibbon"]),
+    ...only(["modern-form"], ["modernNav", "modernEyebrow", "modernTitle", "modernText", "modernFormTitle", "formId", "modernNavCtaAnchor", "modernCtaAnchor", "modernLinkAnchor", "modernNavCta", "modernCta", "modernLink", "modernNavCtaUrl", "modernNavCtaTarget", "modernNavCtaColor", "modernNavCtaTextColor", "modernNavCtaHoverColor", "modernNavCtaHoverTextColor", "modernNavCtaBorderColor", "modernNavCtaRadius", "modernCtaUrl", "modernCtaTarget", "modernCtaColor", "modernCtaTextColor", "modernCtaHoverColor", "modernCtaHoverTextColor", "modernCtaBorderColor", "modernCtaRadius", "modernLinkUrl", "modernLinkTarget", "modernLinkColor", "modernLinkTextColor", "modernLinkHoverColor", "modernLinkHoverTextColor", "modernLinkBorderColor", "modernLinkRadius"]),
   },
   "ipx-overview": {
-    ...only(["burgundy-features", "emerald-overview"], ["eyebrow", "titleAccent"]),
+    ...only(["burgundy-features", "emerald-overview", "modern-overview"], ["eyebrow", "titleAccent"]),
     ...only(["eldeco-overview"], ["subtitle"]),
-    ...only(["eldeco-overview", "tarc-story", "tarc-wellness", "emerald-overview"], ["image", "imageCaption", "buttonText", "buttonUrl", "buttonTarget", "buttonAnchor", "buttonColor", "buttonTextColor", "buttonHoverColor", "buttonHoverTextColor", "buttonBorderColor", "buttonRadius"]),
+    ...only(["eldeco-overview", "tarc-story", "tarc-wellness", "emerald-overview", "modern-overview"], ["image"]),
+    ...only(["eldeco-overview", "tarc-story", "tarc-wellness", "emerald-overview"], ["imageCaption", "buttonText", "buttonUrl", "buttonTarget", "buttonAnchor", "buttonColor", "buttonTextColor", "buttonHoverColor", "buttonHoverTextColor", "buttonBorderColor", "buttonRadius"]),
     ...only(["tarc-story"], ["imageSide", "decorImage"]),
     ...only(["tarc-wellness"], ["watermark"]),
+    ...only(["modern-overview"], ["stats"]),
     ...only(["burgundy-features"], ["items"]),
   },
   "ipx-highlights": {
-    ...only(["eldeco-icons", "tarc-compass", "emerald-list"], ["title", "subtitle"]),
+    ...only(["eldeco-icons", "tarc-compass", "emerald-list", "modern-grid"], ["title", "subtitle"]),
+    ...only(["modern-grid"], ["eyebrow"]),
+    ...only(["emerald-list", "modern-grid"], ["titleAccent"]),
     ...only(["eldeco-icons"], ["tabs", "tabLabel"]),
-    ...only(["burgundy-offers", "eldeco-icons", "emerald-list"], ["items"]),
+    ...only(["burgundy-offers", "eldeco-icons", "emerald-list", "modern-grid"], ["items"]),
     ...only(["tarc-compass"], ["centerImage", "imageCaption", "directions"]),
     ...only(["emerald-offer"], ["logo", "logoText", "offerText", "planValue", "planLabel", "configText", "configNote", "priceLabel", "price", "address"]),
     ...only(["emerald-offer", "emerald-list"], ["image"]),
@@ -926,14 +975,14 @@ export const IPX_FIELD_VARIANTS: Record<string, Record<string, string[]>> = {
     ...only(["eldeco-icons", "emerald-list"], ["buttonText", "buttonUrl", "buttonTarget", "buttonAnchor", "buttonColor", "buttonTextColor", "buttonHoverColor", "buttonHoverTextColor", "buttonBorderColor", "buttonRadius"]),
   },
   "ipx-amenities": {
-    ...only(["burgundy-list"], ["eyebrow"]),
-    ...only(["burgundy-list", "emerald-cards"], ["titleAccent", "description"]),
+    ...only(["burgundy-list", "modern-pills"], ["eyebrow"]),
+    ...only(["burgundy-list", "emerald-cards", "modern-pills"], ["titleAccent", "description"]),
     ...only(["eldeco-tiles", "tarc-carousel"], ["subtitle"]),
     ...only(["eldeco-tiles"], ["highlightFirst"]),
     ...only(["emerald-cards"], ["bgImage"]),
     ...only(["tarc-carousel"], ["imageCaption"]),
     ...only(["tarc-carousel", "emerald-cards"], ["autoplay", "interval"]),
-    ...only(["eldeco-tiles", "emerald-cards"], ["buttonText", "buttonUrl", "buttonTarget", "buttonAnchor", "buttonColor", "buttonTextColor", "buttonHoverColor", "buttonHoverTextColor", "buttonBorderColor", "buttonRadius"]),
+    ...only(["eldeco-tiles", "emerald-cards", "modern-pills"], ["buttonText", "buttonUrl", "buttonTarget", "buttonAnchor", "buttonColor", "buttonTextColor", "buttonHoverColor", "buttonHoverTextColor", "buttonBorderColor", "buttonRadius"]),
   },
   "ipx-pricing": {
     ...only(["burgundy-cards"], ["eyebrow"]),
@@ -943,17 +992,19 @@ export const IPX_FIELD_VARIANTS: Record<string, Record<string, string[]>> = {
     ...only(["emerald-rows"], ["typologyLabel", "sizeLabel", "bgImage"]),
   },
   "ipx-floorplans": {
-    ...only(["burgundy-tabs"], ["eyebrow"]),
-    ...only(["burgundy-tabs", "emerald-tabs"], ["titleAccent", "description"]),
+    ...only(["burgundy-tabs", "modern-cards"], ["eyebrow"]),
+    ...only(["burgundy-tabs", "emerald-tabs", "modern-cards"], ["titleAccent", "description"]),
     ...only(["tarc-details"], ["subtitle", "priceLabel", "decorImage"]),
-    ...only(["tarc-details", "emerald-tabs"], ["buttonText", "buttonUrl", "buttonTarget", "buttonAnchor", "buttonColor", "buttonTextColor", "buttonHoverColor", "buttonHoverTextColor", "buttonBorderColor", "buttonRadius"]),
+    ...only(["tarc-details", "emerald-tabs", "modern-cards"], ["buttonText", "buttonUrl", "buttonTarget", "buttonAnchor", "buttonColor", "buttonTextColor", "buttonHoverColor", "buttonHoverTextColor", "buttonBorderColor", "buttonRadius"]),
   },
   "ipx-masterplan": {
     ...only(["tarc-master"], ["imageCaption"]),
+    ...only(["modern-plan"], ["eyebrow", "titleAccent", "showCompass"]),
+    ...only(["eldeco-site", "tarc-master"], ["buttonText", "buttonUrl", "buttonTarget", "buttonAnchor", "buttonColor", "buttonTextColor", "buttonHoverColor", "buttonHoverTextColor", "buttonBorderColor", "buttonRadius"]),
   },
   "ipx-gallery": {
-    ...only(["burgundy-carousel"], ["eyebrow"]),
-    ...only(["burgundy-carousel", "emerald-rows"], ["titleAccent", "description"]),
+    ...only(["burgundy-carousel", "modern-tabs", "modern-bento"], ["eyebrow"]),
+    ...only(["burgundy-carousel", "emerald-rows", "modern-tabs", "modern-bento"], ["titleAccent", "description"]),
     ...only(["eldeco-grid", "tarc-journey"], ["subtitle"]),
     ...only(["burgundy-carousel", "eldeco-grid", "tarc-journey"], ["imageCaption"]),
     ...only(["tarc-journey"], ["decorImage"]),
@@ -961,11 +1012,11 @@ export const IPX_FIELD_VARIANTS: Record<string, Record<string, string[]>> = {
     ...only(["emerald-rows"], ["buttonText", "buttonUrl", "buttonTarget", "buttonAnchor", "buttonColor", "buttonTextColor", "buttonHoverColor", "buttonHoverTextColor", "buttonBorderColor", "buttonRadius"]),
   },
   "ipx-location": {
-    ...only(["burgundy-map"], ["eyebrow"]),
-    ...only(["burgundy-map", "emerald-map"], ["titleAccent", "description"]),
+    ...only(["burgundy-map", "modern-list"], ["eyebrow"]),
+    ...only(["burgundy-map", "emerald-map", "modern-list"], ["titleAccent", "description"]),
     ...only(["eldeco-map", "tarc-map"], ["subtitle"]),
     ...only(["tarc-map"], ["address"]),
-    ...only(["burgundy-map", "eldeco-map", "emerald-map"], ["buttonText", "buttonUrl", "buttonTarget", "buttonAnchor", "buttonColor", "buttonTextColor", "buttonHoverColor", "buttonHoverTextColor", "buttonBorderColor", "buttonRadius"]),
+    ...only(["burgundy-map", "eldeco-map", "emerald-map", "modern-list"], ["buttonText", "buttonUrl", "buttonTarget", "buttonAnchor", "buttonColor", "buttonTextColor", "buttonHoverColor", "buttonHoverTextColor", "buttonBorderColor", "buttonRadius"]),
   },
   "ipx-about": {
     ...only(["burgundy-stats"], ["eyebrow"]),
@@ -978,22 +1029,29 @@ export const IPX_FIELD_VARIANTS: Record<string, Record<string, string[]>> = {
     ...only(["tarc-banner"], ["imageCaption"]),
   },
   "ipx-cta": {
-    ...only(["burgundy-cta"], ["eyebrow", "titleAccent", "description"]),
-    ...only(["tarc-tour"], ["subtitle", "decorImage"]),
-    ...only(["tarc-club", "tarc-tour"], ["image"]),
+    ...only(["burgundy-cta", "modern-banner"], ["eyebrow", "titleAccent"]),
+    ...only(["tarc-tour", "modern-banner"], ["subtitle"]),
+    ...only(["burgundy-cta"], ["description"]),
+    ...only(["tarc-club", "tarc-tour", "modern-banner"], ["image"]),
+    ...only(["tarc-tour"], ["decorImage"]),
     ...only(["tarc-club"], ["imageCaption"]),
+    ...only(["modern-banner"], ["note", "secondText", "secondUrl", "secondTarget", "secondAnchor", "secondColor", "secondTextColor", "secondHoverColor", "secondHoverTextColor", "secondBorderColor", "secondRadius"]),
   },
   "ipx-form": {
-    ...only(["burgundy-split"], ["eyebrow", "bullets", "formTitle", "formSubtitle"]),
-    ...only(["burgundy-split", "emerald-form"], ["titleAccent", "description", "formNote"]),
-    ...only(["tarc-quote", "emerald-form"], ["image"]),
+    ...only(["burgundy-split", "modern-split"], ["eyebrow"]),
+    ...only(["burgundy-split", "emerald-form", "modern-split"], ["titleAccent", "description", "formNote"]),
+    ...only(["burgundy-split"], ["bullets", "formTitle", "formSubtitle"]),
+    ...only(["tarc-quote", "emerald-form", "modern-split"], ["image"]),
+    ...only(["modern-split"], ["imageLabel"]),
   },
   "ipx-footer": {
     ...only(["burgundy-footer", "tarc-footer", "emerald-footer"], ["title"]),
     ...only(["emerald-footer"], ["title2", "readMoreText"]),
     ...only(["burgundy-footer"], ["address", "website", "qrCodes", "callText", "phone", "buttonText", "buttonUrl", "buttonTarget", "buttonAnchor", "buttonColor", "buttonTextColor", "buttonHoverColor", "buttonHoverTextColor", "buttonBorderColor", "buttonRadius"]),
-    ...only(["eldeco-footer", "tarc-footer", "emerald-footer"], ["linkText", "linkUrl", "credit"]),
+    ...only(["eldeco-footer", "tarc-footer", "emerald-footer"], ["linkText", "linkUrl"]),
+    ...only(["eldeco-footer", "tarc-footer", "emerald-footer", "modern-columns"], ["credit"]),
     ...only(["eldeco-footer"], ["bandColor"]),
+    ...only(["modern-columns"], ["columns", "bottomLinks"]),
   },
 };
 

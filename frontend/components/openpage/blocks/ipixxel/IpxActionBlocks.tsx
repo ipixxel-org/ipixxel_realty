@@ -29,6 +29,7 @@ import {
   useIpxFonts,
 } from "./shared";
 import { EmeraldFooter, EmeraldForm } from "./IpxEmeraldBlocks";
+import { ModernBanner, ModernFooter, ModernFormSplit } from "./IpxModernBlocks";
 
 function wine(accent: string): string {
   return `radial-gradient(ellipse at 70% 40%, color-mix(in srgb, ${accent} 88%, #a3365f) 0%, color-mix(in srgb, ${accent} 75%, black) 100%)`;
@@ -38,12 +39,14 @@ function wine(accent: string): string {
 /* CTA / banner                                                              */
 /* ========================================================================= */
 
-export const CTA_VARIANTS = ["burgundy-cta", "tarc-club", "tarc-tour"] as const;
+export const CTA_VARIANTS = ["burgundy-cta", "tarc-club", "tarc-tour", "modern-banner"] as const;
 
 export function IpxCtaBlock({ block }: { block: BlockConfig }) {
   useIpxFonts();
   const variant = pickVariant(block, CTA_VARIANTS);
   const ctx = makeCtx(block, variant);
+
+  if (variant === "modern-banner") return <ModernBanner block={block} />;
 
   if (variant === "tarc-club") {
     return (
@@ -103,7 +106,7 @@ export function IpxCtaBlock({ block }: { block: BlockConfig }) {
 /* Enquiry form (the form itself comes from Form Builder)                    */
 /* ========================================================================= */
 
-export const FORM_VARIANTS = ["burgundy-split", "eldeco-bar", "tarc-quote", "emerald-form"] as const;
+export const FORM_VARIANTS = ["burgundy-split", "eldeco-bar", "tarc-quote", "emerald-form", "modern-split"] as const;
 
 export function IpxFormBlock({ block }: { block: BlockConfig }) {
   useIpxFonts();
@@ -111,6 +114,7 @@ export function IpxFormBlock({ block }: { block: BlockConfig }) {
   const ctx = makeCtx(block, variant);
 
   if (variant === "emerald-form") return <EmeraldForm block={block} />;
+  if (variant === "modern-split") return <ModernFormSplit block={block} />;
 
   if (variant === "eldeco-bar") {
     return (
@@ -181,7 +185,7 @@ export function IpxFormBlock({ block }: { block: BlockConfig }) {
 /* Footer                                                                    */
 /* ========================================================================= */
 
-export const FOOTER_VARIANTS = ["burgundy-footer", "eldeco-footer", "tarc-footer", "emerald-footer"] as const;
+export const FOOTER_VARIANTS = ["burgundy-footer", "eldeco-footer", "tarc-footer", "emerald-footer", "modern-columns"] as const;
 
 export function IpxFooterBlock({ block }: { block: BlockConfig }) {
   useIpxFonts();
@@ -189,6 +193,7 @@ export function IpxFooterBlock({ block }: { block: BlockConfig }) {
   const ctx = makeCtx(block, variant);
 
   if (variant === "emerald-footer") return <EmeraldFooter block={block} />;
+  if (variant === "modern-columns") return <ModernFooter block={block} />;
 
   if (variant === "eldeco-footer") {
     return (
