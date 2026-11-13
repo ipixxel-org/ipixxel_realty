@@ -121,6 +121,11 @@ function Backdrop({ src, overlay, fallback }: { src: string; overlay: string; fa
   );
 }
 
+/** Tint strength (0–0.9) from the inspector's "darkness" percentage, else the template default. */
+function darkness(v: unknown, fallback: number): number {
+  return clamp(num(v, fallback), 0, 90) / 100;
+}
+
 /** Uploaded full-section background photo with a tint; nothing until one is set. */
 function BgPhoto({ src, overlay, className = "object-cover" }: { src: unknown; overlay: string; className?: string }) {
   if (!isMediaSrc(src)) return null;
@@ -702,11 +707,12 @@ export function IpxSpecsBlock({ block }: { block: BlockConfig }) {
   const variant = pickVariant(block, SPECS_VARIANTS);
   const ctx = makeCtx(block, variant);
   const list = items(ctx);
+  // Photo stays visible like the design: lighter centre, darker edges.
+  const a = darkness(ctx.p.bgDarkness, 40);
+  const overlay = `radial-gradient(ellipse 75% 70% at 45% 45%, rgba(3,27,17,${(a * 0.7).toFixed(3)}) 0%, rgba(3,27,17,${Math.min(a + 0.3, 0.95).toFixed(3)}) 100%)`;
   return (
     <Shell ctx={ctx} className="text-white py-14 @3xl:py-20" style={{ background: LEAF_BG, ...goldVar(ctx) }}>
-      {isMediaSrc(str(ctx.p.bgImage)) ? (
-        <Backdrop src={str(ctx.p.bgImage)} overlay="linear-gradient(180deg, rgba(3,27,17,0.85), rgba(3,27,17,0.85))" fallback="" />
-      ) : null}
+      <BgPhoto src={ctx.p.bgImage} overlay={overlay} />
       <SideOrnament side="left" />
       <SideOrnament side="right" />
       <Wrap>
@@ -817,26 +823,32 @@ export function EmeraldAbout({ block }: { block: BlockConfig }) {
   useEmeraldFonts();
   const ctx = makeCtx(block, "emerald-about");
   const stats = items(ctx, "stats");
-  const sub = "mt-7 uppercase font-medium text-[18px] @3xl:text-[20px] text-white";
-  const para = "mt-2 whitespace-pre-line text-[14px] @3xl:text-[15px] leading-[1.95] tracking-[0.03em] text-white/90 @3xl:text-justify";
+  // Design: uppercase white sub-headings, compact gaps, justified paragraphs.
+  const sub = "mt-5 uppercase font-medium text-[18px] @3xl:text-[20px] leading-snug text-white";
+  const para = "mt-1.5 whitespace-pre-line text-[13.5px] @3xl:text-[14px] leading-[1.95] tracking-[0.04em] text-white/90 @3xl:text-justify";
+  // Green tint over the photo, light enough for the room to show through.
+  const a = darkness(ctx.p.bgDarkness, 55);
+  const fade = "linear-gradient(90deg, transparent, rgba(255,255,255,0.35) 20%, rgba(255,255,255,0.35) 80%, transparent)";
   return (
     <Shell ctx={ctx} className="text-white py-14 @3xl:py-20" style={goldVar(ctx)}>
       <Backdrop
         src={str(ctx.p.image)}
-        overlay="linear-gradient(180deg, rgba(28,58,36,0.9) 0%, rgba(22,48,30,0.82) 100%)"
+        overlay={`linear-gradient(180deg, rgba(30,62,38,${a.toFixed(3)}) 0%, rgba(20,48,30,${Math.min(a + 0.08, 0.95).toFixed(3)}) 100%)`}
         fallback="linear-gradient(160deg, #2c4a33 0%, #16301f 100%)"
       />
       <Wrap>
         <Logo ctx={ctx} className="h-[72px] @3xl:h-[84px]" textClass="tracking-[0.25em] text-[20px] font-semibold" />
-        <Heading ctx={ctx} descKey="" className="mt-5" />
-        <Txt ctx={ctx} k="subtitle" as="h3" className="mt-8 @3xl:mt-10 font-medium text-[20px] @3xl:text-[24px] text-white" />
-        <Txt ctx={ctx} k="description" className={`${para} mt-4`} />
+        <Heading ctx={ctx} descKey="" className="mt-4" />
+        <Txt ctx={ctx} k="subtitle" as="h3" className="mt-9 @3xl:mt-14 uppercase font-medium leading-snug text-[19px] @3xl:text-[22px] text-white" />
+        <Txt ctx={ctx} k="description" className={`${para} mt-3`} />
         <Txt ctx={ctx} k="missionTitle" as="h4" className={sub} />
         <Txt ctx={ctx} k="missionText" className={para} />
         <Txt ctx={ctx} k="visionTitle" as="h4" className={sub} />
         <Txt ctx={ctx} k="visionText" className={para} />
         {stats.length ? (
-          <div className="mt-12 flex flex-wrap justify-center gap-y-8 border-y border-white/20 py-8 @3xl:px-10 text-center">
+          <div className="relative mt-12 flex flex-wrap justify-center gap-y-8 py-8 @3xl:px-10 text-center">
+            <span aria-hidden className="absolute inset-x-0 top-0 h-px" style={{ background: fade }} />
+            <span aria-hidden className="absolute inset-x-0 bottom-0 h-px" style={{ background: fade }} />
             {stats.map((st) => (
               <El key={st.id} block={ctx.block} id={st.id} className="w-1/2 @3xl:w-1/4 px-3">
                 <ITxt ctx={ctx} item={st} k="value" className="font-semibold leading-none text-[28px] @3xl:text-[34px]" style={{ fontFamily: CINZEL, color: "color-mix(in srgb, var(--ipx-accent) 70%, white)" }} />

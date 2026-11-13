@@ -247,6 +247,17 @@ describe("iPixxel Realty section widgets", () => {
     expect(screen.getByText("Highlights").closest("h2")?.textContent).toBe("Highlights");
   });
 
+  it("emerald specs and about show the background photo with an adjustable tint", () => {
+    const tint = (c: HTMLElement) => (c.querySelector("img")?.nextElementSibling as HTMLElement).style.background;
+    const specs = render(<RenderBlock block={make("ipx-specs", "emerald-specs", { bgImage: "https://cdn.test/leaf.jpg" })} />);
+    expect(tint(specs.container)).toContain("0.28"); // default 40% -> lighter centre
+    specs.unmount();
+    const about = render(<RenderBlock block={make("ipx-about", "emerald-about", { image: "https://cdn.test/room.jpg", bgDarkness: 20 })} />);
+    expect(tint(about.container)).toContain("0.2");
+    about.rerender(<RenderBlock block={make("ipx-about", "emerald-about", { image: "https://cdn.test/room.jpg", bgDarkness: "999" })} />);
+    expect(tint(about.container)).toContain("0.9"); // clamped
+  });
+
   it("modern overview shows its stats card", () => {
     const { container } = render(<RenderBlock block={make("ipx-overview", "modern-overview")} />);
     expect(container.textContent).toContain("48");
