@@ -121,6 +121,22 @@ describe("iPixxel Realty section widgets", () => {
     }
   });
 
+  it("modern floor plan cards show the starting price and areas", () => {
+    const { container } = render(<RenderBlock block={make("ipx-floorplans", "modern-cards")} />);
+    expect(screen.getByText("₹ 3.9 Cr*")).toBeTruthy();
+    expect(screen.getAllByText("Starting Price").length).toBe(2);
+    expect(container.textContent).toContain("194 sq.m. / 2,087 sq.ft. (Approx.)");
+    expect(screen.getAllByText("Carpet Area").length).toBe(2);
+    expect(screen.getAllByText("1 Sq M - 10.764 Sq Ft").length).toBe(2);
+  });
+
+  it("modern floor plan cards hide price and areas when empty", () => {
+    const plans = [{ title: "2 BHK", image: "", price: "", specs: "", text: "Compact homes." }];
+    const { container } = render(<RenderBlock block={make("ipx-floorplans", "modern-cards", { plans })} />);
+    expect(container.textContent).toContain("Compact homes.");
+    expect(container.textContent).not.toContain("Starting Price");
+  });
+
   it("emerald floor plan tabs switch the plan", () => {
     render(<RenderBlock block={make("ipx-floorplans", "emerald-tabs")} />);
     const tab = screen.getByRole("tab", { name: "4 BHK" });
