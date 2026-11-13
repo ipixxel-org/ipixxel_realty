@@ -444,6 +444,23 @@ export async function loadTemplate(id: string, resource: Resource = "template"):
   }
 }
 
+/**
+ * Published template for anyone (no login) — GET /templates/:id.
+ * The backend only returns published landing templates here, never drafts or
+ * thank-you pages. No localStorage fallback: visitors always see the live copy.
+ * Returns null when the template is missing or not published.
+ */
+export async function loadPublicTemplate(id: string): Promise<LandingPageData | null> {
+  if (!id) return null;
+  try {
+    const raw = await apiFetch<ApiTemplate>(`/templates/${encodeURIComponent(id)}`);
+    applyLandingPagePropertyFromConfig(null);
+    return fromApiTemplate(raw);
+  } catch {
+    return null;
+  }
+}
+
 export interface CreateTemplateInput {
   name: string;
   slug?: string;
