@@ -120,6 +120,11 @@ describe("iPixxel Realty → Hero widget", () => {
     expect(screen.getByLabelText("WhatsApp").querySelector("svg")).toBeTruthy();
   });
 
+  it("emerald slider also takes an uploaded WhatsApp icon", () => {
+    render(<RenderBlock block={make("emerald-slider", { whatsapp: "+91 90000 11111", whatsappIcon: "https://cdn.test/wa.svg" })} />);
+    expect(screen.getByLabelText("WhatsApp").querySelector("img")?.getAttribute("src")).toBe("https://cdn.test/wa.svg");
+  });
+
   it("WhatsApp icon size from the inspector is applied and kept within 24-120px", () => {
     const btn = () => screen.getByLabelText("WhatsApp") as HTMLElement;
     const { rerender } = render(<RenderBlock block={make("offer-slider", { whatsappSize: 80 })} />);
