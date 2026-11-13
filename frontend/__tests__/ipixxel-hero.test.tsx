@@ -145,4 +145,13 @@ describe("iPixxel Realty → Hero widget", () => {
     expect(screen.getByText("Site").getAttribute("href")).toBe("https://example.com");
     expect(container.innerHTML).not.toContain("javascript:");
   });
+
+  it("modern hero menu links open in a new tab only when flagged", () => {
+    render(<RenderBlock block={make("modern-form", { modernNav: "Same | https://a.com\nFresh | https://b.com | new\nAuto | | new" })} />);
+    expect(screen.getByText("Same").getAttribute("target")).toBeNull();
+    expect(screen.getByText("Fresh").getAttribute("target")).toBe("_blank");
+    expect(screen.getByText("Fresh").getAttribute("rel")).toBe("noopener noreferrer");
+    expect(screen.getByText("Auto").getAttribute("href")).toBe("#auto");
+    expect(screen.getByText("Auto").getAttribute("target")).toBe("_blank");
+  });
 });

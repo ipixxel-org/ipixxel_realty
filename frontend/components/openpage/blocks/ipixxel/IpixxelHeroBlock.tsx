@@ -918,19 +918,20 @@ function EmeraldSliderHero(ctx: HeroCtx) {
 /* ------------------------------------------------------------------------- */
 
 /** Navbar lines "Label" or "Label | target" → in-page or safe links. */
-function navLinks(v: unknown): { label: string; href: string }[] {
+function navLinks(v: unknown): { label: string; href: string; newTab: boolean }[] {
   return str(v)
     .split(/\r?\n/)
     .map((line) => line.trim())
     .filter(Boolean)
     .map((line) => {
-      const [label, target = ""] = line.split("|").map((s) => s.trim());
+      const [label, target = "", flag = ""] = line.split("|").map((s) => s.trim());
+      const newTab = flag.toLowerCase() === "new";
       const href = target
         ? /^[a-z0-9-]+$/i.test(target)
           ? `#${target}`
           : safeHref(target)
         : `#${label.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "")}`;
-      return { label, href };
+      return { label, href, newTab };
     })
     .filter((l) => l.label);
 }
@@ -966,7 +967,13 @@ function ModernFormHero(ctx: HeroCtx) {
         {links.length ? (
           <nav className="hidden @3xl:flex items-center gap-[2cqw] text-[12.5px]">
             {links.map((l, i) => (
-              <a key={i} href={l.href || undefined} className="hover:opacity-70">
+              <a
+                key={i}
+                href={l.href || undefined}
+                target={l.newTab ? "_blank" : undefined}
+                rel={l.newTab ? "noopener noreferrer" : undefined}
+                className="hover:opacity-70"
+              >
                 {l.label}
               </a>
             ))}
