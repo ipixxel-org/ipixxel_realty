@@ -242,8 +242,9 @@ describe("iPixxel Realty section widgets", () => {
   it("emerald key highlights puts the second title line below the title", () => {
     render(<RenderBlock block={make("ipx-highlights", "emerald-list", { title: "Highlights", titleAccent: "Second Line" })} />);
     const accent = screen.getByText("Second Line");
-    expect(accent.className).toContain("block");
-    expect(accent.closest("h2")?.textContent).toBe("HighlightsSecond Line");
+    // Own sub-heading below the title row; the rule stays beside the title.
+    expect(accent.tagName).toBe("H3");
+    expect(screen.getByText("Highlights").closest("h2")?.textContent).toBe("Highlights");
   });
 
   it("modern overview shows its stats card", () => {

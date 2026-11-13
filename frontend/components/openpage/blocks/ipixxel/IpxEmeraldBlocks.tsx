@@ -169,23 +169,36 @@ function Heading({
   accentKey?: string;
   descKey?: string;
   center?: boolean;
-  /** Put the second title line on its own line below the title. */
+  /**
+   * Show the second title line below the title row (rule stays beside the
+   * title), as a lighter sub-heading — like the design's overview heading.
+   */
   stack?: boolean;
   className?: string;
 }) {
   const title = str(ctx.p[k]);
   const accent = accentKey ? str(ctx.p[accentKey]) : "";
+  const inlineAccent = accent && !stack;
   return (
     <div className={`${center ? "text-center" : ""} ${className}`}>
-      {title || accent ? (
+      {title || inlineAccent ? (
         <div className={`flex items-center gap-5 @3xl:gap-8 ${center ? "justify-center" : ""}`}>
           <h2 className="font-semibold leading-tight tracking-[0.02em] text-[21px] @3xl:text-[26px]" style={{ fontFamily: CINZEL, color: "var(--ipx-accent)" }}>
             <Txt ctx={ctx} k={k} as="span" />
-            {title && accent && !stack ? " " : null}
-            {accent ? <Txt ctx={ctx} k={accentKey} as="span" className={stack ? "block" : undefined} /> : null}
+            {title && inlineAccent ? " " : null}
+            {inlineAccent ? <Txt ctx={ctx} k={accentKey} as="span" /> : null}
           </h2>
           <Rule />
         </div>
+      ) : null}
+      {accent && stack ? (
+        <Txt
+          ctx={ctx}
+          k={accentKey}
+          as="h3"
+          className={`${title ? "mt-7 @3xl:mt-10" : ""} whitespace-pre-line text-[21px] @3xl:text-[24px] font-medium leading-snug`}
+          style={{ color: "color-mix(in srgb, var(--ipx-accent) 85%, white)" }}
+        />
       ) : null}
       {descKey ? (
         <Txt
