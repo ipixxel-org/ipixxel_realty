@@ -35,6 +35,7 @@ import {
   type ItemFieldDef,
 } from "./field-helpers";
 import { ELEMENT_ITEM_FIELDS, ELEMENT_ITEM_SUB_ELEMENTS, ELEMENT_ITEM_TEMPLATES } from "./element-fields";
+import { parseNavLines, serializeNavLines, type NavLine } from "@/lib/openpage/nav-lines";
 import { IPX_FIELD_VARIANTS, IPX_INSPECTOR_FIELDS, IPX_KNOWN_VARIANTS } from "@/lib/openpage/ipixxel-blocks";
 
 /** Explicit item fields for a block's list, keyed `${blockType}.${propKey}`. */
@@ -57,7 +58,7 @@ const ITEM_FIELDS: Record<string, ItemFieldDef[]> = {
 interface FieldDef {
   key: string
   label: string
-  type: 'text' | 'textarea' | 'select' | 'array-strings' | 'array-items' | 'image' | 'icon' | 'form-select' | 'toggle' | 'nav-menu' | 'number' | 'color'
+  type: 'text' | 'textarea' | 'select' | 'array-strings' | 'array-items' | 'image' | 'icon' | 'form-select' | 'toggle' | 'nav-menu' | 'nav-lines' | 'number' | 'color'
   options?: string[]
 }
 
@@ -1238,7 +1239,7 @@ const blockFields: Partial<Record<BlockType, { sections: { title: string; fields
         { key: 'emeraldRibbon', label: 'Offer ribbon', type: 'text' },
       ]},
       { title: 'Modern form (template 5)', fields: [
-        { key: 'modernNav', label: 'Menu links, one per line (Label or Label | section ID / URL)', type: 'textarea' },
+        { key: 'modernNav', label: 'Menu items', type: 'nav-lines' },
         { key: 'modernEyebrow', label: 'Small label above the title', type: 'text' },
         { key: 'modernTitle', label: 'Title (new line = new line)', type: 'textarea' },
         { key: 'modernText', label: 'Paragraph', type: 'textarea' },
@@ -1572,6 +1573,95 @@ function StyleFieldButton({ block, fieldKey }: { block: BlockConfig; fieldKey: s
   )
 }
 
+function NavLinesField({
+  label,
+  value,
+  onChange,
+}: {
+  label: string
+  value: string
+  onChange: (v: string) => void
+}) {
+  // Local list so half-filled rows (e.g. a just-added empty item) don't vanish.
+  // If the saved value changed from outside (undo, AI rewrite), it wins.
+  const [draft, setItems] = useState<NavLine[]>(() => parseNavLines(value))
+  const items = serializeNavLines(draft) === value ? draft : parseNavLines(value)
+
+  function commit(next: NavLine[]) {
+    setItems(next)
+    const s = serializeNavLines(next)
+    if (s !== value) onChange(s)
+  }
+  function patch(i: number, p: Partial<NavLine>) {
+    commit(items.map((it, idx) => (idx === i ? { ...it, ...p } : it)))
+  }
+
+  const input = 'w-full px-1.5 py-1 rounded border border-border-subtle bg-bg-3 text-text-0 text-[11px] outline-none focus:border-green'
+
+  return (
+    <div className="mb-2.5">
+      <label className="block text-[11.5px] text-text-2 mb-1 font-medium">{label}</label>
+      <p className="text-[10px] text-text-3 mb-2 leading-relaxed">
+        Link to a section with <code className="text-green">#section-id</code> (match the Section ID field on that
+        section) or to a page with <code className="text-green">https://…</code>. Leave the URL empty to scroll to
+        the section named like the label.
+      </p>
+      {items.map((item, i) => (
+        <div key={i} className="bg-bg-2 border border-border-default rounded p-2 mb-1.5 space-y-1.5">
+          <div className="flex items-center justify-between">
+            <span className="text-[10px] text-text-3 font-medium">Item {i + 1}</span>
+            <button
+              type="button"
+              onClick={() => commit(items.filter((_, idx) => idx !== i))}
+              className="text-[10px] text-text-3 hover:text-status-red transition-colors"
+            >
+              Remove
+            </button>
+          </div>
+          <div>
+            <label className="block text-[10px] text-text-3 mb-0.5">Label</label>
+            <input
+              type="text"
+              value={item.label}
+              placeholder="e.g. Amenities"
+              onChange={(e) => patch(i, { label: e.target.value })}
+              className={input}
+            />
+          </div>
+          <div>
+            <label className="block text-[10px] text-text-3 mb-0.5">URL</label>
+            <input
+              type="text"
+              value={item.href}
+              placeholder="https://… or #section-id"
+              onChange={(e) => patch(i, { href: e.target.value })}
+              className={input}
+            />
+          </div>
+          <div>
+            <label className="block text-[10px] text-text-3 mb-0.5">Link target</label>
+            <select
+              value={item.newTab ? '_blank' : '_self'}
+              onChange={(e) => patch(i, { newTab: e.target.value === '_blank' })}
+              className={`${input} cursor-pointer`}
+            >
+              <option value="_self">Same tab</option>
+              <option value="_blank">New tab</option>
+            </select>
+          </div>
+        </div>
+      ))}
+      <button
+        type="button"
+        onClick={() => commit([...items, { label: '', href: '', newTab: false }])}
+        className="text-[10px] text-green hover:text-green-dim transition-colors mt-0.5"
+      >
+        + Add menu item
+      </button>
+    </div>
+  )
+}
+
 function PropertyField({ field, block }: { field: FieldDef; block: BlockConfig }) {
   const updateBlockProps = useConfigStore((s) => s.updateBlockProps)
   const updateBlock = useConfigStore((s) => s.updateBlock)
@@ -1652,6 +1742,15 @@ function PropertyField({ field, block }: { field: FieldDef; block: BlockConfig }
   })()
 
   switch (field.type) {
+    case 'nav-lines':
+      return (
+        <NavLinesField
+          label={field.label}
+          value={typeof value === 'string' ? value : ''}
+          onChange={onChange}
+        />
+      )
+
     case 'nav-menu': {
       // Prefer structured menuItems; migrate legacy string links on first edit.
       const rawItems = Array.isArray(value) ? value : []
