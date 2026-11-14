@@ -485,7 +485,7 @@ export default function AdminLeadsPage() {
         isOpen={Boolean(convertModalLead)}
         lead={convertModalLead}
         onClose={() => setConvertModalLead(null)}
-        onSuccess={() => void loadLeads()}
+        onSuccess={() => void load()}
       />
     </>
   );

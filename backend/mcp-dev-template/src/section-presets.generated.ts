@@ -2,8 +2,8 @@
  * AUTO-GENERATED - do not edit by hand.
  *
  * Snapshot of frontend/lib/openpage/section-presets.ts taken by
- * mcp-dev-template/scripts/generate-library.ts. Re-run `npm run generate` in
- * mcp-dev-template after changing the frontend catalogue.
+ * backend/mcp-dev-template/scripts/generate-library.ts. Re-run `npm run mcp:generate`
+ * from backend/ after changing the frontend catalogue.
  */
 
 export type SectionPresetCategory = "Header" | "Footer" | "Lead Forms" | "Hero" | "Overview" | "Amenities" | "Location" | "Floor Plans" | "Gallery" | "Pricing" | "Specifications" | "Builder" | "Testimonials" | "Brochure";
@@ -825,6 +825,68 @@ export const SECTION_PRESETS: SectionPreset[] = [
         {
           "title": "Retail",
           "meta": "Within 2 km"
+        }
+      ],
+      "anchor": "location"
+    }
+  },
+  {
+    "id": "location-advantages",
+    "category": "Location",
+    "name": "Location Advantages",
+    "description": "Map with a button, then nearby places grouped by category",
+    "type": "location",
+    "variant": "advantages",
+    "props": {
+      "title": "Location Advantages",
+      "subtitle": "An Exclusive Address Where The World Comes To You",
+      "embedUrl": "https://www.google.com/maps/embed?pb=!1m18!1m12!1m3!1d3888.079!2d77.7499!3d12.9698!2m3!1f0!2d0!3f0!3m2!1i1024!2i768!4f13.1!3m3!1m2!1s0x3bae0e0!2sWhitefield%2C%20Bengaluru!5e0!3m2!1sen!2sin!4v1710000000000",
+      "ctaText": "Google Map Location",
+      "items": [
+        {
+          "title": "Hospitals",
+          "meta": "",
+          "places": [
+            "Global Hospital - 2 Mins",
+            "Ojas Hospital - 3 Mins",
+            "Aditya Birla Hospital - 12 Mins"
+          ]
+        },
+        {
+          "title": "Transport",
+          "meta": "",
+          "places": [
+            "Akurdi Railway Station - 4 Mins",
+            "Dehu Road Station - 15 Mins",
+            "Ravet Bus Stop - 2 Mins"
+          ]
+        },
+        {
+          "title": "Play School",
+          "meta": "",
+          "places": [
+            "Podar Jumbo Kids - 2 Mins",
+            "Euro Kids Ravet - 3 Mins",
+            "Orchid The International School - 6 Mins"
+          ]
+        },
+        {
+          "title": "Markets & Malls",
+          "meta": "",
+          "places": [
+            "D-Mart Ravet - 2 Mins",
+            "Elpro City Square Mall Chinchwad - 12 Mins",
+            "Phoenix Mall Of Millennium Wakad - 15 Mins"
+          ]
+        },
+        {
+          "title": "Colleges",
+          "meta": "",
+          "places": [
+            "Dr. D.Y. Patil Institute & Technology - 3 Mins",
+            "PCCOE (Pimpri Chinchwad College of Engineering) - 5 Mins",
+            "SB PATIL (College of Science and Commerce) - 5 Mins"
+          ]
         }
       ],
       "anchor": "location"

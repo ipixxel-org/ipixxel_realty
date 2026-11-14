@@ -1395,6 +1395,76 @@ export async function getIntegrationsStatus(): Promise<
   return apiFetch("/admin/integrations/status");
 }
 
+// --- Super Admin → Integrations → MCP for Claude ---
+
+export type McpServerConfig = {
+  command: string;
+  args: string[];
+  env: Record<string, string>;
+};
+
+export type McpConnection = {
+  serverName: string;
+  token: string;
+  expiresAt: string | null;
+  config: { mcpServers: Record<string, McpServerConfig> };
+  paths: {
+    tsxCli: string;
+    entry: string;
+    apiBaseUrl: string;
+    siteFile: string;
+    brandKitDir: string;
+  };
+  claudeConfigPath: string;
+};
+
+export async function getMcpConnection(): Promise<McpConnection> {
+  return apiFetch<McpConnection>("/admin/integrations/mcp/connection");
+}
+
+export type McpSettings = {
+  source: "database" | "defaults";
+  command: string;
+  backendUrl: string;
+  tokenExpiresIn: string;
+  tsxCli: string;
+  serverEntry: string;
+  siteFile: string;
+  brandKitDir: string;
+  claudeConfigPath: string;
+  updatedAt: string | null;
+};
+
+export type UpdateMcpSettingsInput = {
+  command?: string;
+  backendUrl?: string;
+  tokenExpiresIn?: string;
+  tsxCli?: string;
+  serverEntry?: string;
+  siteFile?: string;
+  brandKitDir?: string;
+  claudeConfigPath?: string;
+};
+
+export async function getMcpSettings(): Promise<McpSettings> {
+  return apiFetch<McpSettings>("/admin/integrations/mcp/settings");
+}
+
+export async function updateMcpSettings(
+  input: UpdateMcpSettingsInput,
+): Promise<McpSettings> {
+  return apiFetch<McpSettings>("/admin/integrations/mcp/settings", {
+    method: "PUT",
+    body: JSON.stringify(input),
+  });
+}
+
+export async function resetMcpSettings(): Promise<McpSettings> {
+  return apiFetch<McpSettings>("/admin/integrations/mcp/settings/reset", {
+    method: "POST",
+  });
+}
+
 export async function getOrgSmtpConfig(): Promise<SmtpConfig> {
   return apiFetch<SmtpConfig>("/org/email/config");
 }

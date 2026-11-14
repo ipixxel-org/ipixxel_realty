@@ -20,6 +20,7 @@ import {
   applyThemePresetToSite,
   getDesignTokens,
   readSite,
+  resolveSitePath,
   setBlockStyleTokens,
   setThemeTokens,
   setTypographyTokens,
@@ -75,6 +76,20 @@ export function registerDesignTools(server: McpServer): void {
           style: b.style ?? {},
         })),
       );
+    },
+  );
+
+  server.registerTool(
+    "get_site",
+    {
+      title: "Get site document",
+      description:
+        "Read the full OpenPage site document (name, theme, design system, blocks, pages and SEO). Use this after generate_ai_template or create_template to inspect the complete template.",
+      inputSchema: { siteFile: siteFileArg },
+    },
+    async ({ siteFile }) => {
+      const site = await readSite(requireSitePath(siteFile));
+      return text(site);
     },
   );
 
@@ -216,17 +231,21 @@ export function registerDesignTools(server: McpServer): void {
     {
       title: "Generate AI template",
       description:
-        "Generate a complete, token-driven OpenPage template via the backend design agent. Omit designStyle/colours/sections to let the agent design everything itself. Optionally save the returned document to a site file.",
+        "Generate a complete, token-driven OpenPage template via the backend design agent. Omit designStyle/colours/sections to let the agent design everything itself. The full site document is returned and (by default) saved to siteFile or OP_SITE_FILE so list_blocks, get_design_tokens and the other editing tools can work on it.",
       inputSchema: {
         prompt: z.string().describe("Design/content brief for the landing page."),
         mode: z.enum(["prompt", "project", "template"]).optional(),
         templateName: z.string().optional(),
+        pageType: z.string().optional(),
         category: z.string().optional(),
+        projectId: z.string().optional(),
         designStyle: z.string().optional(),
         primaryColor: z.string().optional(),
         accentColor: z.string().optional(),
+        typography: z.string().optional(),
         targetAudience: z.string().optional(),
         selectedSections: z.array(z.string()).optional(),
+        imageStyle: z.string().optional(),
         siteFile: siteFileArg,
         save: saveArg,
       },
@@ -240,17 +259,26 @@ export function registerDesignTools(server: McpServer): void {
           mode: args.mode ?? "prompt",
           prompt: args.prompt,
           templateName: args.templateName,
+          pageType: args.pageType,
           category: args.category,
+          projectId: args.projectId,
           designStyle: args.designStyle,
           primaryColor: args.primaryColor,
           accentColor: args.accentColor,
+          typography: args.typography,
           targetAudience: args.targetAudience,
           selectedSections: args.selectedSections,
+          imageStyle: args.imageStyle,
         });
-        if (args.siteFile) {
-          await writeSite(requireSitePath(args.siteFile), site);
-        }
-        return text({ saved: Boolean(args.siteFile), ...summarize(site) });
+        const target = resolveSitePath(args.siteFile);
+        const shouldSave = Boolean(target) && args.save !== false;
+        if (shouldSave && target) await writeSite(target, site);
+        return text({
+          saved: shouldSave,
+          path: shouldSave ? target : undefined,
+          ...summarize(site),
+          site,
+        });
       } catch (err) {
         return errorText((err as Error).message);
       }
@@ -326,6 +354,138 @@ export function registerDesignTools(server: McpServer): void {
       } catch (err) {
         return errorText((err as Error).message);
       }
+    },
+  );
+
+  server.registerTool(
+    "generate_ai_section",
+    {
+      title: "Generate AI section",
+      description:
+        "Generate a brand new section block with tailored copy & styles using natural language, and append/insert it into the document.",
+      inputSchema: {
+        prompt: z.string().describe("Instructions describing the section, copy, and layout to generate."),
+        sectionType: z.string().optional().describe("Optional block type: features, pricing, amenities, faq, cta, testimonials, etc."),
+        tone: z.string().optional().describe("Tone: luxury, urgent, corporate, friendly."),
+        insertIndex: z.number().optional().describe("Optional 0-based index to insert the block at (defaults to end of page)."),
+        siteFile: siteFileArg,
+        save: saveArg,
+      },
+    },
+    async ({ prompt, sectionType, tone, insertIndex, siteFile, save }) => {
+      if (!BackendClient.isBackendConfigured()) {
+        return errorText("Set OP_API_TOKEN (and optionally OP_API_BASE_URL) to use AI tools.");
+      }
+      const target = requireSitePath(siteFile);
+      try {
+        const site = await readSite(target);
+        const newBlock = await BackendClient.generateSection({
+          prompt,
+          sectionType,
+          tone,
+          siteContext: {
+            projectName: (site.property as any)?.name || site.name,
+            location: (site.property as any)?.location,
+          },
+        });
+        if (!newBlock || typeof newBlock !== "object" || !newBlock.id) {
+          return errorText("Failed to generate a valid section block.");
+        }
+        const next = structuredClone(site);
+        const idx = typeof insertIndex === "number" ? Math.max(0, Math.min(next.blocks.length, insertIndex)) : next.blocks.length;
+        next.blocks.splice(idx, 0, newBlock as any);
+        if (save !== false) await writeSite(target, next);
+        return text({ saved: save !== false, path: target, block: newBlock, insertedIndex: idx });
+      } catch (err) {
+        return errorText((err as Error).message);
+      }
+    },
+  );
+
+  server.registerTool(
+    "edit_ai_component",
+    {
+      title: "Edit component with AI",
+      description:
+        "Modify a specific component or nested element inside a block using natural language instructions (e.g. 'Make headline shorter and mention private beach access').",
+      inputSchema: {
+        blockId: z.string().describe("Target block id to edit."),
+        prompt: z.string().describe("Natural language editing instruction."),
+        elementId: z.string().optional().describe("Optional element id inside the block to target."),
+        action: z.string().optional().describe("Action type: edit, rewrite, tone, polish."),
+        tone: z.string().optional().describe("Tone: luxury, urgent, friendly, etc."),
+        siteFile: siteFileArg,
+        save: saveArg,
+      },
+    },
+    async ({ blockId, prompt, elementId, action, tone, siteFile, save }) => {
+      if (!BackendClient.isBackendConfigured()) {
+        return errorText("Set OP_API_TOKEN (and optionally OP_API_BASE_URL) to use AI tools.");
+      }
+      const target = requireSitePath(siteFile);
+      try {
+        const site = await readSite(target);
+        const block = walkBlocks(site.blocks).find((b) => b.id === blockId);
+        if (!block) return errorText(`Block "${blockId}" not found.`);
+
+        const updated = await BackendClient.editComponent({
+          block,
+          prompt,
+          elementId,
+          action,
+          tone,
+          siteContext: {
+            projectName: (site.property as any)?.name || site.name,
+            location: (site.property as any)?.location,
+          },
+        });
+
+        const next = structuredClone(site);
+        const targetBlock = walkBlocks(next.blocks).find((b) => b.id === blockId);
+        if (targetBlock && updated && typeof updated === "object") {
+          if (updated.props) targetBlock.props = updated.props as Record<string, unknown>;
+          if (updated.style) targetBlock.style = updated.style as never;
+          if (updated.elementStyles) (targetBlock as any).elementStyles = updated.elementStyles;
+        }
+        if (save !== false) await writeSite(target, next);
+        return text({ saved: save !== false, path: target, blockId, elementId });
+      } catch (err) {
+        return errorText((err as Error).message);
+      }
+    },
+  );
+
+  server.registerTool(
+    "get_page_seo",
+    {
+      title: "Get page SEO settings",
+      description: "Read meta tags, OpenGraph, keywords, and schema settings for the site document.",
+      inputSchema: { siteFile: siteFileArg },
+    },
+    async ({ siteFile }) => {
+      const site = await readSite(requireSitePath(siteFile));
+      return text(site.seo ?? {});
+    },
+  );
+
+  server.registerTool(
+    "set_page_seo",
+    {
+      title: "Set page SEO settings",
+      description: "Update meta title, meta description, keywords, canonical URL, or OpenGraph settings.",
+      inputSchema: {
+        seo: z.record(z.any()).describe("SEO settings patch: metaTitle, metaDescription, keywords, canonical, ogTitle, ogDescription, ogImage, etc."),
+        siteFile: siteFileArg,
+        save: saveArg,
+      },
+    },
+    async ({ seo, siteFile, save }) => {
+      const target = requireSitePath(siteFile);
+      const site = await readSite(target);
+      const next = structuredClone(site);
+      next.seo = { ...(next.seo || {}), ...seo };
+      if (save !== false) await writeSite(target, next);
+      return text({ saved: save !== false, path: target, seo: next.seo });
     },
   );
 }

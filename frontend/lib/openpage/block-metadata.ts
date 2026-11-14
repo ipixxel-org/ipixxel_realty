@@ -1,5 +1,5 @@
 import type { BlockType } from "@/components/openpage/blocks/types";
-// Relative on purpose: mcp-dev-template imports this file without the @ alias.
+// Relative on purpose: backend/mcp-dev-template imports this file without the @ alias.
 import { IPX_BLOCK_METADATA } from "./ipixxel-blocks";
 
 export interface BlockMeta {

@@ -17,7 +17,10 @@
     "test:watch": "jest --watch",
     "test:cov": "jest --coverage",
     "test:debug": "node --inspect-brk -r tsconfig-paths/register -r ts-node/register node_modules/.bin/jest --runInBand",
-    "test:e2e": "jest --config ./test/jest-e2e.json"
+    "test:e2e": "jest --config ./test/jest-e2e.json",
+    "mcp": "tsx mcp-dev-template/src/index.ts",
+    "mcp:generate": "tsx mcp-dev-template/scripts/generate-library.ts",
+    "mcp:typecheck": "tsc -p mcp-dev-template/tsconfig.json --noEmit"
   },
   "prisma": {
     "seed": "ts-node prisma/seed.ts"
@@ -25,6 +28,7 @@
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1120.0",
     "@aws-sdk/s3-request-presigner": "^3.1120.0",
+    "@modelcontextprotocol/sdk": "^1.32.1",
     "@nestjs/common": "^11.0.1",
     "@nestjs/core": "^11.0.1",
     "@nestjs/jwt": "^11.0.2",
@@ -44,7 +48,8 @@
     "razorpay": "^2.9.8",
     "reflect-metadata": "^0.2.2",
     "rxjs": "^7.8.1",
-    "socket.io": "^4.8.4"
+    "socket.io": "^4.8.4",
+    "zod": "^3.25.76"
   },
   "devDependencies": {
     "@emnapi/core": "^1.11.3",
@@ -70,6 +75,7 @@
     "ts-jest": "^29.2.5",
     "ts-loader": "^9.5.2",
     "ts-node": "^10.9.2",
+    "tsx": "^4.20.6",
     "tsconfig-paths": "^4.2.0",
     "typescript": "^5.9.3",
     "typescript-eslint": "^8.20.0"

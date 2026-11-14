@@ -284,12 +284,17 @@ export function SortableBlock({ block, isSelected, isMultiSelected = false, froz
         {...attributes}
         {...listeners}
         title="Drag to reorder section"
-        className={`absolute top-0 left-0 z-20 text-[10px] font-medium tracking-wide text-white bg-[#5b9cff] hover:bg-[#4a8beb] px-2 py-0.5 rounded-br flex items-center gap-1 cursor-grab active:cursor-grabbing select-none shadow-sm transition-opacity ${
-          isSelected || isHovered ? "opacity-100" : "opacity-0"
-        }`}
+        className={`absolute top-0 left-0 z-20 text-[10px] font-medium tracking-wide text-white px-2 py-0.5 rounded-br flex items-center gap-1 cursor-grab active:cursor-grabbing select-none shadow-sm transition-opacity ${
+          block.globalWidgetId ? "bg-purple-600 hover:bg-purple-500" : "bg-[#5b9cff] hover:bg-[#4a8beb]"
+        } ${isSelected || isHovered ? "opacity-100" : "opacity-0"}`}
       >
         <GripVertical size={11} className="shrink-0" />
         <span>{isDivBlock(block) ? "Div" : blockLabels[block.type] || blockMetadata.find((m) => m.type === block.type)?.label || block.type}</span>
+        {block.globalWidgetId && (
+          <span className="bg-white/20 text-[9px] px-1 py-0.2 rounded font-mono ml-0.5">
+            Symbol
+          </span>
+        )}
       </div>
 
       {/* Floating Toolbar (Elementor Pro style) */}

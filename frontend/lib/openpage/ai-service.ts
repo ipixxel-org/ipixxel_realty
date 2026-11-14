@@ -75,3 +75,48 @@ export async function regenerateAiSection(
   });
   return result;
 }
+
+export interface GenerateAiSectionParams {
+  prompt: string;
+  sectionType?: string;
+  tone?: string;
+  siteContext?: {
+    projectName?: string;
+    location?: string;
+    category?: string;
+  };
+}
+
+export async function generateAiSection(
+  params: GenerateAiSectionParams,
+): Promise<BlockConfig> {
+  const result = await apiFetch<BlockConfig>("/ai/generate-section", {
+    method: "POST",
+    body: JSON.stringify(params),
+  });
+  return result;
+}
+
+export interface EditAiComponentParams {
+  block: BlockConfig;
+  prompt: string;
+  elementId?: string;
+  action?: string;
+  tone?: string;
+  siteContext?: {
+    projectName?: string;
+    location?: string;
+    category?: string;
+  };
+}
+
+export async function editAiComponent(
+  params: EditAiComponentParams,
+): Promise<BlockConfig> {
+  const result = await apiFetch<BlockConfig>("/ai/edit-component", {
+    method: "POST",
+    body: JSON.stringify(params),
+  });
+  return result;
+}
+

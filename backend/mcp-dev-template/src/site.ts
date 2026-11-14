@@ -4,7 +4,7 @@
  * pure functions over plain objects plus optional file read/write.
  */
 
-import { readFile, writeFile } from "node:fs/promises";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import {
   DEFAULT_THEME,
@@ -68,6 +68,7 @@ export async function readSite(sitePath: string): Promise<SiteConfig> {
 }
 
 export async function writeSite(sitePath: string, site: SiteConfig): Promise<void> {
+  await mkdir(path.dirname(sitePath), { recursive: true });
   await writeFile(sitePath, `${JSON.stringify(site, null, 2)}\n`, "utf8");
 }
 

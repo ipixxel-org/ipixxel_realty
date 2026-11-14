@@ -12,24 +12,43 @@ import type { FormDefinition } from "@/lib/openpage/forms-store";
 import { mergeFormLibraries } from "@/lib/openpage/resolve-form";
 import { PageSettingsChrome } from "@/components/openpage/renderer/PageSettingsChrome";
 import { applyVarsDeep } from "@/lib/openpage/block-style";
+import { shouldRenderBlock } from "@/lib/openpage/conditional-render";
+import { ConditionalRenderProvider } from "@/components/openpage/renderer/ConditionalContext";
 
 function varsFromProperty(site: SiteConfig): Record<string, string> {
-  if (site.vars && Object.keys(site.vars).length) return site.vars;
   const p = site.property;
-  if (!p) return {};
+  const defaults: Record<string, string> = p
+    ? {
+        property_name: p.name || "",
+        "property.name": p.name || "",
+        builder_name: p.builder || "",
+        "property.builder": p.builder || "",
+        starting_price: p.startingPrice || "",
+        "property.startingPrice": p.startingPrice || "",
+        rera_number: p.reraNumber || "",
+        "property.reraNumber": p.reraNumber || "",
+        possession_date: p.possession || "",
+        "property.possession": p.possession || "",
+        carpet_area: p.carpetArea || "",
+        "property.carpetArea": p.carpetArea || "",
+        location: p.location || "",
+        "property.location": p.location || "",
+        description: p.description || "",
+        "property.description": p.description || "",
+        tagline: p.description || "",
+        "property.tagline": p.description || "",
+        land_area: p.landArea || "",
+        "property.landArea": p.landArea || "",
+        towers: p.towers || "",
+        "property.towers": p.towers || "",
+        units: p.units || "",
+        "property.units": p.units || "",
+      }
+    : {};
+
   return {
-    property_name: p.name || "",
-    builder_name: p.builder || "",
-    starting_price: p.startingPrice || "",
-    rera_number: p.reraNumber || "",
-    possession_date: p.possession || "",
-    carpet_area: p.carpetArea || "",
-    location: p.location || "",
-    description: p.description || "",
-    tagline: p.description || "",
-    land_area: p.landArea || "",
-    towers: p.towers || "",
-    units: p.units || "",
+    ...defaults,
+    ...(site.vars || {}),
   };
 }
 
@@ -56,11 +75,22 @@ export function SiteRenderer({
     return applyVarsDeep(site, vars) as SiteConfig;
   }, [site]);
 
-  const pages =
-    resolvedSite.pages && resolvedSite.pages.length > 0
-      ? resolvedSite.pages
-      : [{ id: "page-home", name: "Home", path: "/", blocks: resolvedSite.blocks }];
-  const blocks: BlockConfig[] = pages[0]?.blocks ?? resolvedSite.blocks ?? [];
+  const blocks = useMemo<BlockConfig[]>(() => {
+    const pages =
+      resolvedSite.pages && resolvedSite.pages.length > 0
+        ? resolvedSite.pages
+        : [{ id: "page-home", name: "Home", path: "/", blocks: resolvedSite.blocks }];
+    return pages[0]?.blocks ?? resolvedSite.blocks ?? [];
+  }, [resolvedSite]);
+
+  const conditionalContext = useMemo(
+    () => ({ vars: varsFromProperty(resolvedSite), property: resolvedSite.property }),
+    [resolvedSite],
+  );
+  const visibleBlocks = useMemo(
+    () => blocks.filter((b) => shouldRenderBlock(b, conditionalContext)),
+    [blocks, conditionalContext],
+  );
 
   const resolved = useMemo(() => resolveSiteTheme(resolvedSite), [resolvedSite]);
   const cssVars = useMemo(() => siteThemeCSS(resolvedSite), [resolvedSite]);
@@ -98,9 +128,11 @@ export function SiteRenderer({
       >
         {resolvedSite.settings ? <PageSettingsChrome settings={resolvedSite.settings} /> : null}
         <DeviceProvider device="auto">
-          {blocks.map((block) => (
-            <RenderBlock key={block.id} block={block} />
-          ))}
+          <ConditionalRenderProvider value={conditionalContext}>
+            {visibleBlocks.map((block) => (
+              <RenderBlock key={block.id} block={block} />
+            ))}
+          </ConditionalRenderProvider>
         </DeviceProvider>
       </div>
     </OpenPageRuntimeProvider>

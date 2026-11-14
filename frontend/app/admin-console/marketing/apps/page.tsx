@@ -272,7 +272,7 @@ export default function AdminMarketingAppsPage() {
       name:
         key === "meta"
           ? "Facebook / Meta"
-          : key === "google_ads"
+          : (key as string) === "google_ads"
             ? "Google Ads"
             : key === "whatsapp"
               ? "WhatsApp Ads"

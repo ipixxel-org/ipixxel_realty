@@ -12,6 +12,8 @@ import {
   resolveBlockStyleForDevice,
 } from "@/lib/openpage/block-style";
 import { useDevice } from "@/components/openpage/runtime/device";
+import { useConditionalContext } from "@/components/openpage/renderer/ConditionalContext";
+import { shouldRenderBlock } from "@/lib/openpage/conditional-render";
 import { filterHiddenItems } from "./render-utils";
 import { CustomFields } from "./CustomFields";
 
@@ -227,6 +229,10 @@ const blockRenderers: Record<string, React.ComponentType<{ block: BlockConfig }>
 
 export function RenderBlock({ block }: { block: BlockConfig }): ReactNode {
   const device = useDevice()
+  const conditional = useConditionalContext()
+  // Only the live/public renderer supplies conditions; the canvas has no
+  // provider so every block stays visible and editable.
+  if (conditional && !shouldRenderBlock(block, conditional)) return null
   const Renderer = blockRenderers[block.type] || PlaceholderBlock
   const resolved = resolveBlockStyleForDevice(block.style, device)
   const scopedCss = blockStyleTag(block.id, resolved, WIDGETS_WITH_REPLACEABLE_PADDING.has(block.type), MEDIA_WIDGETS.has(block.type))

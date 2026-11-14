@@ -1,19 +1,15 @@
 "use client";
 
 import { useState } from "react";
-import {
-  Sparkles,
-  Wand2,
-  X,
-  RefreshCw,
-  Check,
-  CheckCircle2,
-  Zap,
-} from "lucide-react";
+import { Sparkles, Wand2, X, RefreshCw, Zap } from "lucide-react";
 import { toast } from "sonner";
 import { useConfigStore } from "@/components/openpage/store/configStore";
 import { useEditorStore } from "@/components/openpage/store/editorStore";
-import { regenerateAiSection, type RegenerateSectionParams } from "@/lib/openpage/ai-service";
+import {
+  editAiComponent,
+  regenerateAiSection,
+  type RegenerateSectionParams,
+} from "@/lib/openpage/ai-service";
 import type { BlockConfig } from "@/components/openpage/blocks/types";
 
 export function SectionAiAssistant({
@@ -27,16 +23,37 @@ export function SectionAiAssistant({
 }) {
   const updateBlock = useConfigStore((s) => s.updateBlock);
   const siteConfig = useConfigStore((s) => s.config);
+  const selectedElement = useEditorStore((s) => s.selectedElement);
 
   const [prompt, setPrompt] = useState("");
   const [loading, setLoading] = useState(false);
-  const [selectedAction, setSelectedAction] = useState<RegenerateSectionParams["action"]>("rewrite");
   const [tone, setTone] = useState("luxury");
+
+  // Element deep-selection (canvas click on a heading, CTA, list item...) lets
+  // the AI edit just that node instead of rewriting the whole section.
+  const targetElementId =
+    selectedElement && selectedElement.blockId === block?.id
+      ? selectedElement.elementId
+      : undefined;
 
   if (!open || !block) return null;
 
+  const context = {
+    projectName: siteConfig.property?.name || siteConfig.name,
+    location: siteConfig.property?.location,
+    category: siteConfig.property?.type,
+  };
+
+  const persist = (updated: BlockConfig) => {
+    updateBlock(block.id, {
+      props: updated.props ?? block.props,
+      style: updated.style ?? block.style,
+      elementStyles: updated.elementStyles ?? block.elementStyles,
+    });
+  };
+
   const handleExecute = async (actionToRun?: RegenerateSectionParams["action"]) => {
-    const action = actionToRun || selectedAction;
+    const action = actionToRun || "rewrite";
     setLoading(true);
 
     try {
@@ -45,11 +62,7 @@ export function SectionAiAssistant({
         block,
         tone,
         prompt: prompt.trim() || undefined,
-        siteContext: {
-          projectName: siteConfig.property?.name || siteConfig.name,
-          location: siteConfig.property?.location,
-          category: siteConfig.property?.type,
-        },
+        siteContext: context,
       });
 
       if (updated && updated.props) {
@@ -60,8 +73,41 @@ export function SectionAiAssistant({
         toast.success(`Section updated via AI!`);
         onClose();
       }
-    } catch (err: any) {
-      toast.error(err?.message || "Failed to update section");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to update section");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Natural-language, element-scoped edit (Builder.io-style "edit with AI").
+  const handleCustomEdit = async () => {
+    if (!prompt.trim()) {
+      toast.error("Describe the change you want first");
+      return;
+    }
+    setLoading(true);
+    try {
+      const updated = await editAiComponent({
+        block,
+        prompt: prompt.trim(),
+        elementId: targetElementId,
+        action: "edit",
+        tone,
+        siteContext: context,
+      });
+      if (updated && typeof updated === "object") {
+        persist(updated);
+        toast.success(
+          targetElementId
+            ? `Element "${targetElementId}" updated via AI`
+            : "Component updated via AI",
+        );
+        setPrompt("");
+        onClose();
+      }
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to apply AI edit");
     } finally {
       setLoading(false);
     }
@@ -93,6 +139,13 @@ export function SectionAiAssistant({
 
         {/* Body */}
         <div className="p-4 space-y-4 text-xs">
+          {targetElementId && (
+            <div className="flex items-center gap-2 px-2.5 py-1.5 rounded-lg bg-[#22d3ee]/10 border border-[#22d3ee]/30 text-[11px] text-[#0e7490]">
+              <span className="font-semibold">Target element:</span>
+              <code className="font-mono">{targetElementId}</code>
+            </div>
+          )}
+
           {/* Quick Action Buttons */}
           <div>
             <label className="block text-[11px] font-medium text-text-2 mb-2">
@@ -108,7 +161,7 @@ export function SectionAiAssistant({
                 <button
                   key={act.id}
                   type="button"
-                  onClick={() => handleExecute(act.id as any)}
+                  onClick={() => handleExecute(act.id as RegenerateSectionParams["action"])}
                   disabled={loading}
                   className="p-2.5 rounded-lg border border-border-default bg-bg-2/40 hover:border-[#6d5dfc]/50 hover:bg-[#6d5dfc]/5 text-left transition-all group disabled:opacity-50"
                 >
@@ -164,24 +217,40 @@ export function SectionAiAssistant({
           >
             Cancel
           </button>
-          <button
-            type="button"
-            onClick={() => handleExecute()}
-            disabled={loading}
-            className="px-4 py-1.5 rounded-lg text-xs font-semibold bg-[#6d5dfc] text-white hover:bg-[#5b4be0] shadow-sm flex items-center gap-1.5 disabled:opacity-50"
-          >
-            {loading ? (
-              <>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={handleCustomEdit}
+              disabled={loading || !prompt.trim()}
+              className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-gradient-to-r from-[#6d5dfc] to-[#ec4899] text-white hover:opacity-95 shadow-sm flex items-center gap-1.5 disabled:opacity-40"
+              title="Apply your instruction to the selected element or section"
+            >
+              {loading ? (
                 <RefreshCw size={12} className="animate-spin" />
-                Updating...
-              </>
-            ) : (
-              <>
-                <Wand2 size={12} />
-                Regenerate Section
-              </>
-            )}
-          </button>
+              ) : (
+                <Sparkles size={12} />
+              )}
+              Apply Instruction
+            </button>
+            <button
+              type="button"
+              onClick={() => handleExecute()}
+              disabled={loading}
+              className="px-4 py-1.5 rounded-lg text-xs font-semibold bg-[#6d5dfc] text-white hover:bg-[#5b4be0] shadow-sm flex items-center gap-1.5 disabled:opacity-50"
+            >
+              {loading ? (
+                <>
+                  <RefreshCw size={12} className="animate-spin" />
+                  Updating...
+                </>
+              ) : (
+                <>
+                  <Wand2 size={12} />
+                  Regenerate
+                </>
+              )}
+            </button>
+          </div>
         </div>
       </div>
     </div>

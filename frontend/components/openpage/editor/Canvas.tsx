@@ -17,7 +17,7 @@ import {
   sortableKeyboardCoordinates,
   verticalListSortingStrategy,
 } from "@dnd-kit/sortable";
-import { GripVertical, Plus, ChevronUp, ChevronDown, Copy, Trash2, Layers, X } from "lucide-react";
+import { GripVertical, Plus, ChevronUp, ChevronDown, Copy, Trash2, Layers, X, ZoomIn, ZoomOut } from "lucide-react";
 import { toast } from "sonner";
 import { useConfigStore } from "@/components/openpage/store/configStore";
 import { useEditorStore } from "@/components/openpage/store/editorStore";
@@ -257,7 +257,7 @@ export function Canvas() {
   const moveBlocks = useConfigStore((s) => s.moveBlocks);
   const moveBlockInColumn = useConfigStore((s) => s.moveBlockInColumn);
   const moveBlockTo = useConfigStore((s) => s.moveBlockTo);
-  const { selectedBlockId, selectedBlockIds, selectBlock, viewport, setIsDragging, showGrid } = useEditorStore();
+  const { selectedBlockId, selectedBlockIds, selectedElement, selectBlock, viewport, zoom, setZoom, setIsDragging, showGrid } = useEditorStore();
 
   const resolved = useMemo(() => resolveSiteTheme(site), [site]);
   const cssVars = useMemo(() => siteThemeCSS(site), [site]);
@@ -589,37 +589,112 @@ export function Canvas() {
         </>
       )}
 
-      {viewport === "tablet" ? (
-        <div className="relative z-[1]">
-          <div
-            className="border-[12px] border-bg-4 rounded-2xl bg-bg-4 shadow-[0_8px_32px_rgba(0,0,0,0.3)]"
-            style={{ width: `${pxWidth + 24}px` }}
-          >
-            <div className="rounded-lg overflow-hidden">
-              {canvasContent}
+      <div
+        className="transition-transform duration-150 origin-top flex flex-col items-center pb-12 w-full"
+        style={{
+          transform: zoom && zoom !== 100 ? `scale(${zoom / 100})` : undefined,
+        }}
+      >
+        {viewport === "tablet" ? (
+          <div className="relative z-[1]">
+            <div
+              className="border-[12px] border-bg-4 rounded-2xl bg-bg-4 shadow-[0_8px_32px_rgba(0,0,0,0.3)]"
+              style={{ width: `${pxWidth + 24}px` }}
+            >
+              <div className="rounded-lg overflow-hidden">
+                {canvasContent}
+              </div>
             </div>
           </div>
-        </div>
-      ) : viewport === "mobile" ? (
-        <div className="relative z-[1]">
-          <div
-            className="border-[10px] border-bg-4 rounded-[2rem] bg-bg-4 shadow-[0_8px_32px_rgba(0,0,0,0.3)]"
-            style={{ width: `${pxWidth + 20}px` }}
-          >
-            <div className="flex justify-center -mt-[4px] mb-1">
-              <div className="w-24 h-5 bg-bg-4 rounded-b-xl" />
-            </div>
-            <div className="rounded-xl overflow-hidden">
-              {canvasContent}
-            </div>
-            <div className="flex justify-center mt-2 pb-1">
-              <div className="w-28 h-1 bg-bg-5 rounded-full" />
+        ) : viewport === "mobile" ? (
+          <div className="relative z-[1]">
+            <div
+              className="border-[10px] border-bg-4 rounded-[2rem] bg-bg-4 shadow-[0_8px_32px_rgba(0,0,0,0.3)]"
+              style={{ width: `${pxWidth + 20}px` }}
+            >
+              <div className="flex justify-center -mt-[4px] mb-1">
+                <div className="w-24 h-5 bg-bg-4 rounded-b-xl" />
+              </div>
+              <div className="rounded-xl overflow-hidden">
+                {canvasContent}
+              </div>
+              <div className="flex justify-center mt-2 pb-1">
+                <div className="w-28 h-1 bg-bg-5 rounded-full" />
+              </div>
             </div>
           </div>
+        ) : (
+          canvasContent
+        )}
+      </div>
+
+      {/* Builder.io Canvas Floating Status Bar: Breadcrumbs & Zoom */}
+      <div className="fixed bottom-3 left-1/2 -translate-x-1/2 z-30 flex items-center gap-3 pointer-events-none select-none">
+        {/* Breadcrumb path */}
+        <div className="pointer-events-auto flex items-center gap-1.5 px-3 py-1.5 bg-bg-1/90 backdrop-blur-md border border-border-default rounded-xl text-[11px] text-text-2 shadow-[0_8px_20px_rgba(0,0,0,0.25)]">
+          <button
+            type="button"
+            onClick={() => selectBlock(null)}
+            className="hover:text-text-0 transition-colors font-medium"
+          >
+            Page
+          </button>
+          {selectedBlockId && (
+            <>
+              <span className="text-text-3">/</span>
+              <button
+                type="button"
+                onClick={() => useEditorStore.getState().clearElementSelection()}
+                className={`hover:text-text-0 transition-colors ${
+                  !selectedElement ? "text-[#6d5dfc] font-semibold" : ""
+                }`}
+              >
+                {findBlock(blocks, selectedBlockId)?.type || "section"}
+              </button>
+            </>
+          )}
+          {selectedElement && (
+            <>
+              <span className="text-text-3">/</span>
+              <span className="text-[#6d5dfc] font-semibold">
+                {selectedElement.elementId}
+              </span>
+            </>
+          )}
         </div>
-      ) : (
-        canvasContent
-      )}
+
+        {/* Zoom Controls */}
+        <div className="pointer-events-auto flex items-center gap-1 bg-bg-1/90 backdrop-blur-md border border-border-default rounded-xl px-2 py-1 text-[11px] text-text-2 shadow-[0_8px_20px_rgba(0,0,0,0.25)]">
+          <button
+            type="button"
+            onClick={() => setZoom(Math.max(50, (zoom || 100) - 15))}
+            className="p-1 hover:text-text-0 rounded hover:bg-bg-3 transition-colors"
+            title="Zoom Out"
+          >
+            <ZoomOut size={12} />
+          </button>
+          <span className="font-mono text-[10.5px] w-9 text-center text-text-1">
+            {zoom || 100}%
+          </span>
+          <button
+            type="button"
+            onClick={() => setZoom(Math.min(150, (zoom || 100) + 15))}
+            className="p-1 hover:text-text-0 rounded hover:bg-bg-3 transition-colors"
+            title="Zoom In"
+          >
+            <ZoomIn size={12} />
+          </button>
+          {zoom !== 100 && (
+            <button
+              type="button"
+              onClick={() => setZoom(100)}
+              className="text-[10px] px-1.5 py-0.5 rounded bg-bg-3 hover:text-text-0 text-text-3 transition-colors ml-0.5"
+            >
+              Reset
+            </button>
+          )}
+        </div>
+      </div>
     </div>
   );
 }

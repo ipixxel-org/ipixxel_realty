@@ -29,6 +29,7 @@ import { createBlockFromType } from "@/lib/openpage/block-factory";
 import type { BlockType } from "@/components/openpage/blocks/types";
 import { EMPTY_GLOBAL_WIDGETS } from "./AdvancedPanel";
 import { FormBuilder } from "./FormBuilder";
+import { GenerateSectionModal } from "./GenerateSectionModal";
 import { NavigatorTree } from "./NavigatorTree";
 import { useIsTemplateBuilder } from "@/lib/openpage/use-builder-scope";
 
@@ -670,6 +671,7 @@ function GlobalWidgetsPanel() {
 
 function AiGeneratorPanel() {
   const openAiModal = useEditorStore((s) => s.openAiModal);
+  const [sectionOpen, setSectionOpen] = useState(false);
   return (
     <div className="flex flex-col flex-1 min-h-0 overflow-y-auto p-4 space-y-4 text-xs">
       <div className="p-4 rounded-xl border border-[#6d5dfc]/30 bg-gradient-to-br from-[#6d5dfc]/10 via-[#ec4899]/5 to-transparent text-center space-y-2.5">
@@ -689,6 +691,14 @@ function AiGeneratorPanel() {
         >
           <Sparkles size={14} />
           Launch AI Architect
+        </button>
+        <button
+          type="button"
+          onClick={() => setSectionOpen(true)}
+          className="w-full py-2 px-3 rounded-xl border border-[#6d5dfc]/30 bg-bg-1/70 text-[#6d5dfc] text-[11px] font-semibold hover:bg-[#6d5dfc]/10 transition-all flex items-center justify-center gap-1.5"
+        >
+          <Sparkles size={13} />
+          Generate a single section
         </button>
       </div>
 
@@ -715,6 +725,8 @@ function AiGeneratorPanel() {
           </div>
         </div>
       </div>
+
+      <GenerateSectionModal open={sectionOpen} onClose={() => setSectionOpen(false)} />
     </div>
   );
 }
