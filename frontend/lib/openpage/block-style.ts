@@ -591,12 +591,20 @@ function stateTextDecls(state?: BlockInteractionState): string[] {
   return out;
 }
 
-/** Deep-replace {{var}} tokens in any JSON-like value. */
+/** Deep-replace {{var}} tokens in any JSON-like value. Supports dot-notation, e.g. {{property.name}}. */
 export function applyVarsDeep(value: unknown, vars: Record<string, string>): unknown {
   if (typeof value === "string") {
-    return value.replace(/\{\{([a-zA-Z0-9_]+)\}\}/g, (_m, key: string) =>
-      vars[key] != null && vars[key] !== "" ? vars[key] : `{{${key}}}`,
-    );
+    return value.replace(/\{\{([a-zA-Z0-9_.-]+)\}\}/g, (_m, key: string) => {
+      // 1. Direct match in vars
+      if (vars[key] != null && vars[key] !== "") return vars[key];
+      // 2. Normalized underscore alternative if key has dots (e.g. property.name -> property_name)
+      const underscoreKey = key.replace(/\./g, "_");
+      if (vars[underscoreKey] != null && vars[underscoreKey] !== "") return vars[underscoreKey];
+      // 3. Normalized dot alternative if key has underscores (e.g. property_name -> property.name)
+      const dotKey = key.replace(/_/g, ".");
+      if (vars[dotKey] != null && vars[dotKey] !== "") return vars[dotKey];
+      return `{{${key}}}`;
+    });
   }
   if (Array.isArray(value)) return value.map((item) => applyVarsDeep(item, vars));
   if (value && typeof value === "object") {

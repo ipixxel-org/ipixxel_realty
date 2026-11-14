@@ -19,6 +19,7 @@ export interface GenerateTemplateParams {
   mode: "prompt" | "project" | "template" | "improve";
   prompt: string;
   templateName?: string;
+  pageType?: string;
   category?: string;
   projectId?: string;
   designStyle?: string;
@@ -27,6 +28,7 @@ export interface GenerateTemplateParams {
   typography?: string;
   targetAudience?: string;
   selectedSections?: string[];
+  imageStyle?: string;
   currentSite?: SiteConfig;
 }
 
@@ -113,6 +115,20 @@ export const BackendClient = {
 
   async regenerateSection(params: RegenerateSectionParams): Promise<Record<string, unknown>> {
     return request<Record<string, unknown>>("/ai/regenerate-section", {
+      method: "POST",
+      body: JSON.stringify(params),
+    });
+  },
+
+  async generateSection(params: { prompt: string; sectionType?: string; tone?: string; siteContext?: any }): Promise<Record<string, unknown>> {
+    return request<Record<string, unknown>>("/ai/generate-section", {
+      method: "POST",
+      body: JSON.stringify(params),
+    });
+  },
+
+  async editComponent(params: { block: Record<string, unknown>; prompt: string; elementId?: string; action?: string; tone?: string; siteContext?: any }): Promise<Record<string, unknown>> {
+    return request<Record<string, unknown>>("/ai/edit-component", {
       method: "POST",
       body: JSON.stringify(params),
     });

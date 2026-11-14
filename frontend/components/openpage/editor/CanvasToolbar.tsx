@@ -1,12 +1,15 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
-import { Plus, Undo2, Redo2, Search, Layers, History, Grid } from "lucide-react";
+import { Bot, Grid, History, Layers, Plus, Redo2, Search, Sparkles, Undo2 } from "lucide-react";
 import { useConfigStore } from "@/components/openpage/store/configStore";
 import { useEditorStore } from "@/components/openpage/store/editorStore";
 import type { PageConfig } from "@/components/openpage/blocks/types";
 import { SpotlightSearch } from "./SpotlightSearch";
 import { StructurePanel } from "./StructurePanel";
+import { GenerateSectionModal } from "./GenerateSectionModal";
+import { McpBridgeModal } from "./McpBridgeModal";
+import { useIsTemplateBuilder } from "@/lib/openpage/use-builder-scope";
 
 function AddPagePopover({ onAdd, onClose }: { onAdd: (name: string, path: string) => void; onClose: () => void }) {
   const [name, setName] = useState('')
@@ -163,6 +166,13 @@ export function CanvasToolbar() {
   const showGrid = useEditorStore((s) => s.showGrid);
   const toggleShowGrid = useEditorStore((s) => s.toggleShowGrid);
 
+  // AI tools follow the same platform gating as the AI template generator:
+  // Super Admin template scope only, so org admins never see a button whose
+  // backend provider they cannot control.
+  const showAiTools = useIsTemplateBuilder();
+  const [aiSectionOpen, setAiSectionOpen] = useState(false);
+  const [mcpOpen, setMcpOpen] = useState(false);
+
   return (
     <div className="h-11 bg-bg-1 border-b border-border-default flex items-center px-3 gap-2 justify-between">
       {/* Page tabs */}
@@ -225,6 +235,29 @@ export function CanvasToolbar() {
           <span className="hidden sm:inline">Finder</span>
         </button>
 
+        {/* AI section generator (Super Admin template scope) */}
+        {showAiTools && (
+          <button
+            type="button"
+            onClick={() => setAiSectionOpen(true)}
+            className="px-2 py-1.5 rounded-lg border border-[#6d5dfc]/30 bg-gradient-to-r from-[#6d5dfc]/15 to-[#ec4899]/15 text-[#6d5dfc] hover:from-[#6d5dfc]/25 hover:to-[#ec4899]/25 transition-colors flex items-center gap-1 text-[11px] font-semibold"
+            title="Generate a new section with AI"
+          >
+            <Sparkles size={13} />
+            <span className="hidden sm:inline">AI Section</span>
+          </button>
+        )}
+
+        {/* MCP bridge setup */}
+        <button
+          type="button"
+          onClick={() => setMcpOpen(true)}
+          className="p-1.5 rounded-lg border border-border-default bg-bg-2 text-text-3 hover:text-[#6d5dfc] hover:bg-bg-3 transition-colors"
+          title="MCP bridge for AI agents"
+        >
+          <Bot size={13} />
+        </button>
+
         {/* Grid overlay toggle */}
         <button
           type="button"
@@ -280,6 +313,8 @@ export function CanvasToolbar() {
           (query/selection) resets on every open */}
       {spotlightOpen && <SpotlightSearch onClose={toggleSpotlight} />}
       <StructurePanel />
+      <GenerateSectionModal open={aiSectionOpen} onClose={() => setAiSectionOpen(false)} />
+      <McpBridgeModal open={mcpOpen} onClose={() => setMcpOpen(false)} />
     </div>
   );
 }

@@ -8,6 +8,8 @@ import {
 import { PrismaService } from '../../database/prisma.service';
 import { GenerateTemplateDto } from './dto/generate-template.dto';
 import { RegenerateSectionDto } from './dto/regenerate-section.dto';
+import { GenerateSectionDto } from './dto/generate-section.dto';
+import { EditComponentDto } from './dto/edit-component.dto';
 import {
   DEFAULT_THEME,
   THEME_TOKEN_KEYS,
@@ -487,6 +489,93 @@ Return RAW VALID JSON ONLY representing the updated block object:
       return await provider.generateJson({ prompt, temperature: 0.7 });
     } catch (err: unknown) {
       this.logFailure('AI section regeneration', provider, err);
+      throw this.toHttpError(err, provider);
+    }
+  }
+
+  /**
+   * Generates a brand-new section block based on natural language instructions
+   */
+  async generateSection(dto: GenerateSectionDto) {
+    const provider = await this.requireProvider();
+    const type = dto.sectionType || 'features';
+    const uniqueId = `block-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
+
+    const prompt = `You are a real estate visual page builder architect and senior designer.
+Create a brand-new high-converting section block for the OpenPage builder.
+User Instruction: "${dto.prompt}"
+Requested Section Type: "${type}"
+Tone: "${dto.tone || 'luxury, professional, modern'}"
+Site Context: Project: ${dto.siteContext?.projectName || 'Premier Residences'}, Location: ${dto.siteContext?.location || 'Prime Location'}, Category: ${dto.siteContext?.category || 'Luxury Real Estate'}
+
+Output MUST BE RAW VALID JSON representing a complete BlockConfig object:
+{
+  "id": "${uniqueId}",
+  "type": "${type}",
+  "variant": "default",
+  "props": { ... appropriate props for this ${type} section matching the instruction ... },
+  "style": { ... modern responsive styling tokens ... }
+}`;
+
+    try {
+      const generated = await provider.generateJson({ prompt, temperature: 0.7 });
+      if (generated && typeof generated === 'object') {
+        const withId = {
+          ...generated,
+          id: generated.id || uniqueId,
+          type: generated.type || type,
+        };
+        return applyBlockDefaults(withId);
+      }
+      throw new Error('Invalid section JSON generated');
+    } catch (err: unknown) {
+      this.logFailure('AI section generation', provider, err);
+      throw this.toHttpError(err, provider);
+    }
+  }
+
+  /**
+   * Edits a component or element within a block using natural language
+   */
+  async editComponent(dto: EditComponentDto) {
+    const provider = await this.requireProvider();
+    const block = dto.block as any;
+    const elementId = dto.elementId;
+
+    const prompt = `You are a visual builder component editor.
+Modify the following component block according to the user's natural language instruction.
+User Instruction: "${dto.prompt}"
+Action: "${dto.action || 'edit'}"
+Target Element: "${elementId || 'whole block'}"
+Tone: "${dto.tone || 'luxury and persuasive'}"
+
+Current Block:
+${JSON.stringify(block, null, 2)}
+
+Provide the updated block with the requested changes applied cleanly to props, style, or elementStyles.
+Output MUST BE RAW VALID JSON ONLY representing the complete updated block:
+{
+  "id": "${block.id}",
+  "type": "${block.type}",
+  "variant": "${block.variant || 'default'}",
+  "props": { ... },
+  "style": { ... },
+  "elementStyles": { ... }
+}`;
+
+    try {
+      const updated = await provider.generateJson({ prompt, temperature: 0.7 });
+      if (updated && typeof updated === 'object') {
+        return {
+          ...block,
+          ...updated,
+          id: block.id,
+          type: block.type,
+        };
+      }
+      return block;
+    } catch (err: unknown) {
+      this.logFailure('AI component edit', provider, err);
       throw this.toHttpError(err, provider);
     }
   }

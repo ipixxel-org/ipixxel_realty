@@ -30,6 +30,8 @@ interface EditorState {
   selectedBlockIds: string[]
   selectedElement: SelectedElement | null
   viewport: Viewport
+  zoom: number
+  setZoom: (zoom: number) => void
   jsonDrawerOpen: boolean
   historyOpen: boolean
   shortcutsModalOpen: boolean
@@ -102,6 +104,8 @@ export const useEditorStore = create<EditorState>()((set) => ({
   selectedBlockIds: [],
   selectedElement: null,
   viewport: 'desktop',
+  zoom: 100,
+  setZoom: (zoom) => set({ zoom }),
   jsonDrawerOpen: false,
   historyOpen: false,
   shortcutsModalOpen: false,

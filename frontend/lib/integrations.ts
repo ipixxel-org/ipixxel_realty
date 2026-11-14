@@ -7,7 +7,12 @@ import type { IconName } from "@/components/icons";
  * under app/admin-console/integrations/<key>/, and (once it has settings)
  * report it from GET /admin/integrations/status.
  */
-export type IntegrationKey = "smtp" | "social-login" | "payments" | "ai";
+export type IntegrationKey =
+  | "smtp"
+  | "social-login"
+  | "payments"
+  | "ai"
+  | "mcp";
 
 export type IntegrationDef = {
   key: IntegrationKey;
@@ -99,5 +104,17 @@ export const INTEGRATIONS: IntegrationDef[] = [
     // Same module as the Settings page (admin_settings).
     permission: "admin_settings",
     statusSource: "api",
+  },
+  {
+    key: "mcp",
+    name: "MCP for Claude",
+    crumb: "MCP",
+    description: "Connect Claude Desktop (or Cursor) to drive the OpenPage builder through the Model Context Protocol.",
+    icon: "sparkles",
+    tone: "ic-green",
+    href: `${INTEGRATIONS_HREF}/mcp`,
+    // Same module as the Settings page (admin_settings).
+    permission: "admin_settings",
+    statusSource: null,
   },
 ];
