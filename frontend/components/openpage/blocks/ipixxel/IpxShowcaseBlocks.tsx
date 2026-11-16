@@ -189,8 +189,9 @@ function TarcAmenityCarousel(ctx: Ctx) {
           </Strip>
           {s.canSlide ? (
             <>
-              <GoldArrow dir="prev" onClick={() => s.go(-1)} className="absolute left-1 @3xl:-left-6 top-[34%] -translate-y-1/2 z-10" />
-              <GoldArrow dir="next" onClick={() => s.go(1)} className="absolute right-1 @3xl:-right-6 top-[34%] -translate-y-1/2 z-10" />
+              {/* Centre on the image, not the whole card: subtract half the title area (mt-6 + one ~28px line). */}
+              <GoldArrow dir="prev" onClick={() => s.go(-1)} className="absolute left-1 @3xl:-left-6 top-[calc(50%-26px)] -translate-y-1/2 z-10" />
+              <GoldArrow dir="next" onClick={() => s.go(1)} className="absolute right-1 @3xl:-right-6 top-[calc(50%-26px)] -translate-y-1/2 z-10" />
             </>
           ) : null}
         </div>

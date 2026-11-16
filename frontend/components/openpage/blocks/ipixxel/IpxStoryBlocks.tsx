@@ -286,6 +286,33 @@ function EldecoIcons(ctx: Ctx) {
 
 const DIRECTION_FALLBACK = ["North", "East", "South", "West"];
 
+/**
+ * One compass axis run: ◆ at the outer end, a hairline, and an arrowhead at
+ * the inner end (touching the emblem) pointing outwards. Fills the remaining
+ * space of its flex parent; `dir` is the direction the arrowhead points.
+ */
+function CompassAxis({ dir, color }: { dir: "up" | "down" | "left" | "right"; color: string }) {
+  const vertical = dir === "up" || dir === "down";
+  const head = { up: "4,0 8,7 0,7", down: "0,0 8,0 4,7", left: "0,4 7,0 7,8", right: "0,0 7,4 0,8" }[dir];
+  // Outer → inner order is ◆ — ▲ for up/left; down/right reverse it so the head still sits by the emblem.
+  const flow = { up: "flex-col", down: "flex-col-reverse", left: "flex-row", right: "flex-row-reverse" }[dir];
+  return (
+    <span aria-hidden className={`flex-1 min-w-0 min-h-0 flex items-center ${flow}`}>
+      <span className="block w-[7px] h-[7px] rotate-45 shrink-0" style={{ backgroundColor: color }} />
+      <span className={`block flex-1 ${vertical ? "w-px" : "h-px"}`} style={{ backgroundColor: color }} />
+      <svg
+        width={vertical ? 8 : 7}
+        height={vertical ? 7 : 8}
+        viewBox={vertical ? "0 0 8 7" : "0 0 7 8"}
+        className="shrink-0"
+        fill={color}
+      >
+        <polygon points={head} />
+      </svg>
+    </span>
+  );
+}
+
 function TarcCompass(ctx: Ctx) {
   const dirs = items(ctx, "directions").slice(0, 4);
   while (dirs.length < 4) {
@@ -303,31 +330,65 @@ function TarcCompass(ctx: Ctx) {
     <Shell ctx={ctx} className="bg-white py-14 @3xl:py-20">
       <Wrap>
         <TarcHeading ctx={ctx} className="mb-10" />
-        {/* Desktop compass */}
-        <div className="hidden @3xl:block relative mx-auto w-[800px] max-w-full h-[580px]">
-          {dirTitle(0, "absolute left-1/2 -translate-x-1/2 top-0 text-center whitespace-nowrap")}
-          <span className="absolute left-1/2 -translate-x-1/2 top-[28px] text-[10px] tracking-[0.1em] uppercase">{label(0)}</span>
-          {dirTitle(2, "absolute left-1/2 -translate-x-1/2 bottom-0 text-center whitespace-nowrap")}
-          <span className="absolute left-1/2 -translate-x-1/2 bottom-[30px] text-[10px] tracking-[0.1em] uppercase">{label(2)}</span>
-          {dirTitle(3, "absolute left-0 top-1/2 -translate-y-1/2 w-[130px] text-right")}
-          <span className="absolute left-[140px] top-1/2 -translate-y-1/2 text-[10px] tracking-[0.1em] uppercase">{label(3)}</span>
-          {dirTitle(1, "absolute right-0 top-1/2 -translate-y-1/2 w-[130px]")}
-          <span className="absolute right-[140px] top-1/2 -translate-y-1/2 text-[10px] tracking-[0.1em] uppercase">{label(1)}</span>
-          {/* Axis lines */}
-          <span aria-hidden className="absolute left-1/2 top-[48px] bottom-[50px] w-px -translate-x-1/2" style={{ backgroundColor: gold }} />
-          <span aria-hidden className="absolute top-1/2 left-[185px] right-[185px] h-px -translate-y-1/2" style={{ backgroundColor: gold }} />
-          {/* Quadrant photos */}
-          <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 grid grid-cols-2 gap-x-24 gap-y-[60px]">
-            {dirs.map((d, i) => (
-              <El key={d.id} block={ctx.block} id={d.id} className="relative w-[203px] h-[203px] overflow-hidden">
-                <Pic src={d.get("image")} className="absolute inset-0 w-full h-full" />
-                <Caption text={str(ctx.p.imageCaption)} className="left-1.5 bottom-1 text-[8px]" />
-                <span className="sr-only">{label(i)}</span>
-              </El>
-            ))}
+        {/* Desktop compass — every piece is placed from the same centre point
+            (CSS vars below), so the axes always run through the photo gaps and
+            end on the emblem. Each axis is one flex run: title · label · ◆ ——— ▲
+            with the arrowhead touching the emblem and pointing outwards (Figma). */}
+        <div
+          className="hidden @3xl:block relative mx-auto [--img:180px] [--gx:84px] [--gy:56px] [--emb:252px] [--side:130px] @5xl:[--img:240px] @5xl:[--gx:112px] @5xl:[--gy:72px] @5xl:[--emb:334px] @5xl:[--side:170px]"
+          style={{
+            width: "calc(var(--img) * 2 + var(--gx) + var(--side) * 2)",
+            height: "calc(var(--img) * 2 + var(--gy) + 116px)",
+          }}
+        >
+          {/* Quadrant photos (same index → quadrant order as before: TL, TR, BL, BR) */}
+          {dirs.map((d, i) => (
+            <El
+              key={d.id}
+              block={ctx.block}
+              id={d.id}
+              className="absolute overflow-hidden"
+              style={{
+                width: "var(--img)",
+                height: "var(--img)",
+                left: i % 2 === 0 ? "calc(50% - var(--gx) / 2 - var(--img))" : "calc(50% + var(--gx) / 2)",
+                top: i < 2 ? "calc(50% - var(--gy) / 2 - var(--img))" : "calc(50% + var(--gy) / 2)",
+              }}
+            >
+              <Pic src={d.get("image")} className="absolute inset-0 w-full h-full" />
+              <Caption text={str(ctx.p.imageCaption)} className="left-1.5 bottom-1 text-[8px]" />
+              <span className="sr-only">{label(i)}</span>
+            </El>
+          ))}
+          {/* North */}
+          <div className="absolute left-1/2 top-0 -translate-x-1/2 z-10 flex flex-col items-center" style={{ height: "calc(50% - var(--emb) / 2)" }}>
+            {dirTitle(0, "text-center whitespace-nowrap")}
+            <span className="mt-1.5 mb-1.5 text-[10px] tracking-[0.1em] uppercase">{label(0)}</span>
+            <CompassAxis dir="up" color={gold} />
+          </div>
+          {/* South */}
+          <div className="absolute left-1/2 bottom-0 -translate-x-1/2 z-10 flex flex-col-reverse items-center" style={{ height: "calc(50% - var(--emb) / 2)" }}>
+            {dirTitle(2, "text-center whitespace-nowrap")}
+            <span className="mt-1.5 mb-1.5 text-[10px] tracking-[0.1em] uppercase">{label(2)}</span>
+            <CompassAxis dir="down" color={gold} />
+          </div>
+          {/* West */}
+          <div className="absolute left-0 top-1/2 -translate-y-1/2 z-10 flex items-center" style={{ width: "calc(50% - var(--emb) / 2)" }}>
+            {dirTitle(3, "shrink-0 text-right w-[calc(var(--side)-12px)]")}
+            <span className="ml-3 mr-2.5 text-[10px] tracking-[0.1em] uppercase">{label(3)}</span>
+            <CompassAxis dir="left" color={gold} />
+          </div>
+          {/* East */}
+          <div className="absolute right-0 top-1/2 -translate-y-1/2 z-10 flex flex-row-reverse items-center" style={{ width: "calc(50% - var(--emb) / 2)" }}>
+            {dirTitle(1, "shrink-0 text-left w-[calc(var(--side)-12px)]")}
+            <span className="mr-3 ml-2.5 text-[10px] tracking-[0.1em] uppercase">{label(1)}</span>
+            <CompassAxis dir="right" color={gold} />
           </div>
           {/* Emblem */}
-          <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-[284px] h-[284px] rounded-full bg-white p-3 grid place-items-center">
+          <div
+            className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-20 rounded-full bg-white p-3 grid place-items-center"
+            style={{ width: "var(--emb)", height: "var(--emb)" }}
+          >
             <Pic src={str(ctx.p.centerImage)} fit="contain" className="w-full h-full rounded-full" />
           </div>
         </div>
