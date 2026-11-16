@@ -1,5 +1,6 @@
 "use client";
 
+import type { CSSProperties } from "react";
 import { El } from "../El";
 import { part, safeHref, str } from "../elements/shared";
 import { useOpenPageRuntime } from "@/components/openpage/runtime/OpenPageRuntime";
@@ -12,7 +13,19 @@ import { Pic, Txt, type Ctx } from "./shared";
 /* Parts shared by several iPixxel widgets: Form Builder form, map, footer links. */
 
 /** The page's chosen Form Builder form, rendered unstyled by this widget. */
-export function LeadForm({ ctx }: { ctx: Ctx }) {
+export function LeadForm({
+  ctx,
+  layout,
+  fieldOverride,
+  submitOverride,
+  submitLabel,
+}: {
+  ctx: Ctx;
+  layout?: "stack" | "bar";
+  fieldOverride?: CSSProperties;
+  submitOverride?: CSSProperties;
+  submitLabel?: string;
+}) {
   const runtime = useOpenPageRuntime();
   const library = typeof window !== "undefined" ? loadFormLibrary() : [];
   const forms = pageFormsWithLibraryFallback(runtime.forms, library);
@@ -28,18 +41,34 @@ export function LeadForm({ ctx }: { ctx: Ctx }) {
       projectName={runtime.projectName}
       projectId={runtime.projectId}
       unitId={runtime.unitId}
+      layout={layout}
+      fieldOverride={fieldOverride}
+      submitOverride={submitOverride}
+      submitLabel={submitLabel || undefined}
     />
   );
 }
 
 /** "Disclaimer & Privacy Policy | Crafted by …" line. */
-export function LinksLine({ ctx, linkColor, textColor }: { ctx: Ctx; linkColor: string; textColor: string }) {
+export function LinksLine({
+  ctx,
+  linkColor,
+  textColor,
+  className = "mt-8",
+  textClassName = "text-[13px] @3xl:text-[14px] tracking-[0.08em]",
+}: {
+  ctx: Ctx;
+  linkColor: string;
+  textColor: string;
+  className?: string;
+  textClassName?: string;
+}) {
   const href = safeHref(ctx.p.linkUrl);
   const hasLink = Boolean(str(ctx.p.linkText));
   const hasCredit = Boolean(str(ctx.p.credit));
   if (!hasLink && !hasCredit) return null;
   return (
-    <p className="mt-8 text-center text-[13px] @3xl:text-[14px] tracking-[0.08em]" style={{ color: textColor }}>
+    <p className={`${className} text-center ${textClassName}`} style={{ color: textColor }}>
       {hasLink ? (
         <El
           block={ctx.block}

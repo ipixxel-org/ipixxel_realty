@@ -1184,6 +1184,7 @@ const blockFields: Partial<Record<BlockType, { sections: { title: string; fields
         { key: 'legalText', label: 'RERA / legal text (top right)', type: 'textarea' },
         { key: 'qrImage', label: 'QR code image', type: 'image' },
         { key: 'bandText', label: 'Price band text', type: 'text' },
+        { key: 'bandColor', label: 'Price band background (empty = none)', type: 'color' },
         { key: 'offerLabel', label: 'Offer card label', type: 'textarea' },
         { key: 'offerValue', label: 'Offer card value', type: 'text' },
       ]},

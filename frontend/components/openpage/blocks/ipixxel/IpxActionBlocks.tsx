@@ -1,5 +1,6 @@
 "use client";
 
+import type { CSSProperties } from "react";
 import { Phone } from "lucide-react";
 import type { BlockConfig } from "../types";
 import { El } from "../El";
@@ -13,7 +14,9 @@ import {
   BurgundyHeading,
   Btn,
   Caption,
+  EldecoWrap,
   FAMILY,
+  HELVETICA,
   ITxt,
   KnowMore,
   Pic,
@@ -30,6 +33,9 @@ import {
 } from "./shared";
 import { EmeraldFooter, EmeraldForm } from "./IpxEmeraldBlocks";
 import { ModernBanner, ModernFooter, ModernFormSplit } from "./IpxModernBlocks";
+
+/** Eldeco enquiry bar title / button colour. */
+const ELDECO_GOLD = "#82663f";
 
 function wine(accent: string): string {
   return `radial-gradient(ellipse at 70% 40%, color-mix(in srgb, ${accent} 88%, #a3365f) 0%, color-mix(in srgb, ${accent} 75%, black) 100%)`;
@@ -117,12 +123,53 @@ export function IpxFormBlock({ block }: { block: BlockConfig }) {
   if (variant === "modern-split") return <ModernFormSplit block={block} />;
 
   if (variant === "eldeco-bar") {
+    // Gold-brown title + button (the accent colour when one is chosen), underlined fields in one row.
+    const gold = color(ctx.p.accentColor) ?? ELDECO_GOLD;
     return (
-      <Shell ctx={ctx} className="bg-[#fdf9ee] shadow-[0_8px_20px_rgba(0,0,0,0.08)]">
-        <div className="mx-auto max-w-[1280px] flex flex-col @3xl:flex-row items-center gap-6 @3xl:gap-10 px-5 @3xl:px-14 py-6">
-          <Txt ctx={ctx} k="title" as="h2" className="shrink-0 @3xl:w-[180px] text-center whitespace-pre-line font-bold leading-[1.3] text-[22px]" style={{ color: ctx.accent }} />
-          <El block={ctx.block} id={part(ctx.block, "form")} className="w-full min-w-0 flex-1">
-            <LeadForm ctx={ctx} />
+      <Shell ctx={ctx} className="bg-[#fdfcee] shadow-[0_8px_20px_rgba(0,0,0,0.08)]">
+        <div className="mx-auto max-w-[1400px] flex flex-col @3xl:flex-row items-center gap-5 @3xl:gap-[43px] px-5 @3xl:pl-14 @3xl:pr-[29px] py-6 @3xl:py-0 @3xl:min-h-[103px]">
+          <Txt
+            ctx={ctx}
+            k="title"
+            as="h2"
+            className="shrink-0 @3xl:w-[166px] text-center whitespace-pre-line font-bold leading-[1.3] text-[21px] @3xl:text-[23px]"
+            style={{ color: gold, fontFamily: HELVETICA }}
+          />
+          <El
+            block={ctx.block}
+            id={part(ctx.block, "form")}
+            className="w-full min-w-0 flex-1 [&_input::placeholder]:text-[#6c757d] [&_textarea::placeholder]:text-[#6c757d] [&_input:focus]:shadow-[inset_0_-1px_0_var(--ipx-bar-gold)]! [&_textarea:focus]:shadow-[inset_0_-1px_0_var(--ipx-bar-gold)]!"
+            style={{ "--ipx-bar-gold": gold } as CSSProperties}
+          >
+            <LeadForm
+              ctx={ctx}
+              layout="bar"
+              submitLabel={str(ctx.p.submitText)}
+              fieldOverride={{
+                backgroundColor: "transparent",
+                border: "none",
+                borderRadius: 0,
+                boxShadow: "inset 0 -1px 0 #a7a69d",
+                padding: "6px 12px",
+                fontFamily: HELVETICA,
+                fontSize: 16,
+                fontWeight: 400,
+                letterSpacing: "0.12em",
+                color: "#212529",
+              }}
+              submitOverride={{
+                minWidth: 180,
+                minHeight: 51,
+                padding: "0 28px",
+                borderRadius: 6,
+                background: gold,
+                fontFamily: HELVETICA,
+                fontWeight: 700,
+                fontSize: 15,
+                letterSpacing: "0.02em",
+                textTransform: "uppercase",
+              }}
+            />
           </El>
         </div>
       </Shell>
@@ -197,11 +244,17 @@ export function IpxFooterBlock({ block }: { block: BlockConfig }) {
 
   if (variant === "eldeco-footer") {
     return (
-      <Shell ctx={ctx} className="py-10 text-white" style={{ background: color(ctx.p.bandColor) ?? BRONZE }}>
-        <Wrap>
-          <Txt ctx={ctx} k="disclaimer" className="mx-auto max-w-[1140px] text-center whitespace-pre-line text-[12px] @3xl:text-[12.5px] leading-[1.8] tracking-[0.04em] text-white/90" />
-          <LinksLine ctx={ctx} linkColor="rgba(255,255,255,0.7)" textColor="#ffffff" />
-        </Wrap>
+      <Shell ctx={ctx} className="py-8 @3xl:pt-[30px] @3xl:pb-[30px] text-white" style={{ background: color(ctx.p.bandColor) ?? BRONZE }}>
+        <EldecoWrap>
+          <Txt
+            ctx={ctx}
+            k="disclaimer"
+            className="mx-auto max-w-[1140px] text-center whitespace-pre-line font-light text-[12px] @3xl:text-[12.5px] leading-[1.76] tracking-[0.06em] text-white/90"
+          />
+          <LinksLine ctx={ctx} linkColor="rgba(255,255,255,0.75)" textColor="#ffffff" className="mt-7 @3xl:mt-[26px] font-light"
+            textClassName="text-[12.5px] tracking-[0.08em]"
+          />
+        </EldecoWrap>
       </Shell>
     );
   }
