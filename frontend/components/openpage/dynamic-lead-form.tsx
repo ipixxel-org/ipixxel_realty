@@ -43,6 +43,26 @@ function widthStyle(width?: FormLeadField["width"]): CSSProperties {
   return { width: "100%", flex: "1 1 100%" };
 }
 
+/** Hidden on screen but still read by screen readers. */
+const VISUALLY_HIDDEN: CSSProperties = {
+  position: "absolute",
+  width: 1,
+  height: 1,
+  padding: 0,
+  margin: -1,
+  overflow: "hidden",
+  clip: "rect(0 0 0 0)",
+  whiteSpace: "nowrap",
+  border: 0,
+};
+
+/** Field box in the one-row "bar" layout: inputs share the row, the rest take a full line. */
+function barItemStyle(type: string): CSSProperties {
+  if (type === "submit") return { flex: "0 0 auto", position: "relative" };
+  if (type === "checkbox" || type === "consent" || type === "heading" || type === "html") return { width: "100%", flex: "1 1 100%" };
+  return { flex: "1 1 150px", minWidth: 0, position: "relative" };
+}
+
 function makeCaptcha() {
   const a = 2 + Math.floor(Math.random() * 8);
   const b = 1 + Math.floor(Math.random() * 8);
@@ -62,6 +82,9 @@ export function DynamicLeadForm({
   submitLabel,
   unitId,
   onSuccess,
+  layout = "stack",
+  fieldOverride,
+  submitOverride,
 }: {
   form: SiteConfig["form"];
   live: boolean;
@@ -75,7 +98,18 @@ export function DynamicLeadForm({
   submitLabel?: string;
   unitId?: string;
   onSuccess?: () => void;
+  /**
+   * "bar" puts the fields and the submit button on one row (wrapping on
+   * narrow screens), hides the labels visually (they stay for screen readers)
+   * and uses each label as the placeholder when none is set. Default "stack".
+   */
+  layout?: "stack" | "bar";
+  /** Extra styles merged over every text / select field (after the form's own). */
+  fieldOverride?: CSSProperties;
+  /** Extra styles merged over the submit button. */
+  submitOverride?: CSSProperties;
 }) {
+  const bar = layout === "bar";
   const wt = getWidgetTheme();
   const allFields = useMemo(
     () => (Array.isArray(form.fields) ? (form.fields.filter(Boolean) as FormLeadField[]) : []),
@@ -153,6 +187,7 @@ export function DynamicLeadForm({
     return {
       ...base,
       ...(typeof radius === "number" ? { borderRadius: radius } : {}),
+      ...fieldOverride,
     };
   };
 
@@ -445,6 +480,7 @@ export function DynamicLeadForm({
             fontSize: 14,
             cursor: submitting ? "not-allowed" : "pointer",
             opacity: submitting || disabled ? 0.7 : 1,
+            ...submitOverride,
           }}
         >
           {submitting ? "Submitting…" : f.label || submitLabel || form.submitLabel || "Submit"}
@@ -456,11 +492,12 @@ export function DynamicLeadForm({
         <select
           required={required}
           disabled={disabled}
+          aria-label={bar ? f.label : undefined}
           value={val}
           onChange={(e) => setField(f, e.target.value)}
           style={fieldStyle(variant === "dark" ? { background: "rgba(15,23,42,.95)" } : undefined)}
         >
-          <option value="">{f.placeholder || "Choose"}</option>
+          <option value="">{f.placeholder || (bar ? f.label : "Choose")}</option>
           {(f.options ?? []).map((o) => (
             <option key={o} value={o}>
               {o}
@@ -486,10 +523,12 @@ export function DynamicLeadForm({
         <textarea
           required={required}
           disabled={disabled}
-          placeholder={f.placeholder}
+          placeholder={f.placeholder || (bar ? f.label : undefined)}
+          aria-label={bar ? f.label : undefined}
+          rows={bar ? 1 : undefined}
           value={val}
           onChange={(e) => setField(f, e.target.value)}
-          style={fieldStyle({ minHeight: 80 })}
+          style={fieldStyle(bar ? { resize: "none" } : { minHeight: 80 })}
         />
       );
     }
@@ -551,7 +590,8 @@ export function DynamicLeadForm({
         }
         required={required}
         disabled={disabled}
-        placeholder={f.placeholder}
+        placeholder={f.placeholder || (bar ? f.label : undefined)}
+        aria-label={bar ? f.label : undefined}
         value={val}
         onChange={(e) => setField(f, e.target.value)}
         style={fieldStyle()}
@@ -571,7 +611,8 @@ export function DynamicLeadForm({
       style={{
         display: "flex",
         flexWrap: "wrap",
-        gap: 10,
+        gap: bar ? 16 : 10,
+        alignItems: bar ? "center" : undefined,
         background: form.style?.background || undefined,
         color: form.style?.textColor || undefined,
         padding: form.style?.background ? 12 : undefined,
@@ -593,9 +634,9 @@ export function DynamicLeadForm({
         const key = f.id || f.label;
         const type = String(f.type);
         return (
-          <div key={f.id || key || i} className={f.cssClass} style={widthStyle(f.width)}>
+          <div key={f.id || key || i} className={f.cssClass} style={bar ? barItemStyle(type) : widthStyle(f.width)}>
             {type !== "checkbox" && type !== "consent" && type !== "heading" && type !== "html" && type !== "submit" ? (
-              <label style={{ fontSize: 11.5, fontWeight: 700, color: labelColor, marginBottom: 5, display: "block" }}>
+              <label style={bar ? VISUALLY_HIDDEN : { fontSize: 11.5, fontWeight: 700, color: labelColor, marginBottom: 5, display: "block" }}>
                 {f.label}
                 {isFieldRequired(f, allFields, values) ? " *" : ""}
               </label>
@@ -625,13 +666,16 @@ export function DynamicLeadForm({
       ) : null}
 
       {error ? (
-        <div style={{ width: "100%", padding: "8px 10px", borderRadius: 8, background: errorBg, color: "#dc2626", fontSize: 12.5, fontWeight: 600 }}>
+        <div
+          role="alert"
+          style={{ width: "100%", padding: "8px 10px", borderRadius: 8, background: errorBg, color: "#dc2626", fontSize: 12.5, fontWeight: 600, order: bar ? 99 : undefined }}
+        >
           {error}
         </div>
       ) : null}
 
       {hideSubmit || hasCustomSubmit ? null : (
-        <div style={{ width: "100%", display: "flex", gap: 8 }}>
+        <div style={bar ? { flex: "0 0 auto", display: "flex", gap: 8 } : { width: "100%", display: "flex", gap: 8 }}>
           {form.multiStep && step > 0 ? (
             <button
               type="button"
@@ -658,9 +702,9 @@ export function DynamicLeadForm({
             type="submit"
             disabled={submitting}
             style={{
-              marginTop: 4,
-              flex: 2,
-              width: "100%",
+              marginTop: bar ? 0 : 4,
+              flex: bar ? "0 0 auto" : 2,
+              width: bar ? "auto" : "100%",
               padding: "12px 16px",
               borderRadius: form.style?.radius ?? 10,
               border: "none",
@@ -670,6 +714,7 @@ export function DynamicLeadForm({
               fontSize: 14,
               cursor: submitting ? "not-allowed" : "pointer",
               opacity: submitting ? 0.7 : 1,
+              ...submitOverride,
             }}
           >
             {submitting ? "Submitting…" : isLastStep ? submitLabel || form.submitLabel || "Submit" : "Continue"}

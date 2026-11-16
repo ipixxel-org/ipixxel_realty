@@ -35,7 +35,7 @@ export const INTER_TIGHT = "'Inter Tight', 'Inter', 'Helvetica Neue', Arial, san
 
 export const FAMILY: Record<Family, { accent: string; cream: string; ink: string; body: string; font: string }> = {
   burgundy: { accent: "#6b0f2a", cream: "#f8f4ef", ink: "#3b3b3b", body: "#555555", font: HELVETICA },
-  eldeco: { accent: "#8a5a3c", cream: "#fbf8f1", ink: "#2b2b2b", body: "#333333", font: MONTSERRAT },
+  eldeco: { accent: "#8c5e49", cream: "#fbf8f1", ink: "#212529", body: "#212529", font: MONTSERRAT },
   tarc: { accent: "#b08d57", cream: "#f3ece2", ink: "#222222", body: "#2b2b2b", font: HELVETICA },
   emerald: { accent: "#c9a45c", cream: "#0b3b31", ink: "#ffffff", body: "rgba(255,255,255,0.88)", font: POPPINS },
   modern: { accent: "#8a877d", cream: "#f4f4f4", ink: "#0b0b0b", body: "#4b4b4b", font: INTER },
@@ -149,6 +149,11 @@ export function Shell({
 /** Centred content column. */
 export function Wrap({ className = "", children }: { className?: string; children: ReactNode }) {
   return <div className={`relative mx-auto w-full max-w-[1120px] px-5 @3xl:px-8 ${className}`}>{children}</div>;
+}
+
+/** Eldeco content column: 1140px wide on desktop, like the Eldeco landing pages. */
+export function EldecoWrap({ className = "", children }: { className?: string; children: ReactNode }) {
+  return <div className={`relative mx-auto w-full max-w-[1180px] px-5 ${className}`}>{children}</div>;
 }
 
 /** A prop shown as its own element; renders nothing while the prop is empty. */
@@ -393,18 +398,30 @@ export function BurgundyHeading({
   );
 }
 
-/** Eldeco spaced-capitals title + subtitle, centred. */
-export function EldecoHeading({ ctx, className = "" }: { ctx: Ctx; className?: string }) {
+/**
+ * Eldeco title + subtitle, centred, in Helvetica / Arial: spaced capitals by
+ * default, or a plain larger title (the "Site Plan" heading) with `plain`.
+ */
+export function EldecoHeading({ ctx, className = "", plain = false }: { ctx: Ctx; className?: string; plain?: boolean }) {
   return (
     <div className={`text-center ${className}`}>
       <Txt
         ctx={ctx}
         k="title"
         as="h2"
-        className="uppercase font-medium tracking-[0.18em] text-[22px] @3xl:text-[26px]"
+        className={
+          plain
+            ? "uppercase font-normal leading-[1.15] text-[24px] @3xl:text-[28px]"
+            : "uppercase font-medium leading-[1.15] tracking-[0.18em] text-[20px] @3xl:text-[24px]"
+        }
         style={{ color: ctx.accent, fontFamily: HELVETICA }}
       />
-      <Txt ctx={ctx} k="subtitle" className="mt-5 tracking-[0.12em] text-[14px] @3xl:text-[16px]" style={{ color: ctx.accent }} />
+      <Txt
+        ctx={ctx}
+        k="subtitle"
+        className="mt-5 @3xl:mt-9 leading-[1.5] @3xl:leading-[1.15] tracking-[0.12em] text-[15px] @3xl:text-[16px]"
+        style={{ color: ctx.accent, fontFamily: HELVETICA }}
+      />
     </div>
   );
 }

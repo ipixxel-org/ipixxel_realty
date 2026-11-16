@@ -184,6 +184,9 @@ function GrandBandHero(ctx: HeroCtx) {
   const brandColor = color(p.brandColor) ?? "#0d6b45";
   const qr = str(p.qrImage);
   const logo = str(p.logo);
+  // Band background only when the user picks one; empty = none (photo shows through).
+  const bandBackground = color(p.bandColor);
+  const bandOff = !bandBackground;
 
   return (
     <section className="relative overflow-hidden bg-white" id={str(p.anchor) || undefined}>
@@ -283,13 +286,15 @@ function GrandBandHero(ctx: HeroCtx) {
         block={block}
         id={part(block, "band")}
         className="relative z-20 flex flex-col items-center gap-4 px-5 py-5 @3xl:absolute @3xl:inset-x-0 @3xl:bottom-0 @3xl:flex-row @3xl:justify-between @3xl:gap-[2cqw] @3xl:py-0 @3xl:pl-[4.5%] @3xl:pr-[5.5%] @3xl:h-[8.6cqw] @3xl:max-h-[120px]"
-        style={{ background: `linear-gradient(90deg, ${accent} 0%, color-mix(in srgb, ${accent} 78%, white) 50%, ${accent} 100%)` }}
+        style={bandBackground ? { background: bandBackground } : undefined}
       >
         <Text
           ctx={ctx}
           k="bandText"
           as="p"
-          className="text-center @3xl:text-left text-white font-semibold uppercase tracking-[0.02em] text-[16px] @3xl:text-[clamp(11px,1.72cqw,26px)]"
+          className={`text-center @3xl:text-left font-semibold uppercase tracking-[0.02em] text-[16px] @3xl:text-[clamp(11px,1.72cqw,26px)] ${
+            bandOff ? "text-[#2b2b2b] @3xl:text-white @3xl:[text-shadow:0_1px_3px_rgba(0,0,0,0.6)]" : "text-white"
+          }`}
           style={{ fontFamily: SERIF }}
         />
         {str(p.offerLabel) || str(p.offerValue) ? (
