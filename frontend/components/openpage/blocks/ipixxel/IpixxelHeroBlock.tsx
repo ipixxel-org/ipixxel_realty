@@ -1,7 +1,7 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState, type CSSProperties, type ReactNode, type TouchEvent } from "react";
-import { ArrowUpRight, ChevronLeft, ChevronRight, Images, MapPin, Menu, Phone, PhoneCall, Video } from "lucide-react";
+import { useCallback, useEffect, useRef, useState, type CSSProperties, type ReactNode, type RefObject, type TouchEvent } from "react";
+import { ArrowUpRight, ChevronLeft, ChevronRight, Images, MapPin, Menu, Phone, PhoneCall, Video, X } from "lucide-react";
 import type { BlockConfig } from "../types";
 import { El, useElementEditor } from "../El";
 import { CtaButton } from "../CtaButton";
@@ -329,13 +329,108 @@ function GrandBandHero(ctx: HeroCtx) {
 /* gold pin lines, location and gallery along the bottom, side Enquire tab.  */
 /* ------------------------------------------------------------------------- */
 
+/**
+ * Pinned-header holder: a no-op unless sticky; paints a backdrop once pinned.
+ * `flow` is for headers that sit in the page flow (offer slider, modern form)
+ * rather than over the photo; `flow-root` keeps a header's top margin inside.
+ * An empty `bg` means no backdrop (the header has its own).
+ */
+function StickyWrap({ enabled, wrapRef, stuck, bg, flow = false, padBottom = false, children }: { enabled: boolean; wrapRef: RefObject<HTMLDivElement | null>; stuck: boolean; bg: string; flow?: boolean; padBottom?: boolean; children: ReactNode }) {
+  if (!enabled) return <>{children}</>;
+  // padBottom: room under a floating header on the backdrop; the negative
+  // margin cancels it so nothing below moves.
+  const pad = padBottom && stuck && bg ? "pb-3 -mb-3 @3xl:pb-[1.2cqw] @3xl:-mb-[1.2cqw]" : "";
+  return (
+    <div
+      ref={wrapRef}
+      data-sticky-header={stuck ? "stuck" : "top"}
+      className={`${flow ? "relative flow-root" : "absolute inset-x-0 top-0"} z-50 will-change-transform transition-[background-color,box-shadow] duration-200 ${pad} ${stuck && bg ? "shadow-lg backdrop-blur-sm" : ""}`}
+      style={{ backgroundColor: stuck && bg ? bg : "transparent" }}
+    >
+      {children}
+    </div>
+  );
+}
+
+/** Nearest ancestor that scrolls vertically (the editor canvas), or null for the window. */
+function scrollParentOf(el: HTMLElement): HTMLElement | null {
+  for (let node = el.parentElement; node && node !== document.body; node = node.parentElement) {
+    if (/(auto|scroll|overlay)/.test(getComputedStyle(node).overflowY)) return node;
+  }
+  return null;
+}
+
+/**
+ * Keeps an absolutely-placed header in view while the page scrolls past its
+ * section. `position: fixed` can't be used: the page root is a CSS container,
+ * which turns fixed children into page-relative ones. So the header is
+ * shifted down by however far the section's top has scrolled above the
+ * scroll area's top edge. Returns whether it is currently pinned.
+ */
+function useStickyHeader(enabled: boolean) {
+  const sectionRef = useRef<HTMLElement>(null);
+  const headerRef = useRef<HTMLDivElement>(null);
+  const [stuck, setStuck] = useState(false);
+  useEffect(() => {
+    const section = sectionRef.current;
+    const header = headerRef.current;
+    if (!enabled || !section || !header) {
+      setStuck(false);
+      return;
+    }
+    const scroller = scrollParentOf(section);
+    let frame = 0;
+    const update = () => {
+      frame = 0;
+      const edge = scroller ? scroller.getBoundingClientRect().top : 0;
+      const offset = Math.max(0, edge - section.getBoundingClientRect().top);
+      header.style.transform = offset ? `translateY(${offset}px)` : "";
+      setStuck(offset > 0);
+    };
+    const onScroll = () => {
+      if (!frame) frame = requestAnimationFrame(update);
+    };
+    update();
+    document.addEventListener("scroll", onScroll, { capture: true, passive: true });
+    window.addEventListener("resize", onScroll);
+    return () => {
+      if (frame) cancelAnimationFrame(frame);
+      document.removeEventListener("scroll", onScroll, { capture: true });
+      window.removeEventListener("resize", onScroll);
+      header.style.transform = "";
+    };
+  }, [enabled]);
+  return { sectionRef, headerRef, stuck };
+}
+
 function SkylineHero(ctx: HeroCtx) {
   const { block, p, accent } = ctx;
+  const sticky = flag(p.stickyHeader, false);
+  const { sectionRef, headerRef, stuck } = useStickyHeader(sticky);
+  // Pinned header is a slimmer bar: smaller logos (unchanged when not pinned).
+  const logoSize = stuck ? "h-8 @3xl:h-[3cqw] max-h-[46px]" : "h-10 @3xl:h-[4.8cqw] max-h-[72px]";
   const logo = str(p.logo);
   const logo2 = str(p.logo2);
   const phone = phoneDigits(p.phone);
   const tourHref = safeHref(p.tourUrl);
   const galleryHref = safeHref(p.galleryUrl);
+  // Menu items ("Label | section-id" per line). With none, the icon keeps its
+  // old behaviour: one jump to `menuAnchor`.
+  const menuLinks = navLinks(p.skylineMenu);
+  const [menuOpen, setMenuOpen] = useState(false);
+  const menuRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!menuOpen) return;
+    const close = (e: Event) => {
+      if (e instanceof KeyboardEvent ? e.key === "Escape" : !menuRef.current?.contains(e.target as Node)) setMenuOpen(false);
+    };
+    document.addEventListener("pointerdown", close);
+    document.addEventListener("keydown", close);
+    return () => {
+      document.removeEventListener("pointerdown", close);
+      document.removeEventListener("keydown", close);
+    };
+  }, [menuOpen]);
 
   const stat = (n: 1 | 2, side: "left" | "right") =>
     str(p[`stat${n}Label`]) || str(p[`stat${n}Value`]) ? (
@@ -359,7 +454,10 @@ function SkylineHero(ctx: HeroCtx) {
 
   return (
     <section
-      className="relative overflow-hidden text-white min-h-[600px] @3xl:min-h-0 @3xl:aspect-[1100/490]"
+      ref={sectionRef}
+      // Sticky: only clip sideways, so the pinned header can travel below the
+      // hero, and lift the hero over the sections after it.
+      className={`relative ${sticky ? "overflow-x-clip z-40" : "overflow-hidden"} text-white min-h-[600px] @3xl:min-h-0 @3xl:aspect-[1100/490]`}
       id={str(p.anchor) || undefined}
       style={{ "--ipx-accent": accent } as CSSProperties}
     >
@@ -367,22 +465,30 @@ function SkylineHero(ctx: HeroCtx) {
       <div aria-hidden className="absolute inset-x-0 top-0 h-[30%] bg-gradient-to-b from-black/45 to-transparent pointer-events-none" />
       <div aria-hidden className="absolute inset-x-0 bottom-0 h-[30%] bg-gradient-to-t from-black/55 to-transparent pointer-events-none" />
 
-      {/* Header */}
+      {/* Header — wrapped only when sticky, so the non-sticky markup is unchanged */}
+      <StickyWrap
+        enabled={sticky}
+        wrapRef={headerRef}
+        stuck={stuck}
+        bg={color(p.stickyHeaderBg) || "rgba(10,22,40,0.92)"}
+      >
       <El
         block={block}
         id={part(block, "header")}
-        className="absolute z-20 inset-x-0 top-0 flex items-center justify-between gap-3 px-4 pt-4 @3xl:px-[5%] @3xl:pt-[2.4cqw]"
+        className={`${sticky ? "relative" : "absolute z-20 inset-x-0 top-0"} flex items-center justify-between gap-3 px-4 @3xl:px-[5%] ${
+          stuck ? "py-2 @3xl:py-[0.7cqw]" : "pt-4 @3xl:pt-[2.4cqw]"
+        }`}
       >
         <div className="flex items-center gap-3 @3xl:gap-[1.6cqw] min-w-0">
           {logo ? (
-            <Img src={logo} alt={str(p.logoText)} className="h-10 @3xl:h-[4.8cqw] max-h-[72px] w-auto object-contain" />
+            <Img src={logo} alt={str(p.logoText)} className={`${logoSize} w-auto object-contain`} />
           ) : (
             <Text ctx={ctx} k="logoText" as="span" className="text-[20px] @3xl:text-[clamp(16px,2.2cqw,30px)] tracking-[0.12em]" style={{ fontFamily: SERIF }} />
           )}
           {logo2 ? (
             <>
               <span aria-hidden className="w-px self-stretch bg-white/60" />
-              <Img src={logo2} alt="" className="h-10 @3xl:h-[4.8cqw] max-h-[72px] w-auto object-contain" />
+              <Img src={logo2} alt="" className={`${logoSize} w-auto object-contain`} />
             </>
           ) : null}
         </div>
@@ -414,16 +520,53 @@ function SkylineHero(ctx: HeroCtx) {
               <span className="hidden @md:inline">{str(p.callText)}</span>
             </El>
           ) : null}
-          <button
-            type="button"
-            aria-label="Menu"
-            onClick={() => scrollToAnchor(str(p.menuAnchor, "overview"))}
-            className="text-white hover:opacity-85"
-          >
-            <Menu size={26} />
-          </button>
+          {menuLinks.length ? (
+            <div ref={menuRef} className="relative">
+              <button
+                type="button"
+                aria-label={menuOpen ? "Close menu" : "Menu"}
+                aria-expanded={menuOpen}
+                onClick={() => setMenuOpen((o) => !o)}
+                className="flex items-center justify-center w-10 h-10 -m-2 text-white hover:opacity-85"
+              >
+                {menuOpen ? <X size={26} /> : <Menu size={26} />}
+              </button>
+              {menuOpen ? (
+                <div className="absolute right-0 top-full mt-3 z-30 min-w-[200px] max-w-[calc(100vw-32px)] max-h-[420px] overflow-y-auto rounded-lg bg-black/85 backdrop-blur-sm py-2 shadow-xl">
+                  {menuLinks.map((l, i) => (
+                    <a
+                      key={i}
+                      href={l.href || undefined}
+                      target={l.newTab ? "_blank" : undefined}
+                      rel={l.newTab ? "noopener noreferrer" : undefined}
+                      onClick={(e) => {
+                        setMenuOpen(false);
+                        if (!l.newTab && l.href.startsWith("#")) {
+                          e.preventDefault();
+                          scrollToAnchor(l.href);
+                        }
+                      }}
+                      className="block px-5 py-3 text-[15px] @3xl:text-[clamp(13px,1.2cqw,16px)] text-white whitespace-nowrap border-l-2 border-transparent hover:border-[var(--ipx-accent)] hover:bg-white/10"
+                    >
+                      {l.label}
+                    </a>
+                  ))}
+                </div>
+              ) : null}
+            </div>
+          ) : (
+            <button
+              type="button"
+              aria-label="Menu"
+              onClick={() => scrollToAnchor(str(p.menuAnchor, "overview"))}
+              className="text-white hover:opacity-85"
+            >
+              <Menu size={26} />
+            </button>
+          )}
         </nav>
       </El>
+      </StickyWrap>
 
       {/* Title */}
       <Text
@@ -504,6 +647,8 @@ function OfferSliderHero(ctx: HeroCtx) {
   const autoplay = flag(p.autoplay, true);
   const interval = clamp(num(p.interval, 5000), 2000, 20000);
   const badgeImage = str(p.offerBadgeImage);
+  const sticky = flag(p.stickyHeader, false);
+  const { sectionRef, headerRef, stuck } = useStickyHeader(sticky);
 
   // The background image is the first slide; "More slides" follow it.
   const slides = [
@@ -546,20 +691,25 @@ function OfferSliderHero(ctx: HeroCtx) {
 
   return (
     <section
-      className="relative bg-white text-[#1b1b1b]"
+      ref={sectionRef}
+      className={`relative ${sticky ? "z-40" : ""} bg-white text-[#1b1b1b]`}
       id={str(p.anchor) || undefined}
       style={{ "--ipx-accent": accent } as CSSProperties}
     >
       <style>{`@keyframes ipxHeroFade{from{opacity:0}to{opacity:1}}`}</style>
 
-      {/* Header */}
+      {/* Header (wrapped only when sticky) */}
+      <StickyWrap enabled={sticky} wrapRef={headerRef} stuck={stuck} flow bg={color(p.stickyHeaderBg) || "#ffffff"}>
       <El
         block={block}
         id={part(block, "header")}
-        className="relative z-20 flex items-center justify-between gap-3 bg-white px-4 py-3 @3xl:px-[3%] @3xl:py-[1.4cqw]"
+        className={`relative z-20 flex items-center justify-between gap-3 bg-white px-4 @3xl:px-[3%] ${
+          stuck ? "py-2 @3xl:py-[0.7cqw]" : "py-3 @3xl:py-[1.4cqw]"
+        }`}
+        style={stuck && color(p.stickyHeaderBg) ? { backgroundColor: color(p.stickyHeaderBg) } : undefined}
       >
         {logo ? (
-          <Img src={logo} alt={str(p.logoText)} className="h-10 @3xl:h-[4.4cqw] max-h-[64px] w-auto object-contain" />
+          <Img src={logo} alt={str(p.logoText)} className={`${stuck ? "h-8 @3xl:h-[3cqw] max-h-[46px]" : "h-10 @3xl:h-[4.4cqw] max-h-[64px]"} w-auto object-contain`} />
         ) : (
           <div className="flex flex-col leading-none">
             <Text
@@ -604,6 +754,7 @@ function OfferSliderHero(ctx: HeroCtx) {
           />
         </div>
       </El>
+      </StickyWrap>
 
       {/* Slide */}
       <div
@@ -812,14 +963,53 @@ function EmeraldSliderHero(ctx: HeroCtx) {
   const showText = current === 0 || flag(p.textOnAllSlides, false);
   const hasPrice = Boolean(str(p.emeraldPriceLabel) || str(p.emeraldPrice));
   const gold: CSSProperties = { fontFamily: CINZEL, color: accent };
+  const sticky = flag(p.stickyHeader, false);
+  const { sectionRef, headerRef, stuck } = useStickyHeader(sticky);
+
+  // When sticky the header can't stay inside the clipped photo layers, so it
+  // is placed on the section instead — same spot, since the photo starts at
+  // the section's top. 7.5cqw ≈ the 17% of photo height it uses otherwise.
+  const header = (
+    <El
+      block={block}
+      id={part(block, "header")}
+      className={`${sticky ? "relative" : "absolute inset-x-0 top-0 z-20"} flex items-center justify-between gap-3 px-4 ${
+        stuck ? "py-2 bg-transparent @3xl:px-[7%] @3xl:py-[0.7cqw]" : `py-2.5 bg-[#0d3b2b]/60 ${sticky ? "@3xl:h-[7.5cqw]" : "@3xl:h-[17%]"} @3xl:px-[7%] @3xl:py-0`
+      }`}
+    >
+      {logo ? (
+        <Img src={logo} alt={str(p.logoText)} className={`${stuck ? "h-9 @3xl:h-[3.4cqw] max-h-[52px]" : "h-11 @3xl:h-[6cqw] max-h-[84px]"} w-auto object-contain`} />
+      ) : (
+        <Text ctx={ctx} k="logoText" as="span" className="uppercase font-semibold tracking-[0.3em] text-[15px] @3xl:text-[clamp(14px,1.5cqw,22px)]" style={gold} />
+      )}
+      {str(p.phone) ? (
+        <El
+          block={block}
+          id={part(block, "phone")}
+          as="a"
+          href={phone ? `tel:${phone}` : undefined}
+          className="inline-flex items-center gap-2 border border-white/70 px-3 py-1.5 text-[12px] tracking-[0.04em] text-white @3xl:px-[1.2cqw] @3xl:py-[0.6cqw] @3xl:text-[clamp(11px,1.2cqw,17px)] hover:bg-white/10"
+        >
+          <Phone aria-hidden size={14} fill="currentColor" style={{ color: accent }} />
+          {str(p.phone)}
+        </El>
+      ) : null}
+    </El>
+  );
 
   return (
     <section
-      className="relative bg-[#04241a] text-white"
+      ref={sectionRef}
+      className={`relative ${sticky ? "z-40" : ""} bg-[#04241a] text-white`}
       id={str(p.anchor) || undefined}
       style={{ "--ipx-accent": accent, fontFamily: POPPINS } as CSSProperties}
     >
       <style>{`@keyframes ipxHeroFade{from{opacity:0}to{opacity:1}}`}</style>
+      {sticky ? (
+        <StickyWrap enabled wrapRef={headerRef} stuck={stuck} bg={color(p.stickyHeaderBg) || "rgba(13,59,43,0.95)"}>
+          {header}
+        </StickyWrap>
+      ) : null}
       <div className="relative flex flex-col @3xl:block @3xl:aspect-[1245/552] overflow-hidden" {...slider.handlers}>
         {/* Photo, header bar, dots and WhatsApp */}
         <div className="relative aspect-[4/3] @md:aspect-[16/10] @3xl:absolute @3xl:inset-0 @3xl:aspect-auto overflow-hidden">
@@ -833,29 +1023,7 @@ function EmeraldSliderHero(ctx: HeroCtx) {
               style={{ background: "linear-gradient(180deg, transparent 0%, rgba(0,0,0,0.5) 45%, rgba(0,0,0,0.72) 100%)" }}
             />
           ) : null}
-          <El
-            block={block}
-            id={part(block, "header")}
-            className="absolute inset-x-0 top-0 z-20 flex items-center justify-between gap-3 px-4 py-2.5 bg-[#0d3b2b]/60 @3xl:h-[17%] @3xl:px-[7%] @3xl:py-0"
-          >
-            {logo ? (
-              <Img src={logo} alt={str(p.logoText)} className="h-11 @3xl:h-[6cqw] max-h-[84px] w-auto object-contain" />
-            ) : (
-              <Text ctx={ctx} k="logoText" as="span" className="uppercase font-semibold tracking-[0.3em] text-[15px] @3xl:text-[clamp(14px,1.5cqw,22px)]" style={gold} />
-            )}
-            {str(p.phone) ? (
-              <El
-                block={block}
-                id={part(block, "phone")}
-                as="a"
-                href={phone ? `tel:${phone}` : undefined}
-                className="inline-flex items-center gap-2 border border-white/70 px-3 py-1.5 text-[12px] tracking-[0.04em] text-white @3xl:px-[1.2cqw] @3xl:py-[0.6cqw] @3xl:text-[clamp(11px,1.2cqw,17px)] hover:bg-white/10"
-              >
-                <Phone aria-hidden size={14} fill="currentColor" style={{ color: accent }} />
-                {str(p.phone)}
-              </El>
-            ) : null}
-          </El>
+          {sticky ? null : header}
           {slides.length > 1 ? (
             <div className="absolute z-20 left-1/2 bottom-2.5 @3xl:bottom-[2%] flex -translate-x-1/2 items-center gap-1.5">
               {slides.map((_, i) => (
@@ -958,17 +1126,21 @@ function ModernFormHero(ctx: HeroCtx) {
   const links = navLinks(p.modernNav);
   const formCtx = makeCtx(block, "modern-form");
   const arrow = <ArrowUpRight aria-hidden size={15} strokeWidth={1.8} />;
+  const sticky = flag(p.stickyHeader, false);
+  const { sectionRef, headerRef, stuck } = useStickyHeader(sticky);
 
   return (
     <section
-      className="relative overflow-hidden bg-[#141414] text-white"
+      ref={sectionRef}
+      className={`relative ${sticky ? "overflow-x-clip z-40" : "overflow-hidden"} bg-[#141414] text-white`}
       id={str(p.anchor) || undefined}
       style={{ fontFamily: INTER, "--ipx-accent": ctx.accent } as CSSProperties}
     >
       <Cover ctx={ctx} src={str(p.image)} placeholder="linear-gradient(160deg,#3a3f3a 0%,#1d211d 60%,#0f120f 100%)" />
       <div aria-hidden className="absolute inset-0 pointer-events-none" style={{ background: "linear-gradient(90deg, rgba(0,0,0,0.55) 0%, rgba(0,0,0,0.25) 55%, rgba(0,0,0,0.05) 100%)" }} />
 
-      {/* Navbar */}
+      {/* Navbar — a floating pill; when pinned it keeps floating (no backdrop unless a colour is set) */}
+      <StickyWrap enabled={sticky} wrapRef={headerRef} stuck={stuck} flow padBottom bg={color(p.stickyHeaderBg) || ""}>
       <El
         block={block}
         id={part(block, "header")}
@@ -1009,6 +1181,7 @@ function ModernFormHero(ctx: HeroCtx) {
           />
         ) : null}
       </El>
+      </StickyWrap>
 
       {/* Copy + form */}
       <div className="relative z-10 grid grid-cols-1 items-center gap-10 px-5 pt-14 pb-10 @3xl:grid-cols-[1fr_minmax(0,360px)] @3xl:gap-[4cqw] @3xl:px-[5.5%] @3xl:pt-[8cqw] @3xl:pb-[5.5cqw]">

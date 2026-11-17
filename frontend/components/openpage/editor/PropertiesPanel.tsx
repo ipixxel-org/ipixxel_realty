@@ -36,6 +36,7 @@ import {
 } from "./field-helpers";
 import { ELEMENT_ITEM_FIELDS, ELEMENT_ITEM_SUB_ELEMENTS, ELEMENT_ITEM_TEMPLATES } from "./element-fields";
 import { parseNavLines, serializeNavLines, type NavLine } from "@/lib/openpage/nav-lines";
+import { VARIANT_CONTENT_KEY } from "@/lib/openpage/variant-content";
 import { LinkLinesField } from "./LinkLinesField";
 import { IPX_FIELD_VARIANTS, IPX_INSPECTOR_FIELDS, IPX_KNOWN_VARIANTS, ipxItemFieldsFor } from "@/lib/openpage/ipixxel-blocks";
 
@@ -1174,6 +1175,10 @@ const blockFields: Partial<Record<BlockType, { sections: { title: string; fields
         { key: 'disclaimer', label: 'Disclaimer', type: 'text' },
         { key: 'anchor', label: 'Section ID (menu scroll)', type: 'text' },
       ]},
+      { title: 'Sticky header', fields: [
+        { key: 'stickyHeader', label: 'Sticky header (logo & menu stay on top while scrolling)', type: 'toggle' },
+        { key: 'stickyHeaderBg', label: 'Sticky header background (once scrolled; empty = template default)', type: 'color' },
+      ]},
       { title: 'Grand band (template 1)', fields: [
         { key: 'brandName', label: 'Brand name', type: 'text' },
         { key: 'brandColor', label: 'Brand name colour', type: 'color' },
@@ -1198,7 +1203,8 @@ const blockFields: Partial<Record<BlockType, { sections: { title: string; fields
         { key: 'tourText', label: 'Virtual tour text', type: 'text' },
         { key: 'tourUrl', label: 'Virtual tour URL', type: 'text' },
         { key: 'callText', label: 'Call text', type: 'text' },
-        { key: 'menuAnchor', label: 'Menu icon scrolls to (section ID)', type: 'text' },
+        { key: 'skylineMenu', label: 'Menu items (open from the ☰ icon)', type: 'nav-lines' },
+        { key: 'menuAnchor', label: 'Menu icon scrolls to (section ID) — only when no menu items', type: 'text' },
         { key: 'galleryText', label: 'Gallery button text', type: 'text' },
         { key: 'galleryUrl', label: 'Gallery button URL (empty = #gallery)', type: 'text' },
       ]},
@@ -1666,7 +1672,7 @@ function NavLinesField({
 
 function PropertyField({ field, block }: { field: FieldDef; block: BlockConfig }) {
   const updateBlockProps = useConfigStore((s) => s.updateBlockProps)
-  const updateBlock = useConfigStore((s) => s.updateBlock)
+  const switchBlockVariant = useConfigStore((s) => s.switchBlockVariant)
   const patchSite = useConfigStore((s) => s.patchSite)
   const forms = useConfigStore((s) => s.config.forms) ?? []
   const pageBlocks = useConfigStore((s) => {
@@ -1695,7 +1701,7 @@ function PropertyField({ field, block }: { field: FieldDef; block: BlockConfig }
 
   const onChange = (newValue: unknown) => {
     if (field.key === 'variant') {
-      updateBlock(block.id, { variant: newValue as string })
+      switchBlockVariant(block.id, newValue as string)
     } else {
       updateBlockProps(block.id, { [field.key]: newValue })
     }
@@ -2211,6 +2217,8 @@ export function PropertiesPanel({ block }: { block: BlockConfig }) {
   for (const key of propKeys) {
     if (predefinedKeys.has(key)) continue
     if (key === CUSTOM_FIELDS_KEY) continue
+    // Other templates' saved content (see variant-content.ts); not user-editable.
+    if (key === VARIANT_CONTENT_KEY) continue
     // Legacy footer string lists, superseded by the Menu & Social Links editors.
     if (block.type === "footer" && (key === "links" || key === "socials" || key === "columns")) continue
     if (key === "columns" && block.type === "columns") continue
@@ -2366,7 +2374,7 @@ export function PropertiesPanel({ block }: { block: BlockConfig }) {
             <label className="text-[10px] text-text-3 uppercase font-medium">Block Layout</label>
             <select
               value={block.variant || variants[0]}
-              onChange={(e) => updateBlock(block.id, { variant: e.target.value })}
+              onChange={(e) => useConfigStore.getState().switchBlockVariant(block.id, e.target.value)}
               className="w-full px-2.5 py-1.5 text-xs rounded border border-border-default bg-white text-text-0 focus:outline-none focus:border-green cursor-pointer font-medium"
             >
               {variants.map((v) => (
