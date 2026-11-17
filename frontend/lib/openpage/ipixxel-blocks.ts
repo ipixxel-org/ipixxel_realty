@@ -40,7 +40,7 @@ export interface IpxWidget {
 function buttonFields(prefix: string, label: string, textKey = `${prefix}Text`): IpxField[] {
   return [
     { key: textKey, label: `${label} text (empty hides it)`, type: "text" },
-    { key: `${prefix}Url`, label: `${label} URL`, type: "text" },
+    { key: `${prefix}Url`, label: `${label} URL (a form URL or #popup opens a popup form)`, type: "text" },
     { key: `${prefix}Target`, label: `${label} link target`, type: "select", options: ["_self", "_blank"] },
     { key: `${prefix}Anchor`, label: `${label} scrolls to section ID (when no URL)`, type: "text" },
     { key: `${prefix}Color`, label: `${label} background`, type: "color" },
