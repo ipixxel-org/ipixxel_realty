@@ -392,20 +392,36 @@ function TarcCompass(ctx: Ctx) {
             <Pic src={str(ctx.p.centerImage)} fit="contain" className="w-full h-full rounded-full" />
           </div>
         </div>
-        {/* Phone / tablet: emblem, then the four photos with their titles */}
-        <div className="@3xl:hidden">
-          <div className="mx-auto w-44 h-44 rounded-full bg-white grid place-items-center">
-            <Pic src={str(ctx.p.centerImage)} fit="contain" className="w-full h-full rounded-full" />
+        {/* Phone / tablet: same compass idea as desktop — the 2×2 photos with the
+            emblem centred over them; top-row titles sit above their photo,
+            bottom-row titles below theirs, so nothing overlaps the emblem. */}
+        <div className="@3xl:hidden mx-auto max-w-[520px]">
+          <div className="grid grid-cols-2 gap-x-3">
+            {[0, 1].map((i) => (
+              <div key={dirs[i].id} className="text-center flex flex-col justify-end pb-2">
+                <ITxt ctx={ctx} item={dirs[i]} k="title" className="text-[13px] @sm:text-[14px] leading-snug" style={{ color: gold }} />
+                <div className="mt-1 text-[10px] tracking-[0.1em] uppercase">{label(i)}</div>
+              </div>
+            ))}
           </div>
-          <div className="mt-8 grid grid-cols-2 gap-4">
+          <div className="relative grid grid-cols-2 gap-3">
             {dirs.map((d, i) => (
-              <El key={d.id} block={ctx.block} id={d.id} className="text-center">
-                <div className="relative overflow-hidden aspect-square">
-                  <Pic src={d.get("image")} className="absolute inset-0 w-full h-full" />
-                </div>
-                <div className="mt-2 text-[10px] tracking-[0.1em] uppercase">{label(i)}</div>
-                <ITxt ctx={ctx} item={d} k="title" className="mt-1 text-[14px] leading-snug" style={{ color: gold }} />
+              <El key={d.id} block={ctx.block} id={d.id} className="relative overflow-hidden aspect-square">
+                <Pic src={d.get("image")} className="absolute inset-0 w-full h-full" />
+                <Caption text={str(ctx.p.imageCaption)} className={`${i % 2 === 0 ? "left-1.5" : "right-1.5"} ${i < 2 ? "top-1" : "bottom-1"} text-[7px]`} />
+                <span className="sr-only">{label(i)}</span>
               </El>
+            ))}
+            <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-10 w-[48%] aspect-square rounded-full bg-white p-2 grid place-items-center pointer-events-none">
+              <Pic src={str(ctx.p.centerImage)} fit="contain" className="w-full h-full rounded-full" />
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-x-3">
+            {[2, 3].map((i) => (
+              <div key={dirs[i].id} className="text-center pt-2">
+                <div className="text-[10px] tracking-[0.1em] uppercase">{label(i)}</div>
+                <ITxt ctx={ctx} item={dirs[i]} k="title" className="mt-1 text-[13px] @sm:text-[14px] leading-snug" style={{ color: gold }} />
+              </div>
             ))}
           </div>
         </div>

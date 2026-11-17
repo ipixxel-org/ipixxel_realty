@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 import type { BlockConfig } from "@/components/openpage/blocks/types";
 import { RenderBlock } from "@/components/openpage/blocks/registry";
@@ -41,6 +41,63 @@ describe("iPixxel Realty → Hero widget", () => {
     expect(screen.getByText("Call Now").closest("a")?.getAttribute("href")).toBe("tel:+919000000000");
   });
 
+  it("skyline menu icon opens the menu items and closes after a pick", () => {
+    render(<RenderBlock block={make("skyline", { skylineMenu: "Overview\nFloor Plans | floor-plans\nSite | https://example.com | new" })} />);
+    expect(screen.queryByText("Floor Plans")).toBeNull();
+    fireEvent.click(screen.getByLabelText("Menu"));
+    expect(screen.getByText("Overview").getAttribute("href")).toBe("#overview");
+    expect(screen.getByText("Floor Plans").getAttribute("href")).toBe("#floor-plans");
+    expect(screen.getByText("Site").getAttribute("target")).toBe("_blank");
+    fireEvent.click(screen.getByText("Floor Plans"));
+    expect(screen.queryByText("Floor Plans")).toBeNull();
+  });
+
+  it("skyline menu icon without menu items keeps the single-section jump", () => {
+    render(<RenderBlock block={make("skyline")} />);
+    fireEvent.click(screen.getByLabelText("Menu"));
+    expect(screen.queryByRole("link", { name: "Overview" })).toBeNull();
+    expect(screen.getByLabelText("Menu").getAttribute("aria-expanded")).toBeNull();
+  });
+
+  it("skyline header is not sticky unless switched on", () => {
+    const { container } = render(<RenderBlock block={make("skyline")} />);
+    expect(container.querySelector("[data-sticky-header]")).toBeNull();
+    expect(container.querySelector("section")?.className).toContain("overflow-hidden");
+  });
+
+  it("skyline sticky header pins the logo and menu once the hero scrolls up", async () => {
+    const { container } = render(<RenderBlock block={make("skyline", { stickyHeader: true, stickyHeaderBg: "#112233" })} />);
+    const section = container.querySelector("section")!;
+    const holder = container.querySelector("[data-sticky-header]") as HTMLElement;
+    expect(holder.getAttribute("data-sticky-header")).toBe("top");
+    expect(holder.contains(screen.getByLabelText("Menu"))).toBe(true);
+    section.getBoundingClientRect = () => ({ top: -300, bottom: 300, left: 0, right: 0, width: 0, height: 600, x: 0, y: -300, toJSON: () => ({}) });
+    act(() => {
+      fireEvent.resize(window);
+    });
+    await waitFor(() => expect(holder.getAttribute("data-sticky-header")).toBe("stuck"));
+    expect(holder.style.transform).toBe("translateY(300px)");
+    expect(holder.style.backgroundColor).toBe("rgb(17, 34, 51)");
+  });
+
+  it.each(["offer-slider", "emerald-slider", "modern-form"])("%s header is not sticky unless switched on", (variant) => {
+    const { container } = render(<RenderBlock block={make(variant)} />);
+    expect(container.querySelector("[data-sticky-header]")).toBeNull();
+  });
+
+  it.each(["offer-slider", "emerald-slider", "modern-form"])("%s sticky header pins once the hero scrolls up", async (variant) => {
+    const { container } = render(<RenderBlock block={make(variant, { stickyHeader: true })} />);
+    const section = container.querySelector("section")!;
+    const holder = container.querySelector("[data-sticky-header]") as HTMLElement;
+    expect(holder.getAttribute("data-sticky-header")).toBe("top");
+    section.getBoundingClientRect = () => ({ top: -200, bottom: 400, left: 0, right: 0, width: 0, height: 600, x: 0, y: -200, toJSON: () => ({}) });
+    act(() => {
+      fireEvent.resize(window);
+    });
+    await waitFor(() => expect(holder.getAttribute("data-sticky-header")).toBe("stuck"));
+    expect(holder.style.transform).toBe("translateY(200px)");
+  });
+
   it("offer slider shows the offer stack, price band and header button", () => {
     const { container } = render(<RenderBlock block={make("offer-slider")} />);
     expect(screen.getByText("Book Your Dream Home")).toBeTruthy();
@@ -64,7 +121,7 @@ describe("iPixxel Realty → Hero widget", () => {
     expect(screen.getByText("Book Your Dream Home")).toBeTruthy();
   });
 
-  it("switching template keeps the user's shared content", () => {
+  it("templates read the same props when rendered directly (no switch involved)", () => {
     const props = { location: "Golf Course Road, Gurugram" };
     const { rerender } = render(<RenderBlock block={make("grand-band", props)} />);
     expect(screen.getByText("Golf Course Road, Gurugram")).toBeTruthy();

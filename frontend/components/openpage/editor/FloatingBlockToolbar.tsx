@@ -103,7 +103,7 @@ export function FloatingBlockToolbar({
                     key={v}
                     type="button"
                     onClick={() => {
-                      useConfigStore.getState().updateBlock(block.id, { variant: v });
+                      useConfigStore.getState().switchBlockVariant(block.id, v);
                       setShowVariantMenu(false);
                       toast.success(`Variant changed to ${v}`);
                     }}
