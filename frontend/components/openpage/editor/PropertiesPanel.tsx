@@ -118,7 +118,7 @@ function ctaFields(
   if (opts.textKey) fields.push({ key: opts.textKey, label: `${label} text`, type: 'text' })
   if (opts.url) {
     fields.push(
-      { key: `${prefix}Url`, label: `${label} URL`, type: 'text' },
+      { key: `${prefix}Url`, label: `${label} URL (a form URL or #popup opens a popup form)`, type: 'text' },
       { key: `${prefix}Target`, label: `${label} link target`, type: 'select', options: ['_self', '_blank'] },
     )
   }

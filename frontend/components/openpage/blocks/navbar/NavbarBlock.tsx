@@ -3,6 +3,7 @@
 import { useState, type MouseEvent } from "react";
 import type { BlockConfig } from "../types";
 import { Menu, X, Phone, Mail, ChevronDown } from "lucide-react";
+import { popupTargetFromHref } from "@/lib/openpage/popup-links";
 
 export type NavMenuItem = {
   label: string;
@@ -85,7 +86,8 @@ function scrollToHash(href: string) {
 }
 
 function handleNavClick(e: MouseEvent<HTMLAnchorElement>, href: string, onClick?: () => void) {
-  if (!href.startsWith("#")) {
+  // #popup links are left to the page's popup handler (popup-links.ts).
+  if (!href.startsWith("#") || popupTargetFromHref(href)) {
     onClick?.();
     return;
   }

@@ -9,6 +9,7 @@ import { clamp, color, flag, list, num, part, prefersReducedMotion, safeHref, st
 import { useDevice } from "@/components/openpage/runtime/device";
 import { overlayLayer, resolveBlockStyleForDevice } from "@/lib/openpage/block-style";
 import { isMediaSrc } from "@/lib/media";
+import { popupTargetFromHref } from "@/lib/openpage/popup-links";
 import { CINZEL, GOLD_GRADIENT, INTER, INTER_TIGHT, POPPINS, makeCtx, useEmeraldFonts, useModernFonts, useSlider } from "./shared";
 import { LeadForm } from "./parts";
 
@@ -541,7 +542,8 @@ function SkylineHero(ctx: HeroCtx) {
                       rel={l.newTab ? "noopener noreferrer" : undefined}
                       onClick={(e) => {
                         setMenuOpen(false);
-                        if (!l.newTab && l.href.startsWith("#")) {
+                        // #popup links are left to the page's popup handler.
+                        if (!l.newTab && l.href.startsWith("#") && !popupTargetFromHref(l.href)) {
                           e.preventDefault();
                           scrollToAnchor(l.href);
                         }
