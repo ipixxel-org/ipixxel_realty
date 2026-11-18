@@ -2,6 +2,7 @@ import { act, fireEvent, render, screen, waitFor } from "@testing-library/react"
 import { describe, expect, it } from "vitest";
 import type { BlockConfig } from "@/components/openpage/blocks/types";
 import { RenderBlock } from "@/components/openpage/blocks/registry";
+import { ElementEditorContext } from "@/components/openpage/blocks/El";
 import { createBlockFromType } from "@/lib/openpage/block-factory";
 import { PICKER_GROUPS } from "@/components/openpage/editor/LayersPanel";
 
@@ -65,19 +66,45 @@ describe("iPixxel Realty → Hero widget", () => {
     expect(container.querySelector("section")?.className).toContain("overflow-hidden");
   });
 
+  const scrolledUp = (section: Element, by: number) => {
+    section.getBoundingClientRect = () => ({ top: -by, bottom: 600 - by, left: 0, right: 0, width: 0, height: 600, x: 0, y: -by, toJSON: () => ({}) });
+    act(() => {
+      fireEvent.resize(window);
+    });
+  };
+  /** The pinned header on the live page: a real fixed bar in a body-level holder. */
+  const pinnedBar = () => document.querySelector("[data-ipx-sticky-host] [data-sticky-header='stuck']") as HTMLElement | null;
+
   it("skyline sticky header pins the logo and menu once the hero scrolls up", async () => {
-    const { container } = render(<RenderBlock block={make("skyline", { stickyHeader: true, stickyHeaderBg: "#112233" })} />);
+    const { container, unmount } = render(<RenderBlock block={make("skyline", { stickyHeader: true, stickyHeaderBg: "#112233" })} />);
     const section = container.querySelector("section")!;
     const holder = container.querySelector("[data-sticky-header]") as HTMLElement;
     expect(holder.getAttribute("data-sticky-header")).toBe("top");
     expect(holder.contains(screen.getByLabelText("Menu"))).toBe(true);
-    section.getBoundingClientRect = () => ({ top: -300, bottom: 300, left: 0, right: 0, width: 0, height: 600, x: 0, y: -300, toJSON: () => ({}) });
-    act(() => {
-      fireEvent.resize(window);
-    });
+    scrolledUp(section, 300);
+    await waitFor(() => expect(pinnedBar()).not.toBeNull());
+    const bar = pinnedBar()!;
+    const host = bar.parentElement!;
+    // Native fixed positioning: no per-scroll shifting, so nothing jitters.
+    expect(host.style.position).toBe("fixed");
+    expect(bar.style.transform).toBe("");
+    expect(bar.style.backgroundColor).toBe("rgb(17, 34, 51)");
+    expect(bar.contains(screen.getByLabelText("Menu"))).toBe(true);
+    unmount();
+    expect(document.querySelector("[data-ipx-sticky-host]")).toBeNull();
+  });
+
+  it("sticky header follows the scroll by shifting while editing in the builder", async () => {
+    const { container } = render(
+      <ElementEditorContext.Provider value={{ blockId: "x", isEditing: true }}>
+        <RenderBlock block={make("skyline", { stickyHeader: true })} />
+      </ElementEditorContext.Provider>,
+    );
+    const holder = container.querySelector("[data-sticky-header]") as HTMLElement;
+    scrolledUp(container.querySelector("section")!, 300);
     await waitFor(() => expect(holder.getAttribute("data-sticky-header")).toBe("stuck"));
     expect(holder.style.transform).toBe("translateY(300px)");
-    expect(holder.style.backgroundColor).toBe("rgb(17, 34, 51)");
+    expect(document.querySelector("[data-ipx-sticky-host]")).toBeNull();
   });
 
   it.each(["offer-slider", "emerald-slider", "modern-form"])("%s header is not sticky unless switched on", (variant) => {
@@ -86,16 +113,18 @@ describe("iPixxel Realty → Hero widget", () => {
   });
 
   it.each(["offer-slider", "emerald-slider", "modern-form"])("%s sticky header pins once the hero scrolls up", async (variant) => {
-    const { container } = render(<RenderBlock block={make(variant, { stickyHeader: true })} />);
-    const section = container.querySelector("section")!;
+    const { container, unmount } = render(<RenderBlock block={make(variant, { stickyHeader: true })} />);
     const holder = container.querySelector("[data-sticky-header]") as HTMLElement;
     expect(holder.getAttribute("data-sticky-header")).toBe("top");
-    section.getBoundingClientRect = () => ({ top: -200, bottom: 400, left: 0, right: 0, width: 0, height: 600, x: 0, y: -200, toJSON: () => ({}) });
-    act(() => {
-      fireEvent.resize(window);
-    });
-    await waitFor(() => expect(holder.getAttribute("data-sticky-header")).toBe("stuck"));
-    expect(holder.style.transform).toBe("translateY(200px)");
+    scrolledUp(container.querySelector("section")!, 200);
+    await waitFor(() => expect(pinnedBar()).not.toBeNull());
+    expect(pinnedBar()!.parentElement!.style.position).toBe("fixed");
+    expect(pinnedBar()!.style.transform).toBe("");
+    // Scrolling back to the top puts the header back in the hero.
+    scrolledUp(container.querySelector("section")!, 0);
+    await waitFor(() => expect(container.querySelector("[data-sticky-header='top']")).not.toBeNull());
+    expect(pinnedBar()).toBeNull();
+    unmount();
   });
 
   it("offer slider shows the offer stack, price band and header button", () => {

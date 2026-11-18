@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState, type CSSProperties, type ReactNode, type RefObject, type TouchEvent } from "react";
+import { createPortal } from "react-dom";
 import { ArrowUpRight, ChevronLeft, ChevronRight, Images, MapPin, Menu, Phone, PhoneCall, Video, X } from "lucide-react";
 import type { BlockConfig } from "../types";
 import { El, useElementEditor } from "../El";
@@ -336,19 +337,57 @@ function GrandBandHero(ctx: HeroCtx) {
  * rather than over the photo; `flow-root` keeps a header's top margin inside.
  * An empty `bg` means no backdrop (the header has its own).
  */
-function StickyWrap({ enabled, wrapRef, stuck, bg, flow = false, padBottom = false, children }: { enabled: boolean; wrapRef: RefObject<HTMLDivElement | null>; stuck: boolean; bg: string; flow?: boolean; padBottom?: boolean; children: ReactNode }) {
+function StickyWrap({
+  enabled,
+  wrapRef,
+  stuck,
+  host = null,
+  bg,
+  flow = false,
+  padBottom = false,
+  children,
+}: {
+  enabled: boolean;
+  wrapRef: RefObject<HTMLDivElement | null>;
+  stuck: boolean;
+  /** Fixed bar on the live page (see useStickyHeader); null in the builder. */
+  host?: HTMLElement | null;
+  bg: string;
+  flow?: boolean;
+  padBottom?: boolean;
+  children: ReactNode;
+}) {
+  // A pinned header is slimmer. In-flow headers keep their full height in the
+  // page while pinned, so the content below never jumps (which used to make
+  // the browser re-adjust the scroll and the header bounce).
+  const [topHeight, setTopHeight] = useState(0);
+  useEffect(() => {
+    const el = wrapRef.current;
+    if (!enabled || !flow || stuck || !el || typeof ResizeObserver === "undefined") return;
+    const ro = new ResizeObserver(() => setTopHeight(el.offsetHeight));
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [enabled, flow, stuck, wrapRef]);
   if (!enabled) return <>{children}</>;
   // padBottom: room under a floating header on the backdrop; the negative
   // margin cancels it so nothing below moves.
   const pad = padBottom && stuck && bg ? "pb-3 -mb-3 @3xl:pb-[1.2cqw] @3xl:-mb-[1.2cqw]" : "";
-  return (
+  const fixed = Boolean(host && stuck);
+  const bar = (
     <div
       ref={wrapRef}
       data-sticky-header={stuck ? "stuck" : "top"}
-      className={`${flow ? "relative flow-root" : "absolute inset-x-0 top-0"} z-50 will-change-transform transition-[background-color,box-shadow] duration-200 ${pad} ${stuck && bg ? "shadow-lg backdrop-blur-sm" : ""}`}
+      className={`${fixed ? "relative" : flow ? "relative flow-root" : "absolute inset-x-0 top-0"} z-50 [overflow-anchor:none] ${fixed ? "" : "will-change-transform"} transition-[background-color,box-shadow] duration-200 ${pad} ${stuck && bg ? "shadow-lg" : ""}`}
       style={{ backgroundColor: stuck && bg ? bg : "transparent" }}
     >
       {children}
+    </div>
+  );
+  const placed = fixed && host ? createPortal(bar, host) : bar;
+  if (!flow) return placed;
+  return (
+    <div className="relative z-50 [overflow-anchor:none]" style={stuck && topHeight ? { height: topHeight } : undefined}>
+      {placed}
     </div>
   );
 }
@@ -362,30 +401,75 @@ function scrollParentOf(el: HTMLElement): HTMLElement | null {
 }
 
 /**
- * Keeps an absolutely-placed header in view while the page scrolls past its
- * section. `position: fixed` can't be used: the page root is a CSS container,
- * which turns fixed children into page-relative ones. So the header is
- * shifted down by however far the section's top has scrolled above the
- * scroll area's top edge. Returns whether it is currently pinned.
+ * Body-level fixed holder for a pinned header on the live page. The page root
+ * is a CSS container, which turns `position: fixed` children into
+ * page-relative ones, so the bar is portalled here instead. The holder is a
+ * container itself (for the header's @3xl / cqw sizes) and carries the page's
+ * theme variables, accent and font.
+ */
+function createStickyHost(section: HTMLElement): HTMLDivElement {
+  const host = document.createElement("div");
+  const site = section.closest<HTMLElement>(".op-site");
+  if (site) {
+    host.style.cssText = site.style.cssText;
+    for (const a of Array.from(site.attributes)) if (a.name.startsWith("data-")) host.setAttribute(a.name, a.value);
+  }
+  const cs = getComputedStyle(section);
+  host.style.setProperty("--ipx-accent", cs.getPropertyValue("--ipx-accent"));
+  Object.assign(host.style, {
+    position: "fixed",
+    top: "0",
+    left: "0",
+    right: "0",
+    zIndex: "50",
+    backgroundColor: "transparent",
+    fontFamily: cs.fontFamily,
+    containerType: "inline-size",
+  });
+  host.setAttribute("data-ipx-sticky-host", "");
+  document.body.appendChild(host);
+  return host;
+}
+
+/**
+ * Keeps a hero's header in view once the page scrolls past its top.
+ *
+ * Live page (window scroll, not editing): the header becomes a real
+ * `position: fixed` bar (portalled to a body-level holder), so the browser
+ * keeps it perfectly still while scrolling.
+ *
+ * Builder canvas (its own scroll area): fixed would pin to the browser window
+ * rather than the canvas, so the header is shifted down by however far the
+ * section's top has scrolled above the canvas's top edge.
+ *
+ * Returns whether it is pinned and, on the live page, the fixed holder.
  */
 function useStickyHeader(enabled: boolean) {
+  const editing = useElementEditor()?.isEditing === true;
   const sectionRef = useRef<HTMLElement>(null);
   const headerRef = useRef<HTMLDivElement>(null);
   const [stuck, setStuck] = useState(false);
+  const [host, setHost] = useState<HTMLElement | null>(null);
   useEffect(() => {
     const section = sectionRef.current;
-    const header = headerRef.current;
-    if (!enabled || !section || !header) {
+    if (!enabled || !section) {
       setStuck(false);
       return;
     }
     const scroller = scrollParentOf(section);
+    const fixedHost = !scroller && !editing ? createStickyHost(section) : null;
+    setHost(fixedHost);
     let frame = 0;
+    let shifted: HTMLElement | null = null;
     const update = () => {
       frame = 0;
       const edge = scroller ? scroller.getBoundingClientRect().top : 0;
       const offset = Math.max(0, edge - section.getBoundingClientRect().top);
-      header.style.transform = offset ? `translateY(${offset}px)` : "";
+      const header = headerRef.current;
+      if (!fixedHost && header) {
+        header.style.transform = offset ? `translateY(${offset}px)` : "";
+        shifted = header;
+      }
       setStuck(offset > 0);
     };
     const onScroll = () => {
@@ -398,16 +482,18 @@ function useStickyHeader(enabled: boolean) {
       if (frame) cancelAnimationFrame(frame);
       document.removeEventListener("scroll", onScroll, { capture: true });
       window.removeEventListener("resize", onScroll);
-      header.style.transform = "";
+      if (shifted) shifted.style.transform = "";
+      setHost(null);
+      fixedHost?.remove();
     };
-  }, [enabled]);
-  return { sectionRef, headerRef, stuck };
+  }, [enabled, editing]);
+  return { sectionRef, headerRef, stuck, host };
 }
 
 function SkylineHero(ctx: HeroCtx) {
   const { block, p, accent } = ctx;
   const sticky = flag(p.stickyHeader, false);
-  const { sectionRef, headerRef, stuck } = useStickyHeader(sticky);
+  const { sectionRef, headerRef, stuck, host } = useStickyHeader(sticky);
   // Pinned header is a slimmer bar: smaller logos (unchanged when not pinned).
   const logoSize = stuck ? "h-8 @3xl:h-[3cqw] max-h-[46px]" : "h-10 @3xl:h-[4.8cqw] max-h-[72px]";
   const logo = str(p.logo);
@@ -471,6 +557,7 @@ function SkylineHero(ctx: HeroCtx) {
         enabled={sticky}
         wrapRef={headerRef}
         stuck={stuck}
+        host={host}
         bg={color(p.stickyHeaderBg) || "rgba(10,22,40,0.92)"}
       >
       <El
@@ -650,7 +737,7 @@ function OfferSliderHero(ctx: HeroCtx) {
   const interval = clamp(num(p.interval, 5000), 2000, 20000);
   const badgeImage = str(p.offerBadgeImage);
   const sticky = flag(p.stickyHeader, false);
-  const { sectionRef, headerRef, stuck } = useStickyHeader(sticky);
+  const { sectionRef, headerRef, stuck, host } = useStickyHeader(sticky);
 
   // The background image is the first slide; "More slides" follow it.
   const slides = [
@@ -701,7 +788,7 @@ function OfferSliderHero(ctx: HeroCtx) {
       <style>{`@keyframes ipxHeroFade{from{opacity:0}to{opacity:1}}`}</style>
 
       {/* Header (wrapped only when sticky) */}
-      <StickyWrap enabled={sticky} wrapRef={headerRef} stuck={stuck} flow bg={color(p.stickyHeaderBg) || "#ffffff"}>
+      <StickyWrap enabled={sticky} wrapRef={headerRef} stuck={stuck} host={host} flow bg={color(p.stickyHeaderBg) || "#ffffff"}>
       <El
         block={block}
         id={part(block, "header")}
@@ -966,7 +1053,7 @@ function EmeraldSliderHero(ctx: HeroCtx) {
   const hasPrice = Boolean(str(p.emeraldPriceLabel) || str(p.emeraldPrice));
   const gold: CSSProperties = { fontFamily: CINZEL, color: accent };
   const sticky = flag(p.stickyHeader, false);
-  const { sectionRef, headerRef, stuck } = useStickyHeader(sticky);
+  const { sectionRef, headerRef, stuck, host } = useStickyHeader(sticky);
 
   // When sticky the header can't stay inside the clipped photo layers, so it
   // is placed on the section instead — same spot, since the photo starts at
@@ -1008,7 +1095,7 @@ function EmeraldSliderHero(ctx: HeroCtx) {
     >
       <style>{`@keyframes ipxHeroFade{from{opacity:0}to{opacity:1}}`}</style>
       {sticky ? (
-        <StickyWrap enabled wrapRef={headerRef} stuck={stuck} bg={color(p.stickyHeaderBg) || "rgba(13,59,43,0.95)"}>
+        <StickyWrap enabled wrapRef={headerRef} stuck={stuck} host={host} bg={color(p.stickyHeaderBg) || "rgba(13,59,43,0.95)"}>
           {header}
         </StickyWrap>
       ) : null}
@@ -1129,7 +1216,7 @@ function ModernFormHero(ctx: HeroCtx) {
   const formCtx = makeCtx(block, "modern-form");
   const arrow = <ArrowUpRight aria-hidden size={15} strokeWidth={1.8} />;
   const sticky = flag(p.stickyHeader, false);
-  const { sectionRef, headerRef, stuck } = useStickyHeader(sticky);
+  const { sectionRef, headerRef, stuck, host } = useStickyHeader(sticky);
 
   return (
     <section
@@ -1142,7 +1229,7 @@ function ModernFormHero(ctx: HeroCtx) {
       <div aria-hidden className="absolute inset-0 pointer-events-none" style={{ background: "linear-gradient(90deg, rgba(0,0,0,0.55) 0%, rgba(0,0,0,0.25) 55%, rgba(0,0,0,0.05) 100%)" }} />
 
       {/* Navbar — a floating pill; when pinned it keeps floating (no backdrop unless a colour is set) */}
-      <StickyWrap enabled={sticky} wrapRef={headerRef} stuck={stuck} flow padBottom bg={color(p.stickyHeaderBg) || ""}>
+      <StickyWrap enabled={sticky} wrapRef={headerRef} stuck={stuck} host={host} flow padBottom bg={color(p.stickyHeaderBg) || ""}>
       <El
         block={block}
         id={part(block, "header")}
