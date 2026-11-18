@@ -40,7 +40,7 @@ export interface IpxWidget {
 function buttonFields(prefix: string, label: string, textKey = `${prefix}Text`): IpxField[] {
   return [
     { key: textKey, label: `${label} text (empty hides it)`, type: "text" },
-    { key: `${prefix}Url`, label: `${label} URL`, type: "text" },
+    { key: `${prefix}Url`, label: `${label} URL (a form URL or #popup opens a popup form)`, type: "text" },
     { key: `${prefix}Target`, label: `${label} link target`, type: "select", options: ["_self", "_blank"] },
     { key: `${prefix}Anchor`, label: `${label} scrolls to section ID (when no URL)`, type: "text" },
     { key: `${prefix}Color`, label: `${label} background`, type: "color" },
@@ -733,6 +733,7 @@ const FORM: IpxWidget = {
     formTitle: "Request Exclusive Details",
     formSubtitle: "Response guaranteed within 60 minutes",
     formId: "",
+    submitText: "",
     imageLabel: "The Residences\nSector 150, Noida",
     bgImage: "",
     formNote: "By submitting, you agree to be contacted regarding this project. Your information is confidential and will not be shared with third parties.",
@@ -758,6 +759,7 @@ const FORM: IpxWidget = {
       title: "Form",
       fields: [
         { key: "formId", label: "Form (Form Builder)", type: "form-select" },
+        { key: "submitText", label: "Submit button text (bar template; empty = the form's own)", type: "text" },
         { key: "formTitle", label: "Form card title (split template)", type: "text" },
         { key: "formSubtitle", label: "Form card subtitle", type: "text" },
         { key: "formNote", label: "Note under the form", type: "textarea" },
@@ -953,8 +955,9 @@ export const IPX_FIELD_VARIANTS: Record<string, Record<string, string[]>> = {
     ...only(["grand-band", "skyline", "emerald-slider"], ["location"]),
     ...only(["skyline", "offer-slider", "emerald-slider"], ["phone"]),
     ...only(["grand-band", "skyline"], ["disclaimer"]),
-    ...only(["grand-band"], ["brandName", "brandColor", "brandNumber", "brandTitle", "brandSubtitle", "headline", "legalText", "qrImage", "bandText", "offerLabel", "offerValue"]),
-    ...only(["skyline"], ["logo2", "skylineTitle", "stat1Label", "stat1Value", "stat2Label", "stat2Value", "tourText", "tourUrl", "callText", "menuAnchor", "galleryText", "galleryUrl", "primaryAnchor", "primaryCta", "primaryCtaUrl", "primaryCtaTarget", "primaryCtaColor", "primaryCtaTextColor", "primaryCtaHoverColor", "primaryCtaHoverTextColor", "primaryCtaBorderColor", "primaryCtaRadius"]),
+    ...only(["skyline", "offer-slider", "emerald-slider", "modern-form"], ["stickyHeader", "stickyHeaderBg"]),
+    ...only(["grand-band"], ["brandName", "brandColor", "brandNumber", "brandTitle", "brandSubtitle", "headline", "legalText", "qrImage", "bandText", "bandColor", "offerLabel", "offerValue"]),
+    ...only(["skyline"], ["logo2", "skylineTitle", "stat1Label", "stat1Value", "stat2Label", "stat2Value", "tourText", "tourUrl", "callText", "skylineMenu", "menuAnchor", "galleryText", "galleryUrl", "primaryAnchor", "primaryCta", "primaryCtaUrl", "primaryCtaTarget", "primaryCtaColor", "primaryCtaTextColor", "primaryCtaHoverColor", "primaryCtaHoverTextColor", "primaryCtaBorderColor", "primaryCtaRadius"]),
     ...only(["offer-slider"], ["logoTagline", "offerTitle", "highlightText", "benefitText", "benefitValue", "benefitNote", "configText", "priceText", "validLabel", "validValue", "offerBadgeImage", "badgeTop", "badgeTitle", "badgeScript", "headerCtaAnchor", "headerCta", "headerCtaUrl", "headerCtaTarget", "headerCtaColor", "headerCtaTextColor", "headerCtaHoverColor", "headerCtaHoverTextColor", "headerCtaBorderColor", "headerCtaRadius"]),
     ...only(["offer-slider", "emerald-slider"], ["slides", "textOnAllSlides", "autoplay", "interval", "whatsapp", "whatsappIcon", "whatsappSize", "showFloatingButtons"]),
     ...only(["emerald-slider"], ["emeraldTitle", "emeraldConfig", "emeraldPriceLabel", "emeraldPrice", "emeraldPlan", "emeraldRibbon"]),
@@ -1055,6 +1058,7 @@ export const IPX_FIELD_VARIANTS: Record<string, Record<string, string[]>> = {
     ...only(["tarc-quote", "emerald-form", "modern-split"], ["image"]),
     ...only(["modern-split"], ["imageLabel"]),
     ...only(["emerald-form"], ["bgImage"]),
+    ...only(["eldeco-bar"], ["submitText"]),
   },
   "ipx-footer": {
     ...only(["burgundy-footer", "tarc-footer", "emerald-footer"], ["title"]),

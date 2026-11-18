@@ -11,7 +11,9 @@ import {
   Btn,
   Caption,
   EldecoHeading,
+  EldecoWrap,
   FAMILY,
+  HELVETICA,
   IconImg,
   ITxt,
   KnowMore,
@@ -52,8 +54,14 @@ export function IpxOverviewBlock({ block }: { block: BlockConfig }) {
 export function bronzeVar(ctx: Ctx): CSSProperties {
   return { "--ipx-btn-bg": color(ctx.p.buttonColor) ?? BRONZE } as CSSProperties;
 }
-export const BRONZE_BTN =
-  "inline-flex items-center justify-center px-6 py-2.5 text-white text-[12px] font-semibold tracking-[0.2em] uppercase [background:var(--ipx-btn-bg)] hover:brightness-110";
+/** Eldeco bronze button without size / padding (callers add their own). */
+export const BRONZE_BTN_BASE =
+  "inline-flex items-center justify-center text-white leading-[1.2] font-semibold uppercase [background:var(--ipx-btn-bg)] hover:brightness-110";
+export const BRONZE_BTN = `${BRONZE_BTN_BASE} px-6 py-3 text-[12px] @3xl:text-[12.5px] tracking-[0.14em]`;
+
+/** Eldeco outlined / filled tab box (highlight tabs and the boxed label), Helvetica spaced capitals. */
+const ELDECO_BOX =
+  "px-6 @3xl:px-[29px] py-2.5 @3xl:py-[13px] uppercase leading-[1.15] tracking-[0.28em] text-[12px] @3xl:text-[14px] border";
 
 function BurgundyFeatures(ctx: Ctx) {
   const list = items(ctx);
@@ -87,22 +95,23 @@ function BurgundyFeatures(ctx: Ctx) {
 
 function EldecoOverview(ctx: Ctx) {
   return (
-    <Shell ctx={ctx} className="bg-white py-14 @3xl:py-20" style={bronzeVar(ctx)}>
-      <Wrap>
+    <Shell ctx={ctx} className="bg-white pt-12 pb-12 @3xl:pt-14 @3xl:pb-9" style={bronzeVar(ctx)}>
+      <EldecoWrap>
         <EldecoHeading ctx={ctx} />
-        <div className="mt-10 @3xl:mt-12 grid grid-cols-1 @3xl:grid-cols-[1fr_1.05fr] gap-10 @3xl:gap-16 items-start">
-          <div className="@3xl:pl-6">
-            <Txt ctx={ctx} k="description" className="whitespace-pre-line text-[14px] @3xl:text-[14.5px] leading-[2.2] tracking-[0.06em] text-[#333]" />
-            <div className="mt-8">
+        {/* Two equal columns: text inset 50px on the left, photo top-aligned with the first line. */}
+        <div className="mt-8 @3xl:mt-10 grid grid-cols-1 @3xl:grid-cols-2 gap-8 @3xl:gap-6 items-start">
+          <div className="@3xl:pl-[50px] @3xl:pr-[38px]">
+            <Txt ctx={ctx} k="description" className="whitespace-pre-line text-[14px] leading-[2.28] tracking-[0.04em] text-[#212529]" />
+            <div className="mt-7">
               <Btn ctx={ctx} className={BRONZE_BTN} />
             </div>
           </div>
-          <div className="relative overflow-hidden rounded-[12px] aspect-[558/422]">
+          <div className="relative overflow-hidden rounded-[10px] aspect-[558/422]">
             <Pic src={str(ctx.p.image)} className="absolute inset-0 w-full h-full" />
-            <Caption text={str(ctx.p.imageCaption)} className="left-6 bottom-4 text-[13px]" />
+            <Caption text={str(ctx.p.imageCaption)} className="left-6 bottom-4 text-[12px]" />
           </div>
         </div>
-      </Wrap>
+      </EldecoWrap>
     </Shell>
   );
 }
@@ -233,19 +242,21 @@ function EldecoIcons(ctx: Ctx) {
   // Items with a Tab name only show under that tab; items without one always show.
   const list = all.filter((it) => !it.get("category") || !current || it.get("category").trim().toLowerCase() === current.toLowerCase());
   return (
-    <Shell ctx={ctx} className="bg-white py-14 @3xl:py-20" style={bronzeVar(ctx)}>
-      <Wrap>
+    <Shell ctx={ctx} className="bg-white pt-12 pb-12 @3xl:pt-14 @3xl:pb-11" style={bronzeVar(ctx)}>
+      <EldecoWrap>
         <EldecoHeading ctx={ctx} />
         {tabs.length ? (
-          <div className="mt-10 @3xl:mt-14 flex flex-wrap justify-center gap-4 @3xl:gap-x-36">
+          <div className="mt-10 @3xl:mt-[76px] flex flex-wrap justify-center gap-4 @3xl:gap-x-[140px]">
             {tabs.map((t, i) => (
               <button
                 key={`${t}-${i}`}
                 type="button"
+                aria-pressed={i === active}
                 onClick={() => setActive(i)}
-                className={`px-6 @3xl:px-8 py-2.5 @3xl:py-3 uppercase tracking-[0.3em] text-[12px] @3xl:text-[14px] border ${
+                className={`${ELDECO_BOX} ${
                   i === active ? "text-white border-transparent [background:var(--ipx-btn-bg)]" : "text-[#1b1b1b] border-[#1b1b1b] bg-white"
                 }`}
+                style={{ fontFamily: HELVETICA }}
               >
                 {t}
               </button>
@@ -253,27 +264,54 @@ function EldecoIcons(ctx: Ctx) {
           </div>
         ) : null}
         {str(ctx.p.tabLabel) ? (
-          <div className="mt-12 @3xl:mt-36 flex justify-center">
-            <Txt ctx={ctx} k="tabLabel" className="border border-[#1b1b1b] px-6 @3xl:px-8 py-2.5 @3xl:py-3 uppercase tracking-[0.3em] text-[12px] @3xl:text-[14px] text-center" />
+          <div className="mt-12 @3xl:mt-[150px] flex justify-center">
+            <Txt ctx={ctx} k="tabLabel" className={`${ELDECO_BOX} border-[#1b1b1b] text-[#1b1b1b] text-center`} style={{ fontFamily: HELVETICA }} />
           </div>
         ) : null}
-        <div className="mt-12 @3xl:mt-16 grid grid-cols-1 @md:grid-cols-2 @3xl:grid-cols-3 gap-y-12 @3xl:gap-y-16 gap-x-10 text-center">
+        <div className="mx-auto mt-12 @3xl:mt-[112px] max-w-[983px] grid grid-cols-1 @md:grid-cols-2 @3xl:grid-cols-3 gap-y-12 @3xl:gap-y-16 gap-x-10 text-center">
           {list.map((it) => (
             <El key={it.id} block={ctx.block} id={it.id} className="flex flex-col items-center">
-              <IconImg src={it.get("icon")} className="w-14 h-14 @3xl:w-16 @3xl:h-16" fallback={<Building2 className="w-14 h-14 text-[#1b1b1b]" strokeWidth={0.9} />} />
-              <ITxt ctx={ctx} item={it} k="title" className="mt-7 max-w-[300px] text-[13.5px] @3xl:text-[14px] leading-[1.9] tracking-[0.08em] text-[#1b1b1b]" />
+              <IconImg src={it.get("icon")} className="w-14 h-14 @3xl:w-[60px] @3xl:h-[60px]" fallback={<Building2 className="w-14 h-14 text-[#111]" strokeWidth={0.9} />} />
+              <ITxt ctx={ctx} item={it} k="title" className="mt-6 @3xl:mt-11 max-w-[290px] text-[13px] leading-[2.04] tracking-[0.08em] text-[#111]" />
             </El>
           ))}
         </div>
-        <div className="mt-12 @3xl:mt-16 flex justify-center">
+        <div className="mt-12 @3xl:mt-[60px] flex justify-center">
           <Btn ctx={ctx} className={BRONZE_BTN} />
         </div>
-      </Wrap>
+      </EldecoWrap>
     </Shell>
   );
 }
 
 const DIRECTION_FALLBACK = ["North", "East", "South", "West"];
+
+/**
+ * One compass axis run: ◆ at the outer end, a hairline, and an arrowhead at
+ * the inner end (touching the emblem) pointing outwards. Fills the remaining
+ * space of its flex parent; `dir` is the direction the arrowhead points.
+ */
+function CompassAxis({ dir, color }: { dir: "up" | "down" | "left" | "right"; color: string }) {
+  const vertical = dir === "up" || dir === "down";
+  const head = { up: "4,0 8,7 0,7", down: "0,0 8,0 4,7", left: "0,4 7,0 7,8", right: "0,0 7,4 0,8" }[dir];
+  // Outer → inner order is ◆ — ▲ for up/left; down/right reverse it so the head still sits by the emblem.
+  const flow = { up: "flex-col", down: "flex-col-reverse", left: "flex-row", right: "flex-row-reverse" }[dir];
+  return (
+    <span aria-hidden className={`flex-1 min-w-0 min-h-0 flex items-center ${flow}`}>
+      <span className="block w-[7px] h-[7px] rotate-45 shrink-0" style={{ backgroundColor: color }} />
+      <span className={`block flex-1 ${vertical ? "w-px" : "h-px"}`} style={{ backgroundColor: color }} />
+      <svg
+        width={vertical ? 8 : 7}
+        height={vertical ? 7 : 8}
+        viewBox={vertical ? "0 0 8 7" : "0 0 7 8"}
+        className="shrink-0"
+        fill={color}
+      >
+        <polygon points={head} />
+      </svg>
+    </span>
+  );
+}
 
 function TarcCompass(ctx: Ctx) {
   const dirs = items(ctx, "directions").slice(0, 4);
@@ -292,48 +330,98 @@ function TarcCompass(ctx: Ctx) {
     <Shell ctx={ctx} className="bg-white py-14 @3xl:py-20">
       <Wrap>
         <TarcHeading ctx={ctx} className="mb-10" />
-        {/* Desktop compass */}
-        <div className="hidden @3xl:block relative mx-auto w-[800px] max-w-full h-[580px]">
-          {dirTitle(0, "absolute left-1/2 -translate-x-1/2 top-0 text-center whitespace-nowrap")}
-          <span className="absolute left-1/2 -translate-x-1/2 top-[28px] text-[10px] tracking-[0.1em] uppercase">{label(0)}</span>
-          {dirTitle(2, "absolute left-1/2 -translate-x-1/2 bottom-0 text-center whitespace-nowrap")}
-          <span className="absolute left-1/2 -translate-x-1/2 bottom-[30px] text-[10px] tracking-[0.1em] uppercase">{label(2)}</span>
-          {dirTitle(3, "absolute left-0 top-1/2 -translate-y-1/2 w-[130px] text-right")}
-          <span className="absolute left-[140px] top-1/2 -translate-y-1/2 text-[10px] tracking-[0.1em] uppercase">{label(3)}</span>
-          {dirTitle(1, "absolute right-0 top-1/2 -translate-y-1/2 w-[130px]")}
-          <span className="absolute right-[140px] top-1/2 -translate-y-1/2 text-[10px] tracking-[0.1em] uppercase">{label(1)}</span>
-          {/* Axis lines */}
-          <span aria-hidden className="absolute left-1/2 top-[48px] bottom-[50px] w-px -translate-x-1/2" style={{ backgroundColor: gold }} />
-          <span aria-hidden className="absolute top-1/2 left-[185px] right-[185px] h-px -translate-y-1/2" style={{ backgroundColor: gold }} />
-          {/* Quadrant photos */}
-          <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 grid grid-cols-2 gap-x-24 gap-y-[60px]">
-            {dirs.map((d, i) => (
-              <El key={d.id} block={ctx.block} id={d.id} className="relative w-[203px] h-[203px] overflow-hidden">
-                <Pic src={d.get("image")} className="absolute inset-0 w-full h-full" />
-                <Caption text={str(ctx.p.imageCaption)} className="left-1.5 bottom-1 text-[8px]" />
-                <span className="sr-only">{label(i)}</span>
-              </El>
-            ))}
+        {/* Desktop compass — every piece is placed from the same centre point
+            (CSS vars below), so the axes always run through the photo gaps and
+            end on the emblem. Each axis is one flex run: title · label · ◆ ——— ▲
+            with the arrowhead touching the emblem and pointing outwards (Figma). */}
+        <div
+          className="hidden @3xl:block relative mx-auto [--img:180px] [--gx:84px] [--gy:56px] [--emb:252px] [--side:130px] @5xl:[--img:240px] @5xl:[--gx:112px] @5xl:[--gy:72px] @5xl:[--emb:334px] @5xl:[--side:170px]"
+          style={{
+            width: "calc(var(--img) * 2 + var(--gx) + var(--side) * 2)",
+            height: "calc(var(--img) * 2 + var(--gy) + 116px)",
+          }}
+        >
+          {/* Quadrant photos (same index → quadrant order as before: TL, TR, BL, BR) */}
+          {dirs.map((d, i) => (
+            <El
+              key={d.id}
+              block={ctx.block}
+              id={d.id}
+              className="absolute overflow-hidden"
+              style={{
+                width: "var(--img)",
+                height: "var(--img)",
+                left: i % 2 === 0 ? "calc(50% - var(--gx) / 2 - var(--img))" : "calc(50% + var(--gx) / 2)",
+                top: i < 2 ? "calc(50% - var(--gy) / 2 - var(--img))" : "calc(50% + var(--gy) / 2)",
+              }}
+            >
+              <Pic src={d.get("image")} className="absolute inset-0 w-full h-full" />
+              <Caption text={str(ctx.p.imageCaption)} className="left-1.5 bottom-1 text-[8px]" />
+              <span className="sr-only">{label(i)}</span>
+            </El>
+          ))}
+          {/* North */}
+          <div className="absolute left-1/2 top-0 -translate-x-1/2 z-10 flex flex-col items-center" style={{ height: "calc(50% - var(--emb) / 2)" }}>
+            {dirTitle(0, "text-center whitespace-nowrap")}
+            <span className="mt-1.5 mb-1.5 text-[10px] tracking-[0.1em] uppercase">{label(0)}</span>
+            <CompassAxis dir="up" color={gold} />
+          </div>
+          {/* South */}
+          <div className="absolute left-1/2 bottom-0 -translate-x-1/2 z-10 flex flex-col-reverse items-center" style={{ height: "calc(50% - var(--emb) / 2)" }}>
+            {dirTitle(2, "text-center whitespace-nowrap")}
+            <span className="mt-1.5 mb-1.5 text-[10px] tracking-[0.1em] uppercase">{label(2)}</span>
+            <CompassAxis dir="down" color={gold} />
+          </div>
+          {/* West */}
+          <div className="absolute left-0 top-1/2 -translate-y-1/2 z-10 flex items-center" style={{ width: "calc(50% - var(--emb) / 2)" }}>
+            {dirTitle(3, "shrink-0 text-right w-[calc(var(--side)-12px)]")}
+            <span className="ml-3 mr-2.5 text-[10px] tracking-[0.1em] uppercase">{label(3)}</span>
+            <CompassAxis dir="left" color={gold} />
+          </div>
+          {/* East */}
+          <div className="absolute right-0 top-1/2 -translate-y-1/2 z-10 flex flex-row-reverse items-center" style={{ width: "calc(50% - var(--emb) / 2)" }}>
+            {dirTitle(1, "shrink-0 text-left w-[calc(var(--side)-12px)]")}
+            <span className="mr-3 ml-2.5 text-[10px] tracking-[0.1em] uppercase">{label(1)}</span>
+            <CompassAxis dir="right" color={gold} />
           </div>
           {/* Emblem */}
-          <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-[284px] h-[284px] rounded-full bg-white p-3 grid place-items-center">
+          <div
+            className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-20 rounded-full bg-white p-3 grid place-items-center"
+            style={{ width: "var(--emb)", height: "var(--emb)" }}
+          >
             <Pic src={str(ctx.p.centerImage)} fit="contain" className="w-full h-full rounded-full" />
           </div>
         </div>
-        {/* Phone / tablet: emblem, then the four photos with their titles */}
-        <div className="@3xl:hidden">
-          <div className="mx-auto w-44 h-44 rounded-full bg-white grid place-items-center">
-            <Pic src={str(ctx.p.centerImage)} fit="contain" className="w-full h-full rounded-full" />
+        {/* Phone / tablet: same compass idea as desktop — the 2×2 photos with the
+            emblem centred over them; top-row titles sit above their photo,
+            bottom-row titles below theirs, so nothing overlaps the emblem. */}
+        <div className="@3xl:hidden mx-auto max-w-[520px]">
+          <div className="grid grid-cols-2 gap-x-3">
+            {[0, 1].map((i) => (
+              <div key={dirs[i].id} className="text-center flex flex-col justify-end pb-2">
+                <ITxt ctx={ctx} item={dirs[i]} k="title" className="text-[13px] @sm:text-[14px] leading-snug" style={{ color: gold }} />
+                <div className="mt-1 text-[10px] tracking-[0.1em] uppercase">{label(i)}</div>
+              </div>
+            ))}
           </div>
-          <div className="mt-8 grid grid-cols-2 gap-4">
+          <div className="relative grid grid-cols-2 gap-3">
             {dirs.map((d, i) => (
-              <El key={d.id} block={ctx.block} id={d.id} className="text-center">
-                <div className="relative overflow-hidden aspect-square">
-                  <Pic src={d.get("image")} className="absolute inset-0 w-full h-full" />
-                </div>
-                <div className="mt-2 text-[10px] tracking-[0.1em] uppercase">{label(i)}</div>
-                <ITxt ctx={ctx} item={d} k="title" className="mt-1 text-[14px] leading-snug" style={{ color: gold }} />
+              <El key={d.id} block={ctx.block} id={d.id} className="relative overflow-hidden aspect-square">
+                <Pic src={d.get("image")} className="absolute inset-0 w-full h-full" />
+                <Caption text={str(ctx.p.imageCaption)} className={`${i % 2 === 0 ? "left-1.5" : "right-1.5"} ${i < 2 ? "top-1" : "bottom-1"} text-[7px]`} />
+                <span className="sr-only">{label(i)}</span>
               </El>
+            ))}
+            <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-10 w-[48%] aspect-square rounded-full bg-white p-2 grid place-items-center pointer-events-none">
+              <Pic src={str(ctx.p.centerImage)} fit="contain" className="w-full h-full rounded-full" />
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-x-3">
+            {[2, 3].map((i) => (
+              <div key={dirs[i].id} className="text-center pt-2">
+                <div className="text-[10px] tracking-[0.1em] uppercase">{label(i)}</div>
+                <ITxt ctx={ctx} item={dirs[i]} k="title" className="mt-1 text-[13px] @sm:text-[14px] leading-snug" style={{ color: gold }} />
+              </div>
             ))}
           </div>
         </div>

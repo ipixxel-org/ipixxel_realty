@@ -1,7 +1,10 @@
 "use client";
 
 import { createContext, useContext, useMemo, useState, useEffect, useCallback, type ReactNode } from "react";
-import { findFormById, type FormDefinition } from "@/lib/openpage/forms-store";
+import { findFormById, loadFormLibrary, type FormDefinition } from "@/lib/openpage/forms-store";
+import { formDefFromRecord } from "@/lib/openpage/forms-backend";
+import { getPublicFormByEmbed } from "@/lib/api";
+import { popupTargetFromHref } from "@/lib/openpage/popup-links";
 import type { PopupConfig } from "@/components/openpage/blocks/types";
 import { DynamicLeadForm } from "@/components/openpage/dynamic-lead-form";
 import { X, ArrowRight, CheckCircle2, Download } from "lucide-react";
@@ -170,6 +173,87 @@ export function OpenPageRuntimeProvider({
     return () => window.removeEventListener("prestate:open-popup", onOpenPopup);
   }, [openPopup]);
 
+  /* ---- Popup links: a button URL of #popup, #popup:<id> or a form's
+     /embed/form/<id> URL opens that form here (see popup-links.ts). ---- */
+
+  // Forms opened from a link that the page itself doesn't carry.
+  const [linkedForms, setLinkedForms] = useState<FormDefinition[]>([]);
+  const allForms = useMemo(() => (linkedForms.length ? [...forms, ...linkedForms] : forms), [forms, linkedForms]);
+
+  const showFormPopup = useCallback((form: FormDefinition) => {
+    setShowSuccess(false);
+    setActive({
+      popup: {
+        id: `form-popup-${form.id}`,
+        name: form.name || "Form",
+        title: form.name || "",
+        description: form.description || "",
+        formId: form.id,
+        closeOnOverlay: true,
+        trigger: "click",
+      },
+    });
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => setVisible(true));
+    });
+  }, []);
+
+  const openFormFromLink = useCallback(
+    (ref: string, fallbackUrl?: string, fallbackTarget?: string) => {
+      if (!ref) {
+        openPopup();
+        return;
+      }
+      const known = findFormById(ref, allForms);
+      if (known) {
+        showFormPopup(known);
+        return;
+      }
+      // Saved in this browser's form library (editor preview)?
+      const local = findFormById(ref, loadFormLibrary());
+      if (local) {
+        setLinkedForms((prev) => (prev.some((f) => f.id === local.id) ? prev : [...prev, local]));
+        showFormPopup(local);
+        return;
+      }
+      // Published forms are public by embed ID.
+      void getPublicFormByEmbed(ref)
+        .then((rec) => {
+          const form = formDefFromRecord(rec);
+          setLinkedForms((prev) => (prev.some((f) => f.id === form.id) ? prev : [...prev, form]));
+          showFormPopup(form);
+        })
+        .catch(() => {
+          // Not found: a form URL still opens as a page (the old behaviour);
+          // #popup:<unknown> falls back to the page's default popup.
+          if (fallbackUrl) {
+            if (fallbackTarget === "_blank") window.open(fallbackUrl, "_blank", "noopener,noreferrer");
+            else window.location.assign(fallbackUrl);
+          } else {
+            openPopup();
+          }
+        });
+    },
+    [allForms, openPopup, showFormPopup],
+  );
+
+  useEffect(() => {
+    function onClick(e: MouseEvent) {
+      // Already handled (e.g. the editor stops links so they can be selected),
+      // or a ctrl/cmd/middle click meant for a new tab.
+      if (e.defaultPrevented || e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+      const link = (e.target as Element | null)?.closest?.("a[href]") as HTMLAnchorElement | null;
+      // Only links inside the page's sections, not the builder's own UI.
+      if (!link || !link.closest("[data-block-id]")) return;
+      const target = popupTargetFromHref(link.getAttribute("href"));
+      if (!target) return;
+      e.preventDefault();
+      openFormFromLink(target.ref, target.fromUrl ? link.href : undefined, link.target);
+    }
+    document.addEventListener("click", onClick);
+    return () => document.removeEventListener("click", onClick);
+  }, [openFormFromLink]);
+
   const value = useMemo<OpenPageRuntimeValue>(
     () => ({
       live,
@@ -190,7 +274,7 @@ export function OpenPageRuntimeProvider({
 
   const activeForm =
     active && (active.popup.formId || forms[0])
-      ? findFormById(active.popup.formId || "", forms) ?? forms[0]
+      ? findFormById(active.popup.formId || "", allForms) ?? forms[0]
       : null;
 
   const downloadUrl = active?.extra?.brochureUrl || active?.popup.brochureUrl || active?.extra?.unlockImageUrl;

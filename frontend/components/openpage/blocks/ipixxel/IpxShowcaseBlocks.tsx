@@ -6,14 +6,16 @@ import type { BlockConfig } from "../types";
 import { El } from "../El";
 import { flag, num, part, str } from "../elements/shared";
 import { isMediaSrc } from "@/lib/media";
-import { bronzeVar, BRONZE_BTN } from "./IpxStoryBlocks";
+import { bronzeVar, BRONZE_BTN, BRONZE_BTN_BASE } from "./IpxStoryBlocks";
 import {
   BURGUNDY_GOLD,
   BurgundyHeading,
   Btn,
   Caption,
   EldecoHeading,
+  EldecoWrap,
   FAMILY,
+  HELVETICA,
   IconImg,
   ITxt,
   KnowMore,
@@ -131,10 +133,11 @@ function EldecoTiles(ctx: Ctx) {
   const list = items(ctx);
   const highlight = flag(ctx.p.highlightFirst, true);
   return (
-    <Shell ctx={ctx} className="bg-white py-14 @3xl:py-20" style={bronzeVar(ctx)}>
-      <Wrap>
+    <Shell ctx={ctx} className="bg-white pt-12 pb-14 @3xl:pt-14 @3xl:pb-[124px]" style={bronzeVar(ctx)}>
+      <EldecoWrap>
         <EldecoHeading ctx={ctx} />
-        <div className="mt-12 @3xl:mt-20 flex flex-wrap justify-center gap-4 @3xl:gap-[30px]">
+        {/* 190px tiles, five per row on desktop (needs the 1140px column). */}
+        <div className="mt-10 @3xl:mt-[86px] flex flex-wrap justify-center gap-4 @3xl:gap-[30px]">
           {list.map((it, i) => {
             const on = (highlight && i === 0) || flag(it.raw.highlight, false);
             return (
@@ -143,7 +146,7 @@ function EldecoTiles(ctx: Ctx) {
                 block={ctx.block}
                 id={it.id}
                 className={`flex flex-col items-center justify-center gap-3 text-center px-3 border w-[calc(50%-8px)] @md:w-[calc(33.333%-11px)] @3xl:w-[190px] h-[106px] ${
-                  on ? "text-white border-transparent [background:var(--ipx-btn-bg)]" : "text-[#1b1b1b] border-[#5a5a5a] bg-[#f1ede4]"
+                  on ? "text-white border-transparent [background:var(--ipx-btn-bg)]" : "text-[#111] border-[#71706c] bg-[#f1eee7]"
                 }`}
               >
                 <IconImg
@@ -151,15 +154,15 @@ function EldecoTiles(ctx: Ctx) {
                   className={`w-9 h-9 ${on ? "brightness-0 invert" : ""}`}
                   fallback={<Dumbbell className="w-8 h-8" strokeWidth={1.2} />}
                 />
-                <ITxt ctx={ctx} item={it} k="title" className="text-[13px] @3xl:text-[13.5px] tracking-[0.06em] leading-snug" />
+                <ITxt ctx={ctx} item={it} k="title" className="text-[13px] tracking-[0.08em] leading-snug" />
               </El>
             );
           })}
         </div>
-        <div className="mt-4 @3xl:mt-4 flex justify-center">
-          <Btn ctx={ctx} className={`${BRONZE_BTN} px-8 py-3 text-[13px] tracking-[0.18em]`} />
+        <div className="mt-4 flex justify-center">
+          <Btn ctx={ctx} className={`${BRONZE_BTN_BASE} px-7 @3xl:px-[30px] py-3 @3xl:py-[13px] text-[13px] tracking-[0.16em]`} />
         </div>
-      </Wrap>
+      </EldecoWrap>
     </Shell>
   );
 }
@@ -186,8 +189,9 @@ function TarcAmenityCarousel(ctx: Ctx) {
           </Strip>
           {s.canSlide ? (
             <>
-              <GoldArrow dir="prev" onClick={() => s.go(-1)} className="absolute left-1 @3xl:-left-6 top-[34%] -translate-y-1/2 z-10" />
-              <GoldArrow dir="next" onClick={() => s.go(1)} className="absolute right-1 @3xl:-right-6 top-[34%] -translate-y-1/2 z-10" />
+              {/* Centre on the image, not the whole card: subtract half the title area (mt-6 + one ~28px line). */}
+              <GoldArrow dir="prev" onClick={() => s.go(-1)} className="absolute left-1 @3xl:-left-6 top-[calc(50%-26px)] -translate-y-1/2 z-10" />
+              <GoldArrow dir="next" onClick={() => s.go(1)} className="absolute right-1 @3xl:-right-6 top-[calc(50%-26px)] -translate-y-1/2 z-10" />
             </>
           ) : null}
         </div>
@@ -224,11 +228,21 @@ function useTabs(ctx: Ctx) {
   return { tabs, active: Math.min(active, Math.max(0, tabs.length - 1)), setActive, shown };
 }
 
-function GalleryImage({ ctx, it, className }: { ctx: Ctx; it: Item; className: string }) {
+function GalleryImage({
+  ctx,
+  it,
+  className,
+  captionClassName = "right-2 bottom-1.5",
+}: {
+  ctx: Ctx;
+  it: Item;
+  className: string;
+  captionClassName?: string;
+}) {
   return (
     <El block={ctx.block} id={it.id} className={`relative overflow-hidden ${className}`}>
       <Pic src={it.get("src")} alt={it.get("alt")} className="absolute inset-0 w-full h-full" />
-      <Caption text={it.get("caption") || str(ctx.p.imageCaption)} className="right-2 bottom-1.5" />
+      <Caption text={it.get("caption") || str(ctx.p.imageCaption)} className={captionClassName} />
     </El>
   );
 }
@@ -294,29 +308,33 @@ function BurgundyCarousel(ctx: Ctx) {
 function EldecoGrid(ctx: Ctx) {
   const t = useTabs(ctx);
   return (
-    <Shell ctx={ctx} className="bg-white py-14 @3xl:py-20">
-      <Wrap>
+    <Shell ctx={ctx} className="bg-white pt-12 pb-12 @3xl:pt-14 @3xl:pb-[45px]">
+      <EldecoWrap>
         <EldecoHeading ctx={ctx} />
         {t.tabs.length > 1 ? (
-          <div className="mt-8 @3xl:mt-10 flex flex-wrap justify-center gap-2.5">
+          <div className="mt-8 @3xl:mt-[43px] flex flex-wrap justify-center gap-2.5">
             {t.tabs.map((tab, i) => (
               <button
                 key={tab}
                 type="button"
+                aria-pressed={i === t.active}
                 onClick={() => t.setActive(i)}
-                className={`px-3 py-2 uppercase tracking-[0.14em] text-[11px] @3xl:text-[12px] border ${i === t.active ? "border-[#1b1b1b] text-[#1b1b1b]" : "border-[#1b1b1b]/35 text-[#1b1b1b]/60"}`}
+                className={`px-3 py-2.5 @3xl:py-[11px] uppercase leading-[1.15] tracking-[0.14em] text-[11px] @3xl:text-[12px] border border-[#1b1b1b] text-[#212529] ${
+                  i === t.active ? "bg-[#f4efe6]" : "bg-white hover:bg-[#f4efe6]"
+                }`}
+                style={{ fontFamily: HELVETICA }}
               >
                 {tab}
               </button>
             ))}
           </div>
         ) : null}
-        <div className="mt-10 @3xl:mt-16 grid grid-cols-1 @md:grid-cols-2 @3xl:grid-cols-4 gap-5">
+        <div className="mt-10 @3xl:mt-[70px] grid grid-cols-1 @md:grid-cols-2 @3xl:grid-cols-4 gap-x-5 gap-y-5 @3xl:gap-y-[30px]">
           {t.shown.map((it) => (
-            <GalleryImage key={it.id} ctx={ctx} it={it} className="aspect-[270/134]" />
+            <GalleryImage key={it.id} ctx={ctx} it={it} className="aspect-[270/134]" captionClassName="right-2 bottom-1.5 text-[11px]" />
           ))}
         </div>
-      </Wrap>
+      </EldecoWrap>
     </Shell>
   );
 }
@@ -390,16 +408,18 @@ export function IpxMasterPlanBlock({ block }: { block: BlockConfig }) {
     );
   }
   return (
-    <Shell ctx={ctx} className="bg-white py-14 @3xl:py-20" style={bronzeVar(ctx)}>
-      <Wrap>
-        <EldecoHeading ctx={ctx} />
-        <El block={ctx.block} id={part(ctx.block, "plan")} className="mt-10 @3xl:mt-12">
+    <Shell ctx={ctx} className="bg-white pt-12 pb-12 @3xl:pt-14 @3xl:pb-[51px]" style={bronzeVar(ctx)}>
+      <EldecoWrap>
+        <EldecoHeading ctx={ctx} plain />
+        <El block={ctx.block} id={part(ctx.block, "plan")} className="mt-8 @3xl:mt-[51px]">
           {plan("aspect-[1140/640]")}
         </El>
-        <div className="mt-8 flex justify-center">
-          <Btn ctx={ctx} className={BRONZE_BTN} />
-        </div>
-      </Wrap>
+        {str(ctx.p.buttonText) ? (
+          <div className="mt-8 flex justify-center">
+            <Btn ctx={ctx} className={BRONZE_BTN} />
+          </div>
+        ) : null}
+      </EldecoWrap>
     </Shell>
   );
 }

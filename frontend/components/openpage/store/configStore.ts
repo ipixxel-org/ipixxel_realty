@@ -1,7 +1,8 @@
 "use client";
 
 import { create } from 'zustand'
-import { produce } from 'immer'
+import { current, produce } from 'immer'
+import { propsForVariantSwitch } from "@/lib/openpage/variant-content";
 import type { BlockConfig, BlockStyle, SiteConfig, ThemeConfig, PageConfig, GlobalWidget } from "@/components/openpage/blocks/types";
 import {
   findBlockLocation,
@@ -56,6 +57,12 @@ interface ConfigState {
   setActivePage: (id: string) => void
   getActivePageBlocks: () => BlockConfig[]
   updateBlock: (id: string, updates: Partial<BlockConfig>) => void
+  /**
+   * The user picked another template. Like `updateBlock({ variant })`, but
+   * widgets with per-template content (see variant-content.ts) also swap in
+   * that template's own text and images.
+   */
+  switchBlockVariant: (id: string, variant: string) => void
   updateBlockProps: (id: string, props: Record<string, unknown>) => void
   updateBlockStyle: (id: string, style: Partial<BlockStyle>) => void
   /** Right-click "Paste Style": make the block look like the copied one (one undo step). */
@@ -352,6 +359,21 @@ export const useConfigStore = create<ConfigState>()((set, get) => ({
             const located = findBlockLocation(page.blocks, id)
             const block = located ? located.parentList[located.index] : undefined
             if (block) Object.assign(block, updates)
+            draft.blocks = page.blocks
+          }),
+        })),
+
+      switchBlockVariant: (id, variant) =>
+        set((state) => ({
+          ...pushUndo(state, 'Change template'),
+          config: produce(withPages(state.config), (draft) => {
+            const page = draft.pages!.find((p) => p.id === state.activePageId)
+            if (!page) return
+            const located = findBlockLocation(page.blocks, id)
+            const block = located ? located.parentList[located.index] : undefined
+            if (!block) return
+            block.props = propsForVariantSwitch(current(block), variant)
+            block.variant = variant
             draft.blocks = page.blocks
           }),
         })),

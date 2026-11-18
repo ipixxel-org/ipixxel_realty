@@ -15,7 +15,9 @@ import {
   Btn,
   Caption,
   EldecoHeading,
+  EldecoWrap,
   FAMILY,
+  HELVETICA,
   IconImg,
   ITxt,
   KnowMore,
@@ -73,23 +75,29 @@ export function IpxPricingBlock({ block }: { block: BlockConfig }) {
 
   if (variant === "eldeco-cards") {
     return (
-      <Shell ctx={ctx} className="bg-white py-14 @3xl:py-20" style={{ ...bronzeVar(ctx), "--ipx-card-btn": color(ctx.p.cardButtonColor) ?? "var(--ipx-btn-bg)" } as CSSProperties}>
-        <Wrap>
+      <Shell ctx={ctx} className="bg-white pt-12 pb-14 @3xl:pt-14 @3xl:pb-[62px]" style={{ ...bronzeVar(ctx), "--ipx-card-btn": color(ctx.p.cardButtonColor) ?? "var(--ipx-btn-bg)" } as CSSProperties}>
+        <EldecoWrap>
           <EldecoHeading ctx={ctx} />
-          <div className="mx-auto mt-12 @3xl:mt-20 max-w-[882px] grid grid-cols-1 @md:grid-cols-2 gap-10 @3xl:gap-[150px]">
+          <div className="mx-auto mt-10 @3xl:mt-[92px] max-w-[882px] grid grid-cols-1 @md:grid-cols-2 gap-10 @3xl:gap-[150px]">
             {units.map((u) => (
-              <El key={u.id} block={ctx.block} id={u.id} className="bg-white px-8 @3xl:px-12 py-12 text-center shadow-[0_10px_30px_rgba(0,0,0,0.12)]">
-                <ITxt ctx={ctx} item={u} k="title" className="border border-[#1b1b1b] px-4 py-3 uppercase tracking-[0.2em] text-[14px] @3xl:text-[15px] leading-snug whitespace-pre-line" />
-                <Txt ctx={ctx} k="priceLabel" className="mt-9 tracking-[0.12em] text-[15px] @3xl:text-[16px]" />
-                <ITxt ctx={ctx} item={u} k="price" className="mt-4 pb-3 border-b border-[#eee] tracking-[0.14em] font-medium text-[21px] @3xl:text-[22px]" />
-                <div className="mt-6 flex justify-center">
+              <El
+                key={u.id}
+                block={ctx.block}
+                id={u.id}
+                className="bg-white px-8 @3xl:px-[51px] pt-12 @3xl:pt-[50px] pb-10 @3xl:pb-[41px] text-center shadow-[0_0_24px_rgba(0,0,0,0.12)]"
+                style={{ fontFamily: HELVETICA, color: "#212529" }}
+              >
+                <ITxt ctx={ctx} item={u} k="title" className="border border-[#55585b] px-4 py-3 uppercase leading-[1.2] tracking-[0.12em] text-[15px] @3xl:text-[16px] whitespace-pre-line" />
+                <Txt ctx={ctx} k="priceLabel" className="mt-8 @3xl:mt-[34px] tracking-[0.1em] text-[16px] @3xl:text-[17px]" />
+                <ITxt ctx={ctx} item={u} k="price" className="mt-4 @3xl:mt-5 pb-3 border-b border-[#eee] tracking-[0.12em] font-medium text-[21px] @3xl:text-[23px]" />
+                <div className="mt-6 flex justify-center" style={{ fontFamily: MONTSERRAT }}>
                   <CardButton ctx={ctx} className={`${BRONZE_BTN} [background:var(--ipx-card-btn)]`} />
                 </div>
               </El>
             ))}
           </div>
           <Txt ctx={ctx} k="note" className="mt-8 text-center text-[12px] text-[#555]" />
-        </Wrap>
+        </EldecoWrap>
       </Shell>
     );
   }
@@ -164,31 +172,32 @@ export function IpxLocationBlock({ block }: { block: BlockConfig }) {
 
   if (variant === "eldeco-map") {
     return (
-      <Shell ctx={ctx} className="bg-white py-14 @3xl:py-20" style={bronzeVar(ctx)}>
-        <Wrap>
+      <Shell ctx={ctx} className="bg-white pt-12 pb-12 @3xl:pt-14 @3xl:pb-6" style={bronzeVar(ctx)}>
+        <EldecoWrap>
           <EldecoHeading ctx={ctx} />
-          <div className="mt-10 @3xl:mt-12 grid grid-cols-1 @3xl:grid-cols-[1fr_1fr] gap-10 @3xl:gap-20 items-start">
+          {/* Map 558px | 84px gap | list 498px inside the 1140px column. */}
+          <div className="mt-10 @3xl:mt-[50px] grid grid-cols-1 @3xl:grid-cols-[1.12fr_1fr] gap-10 @3xl:gap-[84px] items-start">
             <MapArea ctx={ctx} className="aspect-[558/446] bg-[#f4f1ea]" />
-            <div className="@3xl:pt-6">
+            <div className="@3xl:pt-1.5">
               <div className="grid grid-cols-1 @md:grid-cols-2 gap-x-6">
                 {places.map((pl) => (
-                  <El key={pl.id} block={ctx.block} id={pl.id} className="flex items-center gap-4 py-4 border-b border-[#eeeeee]">
-                    <span className="grid place-items-center shrink-0 w-16 h-[54px] rounded-[4px] [background:var(--ipx-btn-bg)]">
+                  <El key={pl.id} block={ctx.block} id={pl.id} className="flex items-center gap-4 pt-4 pb-4 @3xl:pt-[30px] @3xl:pb-[10px] border-b border-[#eeeeee]">
+                    <span className="grid place-items-center shrink-0 w-16 h-[54px] rounded-[5px] [background:var(--ipx-btn-bg)]">
                       <IconImg src={pl.get("icon")} className="w-8 h-8 brightness-0 invert" fallback={<MapPin className="w-7 h-7 text-white" strokeWidth={1.3} />} />
                     </span>
-                    <span className="text-[13.5px] tracking-[0.06em] leading-[1.55] text-[#1b1b1b]">
+                    <span className="text-[13px] tracking-[0.06em] leading-[1.54] text-[#212529]">
                       <ITxt ctx={ctx} item={pl} k="title" as="span" />
                       {pl.get("value") ? <> - <ITxt ctx={ctx} item={pl} k="value" as="span" /></> : null}
                     </span>
                   </El>
                 ))}
               </div>
-              <div className="mt-12 flex justify-center">
+              <div className="mt-10 @3xl:mt-12 flex justify-center">
                 <Btn ctx={ctx} className={BRONZE_BTN} />
               </div>
             </div>
           </div>
-        </Wrap>
+        </EldecoWrap>
       </Shell>
     );
   }
@@ -280,26 +289,27 @@ export function IpxAboutBlock({ block }: { block: BlockConfig }) {
   if (variant === "emerald-about") return <EmeraldAbout block={block} />;
 
   if (variant === "eldeco-stats") {
-    const brand = color(ctx.p.brandColor) ?? "#0d6b45";
+    const brand = color(ctx.p.brandColor) ?? "#097952";
     return (
-      <Shell ctx={ctx} className="bg-white py-14 @3xl:py-20">
-        <Wrap>
+      <Shell ctx={ctx} className="bg-white pt-12 pb-16 @3xl:pt-14 @3xl:pb-[172px]">
+        <EldecoWrap>
           <Logo
             ctx={ctx}
-            className="h-12 @3xl:h-14"
-            textClass="text-center font-black tracking-[0.01em] text-[34px] @3xl:text-[44px] leading-none"
+            className="h-[30px] @3xl:h-[32px]"
+            textClass="text-center font-black tracking-[0.01em] text-[30px] @3xl:text-[36px] leading-none"
             textStyle={{ color: brand, fontFamily: MONTSERRAT }}
           />
-          <div className="mx-auto mt-6 max-w-[700px] grid grid-cols-2">
+          {/* Two columns split by a thin black rule, values in the brand green. */}
+          <div className="mx-auto mt-1.5 max-w-[932px] grid grid-cols-2" style={{ fontFamily: HELVETICA }}>
             {stats.map((st, n) => (
-              <El key={st.id} block={ctx.block} id={st.id} className={`py-3 my-3 text-center ${n % 2 === 0 ? "border-r border-[#1b1b1b]" : ""}`}>
-                <ITxt ctx={ctx} item={st} k="value" as="span" className="text-[18px] @3xl:text-[20px] tracking-[0.08em]" style={{ color: brand }} />{" "}
-                <ITxt ctx={ctx} item={st} k="label" as="span" className="text-[16px] @3xl:text-[18px] tracking-[0.08em] text-[#1b1b1b]" />
+              <El key={st.id} block={ctx.block} id={st.id} className={`py-3 my-3 @3xl:my-[17px] text-center leading-[1.15] ${n % 2 === 0 ? "border-r border-black" : ""}`}>
+                <ITxt ctx={ctx} item={st} k="value" as="span" className="text-[18px] @3xl:text-[21px] tracking-[0.1em]" style={{ color: brand }} />{" "}
+                <ITxt ctx={ctx} item={st} k="label" as="span" className="text-[15px] @3xl:text-[18px] tracking-[0.08em] text-[#272727]" />
               </El>
             ))}
           </div>
-          <Txt ctx={ctx} k="description" className="mx-auto mt-8 @3xl:mt-10 max-w-[990px] text-center whitespace-pre-line text-[13.5px] @3xl:text-[14.5px] leading-[2.2] tracking-[0.06em] text-[#333]" />
-        </Wrap>
+          <Txt ctx={ctx} k="description" className="mx-auto mt-6 @3xl:mt-[37px] max-w-[985px] text-center whitespace-pre-line text-[14px] leading-[2.28] tracking-[0.07em] text-[#212529]" />
+        </EldecoWrap>
       </Shell>
     );
   }

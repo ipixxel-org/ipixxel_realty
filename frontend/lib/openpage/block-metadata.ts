@@ -414,6 +414,7 @@ export const blockMetadata: BlockMeta[] = [
       legalText: 'RERA REG. NO.: UPRERAPRJ000000/01/2026\nWEBSITE: WWW.UP-RERA.IN\nLAUNCH DATE: 1ST JANUARY 2026',
       qrImage: '',
       bandText: '3 & 4 BR Oxy-rich Residences Starting ₹ 2.37 Cr*',
+      bandColor: '',
       offerLabel: 'Exclusive\nPayment Plan',
       offerValue: '30:40:30*',
       // Template 2 — Skyline
