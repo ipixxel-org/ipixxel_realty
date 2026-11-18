@@ -1217,6 +1217,37 @@ function ModernFormHero(ctx: HeroCtx) {
   const arrow = <ArrowUpRight aria-hidden size={15} strokeWidth={1.8} />;
   const sticky = flag(p.stickyHeader, false);
   const { sectionRef, headerRef, stuck, host } = useStickyHeader(sticky);
+  const cta = str(p.modernNavCta);
+  // Phones / tablets: the links (and the button) move into a hamburger menu.
+  const [menuOpen, setMenuOpen] = useState(false);
+  // The chosen link stays highlighted (starts from the page's #hash, if any).
+  const [activeHref, setActiveHref] = useState("");
+  const menuRef = useRef<HTMLDivElement>(null);
+  const menuId = `${block.id}-modern-menu`;
+  useEffect(() => {
+    const sync = () => setActiveHref(window.location.hash);
+    sync();
+    window.addEventListener("hashchange", sync);
+    return () => window.removeEventListener("hashchange", sync);
+  }, []);
+  useEffect(() => {
+    if (!menuOpen) return;
+    const close = (e: Event) => {
+      if (e instanceof KeyboardEvent ? e.key === "Escape" : !menuRef.current?.contains(e.target as Node)) setMenuOpen(false);
+    };
+    document.addEventListener("pointerdown", close);
+    document.addEventListener("keydown", close);
+    return () => {
+      document.removeEventListener("pointerdown", close);
+      document.removeEventListener("keydown", close);
+    };
+  }, [menuOpen]);
+  const pick = (href: string) => {
+    setActiveHref(href);
+    setMenuOpen(false);
+  };
+  const linkClass = (href: string, size: string) =>
+    `rounded-full transition-colors ${size} ${href && href === activeHref ? "bg-[#0b0b0b] text-white" : "hover:bg-black/5"}`;
 
   return (
     <section
@@ -1241,34 +1272,79 @@ function ModernFormHero(ctx: HeroCtx) {
           <Text ctx={ctx} k="logoText" as="span" className="text-[17px] @3xl:text-[18px] font-bold tracking-[-0.02em]" style={{ fontFamily: INTER_TIGHT }} />
         )}
         {links.length ? (
-          <nav className="hidden @3xl:flex items-center gap-[2cqw] text-[12.5px]">
+          <nav aria-label="Main" className="hidden @5xl:flex items-center gap-[1cqw] text-[12.5px]">
             {links.map((l, i) => (
               <a
                 key={i}
                 href={l.href || undefined}
                 target={l.newTab ? "_blank" : undefined}
                 rel={l.newTab ? "noopener noreferrer" : undefined}
-                className="hover:opacity-70"
+                aria-current={l.href && l.href === activeHref ? "location" : undefined}
+                onClick={() => pick(l.href)}
+                className={linkClass(l.href, "px-3 py-1.5")}
               >
                 {l.label}
               </a>
             ))}
           </nav>
         ) : null}
-        {str(p.modernNavCta) ? (
-          <CtaButton
-            block={block}
-            id={part(block, "modernNavCta")}
-            prefix="modernNavCta"
-            label={str(p.modernNavCta)}
-            href={safeHref(p.modernNavCtaUrl)}
-            target={str(p.modernNavCtaTarget)}
-            onClick={() => scrollToAnchor(str(p.modernNavCtaAnchor, "enquire"))}
-            brand={null}
-            icon={arrow}
-            className="inline-flex items-center gap-2 rounded-full bg-[#0b0b0b] px-4 py-2 text-[12px] text-white @3xl:px-5 @3xl:py-2.5 hover:opacity-90"
-          />
+        {/* Right side: the button, then (below 1024px) the hamburger beside it.
+            With a menu, phones show only the hamburger; tablets the button + hamburger. */}
+        <div className="flex shrink-0 items-center gap-2.5">
+        {cta ? (
+          // Hidden through a wrapper: the button sets its own display.
+          <span className={links.length ? "hidden @3xl:inline-flex" : "inline-flex"}>
+            <CtaButton
+              block={block}
+              id={part(block, "modernNavCta")}
+              prefix="modernNavCta"
+              label={cta}
+              href={safeHref(p.modernNavCtaUrl)}
+              target={str(p.modernNavCtaTarget)}
+              onClick={() => scrollToAnchor(str(p.modernNavCtaAnchor, "enquire"))}
+              brand={null}
+              icon={arrow}
+              className="inline-flex items-center gap-2 rounded-full bg-[#0b0b0b] px-4 py-2 text-[12px] text-white @3xl:px-5 @3xl:py-2.5 hover:opacity-90"
+            />
+          </span>
         ) : null}
+        {links.length ? (
+          <div ref={menuRef} className="@5xl:hidden">
+            <button
+              type="button"
+              aria-label={menuOpen ? "Close menu" : "Open menu"}
+              aria-expanded={menuOpen}
+              aria-controls={menuId}
+              onClick={() => setMenuOpen((o) => !o)}
+              className="grid place-items-center w-10 h-10 rounded-full bg-[#0b0b0b] text-white hover:opacity-90"
+            >
+              {menuOpen ? <X size={18} strokeWidth={1.8} /> : <Menu size={18} strokeWidth={1.8} />}
+            </button>
+            {menuOpen ? (
+              <div
+                id={menuId}
+                className="absolute inset-x-0 top-full mt-2 max-h-[calc(100dvh-110px)] overflow-y-auto rounded-[14px] bg-white p-2 text-[#0b0b0b] shadow-[0_18px_40px_rgba(0,0,0,0.25)]"
+              >
+                <nav aria-label="Main" className="flex flex-col gap-0.5 text-[15px]">
+                  {links.map((l, i) => (
+                    <a
+                      key={i}
+                      href={l.href || undefined}
+                      target={l.newTab ? "_blank" : undefined}
+                      rel={l.newTab ? "noopener noreferrer" : undefined}
+                      aria-current={l.href && l.href === activeHref ? "location" : undefined}
+                      onClick={() => pick(l.href)}
+                      className={linkClass(l.href, "block px-4 py-3")}
+                    >
+                      {l.label}
+                    </a>
+                  ))}
+                </nav>
+              </div>
+            ) : null}
+          </div>
+        ) : null}
+        </div>
       </El>
       </StickyWrap>
 

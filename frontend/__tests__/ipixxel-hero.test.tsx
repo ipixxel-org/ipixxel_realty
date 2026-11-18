@@ -245,4 +245,43 @@ describe("iPixxel Realty → Hero widget", () => {
     expect(screen.getByText("Auto").getAttribute("href")).toBe("#auto");
     expect(screen.getByText("Auto").getAttribute("target")).toBe("_blank");
   });
+
+  it("modern hero: phones / tablets get a hamburger menu holding only the links", () => {
+    const { container } = render(<RenderBlock block={make("modern-form", { modernNav: "Overview\nGallery", modernNavCta: "Get Price" })} />);
+    // Links are desktop-only; the button is hidden on phones (shown from tablets, beside the hamburger).
+    expect(container.querySelector("nav[aria-label='Main']")!.className).toContain("hidden @5xl:flex");
+    const buttonWrap = screen.getByText("Get Price").closest("a,button")!.parentElement!;
+    expect(buttonWrap.className).toBe("hidden @3xl:inline-flex");
+    const toggle = screen.getByLabelText("Open menu");
+    expect(buttonWrap.parentElement!.contains(toggle)).toBe(true);
+    expect(toggle.getAttribute("aria-expanded")).toBe("false");
+
+    fireEvent.click(toggle);
+    const panel = document.getElementById(toggle.getAttribute("aria-controls")!)!;
+    expect(screen.getByLabelText("Close menu").getAttribute("aria-expanded")).toBe("true");
+    expect(panel.textContent).toContain("Overview");
+    expect(panel.textContent).toContain("Gallery");
+    expect(panel.textContent).not.toContain("Get Price");
+
+    // Choosing a link closes the menu and highlights that link everywhere.
+    const gallery = Array.from(panel.querySelectorAll("a")).find((a) => a.textContent === "Gallery")!;
+    fireEvent.click(gallery);
+    expect(screen.queryByLabelText("Close menu")).toBeNull();
+    const desktopGallery = container.querySelectorAll("nav[aria-label='Main'] a")[1];
+    expect(desktopGallery.getAttribute("aria-current")).toBe("location");
+    expect(desktopGallery.className).toContain("bg-[#0b0b0b]");
+    fireEvent.click(screen.getByLabelText("Open menu"));
+    const again = Array.from(document.getElementById(toggle.getAttribute("aria-controls")!)!.querySelectorAll("a")).find((a) => a.textContent === "Gallery")!;
+    expect(again.getAttribute("aria-current")).toBe("location");
+
+    // Escape closes it.
+    fireEvent.keyDown(document, { key: "Escape" });
+    expect(screen.queryByLabelText("Close menu")).toBeNull();
+  });
+
+  it("modern hero keeps the plain button (no hamburger) when there are no menu links", () => {
+    render(<RenderBlock block={make("modern-form", { modernNav: "", modernNavCta: "Get Price" })} />);
+    expect(screen.queryByLabelText("Open menu")).toBeNull();
+    expect(screen.getByText("Get Price").closest("a,button")!.parentElement!.className).toBe("inline-flex");
+  });
 });
