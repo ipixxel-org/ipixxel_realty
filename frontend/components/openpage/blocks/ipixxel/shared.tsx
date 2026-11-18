@@ -165,6 +165,19 @@ export function BurgundyWrap({ className = "", children }: { className?: string;
   );
 }
 
+/**
+ * Emerald content column. The Emerald design is a 1280px artwork whose text
+ * starts 82px in (a 1116px column, ≈6.4% side margins); on desktop the gutter
+ * is 6.4% of the page (capped at 140px) so wide screens keep that proportion.
+ */
+export function EmeraldWrap({ className = "", children }: { className?: string; children: ReactNode }) {
+  return (
+    <div className={`relative mx-auto w-full max-w-[1920px] px-5 @3xl:px-8 @5xl:px-[min(6.4cqw,140px)] ${className}`}>
+      {children}
+    </div>
+  );
+}
+
 /** Eldeco content column: 1140px wide on desktop, like the Eldeco landing pages. */
 export function EldecoWrap({ className = "", children }: { className?: string; children: ReactNode }) {
   return <div className={`relative mx-auto w-full max-w-[1180px] px-5 ${className}`}>{children}</div>;
