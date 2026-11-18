@@ -10,6 +10,7 @@ import { bronzeVar, BRONZE_BTN, BRONZE_BTN_BASE } from "./IpxStoryBlocks";
 import {
   BURGUNDY_GOLD,
   BurgundyHeading,
+  BurgundyWrap,
   Btn,
   Caption,
   EldecoHeading,
@@ -104,8 +105,8 @@ export function IpxAmenitiesBlock({ block }: { block: BlockConfig }) {
 function BurgundyAmenityList(ctx: Ctx) {
   const list = items(ctx);
   return (
-    <Shell ctx={ctx} className="py-16 @3xl:py-28" style={{ background: wine(ctx.accent) }}>
-      <Wrap>
+    <Shell ctx={ctx} className="py-16 @3xl:py-24" style={{ background: wine(ctx.accent) }}>
+      <BurgundyWrap>
         <BurgundyHeading ctx={ctx} dark />
         <div className="mt-12 @3xl:mt-16 flex flex-col gap-5">
           {list.map((it) => (
@@ -124,7 +125,7 @@ function BurgundyAmenityList(ctx: Ctx) {
             </El>
           ))}
         </div>
-      </Wrap>
+      </BurgundyWrap>
     </Shell>
   );
 }
@@ -253,7 +254,7 @@ function BurgundyCarousel(ctx: Ctx) {
   const s = useSlider(t.shown.length, { perView });
   return (
     <Shell ctx={ctx} className="py-16 @3xl:py-24" style={{ background: wine(ctx.accent) }}>
-      <Wrap>
+      <BurgundyWrap>
         <BurgundyHeading ctx={ctx} dark />
         {t.tabs.length > 1 ? (
           <div className="mt-10 @3xl:mt-12 flex justify-center">
@@ -300,7 +301,7 @@ function BurgundyCarousel(ctx: Ctx) {
             </button>
           </div>
         ) : null}
-      </Wrap>
+      </BurgundyWrap>
     </Shell>
   );
 }
@@ -519,7 +520,7 @@ export function IpxFloorPlansBlock({ block }: { block: BlockConfig }) {
 
   return (
     <Shell ctx={ctx} className="py-16 @3xl:py-24" style={{ backgroundColor: FAMILY.burgundy.cream }}>
-      <Wrap>
+      <BurgundyWrap>
         <BurgundyHeading ctx={ctx} />
         {plans.length > 1 ? (
           <div className="mt-12 @3xl:mt-16 flex justify-center border-b border-[#e7d9d9] overflow-x-auto">
@@ -537,11 +538,11 @@ export function IpxFloorPlansBlock({ block }: { block: BlockConfig }) {
           </div>
         ) : null}
         {plan ? (
-          <El block={ctx.block} id={plan.id} className="mx-auto mt-12 @3xl:mt-20 w-full max-w-[560px]">
+          <El block={ctx.block} id={plan.id} className="mx-auto mt-12 @3xl:mt-20 w-full max-w-[560px] @5xl:max-w-[51%]">
             {planImage("")}
           </El>
         ) : null}
-      </Wrap>
+      </BurgundyWrap>
     </Shell>
   );
 }

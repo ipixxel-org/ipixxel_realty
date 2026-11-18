@@ -8,6 +8,7 @@ import { color, part, str, strings } from "../elements/shared";
 import {
   BRONZE,
   BurgundyHeading,
+  BurgundyWrap,
   Btn,
   Caption,
   EldecoHeading,
@@ -66,8 +67,8 @@ const ELDECO_BOX =
 function BurgundyFeatures(ctx: Ctx) {
   const list = items(ctx);
   return (
-    <Shell ctx={ctx} className="py-16 @3xl:py-28" style={{ backgroundColor: FAMILY.burgundy.cream }}>
-      <Wrap>
+    <Shell ctx={ctx} className="py-16 @3xl:py-24" style={{ backgroundColor: FAMILY.burgundy.cream }}>
+      <BurgundyWrap>
         <BurgundyHeading ctx={ctx} />
         {list.length ? (
           <div className="mt-12 @3xl:mt-16 grid grid-cols-1 @md:grid-cols-2 @3xl:grid-cols-3 gap-[2px]">
@@ -88,7 +89,7 @@ function BurgundyFeatures(ctx: Ctx) {
             ))}
           </div>
         ) : null}
-      </Wrap>
+      </BurgundyWrap>
     </Shell>
   );
 }

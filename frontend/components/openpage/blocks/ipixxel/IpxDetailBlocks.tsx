@@ -12,6 +12,7 @@ import { bronzeVar, BRONZE_BTN } from "./IpxStoryBlocks";
 import {
   BURGUNDY_GOLD,
   BurgundyHeading,
+  BurgundyWrap,
   Btn,
   Caption,
   EldecoHeading,
@@ -104,7 +105,7 @@ export function IpxPricingBlock({ block }: { block: BlockConfig }) {
 
   return (
     <Shell ctx={ctx} className="bg-white py-16 @3xl:py-24">
-      <Wrap>
+      <BurgundyWrap>
         <BurgundyHeading ctx={ctx} />
         <div className="mt-12 @3xl:mt-16 grid grid-cols-1 @3xl:grid-cols-2 gap-6">
           {units.map((u, n) => {
@@ -150,7 +151,7 @@ export function IpxPricingBlock({ block }: { block: BlockConfig }) {
           })}
         </div>
         <Txt ctx={ctx} k="note" className="mt-5 text-center text-[12px] text-[#555]" />
-      </Wrap>
+      </BurgundyWrap>
     </Shell>
   );
 }
@@ -235,7 +236,7 @@ export function IpxLocationBlock({ block }: { block: BlockConfig }) {
 
   return (
     <Shell ctx={ctx} className="py-16 @3xl:py-24" style={{ backgroundColor: FAMILY.burgundy.cream }}>
-      <Wrap>
+      <BurgundyWrap>
         <div className="grid grid-cols-1 @3xl:grid-cols-[1fr_1.05fr] gap-12 @3xl:gap-16 items-center">
           <div>
             <BurgundyHeading ctx={ctx} />
@@ -256,7 +257,7 @@ export function IpxLocationBlock({ block }: { block: BlockConfig }) {
           </div>
           <MapArea ctx={ctx} className="aspect-[560/480] bg-white border-[10px] border-white shadow-[0_20px_50px_rgba(0,0,0,0.08)]" />
         </div>
-      </Wrap>
+      </BurgundyWrap>
     </Shell>
   );
 }
@@ -335,7 +336,7 @@ export function IpxAboutBlock({ block }: { block: BlockConfig }) {
 
   return (
     <Shell ctx={ctx} className="bg-white py-16 @3xl:py-24">
-      <Wrap>
+      <BurgundyWrap>
         <BurgundyHeading ctx={ctx} center />
         <div className="mt-12 @3xl:mt-16 grid grid-cols-2 @md:grid-cols-3 @3xl:grid-cols-6 gap-[2px]">
           {stats.map((st) => (
@@ -345,7 +346,7 @@ export function IpxAboutBlock({ block }: { block: BlockConfig }) {
             </El>
           ))}
         </div>
-      </Wrap>
+      </BurgundyWrap>
     </Shell>
   );
 }

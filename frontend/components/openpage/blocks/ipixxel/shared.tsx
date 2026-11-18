@@ -151,6 +151,20 @@ export function Wrap({ className = "", children }: { className?: string; childre
   return <div className={`relative mx-auto w-full max-w-[1120px] px-5 @3xl:px-8 ${className}`}>{children}</div>;
 }
 
+/**
+ * Burgundy content column. The Burgundy design is a 1280px artwork whose
+ * content spans 1100px (90px ≈ 7% side margins), so on desktop the gutter is
+ * 7% of the page (capped at 140px) instead of a fixed column — wide screens
+ * keep the artwork's proportions rather than growing empty side margins.
+ */
+export function BurgundyWrap({ className = "", children }: { className?: string; children: ReactNode }) {
+  return (
+    <div className={`relative mx-auto w-full max-w-[1920px] px-5 @3xl:px-8 @5xl:px-[min(7cqw,140px)] ${className}`}>
+      {children}
+    </div>
+  );
+}
+
 /** Eldeco content column: 1140px wide on desktop, like the Eldeco landing pages. */
 export function EldecoWrap({ className = "", children }: { className?: string; children: ReactNode }) {
   return <div className={`relative mx-auto w-full max-w-[1180px] px-5 ${className}`}>{children}</div>;
