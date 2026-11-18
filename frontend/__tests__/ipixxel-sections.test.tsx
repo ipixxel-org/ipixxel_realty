@@ -7,6 +7,8 @@ import { PICKER_GROUPS } from "@/components/openpage/editor/LayersPanel";
 import { ELEMENT_ITEM_FIELDS, ELEMENT_ITEM_TEMPLATES } from "@/components/openpage/editor/element-fields";
 import { blockMetadata } from "@/lib/openpage/block-metadata";
 import { IPX_WIDGETS } from "@/lib/openpage/ipixxel-blocks";
+import { ElementEditorContext } from "@/components/openpage/blocks/El";
+import { useEditorStore } from "@/components/openpage/store/editorStore";
 
 const make = (type: string, variant?: string, props: Record<string, unknown> = {}): BlockConfig => {
   const block = createBlockFromType(type as BlockType)!;
@@ -262,5 +264,24 @@ describe("iPixxel Realty section widgets", () => {
     const { container } = render(<RenderBlock block={make("ipx-overview", "modern-overview")} />);
     expect(container.textContent).toContain("48");
     expect(container.textContent).toContain("Towers");
+  });
+
+  it.each([
+    ["ipx-overview", "modern-overview"],
+    ["ipx-form", "modern-split"],
+  ])("%s (%s): clicking the photo in the builder opens the photo's Style, not the section's Content", (type, variant) => {
+    const block = make(type, variant);
+    const { container } = render(
+      <ElementEditorContext.Provider value={{ blockId: block.id, isEditing: true }}>
+        <RenderBlock block={block} />
+      </ElementEditorContext.Provider>,
+    );
+    const photo = container.querySelector(`[data-el-name="${type}:image"]`) as HTMLElement;
+    expect(photo).not.toBeNull();
+    fireEvent.click(photo);
+    const state = useEditorStore.getState();
+    expect(state.selectedElement).toEqual({ blockId: block.id, elementId: `${type}:image` });
+    expect(state.rightSidebarTab).toBe("element");
+    useEditorStore.getState().selectBlock(null);
   });
 });

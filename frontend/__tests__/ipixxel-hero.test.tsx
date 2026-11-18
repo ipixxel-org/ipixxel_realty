@@ -2,6 +2,7 @@ import { act, fireEvent, render, screen, waitFor } from "@testing-library/react"
 import { describe, expect, it } from "vitest";
 import type { BlockConfig } from "@/components/openpage/blocks/types";
 import { RenderBlock } from "@/components/openpage/blocks/registry";
+import { ElementEditorContext } from "@/components/openpage/blocks/El";
 import { createBlockFromType } from "@/lib/openpage/block-factory";
 import { PICKER_GROUPS } from "@/components/openpage/editor/LayersPanel";
 
@@ -59,43 +60,77 @@ describe("iPixxel Realty → Hero widget", () => {
     expect(screen.getByLabelText("Menu").getAttribute("aria-expanded")).toBeNull();
   });
 
-  it("skyline header is not sticky unless switched on", () => {
-    const { container } = render(<RenderBlock block={make("skyline")} />);
+  it("skyline header is sticky by default (matching the ticked checkbox) and not when unticked", () => {
+    const on = render(<RenderBlock block={make("skyline")} />);
+    expect(on.container.querySelector("[data-sticky-header]")).not.toBeNull();
+    on.unmount();
+    const { container } = render(<RenderBlock block={make("skyline", { stickyHeader: false })} />);
     expect(container.querySelector("[data-sticky-header]")).toBeNull();
     expect(container.querySelector("section")?.className).toContain("overflow-hidden");
   });
 
+  const scrolledUp = (section: Element, by: number) => {
+    section.getBoundingClientRect = () => ({ top: -by, bottom: 600 - by, left: 0, right: 0, width: 0, height: 600, x: 0, y: -by, toJSON: () => ({}) });
+    act(() => {
+      fireEvent.resize(window);
+    });
+  };
+  /** The pinned header on the live page: a real fixed bar in a body-level holder. */
+  const pinnedBar = () => document.querySelector("[data-ipx-sticky-host] [data-sticky-header='stuck']") as HTMLElement | null;
+
   it("skyline sticky header pins the logo and menu once the hero scrolls up", async () => {
-    const { container } = render(<RenderBlock block={make("skyline", { stickyHeader: true, stickyHeaderBg: "#112233" })} />);
+    const { container, unmount } = render(<RenderBlock block={make("skyline", { stickyHeader: true, stickyHeaderBg: "#112233" })} />);
     const section = container.querySelector("section")!;
     const holder = container.querySelector("[data-sticky-header]") as HTMLElement;
     expect(holder.getAttribute("data-sticky-header")).toBe("top");
     expect(holder.contains(screen.getByLabelText("Menu"))).toBe(true);
-    section.getBoundingClientRect = () => ({ top: -300, bottom: 300, left: 0, right: 0, width: 0, height: 600, x: 0, y: -300, toJSON: () => ({}) });
-    act(() => {
-      fireEvent.resize(window);
-    });
-    await waitFor(() => expect(holder.getAttribute("data-sticky-header")).toBe("stuck"));
-    expect(holder.style.transform).toBe("translateY(300px)");
-    expect(holder.style.backgroundColor).toBe("rgb(17, 34, 51)");
+    scrolledUp(section, 300);
+    await waitFor(() => expect(pinnedBar()).not.toBeNull());
+    const bar = pinnedBar()!;
+    const host = bar.parentElement!;
+    // Native fixed positioning: no per-scroll shifting, so nothing jitters.
+    expect(host.style.position).toBe("fixed");
+    expect(bar.style.transform).toBe("");
+    expect(bar.style.backgroundColor).toBe("rgb(17, 34, 51)");
+    expect(bar.contains(screen.getByLabelText("Menu"))).toBe(true);
+    unmount();
+    expect(document.querySelector("[data-ipx-sticky-host]")).toBeNull();
   });
 
-  it.each(["offer-slider", "emerald-slider", "modern-form"])("%s header is not sticky unless switched on", (variant) => {
-    const { container } = render(<RenderBlock block={make(variant)} />);
+  it("sticky header follows the scroll by shifting while editing in the builder", async () => {
+    const { container } = render(
+      <ElementEditorContext.Provider value={{ blockId: "x", isEditing: true }}>
+        <RenderBlock block={make("skyline", { stickyHeader: true })} />
+      </ElementEditorContext.Provider>,
+    );
+    const holder = container.querySelector("[data-sticky-header]") as HTMLElement;
+    scrolledUp(container.querySelector("section")!, 300);
+    await waitFor(() => expect(holder.getAttribute("data-sticky-header")).toBe("stuck"));
+    expect(holder.style.transform).toBe("translateY(300px)");
+    expect(document.querySelector("[data-ipx-sticky-host]")).toBeNull();
+  });
+
+  it.each(["offer-slider", "emerald-slider", "modern-form"])("%s header is sticky by default and not when unticked", (variant) => {
+    const on = render(<RenderBlock block={make(variant)} />);
+    expect(on.container.querySelector("[data-sticky-header]")).not.toBeNull();
+    on.unmount();
+    const { container } = render(<RenderBlock block={make(variant, { stickyHeader: false })} />);
     expect(container.querySelector("[data-sticky-header]")).toBeNull();
   });
 
   it.each(["offer-slider", "emerald-slider", "modern-form"])("%s sticky header pins once the hero scrolls up", async (variant) => {
-    const { container } = render(<RenderBlock block={make(variant, { stickyHeader: true })} />);
-    const section = container.querySelector("section")!;
+    const { container, unmount } = render(<RenderBlock block={make(variant, { stickyHeader: true })} />);
     const holder = container.querySelector("[data-sticky-header]") as HTMLElement;
     expect(holder.getAttribute("data-sticky-header")).toBe("top");
-    section.getBoundingClientRect = () => ({ top: -200, bottom: 400, left: 0, right: 0, width: 0, height: 600, x: 0, y: -200, toJSON: () => ({}) });
-    act(() => {
-      fireEvent.resize(window);
-    });
-    await waitFor(() => expect(holder.getAttribute("data-sticky-header")).toBe("stuck"));
-    expect(holder.style.transform).toBe("translateY(200px)");
+    scrolledUp(container.querySelector("section")!, 200);
+    await waitFor(() => expect(pinnedBar()).not.toBeNull());
+    expect(pinnedBar()!.parentElement!.style.position).toBe("fixed");
+    expect(pinnedBar()!.style.transform).toBe("");
+    // Scrolling back to the top puts the header back in the hero.
+    scrolledUp(container.querySelector("section")!, 0);
+    await waitFor(() => expect(container.querySelector("[data-sticky-header='top']")).not.toBeNull());
+    expect(pinnedBar()).toBeNull();
+    unmount();
   });
 
   it("offer slider shows the offer stack, price band and header button", () => {
@@ -215,5 +250,44 @@ describe("iPixxel Realty → Hero widget", () => {
     expect(screen.getByText("Fresh").getAttribute("rel")).toBe("noopener noreferrer");
     expect(screen.getByText("Auto").getAttribute("href")).toBe("#auto");
     expect(screen.getByText("Auto").getAttribute("target")).toBe("_blank");
+  });
+
+  it("modern hero: phones / tablets get a hamburger menu holding only the links", () => {
+    const { container } = render(<RenderBlock block={make("modern-form", { modernNav: "Overview\nGallery", modernNavCta: "Get Price" })} />);
+    // Links are desktop-only; the button is hidden on phones (shown from tablets, beside the hamburger).
+    expect(container.querySelector("nav[aria-label='Main']")!.className).toContain("hidden @5xl:flex");
+    const buttonWrap = screen.getByText("Get Price").closest("a,button")!.parentElement!;
+    expect(buttonWrap.className).toBe("hidden @3xl:inline-flex");
+    const toggle = screen.getByLabelText("Open menu");
+    expect(buttonWrap.parentElement!.contains(toggle)).toBe(true);
+    expect(toggle.getAttribute("aria-expanded")).toBe("false");
+
+    fireEvent.click(toggle);
+    const panel = document.getElementById(toggle.getAttribute("aria-controls")!)!;
+    expect(screen.getByLabelText("Close menu").getAttribute("aria-expanded")).toBe("true");
+    expect(panel.textContent).toContain("Overview");
+    expect(panel.textContent).toContain("Gallery");
+    expect(panel.textContent).not.toContain("Get Price");
+
+    // Choosing a link closes the menu and highlights that link everywhere.
+    const gallery = Array.from(panel.querySelectorAll("a")).find((a) => a.textContent === "Gallery")!;
+    fireEvent.click(gallery);
+    expect(screen.queryByLabelText("Close menu")).toBeNull();
+    const desktopGallery = container.querySelectorAll("nav[aria-label='Main'] a")[1];
+    expect(desktopGallery.getAttribute("aria-current")).toBe("location");
+    expect(desktopGallery.className).toContain("bg-[#0b0b0b]");
+    fireEvent.click(screen.getByLabelText("Open menu"));
+    const again = Array.from(document.getElementById(toggle.getAttribute("aria-controls")!)!.querySelectorAll("a")).find((a) => a.textContent === "Gallery")!;
+    expect(again.getAttribute("aria-current")).toBe("location");
+
+    // Escape closes it.
+    fireEvent.keyDown(document, { key: "Escape" });
+    expect(screen.queryByLabelText("Close menu")).toBeNull();
+  });
+
+  it("modern hero keeps the plain button (no hamburger) when there are no menu links", () => {
+    render(<RenderBlock block={make("modern-form", { modernNav: "", modernNavCta: "Get Price" })} />);
+    expect(screen.queryByLabelText("Open menu")).toBeNull();
+    expect(screen.getByText("Get Price").closest("a,button")!.parentElement!.className).toBe("inline-flex");
   });
 });

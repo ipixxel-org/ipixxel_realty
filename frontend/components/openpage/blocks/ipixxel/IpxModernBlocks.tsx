@@ -182,9 +182,10 @@ export function ModernOverview({ block }: { block: BlockConfig }) {
           <Paras ctx={ctx} k="description" className="mt-8 @3xl:mt-10 @3xl:text-[16px]" />
         </div>
         <div className="relative pb-8 @3xl:pb-0">
-          <div className="relative overflow-hidden rounded-[28px] aspect-[540/570]">
+          {/* Its own element: clicking the photo in the builder opens its Style, like the stats card. */}
+          <El block={ctx.block} id={part(ctx.block, "image")} className="relative overflow-hidden rounded-[28px] aspect-[540/570]">
             <Pic src={str(ctx.p.image)} alt={str(ctx.p.title)} className="absolute inset-0 w-full h-full" />
-          </div>
+          </El>
           {stats.length ? (
             <div className="absolute -bottom-0 left-4 @3xl:-bottom-6 @3xl:-left-8 flex rounded-[22px] border border-black/10 bg-white px-2 py-4 shadow-[0_12px_30px_rgba(0,0,0,0.08)]">
               {stats.map((st, i) => (
@@ -519,7 +520,8 @@ export function ModernFormSplit({ block }: { block: BlockConfig }) {
       <MWrap>
         <SplitHead ctx={ctx} />
         <div className="mt-12 @3xl:mt-16 grid grid-cols-1 @3xl:grid-cols-2 overflow-hidden rounded-[28px] border border-black/10 bg-white">
-          <div className="relative min-h-[260px] @3xl:min-h-[536px]">
+          {/* Its own element: clicking the photo in the builder opens its Style (the label inside stays separately selectable). */}
+          <El block={ctx.block} id={part(ctx.block, "image")} className="relative min-h-[260px] @3xl:min-h-[536px]">
             <Pic src={str(ctx.p.image)} className="absolute inset-0 w-full h-full" />
             {label.length ? (
               <Txt
@@ -534,7 +536,7 @@ export function ModernFormSplit({ block }: { block: BlockConfig }) {
                 ))}
               />
             ) : null}
-          </div>
+          </El>
           <div className="px-6 py-8 @3xl:px-12 @3xl:py-14">
             <El block={ctx.block} id={part(ctx.block, "form")}>
               <LeadForm ctx={ctx} />
