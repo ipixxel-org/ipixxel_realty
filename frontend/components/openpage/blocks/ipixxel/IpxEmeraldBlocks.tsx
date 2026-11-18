@@ -17,7 +17,7 @@ import {
   Pic,
   Shell,
   Txt,
-  Wrap,
+  EmeraldWrap,
   items,
   lines,
   makeCtx,
@@ -266,13 +266,13 @@ export function EmeraldOverview({ block }: { block: BlockConfig }) {
   const image = str(ctx.p.image);
   const hasImage = isMediaSrc(image);
   return (
-    <Shell ctx={ctx} className="text-white py-16 @3xl:py-24" style={{ background: LEAF_BG, ...goldVar(ctx) }}>
+    <Shell ctx={ctx} className="text-white py-16 @3xl:py-24 @5xl:py-36" style={{ background: LEAF_BG, ...goldVar(ctx) }}>
       <BgPhoto src={ctx.p.bgImage} overlay="linear-gradient(160deg, rgba(4,40,24,0.55) 0%, rgba(2,22,13,0.75) 100%)" />
       <Grain className="inset-0 w-full h-full" opacity={0.035} />
       <div aria-hidden className="hidden @3xl:block absolute left-0 top-[8%] w-[64%] h-[70%] bg-white/[0.035] shadow-[0_30px_60px_rgba(0,0,0,0.35)] overflow-hidden">
         <Grain className="inset-0 w-full h-full" opacity={0.06} />
       </div>
-      <Wrap className="grid grid-cols-1 @3xl:grid-cols-[1.3fr_1fr] gap-12 @3xl:gap-16 items-center">
+      <EmeraldWrap className="grid grid-cols-1 @3xl:grid-cols-[1.3fr_1fr] gap-12 @3xl:gap-16 items-center">
         <div>
           <Heading ctx={ctx} k="eyebrow" accentKey="" descKey="" />
           {subtitle.length ? (
@@ -305,7 +305,7 @@ export function EmeraldOverview({ block }: { block: BlockConfig }) {
             <Caption text={str(ctx.p.imageCaption)} />
           </div>
         </div>
-      </Wrap>
+      </EmeraldWrap>
     </Shell>
   );
 }
@@ -323,7 +323,7 @@ export function EmeraldOfferBand({ block }: { block: BlockConfig }) {
     <Shell ctx={ctx} className="text-white" style={{ background: LEAF_BG }}>
       <BgPhoto src={ctx.p.bgImage} overlay="linear-gradient(90deg, rgba(3,40,24,0.35) 0%, rgba(3,30,18,0.55) 100%)" />
       <Sparkle className="hidden @3xl:block absolute right-[4%] bottom-[7%] w-[54px]" style={{ color: "color-mix(in srgb, var(--ipx-accent) 80%, white)" }} />
-      <div className="relative mx-auto grid max-w-[1245px] grid-cols-1 @3xl:grid-cols-[0.95fr_1fr_1.15fr] items-center gap-8 @3xl:gap-6 px-5 py-10 @3xl:px-10 @3xl:py-0 @3xl:min-h-[260px]">
+      <div className="relative mx-auto grid max-w-[1920px] grid-cols-1 @3xl:grid-cols-[0.95fr_1fr_1.15fr] items-center gap-8 @3xl:gap-6 px-5 py-10 @3xl:px-10 @5xl:px-[min(4.5cqw,120px)] @3xl:py-0 @3xl:min-h-[260px]">
         <div className="flex flex-col items-center text-center @3xl:items-start @3xl:text-left">
           <div className="@3xl:w-full @3xl:flex @3xl:justify-center @3xl:pr-10">
             <Logo ctx={ctx} className="h-[90px] @3xl:h-[110px]" textClass="tracking-[0.25em] text-[20px] font-semibold" />
@@ -412,13 +412,13 @@ export function EmeraldKeyHighlights({ block }: { block: BlockConfig }) {
   const left = str(ctx.p.image);
   const right = str(ctx.p.image2);
   return (
-    <Shell ctx={ctx} className="text-white py-14 @3xl:py-20" style={{ backgroundColor: EM.teal, ...goldVar(ctx) }}>
+    <Shell ctx={ctx} className="text-white py-12 @3xl:py-[52px]" style={{ backgroundColor: EM.teal, ...goldVar(ctx) }}>
       <BgPhoto src={ctx.p.bgImage} overlay="rgba(11,59,49,0.6)" />
       <Mandala className="-right-[70px] -top-[30px] w-[240px] @3xl:w-[290px] opacity-35" />
       <Mandala className="-left-[90px] -bottom-[70px] w-[240px] @3xl:w-[290px] opacity-35" />
-      <Wrap>
+      <EmeraldWrap>
         <Heading ctx={ctx} descKey="subtitle" stack />
-      </Wrap>
+      </EmeraldWrap>
       {/* Desktop: photo | line | centred list | line | photo (right photo sits lower). */}
       <div className="relative mt-10 @3xl:mt-12 grid grid-cols-1 @3xl:grid-cols-[min(23.5%,400px)_minmax(0,1fr)_min(23.5%,400px)] items-start gap-10 @3xl:gap-0">
         <FramedPhoto src={left} side="left" className="hidden @3xl:block aspect-[292/384] mr-2.5" />
@@ -467,15 +467,15 @@ export function EmeraldAmenityCards({ block }: { block: BlockConfig }) {
   });
   const width = 100 / perView;
   return (
-    <Shell ctx={ctx} className="text-white py-14 @3xl:py-20" style={goldVar(ctx)}>
+    <Shell ctx={ctx} className="text-white py-12 @3xl:py-[52px]" style={goldVar(ctx)}>
       <Backdrop
         src={str(ctx.p.bgImage)}
         overlay="linear-gradient(180deg, rgba(0,0,0,0.45) 0%, rgba(0,0,0,0.2) 45%, rgba(0,0,0,0.3) 100%)"
         fallback="linear-gradient(160deg, #3b5248 0%, #1d3029 100%)"
       />
-      <Wrap>
+      <EmeraldWrap>
         <Heading ctx={ctx} />
-      </Wrap>
+      </EmeraldWrap>
       {list.length ? (
         <div ref={ref} className="relative mt-10 overflow-hidden px-3 @3xl:px-6" {...slider.handlers}>
           <div className="flex transition-transform duration-500 ease-out" style={{ transform: `translateX(-${slider.start * width}%)` }}>
@@ -525,8 +525,8 @@ export function EmeraldFloorPlans({ block }: { block: BlockConfig }) {
   const [tab, setTab] = useState(0);
   const current = plans[Math.min(tab, plans.length - 1)];
   return (
-    <Shell ctx={ctx} className="text-white py-14 @3xl:py-20" style={{ background: LEAF_BG, ...goldVar(ctx) }}>
-      <Wrap>
+    <Shell ctx={ctx} className="text-white py-12 @3xl:py-[52px]" style={{ background: LEAF_BG, ...goldVar(ctx) }}>
+      <EmeraldWrap>
         <Heading ctx={ctx} />
         {plans.length ? (
           <div role="tablist" className="mt-10 flex flex-wrap justify-center gap-x-4 @3xl:gap-x-14 gap-y-3">
@@ -554,12 +554,12 @@ export function EmeraldFloorPlans({ block }: { block: BlockConfig }) {
           </div>
         ) : null}
         {current ? (
-          <El block={ctx.block} id={current.id} className="relative mx-auto mt-10 @3xl:mt-14 w-full max-w-[750px] aspect-[750/472] bg-white/5">
+          <El block={ctx.block} id={current.id} className="relative mx-auto mt-10 @3xl:mt-14 w-full max-w-[750px] @5xl:max-w-[69%] aspect-[750/472] bg-white/5">
             <Pic src={current.get("image")} alt={current.get("title")} fit="contain" tone="dark" className="absolute inset-0 w-full h-full" />
           </El>
         ) : null}
         <GoldButton ctx={ctx} />
-      </Wrap>
+      </EmeraldWrap>
     </Shell>
   );
 }
@@ -575,13 +575,13 @@ export function EmeraldPriceRows({ block }: { block: BlockConfig }) {
   const label = "text-[13px] @3xl:text-[14px] tracking-[0.03em]";
   const value = "mt-1 font-semibold leading-tight text-[20px] @3xl:text-[25px]";
   return (
-    <Shell ctx={ctx} className="text-white py-14 @3xl:py-20" style={goldVar(ctx, "cardButton")}>
+    <Shell ctx={ctx} className="text-white py-12 @3xl:py-[52px]" style={goldVar(ctx, "cardButton")}>
       <Backdrop
         src={str(ctx.p.bgImage)}
         overlay="linear-gradient(180deg, rgba(5,40,30,0.85) 0%, rgba(5,40,30,0.72) 100%)"
         fallback="linear-gradient(160deg, #134236 0%, #06241b 100%)"
       />
-      <Wrap>
+      <EmeraldWrap>
         <Heading ctx={ctx} />
         {units.length ? (
           <div className="mt-10 @3xl:mt-14">
@@ -615,7 +615,7 @@ export function EmeraldPriceRows({ block }: { block: BlockConfig }) {
         ) : null}
         <Txt ctx={ctx} k="note" className="mt-5 text-[12px] text-white/60" />
         <GoldButton ctx={ctx} prefix="cardButton" textKey="cardButtonText" />
-      </Wrap>
+      </EmeraldWrap>
     </Shell>
   );
 }
@@ -650,10 +650,10 @@ export function EmeraldLocation({ block }: { block: BlockConfig }) {
   const left = rest.slice(0, half);
   const right = rest.slice(half);
   return (
-    <Shell ctx={ctx} className="text-white py-14 @3xl:py-20" style={{ backgroundColor: EM.teal, ...goldVar(ctx) }}>
+    <Shell ctx={ctx} className="text-white py-12 @3xl:py-[52px]" style={{ backgroundColor: EM.teal, ...goldVar(ctx) }}>
       <Mandala className="-right-20 -top-10 w-[260px] opacity-30" />
       <Mandala className="-left-24 -bottom-24 w-[260px] opacity-30" />
-      <Wrap>
+      <EmeraldWrap>
         <Heading ctx={ctx} />
         <div className="mt-12 grid grid-cols-1 @3xl:grid-cols-[1fr_minmax(0,350px)_1fr] items-center gap-8 @3xl:gap-0">
           <ul className="order-2 @3xl:order-1 grid grid-cols-2 gap-6 @3xl:flex @3xl:flex-col @3xl:gap-9">
@@ -682,7 +682,7 @@ export function EmeraldLocation({ block }: { block: BlockConfig }) {
           </ul>
         </div>
         <GoldButton ctx={ctx} />
-      </Wrap>
+      </EmeraldWrap>
     </Shell>
   );
 }
@@ -711,14 +711,14 @@ export function IpxSpecsBlock({ block }: { block: BlockConfig }) {
   const a = darkness(ctx.p.bgDarkness, 40);
   const overlay = `radial-gradient(ellipse 75% 70% at 45% 45%, rgba(3,27,17,${(a * 0.7).toFixed(3)}) 0%, rgba(3,27,17,${Math.min(a + 0.3, 0.95).toFixed(3)}) 100%)`;
   return (
-    <Shell ctx={ctx} className="text-white py-14 @3xl:py-20" style={{ background: LEAF_BG, ...goldVar(ctx) }}>
+    <Shell ctx={ctx} className="text-white py-12 @3xl:py-[52px]" style={{ background: LEAF_BG, ...goldVar(ctx) }}>
       <BgPhoto src={ctx.p.bgImage} overlay={overlay} />
       <SideOrnament side="left" />
       <SideOrnament side="right" />
-      <Wrap>
+      <EmeraldWrap>
         <Heading ctx={ctx} />
         {list.length ? (
-          <div className="mt-10 grid grid-cols-1 @md:grid-cols-2 gap-x-14 gap-y-8 @3xl:px-16">
+          <div className="mt-10 grid grid-cols-1 @md:grid-cols-2 gap-x-14 gap-y-8 @3xl:px-16 @5xl:px-[7.5%]">
             {list.map((it) => {
               const points = lines(it.raw.text);
               return (
@@ -745,7 +745,7 @@ export function IpxSpecsBlock({ block }: { block: BlockConfig }) {
           </div>
         ) : null}
         <GoldButton ctx={ctx} />
-      </Wrap>
+      </EmeraldWrap>
     </Shell>
   );
 }
@@ -769,10 +769,10 @@ export function EmeraldGalleryRows({ block }: { block: BlockConfig }) {
   // A slot is a little narrower than 1/perView so the next photo peeks in.
   const slot = 100 / (perView + 0.5);
   return (
-    <Shell ctx={ctx} className="text-white pt-14 pb-12 @3xl:pt-20 @3xl:pb-16" style={{ backgroundColor: EM.night, ...goldVar(ctx) }}>
-      <Wrap>
+    <Shell ctx={ctx} className="text-white py-12 @3xl:py-[52px]" style={{ backgroundColor: EM.night, ...goldVar(ctx) }}>
+      <EmeraldWrap>
         <Heading ctx={ctx} />
-      </Wrap>
+      </EmeraldWrap>
       {rows.length ? (
         <div ref={ref} className="relative mt-10 flex flex-col gap-4 @3xl:gap-5 overflow-hidden" {...slider.handlers}>
           {rows.map((row, r) => (
@@ -792,7 +792,7 @@ export function EmeraldGalleryRows({ block }: { block: BlockConfig }) {
           ))}
         </div>
       ) : null}
-      <Wrap className="mt-10 flex flex-col @3xl:flex-row items-center justify-between gap-6">
+      <EmeraldWrap className="mt-10 flex flex-col @3xl:flex-row items-center justify-between gap-6">
         <div className="flex items-center gap-1.5 @3xl:w-[200px]">
           {slider.canSlide
             ? Array.from({ length: slider.pages }, (_, i) => (
@@ -810,7 +810,7 @@ export function EmeraldGalleryRows({ block }: { block: BlockConfig }) {
         </div>
         {str(ctx.p.buttonText) ? <Btn ctx={ctx} className={GOLD_BTN} /> : null}
         <div className="flex @3xl:w-[200px] @3xl:justify-end">{slider.canSlide ? <Arrows go={slider.go} /> : null}</div>
-      </Wrap>
+      </EmeraldWrap>
     </Shell>
   );
 }
@@ -830,13 +830,13 @@ export function EmeraldAbout({ block }: { block: BlockConfig }) {
   const a = darkness(ctx.p.bgDarkness, 55);
   const fade = "linear-gradient(90deg, transparent, rgba(255,255,255,0.35) 20%, rgba(255,255,255,0.35) 80%, transparent)";
   return (
-    <Shell ctx={ctx} className="text-white py-14 @3xl:py-20" style={goldVar(ctx)}>
+    <Shell ctx={ctx} className="text-white py-12 @3xl:py-[52px]" style={goldVar(ctx)}>
       <Backdrop
         src={str(ctx.p.image)}
         overlay={`linear-gradient(180deg, rgba(30,62,38,${a.toFixed(3)}) 0%, rgba(20,48,30,${Math.min(a + 0.08, 0.95).toFixed(3)}) 100%)`}
         fallback="linear-gradient(160deg, #2c4a33 0%, #16301f 100%)"
       />
-      <Wrap>
+      <EmeraldWrap>
         <Logo ctx={ctx} className="h-[72px] @3xl:h-[84px]" textClass="tracking-[0.25em] text-[20px] font-semibold" />
         <Heading ctx={ctx} descKey="" className="mt-4" />
         <Txt ctx={ctx} k="subtitle" as="h3" className="mt-9 @3xl:mt-14 uppercase font-medium leading-snug text-[19px] @3xl:text-[22px] text-white" />
@@ -858,7 +858,7 @@ export function EmeraldAbout({ block }: { block: BlockConfig }) {
           </div>
         ) : null}
         <GoldButton ctx={ctx} />
-      </Wrap>
+      </EmeraldWrap>
     </Shell>
   );
 }
@@ -892,14 +892,14 @@ export function EmeraldForm({ block }: { block: BlockConfig }) {
   const image = str(ctx.p.image);
   const hasBg = isMediaSrc(ctx.p.bgImage);
   return (
-    <Shell ctx={ctx} className="text-white py-14 @3xl:py-20" style={{ backgroundColor: EM.night }}>
+    <Shell ctx={ctx} className="text-white py-12 @3xl:py-[52px]" style={{ backgroundColor: EM.night }}>
       {/* Background photo: anchored right, fading into the dark green behind the form. */}
       <BgPhoto
         src={ctx.p.bgImage}
         className="object-cover object-[75%_center] @3xl:object-right"
         overlay={`linear-gradient(90deg, ${EM.night} 0%, rgba(2,26,17,0.92) 38%, rgba(2,26,17,0.35) 70%, rgba(2,26,17,0.1) 100%), linear-gradient(0deg, rgba(2,26,17,0.6) 0%, transparent 30%)`}
       />
-      <Wrap className="grid grid-cols-1 @3xl:grid-cols-[1.15fr_1fr] gap-10 items-stretch">
+      <EmeraldWrap className="grid grid-cols-1 @3xl:grid-cols-[1.15fr_1fr] gap-10 items-stretch">
         <div>
           <Heading ctx={ctx} />
           <El block={ctx.block} id={part(ctx.block, "formCard")} className="mt-10 max-w-[560px] p-5 @3xl:p-7 shadow-[0_24px_50px_rgba(0,0,0,0.5)]" style={{ backgroundColor: EM.panel }}>
@@ -912,7 +912,7 @@ export function EmeraldForm({ block }: { block: BlockConfig }) {
         <div className="relative hidden @3xl:block min-h-[420px]">
           {isMediaSrc(image) ? <Pic src={image} fit="contain" className="absolute inset-0 w-full h-full object-bottom" /> : hasBg ? null : <TowerSketch />}
         </div>
-      </Wrap>
+      </EmeraldWrap>
     </Shell>
   );
 }
@@ -931,7 +931,7 @@ export function EmeraldFooter({ block }: { block: BlockConfig }) {
   return (
     <Shell ctx={ctx} className="text-white pt-14 pb-8" style={{ backgroundColor: EM.teal }}>
       <Mandala className="left-1/2 top-4 w-[300px] -translate-x-1/2 opacity-[0.14]" />
-      <Wrap className="text-center">
+      <EmeraldWrap className="text-center">
         <Txt ctx={ctx} k="title" as="h2" className={rera} style={{ fontFamily: CINZEL, color: "var(--ipx-accent)" }} />
         <Txt ctx={ctx} k="title2" className={`mt-1 ${rera}`} style={{ fontFamily: CINZEL, color: "var(--ipx-accent)" }} />
         <Txt
@@ -962,7 +962,7 @@ export function EmeraldFooter({ block }: { block: BlockConfig }) {
           </p>
         ) : null}
         <Txt ctx={ctx} k="credit" className="mt-3 text-[12px] @3xl:text-[13px]" style={{ color: "var(--ipx-accent)" }} />
-      </Wrap>
+      </EmeraldWrap>
     </Shell>
   );
 }

@@ -35,9 +35,17 @@ import {
 
 const LIGHT = "#f4f4f4";
 
-/** Wider content column than the shared Wrap (as in the artwork). */
+/**
+ * Modern content column. The design is a 1440px artwork with 80px (≈5.6%)
+ * side margins; from 1024px the gutter is 5.6% of the page (capped at 140px),
+ * so wide screens keep that proportion instead of a fixed 1200px column.
+ */
 function MWrap({ className = "", children }: { className?: string; children: ReactNode }) {
-  return <div className={`relative mx-auto w-full max-w-[1200px] px-5 @3xl:px-8 ${className}`}>{children}</div>;
+  return (
+    <div className={`relative mx-auto w-full max-w-[1920px] px-5 @3xl:px-8 @5xl:px-[min(5.6cqw,140px)] ${className}`}>
+      {children}
+    </div>
+  );
 }
 
 /** Paragraphs of a textarea (blank line = new paragraph). */

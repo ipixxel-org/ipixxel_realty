@@ -12,6 +12,7 @@ import { bronzeVar, BRONZE_BTN } from "./IpxStoryBlocks";
 import {
   BURGUNDY_GOLD,
   BurgundyHeading,
+  BurgundyWrap,
   Btn,
   Caption,
   EldecoHeading,
@@ -27,7 +28,7 @@ import {
   Shell,
   TarcHeading,
   Txt,
-  Wrap,
+  TarcWrap,
   items,
   lines,
   makeCtx,
@@ -78,7 +79,7 @@ export function IpxPricingBlock({ block }: { block: BlockConfig }) {
       <Shell ctx={ctx} className="bg-white pt-12 pb-14 @3xl:pt-14 @3xl:pb-[62px]" style={{ ...bronzeVar(ctx), "--ipx-card-btn": color(ctx.p.cardButtonColor) ?? "var(--ipx-btn-bg)" } as CSSProperties}>
         <EldecoWrap>
           <EldecoHeading ctx={ctx} />
-          <div className="mx-auto mt-10 @3xl:mt-[92px] max-w-[882px] grid grid-cols-1 @md:grid-cols-2 gap-10 @3xl:gap-[150px]">
+          <div className="mx-auto mt-10 @3xl:mt-[92px] max-w-[882px] @5xl:max-w-[77.4%] grid grid-cols-1 @md:grid-cols-2 gap-10 @3xl:gap-[150px] @5xl:gap-[13.2%]">
             {units.map((u) => (
               <El
                 key={u.id}
@@ -104,7 +105,7 @@ export function IpxPricingBlock({ block }: { block: BlockConfig }) {
 
   return (
     <Shell ctx={ctx} className="bg-white py-16 @3xl:py-24">
-      <Wrap>
+      <BurgundyWrap>
         <BurgundyHeading ctx={ctx} />
         <div className="mt-12 @3xl:mt-16 grid grid-cols-1 @3xl:grid-cols-2 gap-6">
           {units.map((u, n) => {
@@ -150,7 +151,7 @@ export function IpxPricingBlock({ block }: { block: BlockConfig }) {
           })}
         </div>
         <Txt ctx={ctx} k="note" className="mt-5 text-center text-[12px] text-[#555]" />
-      </Wrap>
+      </BurgundyWrap>
     </Shell>
   );
 }
@@ -205,7 +206,7 @@ export function IpxLocationBlock({ block }: { block: BlockConfig }) {
   if (variant === "tarc-map") {
     return (
       <Shell ctx={ctx} className="bg-white py-14 @3xl:py-20">
-        <Wrap>
+        <TarcWrap>
           <TarcHeading ctx={ctx} />
           {str(ctx.p.address) ? (
             <div className="mt-6 flex items-center justify-center gap-2">
@@ -228,14 +229,14 @@ export function IpxLocationBlock({ block }: { block: BlockConfig }) {
               </El>
             ))}
           </div>
-        </Wrap>
+        </TarcWrap>
       </Shell>
     );
   }
 
   return (
     <Shell ctx={ctx} className="py-16 @3xl:py-24" style={{ backgroundColor: FAMILY.burgundy.cream }}>
-      <Wrap>
+      <BurgundyWrap>
         <div className="grid grid-cols-1 @3xl:grid-cols-[1fr_1.05fr] gap-12 @3xl:gap-16 items-center">
           <div>
             <BurgundyHeading ctx={ctx} />
@@ -256,7 +257,7 @@ export function IpxLocationBlock({ block }: { block: BlockConfig }) {
           </div>
           <MapArea ctx={ctx} className="aspect-[560/480] bg-white border-[10px] border-white shadow-[0_20px_50px_rgba(0,0,0,0.08)]" />
         </div>
-      </Wrap>
+      </BurgundyWrap>
     </Shell>
   );
 }
@@ -300,7 +301,7 @@ export function IpxAboutBlock({ block }: { block: BlockConfig }) {
             textStyle={{ color: brand, fontFamily: MONTSERRAT }}
           />
           {/* Two columns split by a thin black rule, values in the brand green. */}
-          <div className="mx-auto mt-1.5 max-w-[932px] grid grid-cols-2" style={{ fontFamily: HELVETICA }}>
+          <div className="mx-auto mt-1.5 max-w-[932px] @5xl:max-w-[82%] grid grid-cols-2" style={{ fontFamily: HELVETICA }}>
             {stats.map((st, n) => (
               <El key={st.id} block={ctx.block} id={st.id} className={`py-3 my-3 @3xl:my-[17px] text-center leading-[1.15] ${n % 2 === 0 ? "border-r border-black" : ""}`}>
                 <ITxt ctx={ctx} item={st} k="value" as="span" className="text-[18px] @3xl:text-[21px] tracking-[0.1em]" style={{ color: brand }} />{" "}
@@ -308,7 +309,7 @@ export function IpxAboutBlock({ block }: { block: BlockConfig }) {
               </El>
             ))}
           </div>
-          <Txt ctx={ctx} k="description" className="mx-auto mt-6 @3xl:mt-[37px] max-w-[985px] text-center whitespace-pre-line text-[14px] leading-[2.28] tracking-[0.07em] text-[#212529]" />
+          <Txt ctx={ctx} k="description" className="mx-auto mt-6 @3xl:mt-[37px] max-w-[985px] @5xl:max-w-[86%] text-center whitespace-pre-line text-[14px] leading-[2.28] tracking-[0.07em] text-[#212529]" />
         </EldecoWrap>
       </Shell>
     );
@@ -319,7 +320,7 @@ export function IpxAboutBlock({ block }: { block: BlockConfig }) {
       <Shell ctx={ctx} className="text-white">
         <Pic src={str(ctx.p.image)} tone="dark" className="absolute inset-0 w-full h-full" />
         <div aria-hidden className="absolute inset-0 bg-black/60" />
-        <Wrap className="py-16 @3xl:py-20 text-center">
+        <TarcWrap className="py-16 @3xl:py-20 text-center">
           <Logo ctx={ctx} className="h-24 @3xl:h-[112px]" textClass="tracking-[0.2em] text-[34px] text-white" textStyle={{ fontFamily: SERIF }} />
           <Txt ctx={ctx} k="title" as="h2" className="mt-10 @3xl:mt-14 text-white text-[22px] @3xl:text-[24px] tracking-[0.1em]" />
           <Txt ctx={ctx} k="subtitle" className="mt-8 @3xl:mt-12 text-white text-[17px] @3xl:text-[20px] tracking-[0.04em]" />
@@ -327,7 +328,7 @@ export function IpxAboutBlock({ block }: { block: BlockConfig }) {
           <div className="mt-10 @3xl:mt-16 flex justify-center">
             <KnowMore ctx={ctx} light />
           </div>
-        </Wrap>
+        </TarcWrap>
         <Caption text={str(ctx.p.imageCaption)} />
       </Shell>
     );
@@ -335,7 +336,7 @@ export function IpxAboutBlock({ block }: { block: BlockConfig }) {
 
   return (
     <Shell ctx={ctx} className="bg-white py-16 @3xl:py-24">
-      <Wrap>
+      <BurgundyWrap>
         <BurgundyHeading ctx={ctx} center />
         <div className="mt-12 @3xl:mt-16 grid grid-cols-2 @md:grid-cols-3 @3xl:grid-cols-6 gap-[2px]">
           {stats.map((st) => (
@@ -345,7 +346,7 @@ export function IpxAboutBlock({ block }: { block: BlockConfig }) {
             </El>
           ))}
         </div>
-      </Wrap>
+      </BurgundyWrap>
     </Shell>
   );
 }

@@ -12,6 +12,7 @@ import {
   BRONZE,
   BURGUNDY_GOLD,
   BurgundyHeading,
+  BurgundyWrap,
   Btn,
   Caption,
   EldecoWrap,
@@ -24,7 +25,7 @@ import {
   Shell,
   TarcHeading,
   Txt,
-  Wrap,
+  TarcWrap,
   items,
   lines,
   makeCtx,
@@ -73,7 +74,7 @@ export function IpxCtaBlock({ block }: { block: BlockConfig }) {
   if (variant === "tarc-tour") {
     return (
       <Shell ctx={ctx} className="bg-white py-14 @3xl:py-20">
-        <Wrap>
+        <TarcWrap>
           <div className="mx-auto max-w-[460px]">
             <TarcHeading ctx={ctx} />
           </div>
@@ -86,14 +87,14 @@ export function IpxCtaBlock({ block }: { block: BlockConfig }) {
               <Pic src={str(ctx.p.image)} fit="contain" className="absolute inset-0 w-full h-full" />
             </El>
           </div>
-        </Wrap>
+        </TarcWrap>
       </Shell>
     );
   }
 
   return (
     <Shell ctx={ctx} className="py-16 @3xl:py-24 text-center" style={{ backgroundColor: FAMILY.burgundy.cream }}>
-      <Wrap className="flex flex-col items-center">
+      <BurgundyWrap className="flex flex-col items-center">
         <Txt ctx={ctx} k="eyebrow" className="uppercase font-semibold tracking-[0.32em] text-[11px]" style={{ color: BURGUNDY_GOLD }} />
         <h2 className="mt-5 leading-[1.08]" style={{ fontFamily: SERIF }}>
           <Txt ctx={ctx} k="title" as="span" className="block text-[38px] @3xl:text-[56px] text-[#1b1b1b]" />
@@ -103,7 +104,7 @@ export function IpxCtaBlock({ block }: { block: BlockConfig }) {
         <div className="mt-10">
           <Btn ctx={ctx} className="inline-flex px-11 py-3.5 uppercase font-semibold tracking-[0.25em] text-[12px] @3xl:text-[13px] text-white bg-[var(--ipx-accent)] hover:brightness-110" />
         </div>
-      </Wrap>
+      </BurgundyWrap>
     </Shell>
   );
 }
@@ -179,7 +180,7 @@ export function IpxFormBlock({ block }: { block: BlockConfig }) {
   if (variant === "tarc-quote") {
     return (
       <Shell ctx={ctx} className="bg-white pt-14 @3xl:pt-20">
-        <Wrap>
+        <TarcWrap>
           <div className="grid grid-cols-1 @3xl:grid-cols-[1fr_1.45fr] gap-10 items-end">
             <div className="@3xl:pl-12 max-w-[400px] pb-14 @3xl:pb-24">
               <Txt ctx={ctx} k="title" as="h2" className="font-normal tracking-[0.02em] text-[36px] @3xl:text-[44px] @3xl:pl-6" style={{ color: ctx.accent }} />
@@ -191,7 +192,7 @@ export function IpxFormBlock({ block }: { block: BlockConfig }) {
               <Pic src={str(ctx.p.image)} fit="contain" className="hidden @3xl:block w-full h-[540px] object-bottom" />
             ) : null}
           </div>
-        </Wrap>
+        </TarcWrap>
       </Shell>
     );
   }
@@ -199,8 +200,9 @@ export function IpxFormBlock({ block }: { block: BlockConfig }) {
   const bullets = lines(ctx.p.bullets);
   return (
     <Shell ctx={ctx} className="py-16 @3xl:py-24" style={{ background: wine(ctx.accent) }}>
-      <Wrap>
-        <div className="grid grid-cols-1 @3xl:grid-cols-[1fr_510px] gap-12 @3xl:gap-16 items-center">
+      <BurgundyWrap>
+        {/* Stacked on phones / tablets; side by side from 1024px with the card at 510/1100 of the column, as in the design. */}
+        <div className="grid grid-cols-1 @5xl:grid-cols-[minmax(0,1fr)_46.4%] gap-12 @5xl:gap-16 items-center">
           <div>
             <BurgundyHeading ctx={ctx} dark />
             {bullets.length ? (
@@ -223,7 +225,7 @@ export function IpxFormBlock({ block }: { block: BlockConfig }) {
             <Txt ctx={ctx} k="formNote" className="mt-6 text-center whitespace-pre-line text-[11.5px] leading-[1.6] text-[#8a8a8a]" />
           </El>
         </div>
-      </Wrap>
+      </BurgundyWrap>
     </Shell>
   );
 }
@@ -249,7 +251,7 @@ export function IpxFooterBlock({ block }: { block: BlockConfig }) {
           <Txt
             ctx={ctx}
             k="disclaimer"
-            className="mx-auto max-w-[1140px] text-center whitespace-pre-line font-light text-[12px] @3xl:text-[12.5px] leading-[1.76] tracking-[0.06em] text-white/90"
+            className="mx-auto max-w-[1140px] @5xl:max-w-none text-center whitespace-pre-line font-light text-[12px] @3xl:text-[12.5px] leading-[1.76] tracking-[0.06em] text-white/90"
           />
           <LinksLine ctx={ctx} linkColor="rgba(255,255,255,0.75)" textColor="#ffffff" className="mt-7 @3xl:mt-[26px] font-light"
             textClassName="text-[12.5px] tracking-[0.08em]"
@@ -263,11 +265,11 @@ export function IpxFooterBlock({ block }: { block: BlockConfig }) {
     return (
       <Shell ctx={ctx} className="bg-white pb-12">
         <div aria-hidden className="mx-auto h-px w-[92%]" style={{ background: `linear-gradient(90deg, transparent, color-mix(in srgb, ${ctx.accent} 45%, white), transparent)` }} />
-        <Wrap className="pt-12">
+        <TarcWrap className="pt-12">
           <Txt ctx={ctx} k="title" as="h2" className="text-center tracking-[0.02em] text-[18px] @3xl:text-[22px]" style={{ color: ctx.accent }} />
           <Txt ctx={ctx} k="disclaimer" className="mx-auto mt-8 max-w-[1110px] text-center whitespace-pre-line text-[11.5px] @3xl:text-[12px] leading-[2] tracking-[0.14em] text-[#1b1b1b]" />
           <LinksLine ctx={ctx} linkColor={ctx.accent} textColor="#1b1b1b" />
-        </Wrap>
+        </TarcWrap>
       </Shell>
     );
   }
@@ -276,7 +278,9 @@ export function IpxFooterBlock({ block }: { block: BlockConfig }) {
   const phone = str(ctx.p.phone).replace(/[^\d+]/g, "");
   return (
     <Shell ctx={ctx} className="py-12 text-white" style={{ backgroundColor: `color-mix(in srgb, ${ctx.accent} 62%, black)` }}>
-      <Wrap className="max-w-[960px]">
+      <BurgundyWrap>
+        {/* Footer content: a narrower centred column (920/1100 of the page column in the design). */}
+        <div className="mx-auto w-full max-w-[960px] @5xl:max-w-[84%]">
         {qrs.length ? (
           <div className="flex flex-wrap justify-center @3xl:justify-start gap-7">
             {qrs.map((q) => (
@@ -318,7 +322,8 @@ export function IpxFooterBlock({ block }: { block: BlockConfig }) {
           ) : null}
           <Btn ctx={ctx} className="inline-flex px-11 py-3 uppercase tracking-[0.2em] text-[13px] @3xl:text-[14px] text-white/80 border border-white/15 hover:bg-white/5" />
         </div>
-      </Wrap>
+        </div>
+      </BurgundyWrap>
     </Shell>
   );
 }

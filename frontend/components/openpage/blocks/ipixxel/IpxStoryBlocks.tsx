@@ -8,6 +8,7 @@ import { color, part, str, strings } from "../elements/shared";
 import {
   BRONZE,
   BurgundyHeading,
+  BurgundyWrap,
   Btn,
   Caption,
   EldecoHeading,
@@ -22,7 +23,7 @@ import {
   Shell,
   TarcHeading,
   Txt,
-  Wrap,
+  TarcWrap,
   items,
   makeCtx,
   pickVariant,
@@ -66,8 +67,8 @@ const ELDECO_BOX =
 function BurgundyFeatures(ctx: Ctx) {
   const list = items(ctx);
   return (
-    <Shell ctx={ctx} className="py-16 @3xl:py-28" style={{ backgroundColor: FAMILY.burgundy.cream }}>
-      <Wrap>
+    <Shell ctx={ctx} className="py-16 @3xl:py-24" style={{ backgroundColor: FAMILY.burgundy.cream }}>
+      <BurgundyWrap>
         <BurgundyHeading ctx={ctx} />
         {list.length ? (
           <div className="mt-12 @3xl:mt-16 grid grid-cols-1 @md:grid-cols-2 @3xl:grid-cols-3 gap-[2px]">
@@ -88,7 +89,7 @@ function BurgundyFeatures(ctx: Ctx) {
             ))}
           </div>
         ) : null}
-      </Wrap>
+      </BurgundyWrap>
     </Shell>
   );
 }
@@ -121,7 +122,7 @@ function TarcStory(ctx: Ctx) {
   const decor = str(ctx.p.decorImage);
   return (
     <Shell ctx={ctx} className="bg-white py-14 @3xl:py-20">
-      <Wrap>
+      <TarcWrap>
         <div className="grid grid-cols-1 @3xl:grid-cols-2 gap-12 @3xl:gap-20 items-center">
           <div className={`relative ${right ? "@3xl:order-2 @3xl:justify-self-end" : ""}`}>
             <div className={`relative overflow-hidden ${right ? "aspect-[450/620] w-full @3xl:w-[450px]" : "aspect-[325/400] w-full @3xl:w-[325px]"}`}>
@@ -144,7 +145,7 @@ function TarcStory(ctx: Ctx) {
             </div>
           </div>
         </div>
-      </Wrap>
+      </TarcWrap>
     </Shell>
   );
 }
@@ -152,7 +153,7 @@ function TarcStory(ctx: Ctx) {
 function TarcWellness(ctx: Ctx) {
   return (
     <Shell ctx={ctx} className="bg-white py-14 @3xl:py-24">
-      <Wrap>
+      <TarcWrap>
         <div className="grid grid-cols-1 @3xl:grid-cols-[1fr_1.1fr] gap-12 @3xl:gap-20 items-center">
           <div>
             <Txt
@@ -171,7 +172,7 @@ function TarcWellness(ctx: Ctx) {
             <Caption text={str(ctx.p.imageCaption)} />
           </div>
         </div>
-      </Wrap>
+      </TarcWrap>
     </Shell>
   );
 }
@@ -268,7 +269,7 @@ function EldecoIcons(ctx: Ctx) {
             <Txt ctx={ctx} k="tabLabel" className={`${ELDECO_BOX} border-[#1b1b1b] text-[#1b1b1b] text-center`} style={{ fontFamily: HELVETICA }} />
           </div>
         ) : null}
-        <div className="mx-auto mt-12 @3xl:mt-[112px] max-w-[983px] grid grid-cols-1 @md:grid-cols-2 @3xl:grid-cols-3 gap-y-12 @3xl:gap-y-16 gap-x-10 text-center">
+        <div className="mx-auto mt-12 @3xl:mt-[112px] max-w-[983px] @5xl:max-w-[86%] grid grid-cols-1 @md:grid-cols-2 @3xl:grid-cols-3 gap-y-12 @3xl:gap-y-16 gap-x-10 text-center">
           {list.map((it) => (
             <El key={it.id} block={ctx.block} id={it.id} className="flex flex-col items-center">
               <IconImg src={it.get("icon")} className="w-14 h-14 @3xl:w-[60px] @3xl:h-[60px]" fallback={<Building2 className="w-14 h-14 text-[#111]" strokeWidth={0.9} />} />
@@ -328,7 +329,7 @@ function TarcCompass(ctx: Ctx) {
   );
   return (
     <Shell ctx={ctx} className="bg-white py-14 @3xl:py-20">
-      <Wrap>
+      <TarcWrap>
         <TarcHeading ctx={ctx} className="mb-10" />
         {/* Desktop compass — every piece is placed from the same centre point
             (CSS vars below), so the axes always run through the photo gaps and
@@ -425,7 +426,7 @@ function TarcCompass(ctx: Ctx) {
             ))}
           </div>
         </div>
-      </Wrap>
+      </TarcWrap>
     </Shell>
   );
 }
