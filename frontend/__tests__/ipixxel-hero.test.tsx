@@ -60,8 +60,11 @@ describe("iPixxel Realty → Hero widget", () => {
     expect(screen.getByLabelText("Menu").getAttribute("aria-expanded")).toBeNull();
   });
 
-  it("skyline header is not sticky unless switched on", () => {
-    const { container } = render(<RenderBlock block={make("skyline")} />);
+  it("skyline header is sticky by default (matching the ticked checkbox) and not when unticked", () => {
+    const on = render(<RenderBlock block={make("skyline")} />);
+    expect(on.container.querySelector("[data-sticky-header]")).not.toBeNull();
+    on.unmount();
+    const { container } = render(<RenderBlock block={make("skyline", { stickyHeader: false })} />);
     expect(container.querySelector("[data-sticky-header]")).toBeNull();
     expect(container.querySelector("section")?.className).toContain("overflow-hidden");
   });
@@ -107,8 +110,11 @@ describe("iPixxel Realty → Hero widget", () => {
     expect(document.querySelector("[data-ipx-sticky-host]")).toBeNull();
   });
 
-  it.each(["offer-slider", "emerald-slider", "modern-form"])("%s header is not sticky unless switched on", (variant) => {
-    const { container } = render(<RenderBlock block={make(variant)} />);
+  it.each(["offer-slider", "emerald-slider", "modern-form"])("%s header is sticky by default and not when unticked", (variant) => {
+    const on = render(<RenderBlock block={make(variant)} />);
+    expect(on.container.querySelector("[data-sticky-header]")).not.toBeNull();
+    on.unmount();
+    const { container } = render(<RenderBlock block={make(variant, { stickyHeader: false })} />);
     expect(container.querySelector("[data-sticky-header]")).toBeNull();
   });
 

@@ -392,6 +392,14 @@ function StickyWrap({
   );
 }
 
+/**
+ * Whether the sticky header is on. Unset counts as on, matching the inspector's
+ * checkbox (shown ticked until it is unticked); only an explicit untick turns it off.
+ */
+function stickyOn(p: Record<string, unknown>): boolean {
+  return flag(p.stickyHeader, true);
+}
+
 /** Nearest ancestor that scrolls vertically (the editor canvas), or null for the window. */
 function scrollParentOf(el: HTMLElement): HTMLElement | null {
   for (let node = el.parentElement; node && node !== document.body; node = node.parentElement) {
@@ -492,7 +500,7 @@ function useStickyHeader(enabled: boolean) {
 
 function SkylineHero(ctx: HeroCtx) {
   const { block, p, accent } = ctx;
-  const sticky = flag(p.stickyHeader, false);
+  const sticky = stickyOn(p);
   const { sectionRef, headerRef, stuck, host } = useStickyHeader(sticky);
   // Pinned header is a slimmer bar: smaller logos (unchanged when not pinned).
   const logoSize = stuck ? "h-8 @3xl:h-[3cqw] max-h-[46px]" : "h-10 @3xl:h-[4.8cqw] max-h-[72px]";
@@ -736,7 +744,7 @@ function OfferSliderHero(ctx: HeroCtx) {
   const autoplay = flag(p.autoplay, true);
   const interval = clamp(num(p.interval, 5000), 2000, 20000);
   const badgeImage = str(p.offerBadgeImage);
-  const sticky = flag(p.stickyHeader, false);
+  const sticky = stickyOn(p);
   const { sectionRef, headerRef, stuck, host } = useStickyHeader(sticky);
 
   // The background image is the first slide; "More slides" follow it.
@@ -1052,7 +1060,7 @@ function EmeraldSliderHero(ctx: HeroCtx) {
   const showText = current === 0 || flag(p.textOnAllSlides, false);
   const hasPrice = Boolean(str(p.emeraldPriceLabel) || str(p.emeraldPrice));
   const gold: CSSProperties = { fontFamily: CINZEL, color: accent };
-  const sticky = flag(p.stickyHeader, false);
+  const sticky = stickyOn(p);
   const { sectionRef, headerRef, stuck, host } = useStickyHeader(sticky);
 
   // When sticky the header can't stay inside the clipped photo layers, so it
@@ -1215,7 +1223,7 @@ function ModernFormHero(ctx: HeroCtx) {
   const links = navLinks(p.modernNav);
   const formCtx = makeCtx(block, "modern-form");
   const arrow = <ArrowUpRight aria-hidden size={15} strokeWidth={1.8} />;
-  const sticky = flag(p.stickyHeader, false);
+  const sticky = stickyOn(p);
   const { sectionRef, headerRef, stuck, host } = useStickyHeader(sticky);
   const cta = str(p.modernNavCta);
   // Phones / tablets: the links (and the button) move into a hamburger menu.
