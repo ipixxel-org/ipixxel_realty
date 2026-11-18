@@ -25,7 +25,7 @@ import {
   Shell,
   TarcHeading,
   Txt,
-  Wrap,
+  TarcWrap,
   items,
   lines,
   makeCtx,
@@ -74,7 +74,7 @@ export function IpxCtaBlock({ block }: { block: BlockConfig }) {
   if (variant === "tarc-tour") {
     return (
       <Shell ctx={ctx} className="bg-white py-14 @3xl:py-20">
-        <Wrap>
+        <TarcWrap>
           <div className="mx-auto max-w-[460px]">
             <TarcHeading ctx={ctx} />
           </div>
@@ -87,7 +87,7 @@ export function IpxCtaBlock({ block }: { block: BlockConfig }) {
               <Pic src={str(ctx.p.image)} fit="contain" className="absolute inset-0 w-full h-full" />
             </El>
           </div>
-        </Wrap>
+        </TarcWrap>
       </Shell>
     );
   }
@@ -180,7 +180,7 @@ export function IpxFormBlock({ block }: { block: BlockConfig }) {
   if (variant === "tarc-quote") {
     return (
       <Shell ctx={ctx} className="bg-white pt-14 @3xl:pt-20">
-        <Wrap>
+        <TarcWrap>
           <div className="grid grid-cols-1 @3xl:grid-cols-[1fr_1.45fr] gap-10 items-end">
             <div className="@3xl:pl-12 max-w-[400px] pb-14 @3xl:pb-24">
               <Txt ctx={ctx} k="title" as="h2" className="font-normal tracking-[0.02em] text-[36px] @3xl:text-[44px] @3xl:pl-6" style={{ color: ctx.accent }} />
@@ -192,7 +192,7 @@ export function IpxFormBlock({ block }: { block: BlockConfig }) {
               <Pic src={str(ctx.p.image)} fit="contain" className="hidden @3xl:block w-full h-[540px] object-bottom" />
             ) : null}
           </div>
-        </Wrap>
+        </TarcWrap>
       </Shell>
     );
   }
@@ -251,7 +251,7 @@ export function IpxFooterBlock({ block }: { block: BlockConfig }) {
           <Txt
             ctx={ctx}
             k="disclaimer"
-            className="mx-auto max-w-[1140px] text-center whitespace-pre-line font-light text-[12px] @3xl:text-[12.5px] leading-[1.76] tracking-[0.06em] text-white/90"
+            className="mx-auto max-w-[1140px] @5xl:max-w-none text-center whitespace-pre-line font-light text-[12px] @3xl:text-[12.5px] leading-[1.76] tracking-[0.06em] text-white/90"
           />
           <LinksLine ctx={ctx} linkColor="rgba(255,255,255,0.75)" textColor="#ffffff" className="mt-7 @3xl:mt-[26px] font-light"
             textClassName="text-[12.5px] tracking-[0.08em]"
@@ -265,11 +265,11 @@ export function IpxFooterBlock({ block }: { block: BlockConfig }) {
     return (
       <Shell ctx={ctx} className="bg-white pb-12">
         <div aria-hidden className="mx-auto h-px w-[92%]" style={{ background: `linear-gradient(90deg, transparent, color-mix(in srgb, ${ctx.accent} 45%, white), transparent)` }} />
-        <Wrap className="pt-12">
+        <TarcWrap className="pt-12">
           <Txt ctx={ctx} k="title" as="h2" className="text-center tracking-[0.02em] text-[18px] @3xl:text-[22px]" style={{ color: ctx.accent }} />
           <Txt ctx={ctx} k="disclaimer" className="mx-auto mt-8 max-w-[1110px] text-center whitespace-pre-line text-[11.5px] @3xl:text-[12px] leading-[2] tracking-[0.14em] text-[#1b1b1b]" />
           <LinksLine ctx={ctx} linkColor={ctx.accent} textColor="#1b1b1b" />
-        </Wrap>
+        </TarcWrap>
       </Shell>
     );
   }

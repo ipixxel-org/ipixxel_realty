@@ -178,9 +178,30 @@ export function EmeraldWrap({ className = "", children }: { className?: string; 
   );
 }
 
-/** Eldeco content column: 1140px wide on desktop, like the Eldeco landing pages. */
+/**
+ * TARC content column. The TARC design is a 1280px artwork with text 82px in
+ * (≈6.4% side margins); on desktop the gutter is 6.4% of the page (capped at
+ * 140px) so wide screens keep that proportion.
+ */
+export function TarcWrap({ className = "", children }: { className?: string; children: ReactNode }) {
+  return (
+    <div className={`relative mx-auto w-full max-w-[1920px] px-5 @3xl:px-8 @5xl:px-[min(6.4cqw,140px)] ${className}`}>
+      {children}
+    </div>
+  );
+}
+
+/**
+ * Eldeco content column: 1140px inside the 1280px artwork (70px ≈ 5.5% side
+ * margins). From 1024px the gutter is 5.5% of the page (capped at 140px), so
+ * it is 1140px at 1280 and keeps the proportion on wider screens.
+ */
 export function EldecoWrap({ className = "", children }: { className?: string; children: ReactNode }) {
-  return <div className={`relative mx-auto w-full max-w-[1180px] px-5 ${className}`}>{children}</div>;
+  return (
+    <div className={`relative mx-auto w-full max-w-[1180px] @5xl:max-w-[1920px] px-5 @5xl:px-[min(5.5cqw,140px)] ${className}`}>
+      {children}
+    </div>
+  );
 }
 
 /** A prop shown as its own element; renders nothing while the prop is empty. */

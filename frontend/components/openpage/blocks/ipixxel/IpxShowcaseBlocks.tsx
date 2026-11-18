@@ -24,7 +24,7 @@ import {
   SERIF,
   Shell,
   TarcHeading,
-  Wrap,
+  TarcWrap,
   categories,
   items,
   lines,
@@ -138,7 +138,7 @@ function EldecoTiles(ctx: Ctx) {
       <EldecoWrap>
         <EldecoHeading ctx={ctx} />
         {/* 190px tiles, five per row on desktop (needs the 1140px column). */}
-        <div className="mt-10 @3xl:mt-[86px] flex flex-wrap justify-center gap-4 @3xl:gap-[30px]">
+        <div className="mt-10 @3xl:mt-[86px] flex flex-wrap justify-center gap-4 @3xl:gap-[30px] @5xl:px-[3.07%]">
           {list.map((it, i) => {
             const on = (highlight && i === 0) || flag(it.raw.highlight, false);
             return (
@@ -146,7 +146,7 @@ function EldecoTiles(ctx: Ctx) {
                 key={it.id}
                 block={ctx.block}
                 id={it.id}
-                className={`flex flex-col items-center justify-center gap-3 text-center px-3 border w-[calc(50%-8px)] @md:w-[calc(33.333%-11px)] @3xl:w-[190px] h-[106px] ${
+                className={`flex flex-col items-center justify-center gap-3 text-center px-3 border w-[calc(50%-8px)] @md:w-[calc(33.333%-11px)] @3xl:w-[190px] @5xl:w-[calc((100%-120px)/5)] h-[106px] @5xl:h-auto @5xl:aspect-[190/106] ${
                   on ? "text-white border-transparent [background:var(--ipx-btn-bg)]" : "text-[#111] border-[#71706c] bg-[#f1eee7]"
                 }`}
               >
@@ -174,7 +174,7 @@ function TarcAmenityCarousel(ctx: Ctx) {
   const s = useSlider(list.length, { perView, autoplay: flag(ctx.p.autoplay, false), interval: num(ctx.p.interval, 5000) });
   return (
     <Shell ctx={ctx} className="py-14 @3xl:py-24" style={{ backgroundColor: FAMILY.tarc.cream }}>
-      <Wrap>
+      <TarcWrap>
         <TarcHeading ctx={ctx} />
         <div ref={ref} className="relative mt-10 @3xl:mt-14" {...s.handlers}>
           <Strip start={s.start} perView={perView} gap={20}>
@@ -196,7 +196,7 @@ function TarcAmenityCarousel(ctx: Ctx) {
             </>
           ) : null}
         </div>
-      </Wrap>
+      </TarcWrap>
     </Shell>
   );
 }
@@ -348,9 +348,9 @@ function TarcJourney(ctx: Ctx) {
   return (
     <Shell ctx={ctx} className="pt-14 @3xl:pt-20 pb-14 @3xl:pb-20" style={{ backgroundColor: FAMILY.tarc.cream }}>
       {decor ? <Pic src={decor} fit="contain" className="hidden @3xl:block absolute left-[11%] top-8 w-[250px] h-[180px] pointer-events-none" /> : null}
-      <Wrap>
+      <TarcWrap>
         <TarcHeading ctx={ctx} />
-      </Wrap>
+      </TarcWrap>
       <div ref={ref} className="mt-10 @3xl:mt-12" {...s.handlers}>
         <Strip start={s.start} perView={perView} gap={20}>
           {list.map((it) => (
@@ -391,7 +391,7 @@ export function IpxMasterPlanBlock({ block }: { block: BlockConfig }) {
   if (variant === "tarc-master") {
     return (
       <Shell ctx={ctx} className="bg-white py-14 @3xl:py-20">
-        <Wrap>
+        <TarcWrap>
           <TarcHeading ctx={ctx} />
           <El block={ctx.block} id={part(ctx.block, "plan")} className="relative mx-auto mt-8 w-full max-w-[465px]">
             {plan("aspect-[465/740]")}
@@ -404,7 +404,7 @@ export function IpxMasterPlanBlock({ block }: { block: BlockConfig }) {
           <div className="mt-9 flex justify-center">
             <KnowMore ctx={ctx} />
           </div>
-        </Wrap>
+        </TarcWrap>
       </Shell>
     );
   }
@@ -468,7 +468,7 @@ export function IpxFloorPlansBlock({ block }: { block: BlockConfig }) {
             <Pic src={decor} fit="contain" className="hidden @3xl:block absolute left-0 bottom-20 w-[300px] h-[220px] opacity-70 pointer-events-none" />
           </>
         ) : null}
-        <Wrap>
+        <TarcWrap>
           <TarcHeading ctx={ctx} />
           {plans.length > 1 ? (
             <div className="mt-8 flex flex-wrap justify-center gap-3">
@@ -513,7 +513,7 @@ export function IpxFloorPlansBlock({ block }: { block: BlockConfig }) {
               </div>
             </div>
           ) : null}
-        </Wrap>
+        </TarcWrap>
       </Shell>
     );
   }
