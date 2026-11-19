@@ -596,7 +596,7 @@ export function ModernFooter({ block }: { block: BlockConfig }) {
     <Shell ctx={ctx} className="text-white pt-14 pb-10" style={{ backgroundColor: "#000000" }}>
       <MWrap>
         {cols.length ? (
-          <div className="grid grid-cols-1 @md:grid-cols-2 @3xl:grid-cols-4 gap-x-10 gap-y-10">
+          <div className="grid grid-cols-[repeat(2,auto)] justify-between @3xl:grid-cols-4 @3xl:justify-normal gap-x-6 @md:gap-x-10 gap-y-10">
             {cols.map((col) => (
               <El key={col.id} block={ctx.block} id={col.id}>
                 <ITxt ctx={ctx} item={col} k="title" as="h3" className="text-[15px] font-medium text-white" />

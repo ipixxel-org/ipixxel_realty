@@ -133,6 +133,92 @@ describe("iPixxel Realty → Hero widget", () => {
     unmount();
   });
 
+  describe("offer slider sticky call / WhatsApp", () => {
+    const floatHost = () => document.querySelector("[data-ipx-float-host]") as HTMLElement | null;
+    const setWidth = (w: number) => {
+      Object.defineProperty(window, "innerWidth", { configurable: true, value: w });
+    };
+
+    it("is off by default: the buttons stay in the hero while scrolling", async () => {
+      const { container, unmount } = render(<RenderBlock block={make("offer-slider")} />);
+      scrolledUp(container.querySelector("section")!, 300);
+      expect(floatHost()).toBeNull();
+      expect(container.contains(screen.getByLabelText("WhatsApp"))).toBe(true);
+      unmount();
+    });
+
+    it("mobile only: pins on a phone width, stays put on desktop", async () => {
+      const prev = window.innerWidth;
+      try {
+        setWidth(390);
+        const { container, unmount } = render(<RenderBlock block={make("offer-slider", { stickyFloatingMobile: true })} />);
+        const section = container.querySelector("section")!;
+        scrolledUp(section, 300);
+        await waitFor(() => expect(floatHost()?.contains(screen.getByLabelText("WhatsApp"))).toBe(true));
+        expect(floatHost()!.contains(screen.getByLabelText("Call"))).toBe(true);
+        expect(floatHost()!.style.position).toBe("fixed");
+        // Back at the top they return to the hero.
+        scrolledUp(section, 0);
+        await waitFor(() => expect(container.contains(screen.getByLabelText("WhatsApp"))).toBe(true));
+        // Desktop width: not pinned.
+        setWidth(1280);
+        scrolledUp(section, 300);
+        await act(async () => {
+          await new Promise((r) => setTimeout(r, 50));
+        });
+        expect(container.contains(screen.getByLabelText("WhatsApp"))).toBe(true);
+        unmount();
+        expect(floatHost()).toBeNull();
+      } finally {
+        setWidth(prev);
+      }
+    });
+
+    it("desktop only: pins on a desktop width", async () => {
+      const prev = window.innerWidth;
+      try {
+        setWidth(1280);
+        const { container, unmount } = render(<RenderBlock block={make("offer-slider", { stickyFloatingDesktop: true })} />);
+        scrolledUp(container.querySelector("section")!, 300);
+        await waitFor(() => expect(floatHost()?.contains(screen.getByLabelText("Call"))).toBe(true));
+        unmount();
+      } finally {
+        setWidth(prev);
+      }
+    });
+
+    it("emerald slider: WhatsApp pins when ticked, stays in the hero when not", async () => {
+      const prev = window.innerWidth;
+      try {
+        setWidth(390);
+        const off = render(<RenderBlock block={make("emerald-slider", { whatsapp: "+91 90000 11111" })} />);
+        scrolledUp(off.container.querySelector("section")!, 300);
+        expect(floatHost()).toBeNull();
+        off.unmount();
+        const { container, unmount } = render(
+          <RenderBlock block={make("emerald-slider", { whatsapp: "+91 90000 11111", stickyFloatingMobile: true })} />,
+        );
+        scrolledUp(container.querySelector("section")!, 300);
+        await waitFor(() => expect(floatHost()?.contains(screen.getByLabelText("WhatsApp"))).toBe(true));
+        unmount();
+        expect(floatHost()).toBeNull();
+      } finally {
+        setWidth(prev);
+      }
+    });
+
+    it("does not pin in the builder", async () => {
+      const { container } = render(
+        <ElementEditorContext.Provider value={{ blockId: "x", isEditing: true }}>
+          <RenderBlock block={make("offer-slider", { stickyFloatingMobile: true, stickyFloatingDesktop: true })} />
+        </ElementEditorContext.Provider>,
+      );
+      scrolledUp(container.querySelector("section")!, 300);
+      expect(floatHost()).toBeNull();
+      expect(container.contains(screen.getByLabelText("WhatsApp"))).toBe(true);
+    });
+  });
+
   it("offer slider shows the offer stack, price band and header button", () => {
     const { container } = render(<RenderBlock block={make("offer-slider")} />);
     expect(screen.getByText("Book Your Dream Home")).toBeTruthy();

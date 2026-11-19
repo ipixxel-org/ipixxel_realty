@@ -62,6 +62,8 @@ interface FieldDef {
   label: string
   type: 'text' | 'textarea' | 'select' | 'array-strings' | 'array-items' | 'image' | 'icon' | 'form-select' | 'toggle' | 'nav-menu' | 'nav-lines' | 'link-lines' | 'number' | 'color'
   options?: string[]
+  /** Toggle only: unset shows unticked (default is ticked when unset). */
+  defaultOff?: boolean
 }
 
 /**
@@ -1237,6 +1239,8 @@ const blockFields: Partial<Record<BlockType, { sections: { title: string; fields
         { key: 'whatsappIcon', label: 'WhatsApp icon (upload SVG / PNG; replaces the built-in icon)', type: 'image' },
         { key: 'whatsappSize', label: 'WhatsApp icon size (px, 24–120; empty = auto)', type: 'number' },
         { key: 'showFloatingButtons', label: 'Show call / WhatsApp buttons', type: 'toggle' },
+        { key: 'stickyFloatingMobile', label: 'Keep floating call / WhatsApp buttons on screen while scrolling — mobile', type: 'toggle', defaultOff: true },
+        { key: 'stickyFloatingDesktop', label: 'Keep floating call / WhatsApp buttons on screen while scrolling — desktop', type: 'toggle', defaultOff: true },
       ]},
       { title: 'Emerald slider (template 4)', fields: [
         { key: 'emeraldTitle', label: 'Title', type: 'text' },
@@ -1907,7 +1911,7 @@ function PropertyField({ field, block }: { field: FieldDef; block: BlockConfig }
           <span className="text-[11.5px] text-text-2 font-medium">{field.label}</span>
           <input
             type="checkbox"
-            checked={value !== false}
+            checked={field.defaultOff ? value === true : value !== false}
             onChange={(e) => onChange(e.target.checked)}
             className="accent-[var(--color-green,#10b981)]"
           />

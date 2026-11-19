@@ -53,6 +53,18 @@ describe("iPixxel inspector shows only the chosen template's fields", () => {
     expect(screen.queryByText(/Grand band \(template 1\)/i)).toBeNull();
   });
 
+  it.each(["offer-slider", "emerald-slider"])("%s: sticky call / WhatsApp toggles start unticked; sticky header stays ticked", (variant) => {
+    const box = (label: RegExp) => screen.getByText(label).closest("label")!.querySelector("input") as HTMLInputElement;
+    render(<PropertiesPanel block={heroBlock(variant)} />);
+    expect(box(/on screen while scrolling — mobile/).checked).toBe(false);
+    expect(box(/on screen while scrolling — desktop/).checked).toBe(false);
+    expect(box(/^Sticky header \(/).checked).toBe(true);
+    cleanup();
+    render(<PropertiesPanel block={{ ...heroBlock(variant), props: { ...heroBlock(variant).props, stickyFloatingMobile: true } }} />);
+    expect(box(/on screen while scrolling — mobile/).checked).toBe(true);
+    expect(box(/on screen while scrolling — desktop/).checked).toBe(false);
+  });
+
   it("skyline hero shows its own fields instead", () => {
     render(<PropertiesPanel block={heroBlock("skyline")} />);
     expect(screen.getByText("Left stat label")).toBeTruthy();
