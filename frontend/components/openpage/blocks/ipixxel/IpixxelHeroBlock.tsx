@@ -498,12 +498,92 @@ function useStickyHeader(enabled: boolean) {
   return { sectionRef, headerRef, stuck, host };
 }
 
+/** Where a pinned floating button sits on screen (px from the viewport edges). */
+type FloatSpot = { top: number; left?: number; right?: number };
+
+/**
+ * Keeps floating buttons (call / WhatsApp) on screen once the hero scrolls up,
+ * at the same spot they sat in, separately for mobile and desktop (the
+ * template's @3xl = 768px split). Live page only: like the sticky header, the
+ * buttons are portalled to a body-level fixed holder because `position: fixed`
+ * is page-relative inside the page's CSS container. In the builder, or with
+ * both flags off, nothing changes.
+ *
+ * `refs[i]` are the buttons; returns the holder and, while pinned, each
+ * button's spot (null when not pinned).
+ */
+function useFloatingPin(sectionRef: RefObject<HTMLElement | null>, refs: RefObject<HTMLElement | null>[], mobile: boolean, desktop: boolean) {
+  const editing = useElementEditor()?.isEditing === true;
+  const [host, setHost] = useState<HTMLElement | null>(null);
+  const [spots, setSpots] = useState<(FloatSpot | null)[] | null>(null);
+  const refsRef = useRef(refs);
+  refsRef.current = refs;
+  useEffect(() => {
+    const section = sectionRef.current;
+    if ((!mobile && !desktop) || editing || !section || scrollParentOf(section)) return;
+    const fixedHost = createStickyHost(section);
+    fixedHost.removeAttribute("data-ipx-sticky-host");
+    fixedHost.setAttribute("data-ipx-float-host", "");
+    Object.assign(fixedHost.style, { zIndex: "40", height: "0", pointerEvents: "none" });
+    setHost(fixedHost);
+    let frame = 0;
+    let pinned = false;
+    let measured: (FloatSpot | null)[] = [];
+    const update = () => {
+      frame = 0;
+      const on = window.innerWidth >= 768 ? desktop : mobile;
+      const box = section.getBoundingClientRect();
+      if (!pinned) {
+        // Resting spots, measured while the buttons are still in the hero.
+        const vw = document.documentElement.clientWidth || window.innerWidth;
+        measured = refsRef.current.map((r) => {
+          const el = r.current;
+          if (!el) return null;
+          const b = el.getBoundingClientRect();
+          // Stay inside the screen when the resting spot is below the fold.
+          const top = Math.max(0, Math.min(b.top - box.top, window.innerHeight - b.height - 16));
+          return b.left + b.width / 2 < vw / 2 ? { top, left: b.left } : { top, right: vw - b.right };
+        });
+      }
+      const want = on && box.top < 0;
+      if (want !== pinned) {
+        pinned = want;
+        setSpots(want ? measured : null);
+      }
+    };
+    const onScroll = () => {
+      if (!frame) frame = requestAnimationFrame(update);
+    };
+    const onResize = () => {
+      // Re-measure in the hero (sizes and the mobile/desktop split may change).
+      if (pinned) {
+        pinned = false;
+        setSpots(null);
+      }
+      onScroll();
+    };
+    update();
+    document.addEventListener("scroll", onScroll, { capture: true, passive: true });
+    window.addEventListener("resize", onResize);
+    return () => {
+      if (frame) cancelAnimationFrame(frame);
+      document.removeEventListener("scroll", onScroll, { capture: true });
+      window.removeEventListener("resize", onResize);
+      setSpots(null);
+      setHost(null);
+      fixedHost.remove();
+    };
+  }, [sectionRef, mobile, desktop, editing]);
+  return { host, spots };
+}
+
 function SkylineHero(ctx: HeroCtx) {
   const { block, p, accent } = ctx;
   const sticky = stickyOn(p);
   const { sectionRef, headerRef, stuck, host } = useStickyHeader(sticky);
   // Pinned header is a slimmer bar: smaller logos (unchanged when not pinned).
-  const logoSize = stuck ? "h-8 @3xl:h-[3cqw] max-h-[46px]" : "h-10 @3xl:h-[4.8cqw] max-h-[72px]";
+  // Mobile keeps the same height when pinned; desktop slims down.
+  const logoSize = stuck ? "h-10 @3xl:h-[3cqw] max-h-[46px]" : "h-10 @3xl:h-[4.8cqw] max-h-[72px]";
   const logo = str(p.logo);
   const logo2 = str(p.logo2);
   const phone = phoneDigits(p.phone);
@@ -746,6 +826,21 @@ function OfferSliderHero(ctx: HeroCtx) {
   const badgeImage = str(p.offerBadgeImage);
   const sticky = stickyOn(p);
   const { sectionRef, headerRef, stuck, host } = useStickyHeader(sticky);
+  // Call / WhatsApp stay on screen while scrolling (off unless ticked).
+  const callRef = useRef<HTMLAnchorElement>(null);
+  const waRef = useRef<HTMLAnchorElement>(null);
+  const float = useFloatingPin(
+    sectionRef,
+    [callRef, waRef],
+    showFloating && flag(p.stickyFloatingMobile, false),
+    showFloating && flag(p.stickyFloatingDesktop, false),
+  );
+  const floatSpot = (i: number) => (float.host && float.spots?.[i]) || null;
+  const placeFloat = (i: number, node: ReactNode) => (floatSpot(i) && float.host ? createPortal(node, float.host) : node);
+  const spotStyle = (i: number): CSSProperties | undefined => {
+    const s = floatSpot(i);
+    return s ? { top: s.top, left: s.left ?? "auto", right: s.right ?? "auto", bottom: "auto", pointerEvents: "auto" } : undefined;
+  };
 
   // The background image is the first slide; "More slides" follow it.
   const slides = [
@@ -801,12 +896,12 @@ function OfferSliderHero(ctx: HeroCtx) {
         block={block}
         id={part(block, "header")}
         className={`relative z-20 flex items-center justify-between gap-3 bg-white px-4 @3xl:px-[3%] ${
-          stuck ? "py-2 @3xl:py-[0.7cqw]" : "py-3 @3xl:py-[1.4cqw]"
+          stuck ? "py-3 @3xl:py-[0.7cqw]" : "py-3 @3xl:py-[1.4cqw]"
         }`}
         style={stuck && color(p.stickyHeaderBg) ? { backgroundColor: color(p.stickyHeaderBg) } : undefined}
       >
         {logo ? (
-          <Img src={logo} alt={str(p.logoText)} className={`${stuck ? "h-8 @3xl:h-[3cqw] max-h-[46px]" : "h-10 @3xl:h-[4.4cqw] max-h-[64px]"} w-auto object-contain`} />
+          <Img src={logo} alt={str(p.logoText)} className={`${stuck ? "h-10 @3xl:h-[3cqw] max-h-[46px]" : "h-10 @3xl:h-[4.4cqw] max-h-[64px]"} w-auto object-contain`} />
         ) : (
           <div className="flex flex-col leading-none">
             <Text
@@ -1007,27 +1102,36 @@ function OfferSliderHero(ctx: HeroCtx) {
         ) : null}
 
         {/* Floating call / WhatsApp */}
-        {showFloating && phone ? (
-          <a
-            href={`tel:${phone}`}
-            aria-label="Call"
-            className="absolute z-30 left-3 top-3 @3xl:top-auto @3xl:left-[calc(3.3%-clamp(42px,4.4cqw,104px)/2)] @3xl:bottom-[calc(13%+1.6cqw-clamp(42px,4.4cqw,104px)/2)] grid place-items-center w-12 h-12 @3xl:w-[clamp(42px,4.4cqw,104px)] @3xl:h-[clamp(42px,4.4cqw,104px)] rounded-full bg-[#5cc84a] border-2 border-white/80 text-white shadow-lg hover:brightness-110"
-          >
-            <PhoneCall className="w-1/2 h-1/2" fill="currentColor" strokeWidth={1.6} />
-          </a>
-        ) : null}
-        {showFloating && whatsapp ? (
-          <a
-            href={`https://wa.me/${whatsapp}`}
-            target="_blank"
-            rel="noopener noreferrer"
-            aria-label="WhatsApp"
-            className={`absolute z-30 right-3 top-3 @3xl:top-auto @3xl:right-[1.6%] @3xl:bottom-[calc(13%-clamp(42px,4.4cqw,104px)*0.9)] grid place-items-center w-12 h-12 @3xl:w-[clamp(42px,4.4cqw,104px)] @3xl:h-[clamp(42px,4.4cqw,104px)] rounded-full overflow-hidden hover:brightness-110 ${whatsAppSkin(p.whatsappIcon, "bg-[#25d366] border-2 border-white text-white shadow-lg")}`}
-            style={whatsAppSize(p.whatsappSize)}
-          >
-            <WhatsAppIcon src={p.whatsappIcon} size={24} />
-          </a>
-        ) : null}
+        {showFloating && phone
+          ? placeFloat(
+              0,
+              <a
+                ref={callRef}
+                href={`tel:${phone}`}
+                aria-label="Call"
+                className="absolute z-30 left-3 top-3 @3xl:top-auto @3xl:left-[calc(3.3%-clamp(42px,4.4cqw,104px)/2)] @3xl:bottom-[calc(13%+1.6cqw-clamp(42px,4.4cqw,104px)/2)] grid place-items-center w-12 h-12 @3xl:w-[clamp(42px,4.4cqw,104px)] @3xl:h-[clamp(42px,4.4cqw,104px)] rounded-full bg-[#5cc84a] border-2 border-white/80 text-white shadow-lg hover:brightness-110"
+                style={spotStyle(0)}
+              >
+                <PhoneCall className="w-1/2 h-1/2" fill="currentColor" strokeWidth={1.6} />
+              </a>,
+            )
+          : null}
+        {showFloating && whatsapp
+          ? placeFloat(
+              1,
+              <a
+                ref={waRef}
+                href={`https://wa.me/${whatsapp}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                aria-label="WhatsApp"
+                className={`absolute z-30 right-3 top-3 @3xl:top-auto @3xl:right-[1.6%] @3xl:bottom-[calc(13%-clamp(42px,4.4cqw,104px)*0.9)] grid place-items-center w-12 h-12 @3xl:w-[clamp(42px,4.4cqw,104px)] @3xl:h-[clamp(42px,4.4cqw,104px)] rounded-full overflow-hidden hover:brightness-110 ${whatsAppSkin(p.whatsappIcon, "bg-[#25d366] border-2 border-white text-white shadow-lg")}`}
+                style={{ ...whatsAppSize(p.whatsappSize), ...spotStyle(1) }}
+              >
+                <WhatsAppIcon src={p.whatsappIcon} size={24} />
+              </a>,
+            )
+          : null}
       </div>
     </section>
   );
@@ -1062,6 +1166,15 @@ function EmeraldSliderHero(ctx: HeroCtx) {
   const gold: CSSProperties = { fontFamily: CINZEL, color: accent };
   const sticky = stickyOn(p);
   const { sectionRef, headerRef, stuck, host } = useStickyHeader(sticky);
+  // WhatsApp stays on screen while scrolling (off unless ticked).
+  const waRef = useRef<HTMLAnchorElement>(null);
+  const float = useFloatingPin(
+    sectionRef,
+    [waRef],
+    showFloating && flag(p.stickyFloatingMobile, false),
+    showFloating && flag(p.stickyFloatingDesktop, false),
+  );
+  const waSpot = (float.host && float.spots?.[0]) || null;
 
   // When sticky the header can't stay inside the clipped photo layers, so it
   // is placed on the section instead — same spot, since the photo starts at
@@ -1071,11 +1184,11 @@ function EmeraldSliderHero(ctx: HeroCtx) {
       block={block}
       id={part(block, "header")}
       className={`${sticky ? "relative" : "absolute inset-x-0 top-0 z-20"} flex items-center justify-between gap-3 px-4 ${
-        stuck ? "py-2 bg-transparent @3xl:px-[7%] @3xl:py-[0.7cqw]" : `py-2.5 bg-[#0d3b2b]/60 ${sticky ? "@3xl:h-[7.5cqw]" : "@3xl:h-[17%]"} @3xl:px-[7%] @3xl:py-0`
+        stuck ? "py-2.5 bg-transparent @3xl:px-[7%] @3xl:py-[0.7cqw]" : `py-2.5 bg-[#0d3b2b]/60 ${sticky ? "@3xl:h-[7.5cqw]" : "@3xl:h-[17%]"} @3xl:px-[7%] @3xl:py-0`
       }`}
     >
       {logo ? (
-        <Img src={logo} alt={str(p.logoText)} className={`${stuck ? "h-9 @3xl:h-[3.4cqw] max-h-[52px]" : "h-11 @3xl:h-[6cqw] max-h-[84px]"} w-auto object-contain`} />
+        <Img src={logo} alt={str(p.logoText)} className={`${stuck ? "h-11 @3xl:h-[3.4cqw] max-h-[52px]" : "h-11 @3xl:h-[6cqw] max-h-[84px]"} w-auto object-contain`} />
       ) : (
         <Text ctx={ctx} k="logoText" as="span" className="uppercase font-semibold tracking-[0.3em] text-[15px] @3xl:text-[clamp(14px,1.5cqw,22px)]" style={gold} />
       )}
@@ -1135,18 +1248,24 @@ function EmeraldSliderHero(ctx: HeroCtx) {
               ))}
             </div>
           ) : null}
-          {showFloating && whatsapp ? (
-            <a
-              href={`https://wa.me/${whatsapp}`}
-              target="_blank"
-              rel="noopener noreferrer"
-              aria-label="WhatsApp"
-              className={`absolute z-30 right-3 bottom-3 @3xl:right-[2.5%] @3xl:bottom-[10%] grid place-items-center w-11 h-11 @3xl:w-[clamp(40px,3.4cqw,52px)] @3xl:h-[clamp(40px,3.4cqw,52px)] rounded-full overflow-hidden hover:scale-105 transition-transform ${whatsAppSkin(p.whatsappIcon, "bg-white text-[#1b1b1b] shadow-lg")}`}
-              style={whatsAppSize(p.whatsappSize)}
-            >
-              <WhatsAppIcon src={p.whatsappIcon} size={22} />
-            </a>
-          ) : null}
+          {showFloating && whatsapp
+            ? ((node: ReactNode) => (waSpot && float.host ? createPortal(node, float.host) : node))(
+                <a
+                  ref={waRef}
+                  href={`https://wa.me/${whatsapp}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  aria-label="WhatsApp"
+                  className={`absolute z-30 right-3 bottom-3 @3xl:right-[2.5%] @3xl:bottom-[10%] grid place-items-center w-11 h-11 @3xl:w-[clamp(40px,3.4cqw,52px)] @3xl:h-[clamp(40px,3.4cqw,52px)] rounded-full overflow-hidden hover:scale-105 transition-transform ${whatsAppSkin(p.whatsappIcon, "bg-white text-[#1b1b1b] shadow-lg")}`}
+                  style={{
+                    ...whatsAppSize(p.whatsappSize),
+                    ...(waSpot ? { top: waSpot.top, left: waSpot.left ?? "auto", right: waSpot.right ?? "auto", bottom: "auto", pointerEvents: "auto" as const } : null),
+                  }}
+                >
+                  <WhatsAppIcon src={p.whatsappIcon} size={22} />
+                </a>,
+              )
+            : null}
         </div>
 
         {/* Location, title, price row and ribbon */}
