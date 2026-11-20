@@ -33,8 +33,19 @@ import {
 function isValidEmail(v: string): boolean {
   return /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(v.trim());
 }
+const PHONE_PREFIX = "+91";
+const PHONE_DIGITS = 10;
+
+/** The local digits of a phone value ("+91 98765 43210" → "9876543210"), at most 10. */
+function phoneDigits(v: string): string {
+  const s = v.trim();
+  // "+91 …" always drops the prefix (even mid-typing); a bare "91…" only
+  // when 12 digits make it clear it is the country code.
+  const local = s.startsWith("+91") ? s.slice(3) : s.replace(/^91(?=\d{10}$)/, "");
+  return local.replace(/\D/g, "").slice(0, PHONE_DIGITS);
+}
 function isValidPhone(v: string): boolean {
-  return v.replace(/\D/g, "").length >= 8;
+  return phoneDigits(v).length === PHONE_DIGITS;
 }
 
 function widthStyle(width?: FormLeadField["width"]): CSSProperties {
@@ -223,7 +234,7 @@ export function DynamicLeadForm({
         return false;
       }
       if (v && f.type === "phone" && !isValidPhone(v)) {
-        setError(f.validation?.customMessage || "Please enter a valid phone number.");
+        setError(f.validation?.customMessage || `Please enter a valid ${PHONE_DIGITS}-digit mobile number.`);
         return false;
       }
       if (v && f.validation?.pattern) {
@@ -567,6 +578,51 @@ export function DynamicLeadForm({
             onChange={(e) => setCaptchaAnswer(e.target.value)}
             placeholder="Answer"
             style={fieldStyle()}
+          />
+        </div>
+      );
+    }
+    if (type === "phone") {
+      // Fixed +91 prefix; the box takes digits only, up to 10. The stored
+      // value keeps the prefix ("+91 9876543210") so leads carry it.
+      const digits = phoneDigits(val);
+      const placeholder = (f.placeholder || (bar ? f.label : "") || "")
+        .replace(/^\s*\+91\s*/, "")
+        .trim();
+      const prefixColor = variant === "dark" ? "#e2e8f0" : wt.ink || "#0f172a";
+      return (
+        <div style={{ position: "relative" }}>
+          <span
+            aria-hidden="true"
+            style={{
+              position: "absolute",
+              left: 14,
+              top: "50%",
+              transform: "translateY(-50%)",
+              fontSize: 14,
+              fontWeight: 600,
+              color: prefixColor,
+              pointerEvents: "none",
+            }}
+          >
+            {PHONE_PREFIX}
+          </span>
+          <input
+            type="tel"
+            inputMode="numeric"
+            autoComplete="tel-national"
+            maxLength={PHONE_DIGITS}
+            pattern="[0-9]*"
+            required={required}
+            disabled={disabled}
+            placeholder={placeholder || "98765 43210"}
+            aria-label={bar ? f.label : undefined}
+            value={digits}
+            onChange={(e) => {
+              const next = e.target.value.replace(/\D/g, "").slice(0, PHONE_DIGITS);
+              setField(f, next ? `${PHONE_PREFIX} ${next}` : "");
+            }}
+            style={{ ...fieldStyle(), paddingLeft: 48 }}
           />
         </div>
       );
