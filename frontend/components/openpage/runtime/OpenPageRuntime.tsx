@@ -283,16 +283,10 @@ export function OpenPageRuntimeProvider({
     <RuntimeContext.Provider value={value}>
       {children}
       {active ? (
-        <div
-          className={`op-popup-overlay ${visible ? "op-popup-overlay--visible" : ""}`}
-          onClick={() => {
-            if (active.popup.closeOnOverlay) closePopup();
-          }}
-        >
-          <div
-            className={`op-popup-card ${visible ? "op-popup-card--visible" : ""}`}
-            onClick={(e) => e.stopPropagation()}
-          >
+        // Clicking outside the card does not close it, so a half-filled form
+        // isn't lost by a stray click; only the close (X) button closes it.
+        <div className={`op-popup-overlay ${visible ? "op-popup-overlay--visible" : ""}`}>
+          <div className={`op-popup-card ${visible ? "op-popup-card--visible" : ""}`}>
             <button type="button" className="op-popup-close" onClick={closePopup} aria-label="Close">
               <X size={16} strokeWidth={2.5} />
             </button>
