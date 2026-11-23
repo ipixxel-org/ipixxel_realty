@@ -58,6 +58,7 @@ const blockLabels: Record<string, string> = {
   "payment-plan": "Payment plan",
   team: "Sales team",
   "social-icons": "Social icons",
+  "hamburger-menu": "Hamburger menu",
   tabs: "Tabs",
   countdown: "Countdown",
   logocloud: "Logos",

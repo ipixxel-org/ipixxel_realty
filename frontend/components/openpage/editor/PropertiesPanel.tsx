@@ -1123,6 +1123,30 @@ const blockFields: Partial<Record<BlockType, { sections: { title: string; fields
       ]},
     ],
   },
+  'hamburger-menu': {
+    sections: [
+      { title: 'Menu', fields: [
+        { key: 'items', label: 'Menu links', type: 'array-items' },
+        { key: 'panelTitle', label: 'Panel title', type: 'text' },
+      ]},
+      { title: 'Layout', fields: [
+        { key: 'display', label: 'Show links', type: 'select', options: ['always', 'inline-desktop'] },
+        { key: 'align', label: 'Button alignment', type: 'select', options: ['right', 'left', 'center'] },
+        { key: 'position', label: 'Panel slides in from', type: 'select', options: ['right', 'left'] },
+        { key: 'width', label: 'Panel width (px)', type: 'number' },
+        { key: 'iconSize', label: 'Icon size (px)', type: 'number' },
+      ]},
+      { title: 'Colours', fields: [
+        { key: 'linkColor', label: 'Menu link colour', type: 'color' },
+        { key: 'activeLinkColor', label: 'Active link colour', type: 'color' },
+        { key: 'hoverLinkColor', label: 'Hover link colour (empty = active colour)', type: 'color' },
+        { key: 'iconColor', label: 'Hamburger icon colour', type: 'color' },
+        { key: 'closeIconColor', label: 'Close (✕) icon colour (empty = hamburger icon colour)', type: 'color' },
+        { key: 'panelTitleColor', label: 'Panel title colour', type: 'color' },
+        { key: 'panelBg', label: 'Panel background', type: 'color' },
+      ]},
+    ],
+  },
   'off-canvas': {
     sections: [
       { title: 'Button', fields: [

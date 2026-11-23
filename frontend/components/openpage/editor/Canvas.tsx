@@ -466,6 +466,7 @@ export function Canvas() {
       <div
         {...brandAttrs}
         className="@container border rounded-xl min-h-[400px] relative z-[1] overflow-visible pt-4 pb-8 transition-all duration-300"
+        data-op-page-root=""
         style={{
           width: `${pxWidth}px`,
           maxWidth: `${pxWidth}px`,
