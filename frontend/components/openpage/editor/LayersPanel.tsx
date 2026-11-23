@@ -14,7 +14,7 @@ import {
   ListChecks, TriangleAlert, Crosshair, Hash, Star, BarChartHorizontal, Receipt,
   Rotate3d, PanelRightOpen, Images, Timer, Share2, PanelTop, Bookmark, Heading1,
   ChevronsRight, ListTree, LayoutGrid, Newspaper, Briefcase, MessageSquareQuote,
-  GalleryHorizontal,
+  GalleryHorizontal, Menu,
 } from "lucide-react";
 import { useConfigStore } from "@/components/openpage/store/configStore";
 import { useEditorStore } from "@/components/openpage/store/editorStore";
@@ -80,6 +80,7 @@ const blockIcons: Partial<Record<BlockType, typeof Layout>> = {
   "site-title": Type,
   "page-title": Heading1,
   breadcrumbs: ChevronsRight,
+  "hamburger-menu": Menu,
   "table-of-contents": ListTree,
   navbar: Layout,
   footer: PanelBottom,
@@ -132,7 +133,7 @@ export const PICKER_GROUPS: { id: string; title: string; defaultOpen: boolean; t
     id: "core",
     title: "Core",
     defaultOpen: true,
-    types: ["heading", "text", "button", "columns", "div", "image", "video", "icon", "icon-box", "divider", "spacer", "html-code"],
+    types: ["heading", "text", "button", "columns", "div", "image", "video", "icon", "icon-box", "divider", "spacer", "html-code", "hamburger-menu"],
   },
   {
     id: "basic",
@@ -281,6 +282,7 @@ export const blockLabels: Partial<Record<BlockType, string>> = {
   'site-title': 'Site title',
   'page-title': 'Page title',
   breadcrumbs: 'Breadcrumbs',
+  'hamburger-menu': 'Hamburger menu',
   'table-of-contents': 'Table of contents',
   navbar: 'Header',
   footer: 'Footer',
@@ -367,6 +369,7 @@ const WIDGET_COLORS: Partial<Record<BlockType, string>> = {
   "site-title": "#38bdf8",
   "page-title": "#38bdf8",
   breadcrumbs: "#38bdf8",
+  "hamburger-menu": "#38bdf8",
   "table-of-contents": "#38bdf8",
   section: "#38bdf8",
   columns: "#38bdf8",

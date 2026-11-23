@@ -1,7 +1,8 @@
 "use client";
 
 import type { BlockConfig } from "./types";
-import { Component, type ReactNode } from "react";
+import { Component, useRef, type CSSProperties, type ReactNode } from "react";
+import { createPortal } from "react-dom";
 import {
   applyBlockBoxStyleForDevice,
   blockAnimationClass,
@@ -13,6 +14,7 @@ import {
 } from "@/lib/openpage/block-style";
 import { useDevice } from "@/components/openpage/runtime/device";
 import { filterHiddenItems } from "./render-utils";
+import { useStickyPin } from "./use-sticky-pin";
 import { CustomFields } from "./CustomFields";
 
 import { NavbarBlock } from "./navbar/NavbarBlock";
@@ -38,6 +40,7 @@ import { SliderBlock } from "./slider/SliderBlock";
 import { TabsBlock } from "./tabs/TabsBlock";
 import { CountdownBlock } from "./countdown/CountdownBlock";
 import { SocialIconsBlock } from "./social-icons/SocialIconsBlock";
+import { HamburgerMenuBlock } from "./elements/HamburgerMenu";
 import { IconBlock } from "./icon/IconBlock";
 import { SpacerBlock } from "./spacer/SpacerBlock";
 import { HtmlCodeBlock } from "./html-code/HtmlCodeBlock";
@@ -152,6 +155,7 @@ const blockRenderers: Record<string, React.ComponentType<{ block: BlockConfig }>
   tabs: TabsBlock,
   countdown: CountdownBlock,
   "social-icons": SocialIconsBlock,
+  "hamburger-menu": HamburgerMenuBlock,
   icon: IconBlock,
   spacer: SpacerBlock,
   "html-code": HtmlCodeBlock,
@@ -232,20 +236,38 @@ export function RenderBlock({ block }: { block: BlockConfig }): ReactNode {
   const scopedCss = blockStyleTag(block.id, resolved, WIDGETS_WITH_REPLACEABLE_PADDING.has(block.type), MEDIA_WIDGETS.has(block.type))
   // Inline: the wrapper's box only. Backgrounds, borders, transforms and
   // typography come from `scopedCss`, so each is applied exactly once.
-  const style = {
-    ...applyBlockBoxStyleForDevice(block.style, device),
-    ...blockAnimationStyle(block),
+  const box = applyBlockBoxStyleForDevice(block.style, device)
+  // Sticky sticks to the page (see useStickyPin); Top is the gap from the top
+  // edge. `slotRef` is whatever sits in the page flow: the block, or the empty
+  // box it leaves behind while pinned to the top.
+  const sticky = resolved?.position === "sticky" && !box.display
+  const slotRef = useRef<HTMLDivElement>(null)
+  const pin = useStickyPin(slotRef, sticky, resolved?.top)
+  const pinned = pin.host !== null
+  const style: CSSProperties = {
+    ...box,
+    // No entrance animation replay when the block moves into the pinned bar.
+    ...(pinned ? {} : blockAnimationStyle(block)),
   }
-  const animationClass = blockAnimationClass(block)
+  if (sticky) {
+    style.position = "relative"
+    delete style.top
+    delete style.right
+    delete style.bottom
+    delete style.left
+    // Above the content it passes over, unless a Z-index is set.
+    if (style.zIndex === undefined) style.zIndex = 40
+  }
+  const animationClass = pinned ? "" : blockAnimationClass(block)
   const className = animationClass || undefined
   const renderBlock: BlockConfig = {
     ...block,
     props: filterHiddenItems(block.props) as Record<string, unknown>,
   }
 
-  return (
-    <BlockErrorBoundary blockType={block.type}>
+  const content = (
       <div
+        ref={pinned ? undefined : slotRef}
         className={className || undefined}
         style={Object.keys(style).length ? style : undefined}
         data-block-type={block.type}
@@ -258,6 +280,18 @@ export function RenderBlock({ block }: { block: BlockConfig }): ReactNode {
         <Renderer block={renderBlock} />
         <CustomFields block={renderBlock} />
       </div>
+  )
+
+  return (
+    <BlockErrorBoundary blockType={block.type}>
+      {pinned ? (
+        <>
+          <div ref={slotRef} aria-hidden="true" data-op-sticky-spacer="" style={{ height: pin.height }} />
+          {createPortal(content, pin.host!)}
+        </>
+      ) : (
+        content
+      )}
     </BlockErrorBoundary>
   )
 }

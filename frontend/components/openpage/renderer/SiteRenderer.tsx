@@ -93,6 +93,7 @@ export function SiteRenderer({
       <div
         {...brandAttrs}
         className="op-site @container min-h-screen w-full"
+        data-op-page-root=""
         // Same page background as the builder canvas (see sitePageBackground).
         style={{ ...cssVars, color: "var(--color-text-0)", backgroundColor: sitePageBackground(resolvedSite) } as React.CSSProperties}
       >

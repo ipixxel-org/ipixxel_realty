@@ -68,7 +68,8 @@ export type GenericBlockType =
   | "image-comparison"
   | "social-share"
   | "popup-trigger"
-  | "site-search";
+  | "site-search"
+  | "hamburger-menu";
 
 export type RealEstateBlockType =
   | "project-banner"

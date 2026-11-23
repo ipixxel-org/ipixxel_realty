@@ -292,7 +292,7 @@ const ITEM_TYPE_EXCLUDE = ":not(:where(button, button *, .op-btn, .op-btn *, for
 export const WIDGETS_WITH_REPLACEABLE_PADDING = new Set<string>([
   "heading", "text", "button", "icon", "image", "video", "divider", "spacer", "icon-box", "image-box", "html-code",
   "icon-list", "alert", "animated-headline", "counter", "star-rating", "progress-bar", "price-list", "flip-box",
-  "site-logo", "site-title", "page-title", "breadcrumbs", "table-of-contents", "off-canvas", "social-icons",
+  "site-logo", "site-title", "page-title", "breadcrumbs", "table-of-contents", "off-canvas", "social-icons", "hamburger-menu",
 ]);
 
 /** Widgets that show a picture / video; a border radius also clips it. */

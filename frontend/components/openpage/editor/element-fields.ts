@@ -114,6 +114,12 @@ export const ELEMENT_ITEM_FIELDS: Record<string, ItemFieldDef[]> = {
     { key: "src", label: "Slide image", kind: "image" },
     { key: "alt", label: "Alt text (optional)", kind: "text" },
   ],
+  "hamburger-menu.items": [
+    { key: "label", label: "Menu name", kind: "text", placeholder: "e.g. Amenities" },
+    { key: "url", label: "Link", kind: "text", placeholder: "https://… , /page or #section-id" },
+    { key: "target", label: "Open in", kind: "select", options: ["_self", "_blank"] },
+    { key: "active", label: "Always show as active", kind: "toggle" },
+  ],
   "tabs.items": [
     { key: "label", label: "Tab title", kind: "text" },
     { key: "content", label: "Content", kind: "textarea", rows: 4 },
@@ -137,6 +143,7 @@ export const ELEMENT_ITEM_TEMPLATES: Record<string, Record<string, Record<string
   slider: { images: { src: "", alt: "", caption: "" } },
   "social-icons": { icons: { platform: "facebook", url: "", label: "" } },
   tabs: { items: { label: "", content: "" } },
+  "hamburger-menu": { items: { label: "", url: "", target: "_self", active: false } },
   "visual-journey": { images: { src: "", caption: "", description: "", badge: "", alt: "" } },
   "ipixxel-hero": { slides: { src: "", alt: "" } },
   ...IPX_ITEM_TEMPLATES,
