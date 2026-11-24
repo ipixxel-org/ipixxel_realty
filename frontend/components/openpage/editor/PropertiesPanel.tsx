@@ -1090,13 +1090,26 @@ const blockFields: Partial<Record<BlockType, { sections: { title: string; fields
   },
   'price-list': {
     sections: [
+      { title: 'Template', fields: [
+        { key: 'template', label: 'Template (list = classic rows, cards = price cards)', type: 'select', options: ['list', 'cards'] },
+      ]},
       { title: 'Content', fields: [
+        { key: 'eyebrow', label: 'Small label above title (cards template)', type: 'text' },
         { key: 'title', label: 'Title', type: 'text' },
         { key: 'items', label: 'Items', type: 'array-items' },
       ]},
       { title: 'Style', fields: [
-        { key: 'separator', label: 'Separator', type: 'select', options: ['dotted', 'dashed', 'solid', 'none'] },
+        { key: 'separator', label: 'Separator (list template)', type: 'select', options: ['dotted', 'dashed', 'solid', 'none'] },
         { key: 'priceColor', label: 'Price colour', type: 'color' },
+      ]},
+      { title: 'Cards layout (cards template)', fields: [
+        { key: 'cardsPerRow', label: 'Cards in one line', type: 'select', options: ['1', '2', '3', '4', '5', '6'] },
+        { key: 'cardsMaxWidth', label: 'Cards area max width (px, 0 = default)', type: 'number' },
+        { key: 'cardGap', label: 'Space between cards (px)', type: 'number' },
+        { key: 'cardMinWidth', label: 'Smallest card width before wrapping (px)', type: 'number' },
+        { key: 'accentColor', label: 'Accent colour (button, lines, shadow)', type: 'color' },
+        { key: 'cardBg', label: 'Card background', type: 'color' },
+        { key: 'cardTextColor', label: 'Card text colour', type: 'color' },
       ]},
     ],
   },

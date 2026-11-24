@@ -131,6 +131,28 @@ describe("widgets", () => {
     expect(screen.getByText("₹ 1.42 Cr*")).toBeTruthy();
   });
 
+  it("Price List cards template renders cards inside one wrapper with an enquire button", () => {
+    const { container } = render(
+      <RenderBlock block={make("price-list", { template: "cards", cardsPerRow: "4", items: [{ title: "3 BHK Apartments", price: "₹ 8.0 Cr*", size: "3525 Sq.Ft." }, { title: "4 BHK Apartments", price: "₹ 11.05 Cr*", size: "5525 Sq.Ft.", link: "javascript:x" }] })} />,
+    );
+    expect(screen.getByText("3 BHK Apartments")).toBeTruthy();
+    expect(screen.getByText("₹ 11.05 Cr*")).toBeTruthy();
+    expect(screen.getByText("5525 Sq.Ft.")).toBeTruthy();
+    expect(screen.getAllByText("Starting Price")).toHaveLength(2);
+    const buttons = screen.getAllByText("Enquire Now");
+    expect(buttons[1].getAttribute("href")).toBe("#enquire");
+    // Both cards share one wrapper element; 4 per row sets the card basis.
+    const wrapper = buttons[0].closest('[data-el-id$="price-list:cards"]');
+    expect(wrapper?.contains(buttons[1])).toBe(true);
+    expect((container.querySelector("section") as HTMLElement).style.getPropertyValue("--pl-basis")).toContain("/ 4");
+  });
+
+  it("Price List without a template keeps the classic list", () => {
+    render(<RenderBlock block={make("price-list")} />);
+    expect(screen.queryByText("Enquire Now")).toBeNull();
+    expect(screen.queryByText("Starting Price")).toBeNull();
+  });
+
   it("Flip Box shows both faces' text and its button link", () => {
     render(<RenderBlock block={make("flip-box", { buttonUrl: "javascript:x" })} />);
     expect(screen.getByText("3 BHK Residences")).toBeTruthy();

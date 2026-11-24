@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type CSSProperties } from "react";
 import { Plus, Star } from "lucide-react";
 import type { BlockConfig } from "../types";
 import { El, useElementEditor } from "../El";
@@ -216,6 +216,8 @@ export function ProgressBarBlock({ block }: { block: BlockConfig }) {
 /* ------------------------------------------------------------------ */
 
 export function PriceListBlock({ block }: { block: BlockConfig }) {
+  // "Template" picks the look; unset keeps the original list so saved pages don't change.
+  if (str(block.props.template) === "cards") return <PriceListCards block={block} />;
   const p = block.props;
   const items = list(p.items);
   const sep = ["dotted", "dashed", "solid", "none"].includes(str(p.separator)) ? str(p.separator) : "dotted";
@@ -266,6 +268,122 @@ export function PriceListBlock({ block }: { block: BlockConfig }) {
           })}
         </ul>
       </div>
+    </section>
+  );
+}
+
+/**
+ * Price List — "cards" template: eyebrow + heading, then one card per unit
+ * type (pill title, starting price, size row, enquire button).
+ *
+ * All cards sit inside one wrapper (`price-list:cards`) so the wrapper's
+ * width/height can be styled without touching the section. "Cards per row"
+ * sets the most cards on one line; each card's width is that share of the
+ * wrapper, and cards wrap onto new lines once they would get narrower than
+ * the minimum card width (so 4-per-row drops to 2 or 1 on small screens).
+ */
+function PriceListCards({ block }: { block: BlockConfig }) {
+  const p = block.props;
+  const items = list(p.items);
+  const perRow = clamp(Math.round(num(p.cardsPerRow, 2)), 1, 6);
+  const gap = clamp(num(p.cardGap, 48), 0, 200);
+  const minCard = clamp(num(p.cardMinWidth, 240), 120, 600);
+  const maxWidth = num(p.cardsMaxWidth, 0);
+  const accent = color(p.accentColor) ?? "#a3845a";
+  const cardBg = color(p.cardBg);
+  const textColor = color(p.cardTextColor);
+  const eyebrow = str(p.eyebrow, "Price List");
+  const heading = str(p.title);
+  // Defaults travel as CSS variables read by classes (not inline styles), so
+  // width / height / colours set in the element style panel still win.
+  const vars = {
+    "--pl-accent": accent,
+    "--pl-gap": `${gap}px`,
+    "--pl-max": maxWidth > 0 ? `${maxWidth}px` : "72rem",
+    "--pl-basis": `calc((100% - ${(perRow - 1) * gap}px) / ${perRow})`,
+    "--pl-min": `min(100%, ${minCard}px)`,
+    ...(cardBg ? { "--pl-card-bg": cardBg } : {}),
+    ...(textColor ? { "--pl-card-text": textColor } : {}),
+    ...(color(p.priceColor) ? { "--pl-price": color(p.priceColor) } : {}),
+  } as CSSProperties;
+  return (
+    <section className="px-6 @md:px-10 py-10 @md:py-14" style={vars}>
+      {eyebrow || heading ? (
+        <div className="max-w-6xl mx-auto mb-10 @md:mb-14">
+          {eyebrow ? (
+            <El block={block} id={part(block, "eyebrow")} as="p" className="inline-block text-sm uppercase tracking-[0.12em] pb-2 mb-3 border-b border-[color:color-mix(in_srgb,var(--pl-accent)_35%,transparent)]">
+              {eyebrow}
+            </El>
+          ) : null}
+          {heading ? (
+            <El block={block} id={part(block, "title")} as="h2" className="text-2xl @md:text-3xl leading-snug tracking-wide max-w-xl">
+              {heading}
+            </El>
+          ) : null}
+        </div>
+      ) : null}
+      <El
+        block={block}
+        id={part(block, "cards")}
+        className="mx-auto flex flex-wrap justify-center gap-[var(--pl-gap)] max-w-[var(--pl-max)]"
+      >
+        {items.map((item, i) => {
+          const id = itemId("items", item, i);
+          const href = safeHref(item.link) || "#enquire";
+          const priceLabel = str(item.priceLabel, "Starting Price");
+          const suffix = str(item.priceSuffix, "Onwards");
+          const sizeLabel = str(item.sizeLabel, "Size");
+          const size = str(item.size, str(item.description));
+          const button = str(item.buttonText, "Enquire Now");
+          return (
+            <El
+              key={id}
+              block={block}
+              id={id}
+              className="flex flex-col grow-0 shrink basis-[var(--pl-basis)] min-w-[var(--pl-min)] rounded-2xl border border-[color:color-mix(in_srgb,var(--pl-accent)_25%,transparent)] bg-[var(--pl-card-bg,transparent)] text-[color:var(--pl-card-text,inherit)] shadow-[0_4px_0_-1px_var(--pl-accent),0_6px_14px_rgba(0,0,0,0.08)] px-6 @md:px-10 py-8 text-center"
+            >
+              <El block={block} id={subElementId(id, "title")} as="div" className="border border-current rounded-sm px-3 py-2.5 uppercase tracking-[0.08em] text-sm @md:text-base">
+                {str(item.title, "Unit type")}
+              </El>
+              {priceLabel ? (
+                <El block={block} id={subElementId(id, "priceLabel")} as="p" className="mt-8 text-xs @md:text-sm uppercase tracking-[0.12em]">
+                  {priceLabel}
+                </El>
+              ) : null}
+              <p className={`${priceLabel ? "mt-2" : "mt-8"} tracking-wide`}>
+                <El block={block} id={subElementId(id, "price")} as="span" className="text-2xl @md:text-3xl text-[color:var(--pl-price,inherit)]">
+                  {str(item.price)}
+                </El>
+                {suffix ? (
+                  <El block={block} id={subElementId(id, "priceSuffix")} as="span" className="text-lg @md:text-xl ml-2">
+                    {suffix}
+                  </El>
+                ) : null}
+              </p>
+              <span aria-hidden="true" className="block h-px my-6 bg-[linear-gradient(90deg,transparent,color-mix(in_srgb,var(--pl-accent)_55%,transparent),transparent)]" />
+              {sizeLabel || size ? (
+                <div className="flex items-center justify-between gap-4 tracking-wide text-sm @md:text-base">
+                  <El block={block} id={subElementId(id, "sizeLabel")} as="span">{sizeLabel}</El>
+                  <El block={block} id={subElementId(id, "size")} as="span" className="text-right">{size}</El>
+                </div>
+              ) : null}
+              {button ? (
+                <div className="mt-auto pt-10">
+                  <El
+                    block={block}
+                    id={subElementId(id, "button")}
+                    as="a"
+                    href={href}
+                    className="inline-block rounded px-7 py-3 text-sm uppercase tracking-[0.1em] text-white bg-[var(--pl-accent)] hover:opacity-90 transition-opacity"
+                  >
+                    {button}
+                  </El>
+                </div>
+              ) : null}
+            </El>
+          );
+        })}
+      </El>
     </section>
   );
 }
