@@ -16,7 +16,7 @@ import { Modal, ModalActions } from "@/components/ui/modal";
 import Link from "next/link";
 import { useAuth } from "@/lib/auth-context";
 import type { CrmLead, CrmLeadStatus } from "@/lib/types";
-import { leadDisplayName, leadDisplayPhone, leadDisplaySource } from "@/lib/lead-display";
+import { leadDisplayName, leadDisplayPhone, leadDisplaySource, leadField } from "@/lib/lead-display";
 import { LEADS_FLASH_KEY } from "@/components/org/add-lead-form";
 import { ImportLeadsModal } from "@/components/org/import-leads-modal";
 import { useFlash } from "@/lib/flash";
@@ -36,6 +36,26 @@ function initialsFor(name: string): string {
 
 const leadName = leadDisplayName;
 const leadPhone = leadDisplayPhone;
+
+// Same source as the lead detail page's "Project" row: the linked project,
+// else whatever the form captured.
+function leadProject(lead: CrmLead): string {
+  // Standalone-unit leads render the unit instead (their form's "project"
+  // value is the unit label).
+  if (lead.standaloneUnit) return "";
+  const name = lead.project?.name ?? leadField(lead.data, "Project", "project");
+  return name && name !== "—" ? name : "";
+}
+
+// When the lead came in (form submitted / lead created).
+function leadDate(iso: string): { date: string; time: string } | null {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return null;
+  return {
+    date: d.toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" }),
+    time: d.toLocaleTimeString("en-IN", { hour: "numeric", minute: "2-digit" }),
+  };
+}
 
 export default function OrgLeadsPage() {
   const searchParams = useSearchParams();
@@ -605,6 +625,16 @@ export default function OrgLeadsPage() {
                     </th>
                     <th>
                       <div style={{ display: "inline-flex", alignItems: "center", gap: 6, cursor: "pointer" }}>
+                        PROJECT <span style={{ opacity: 0.4, fontSize: 11 }}>⇅</span>
+                      </div>
+                    </th>
+                    <th>
+                      <div style={{ display: "inline-flex", alignItems: "center", gap: 6, cursor: "pointer" }}>
+                        DATE <span style={{ opacity: 0.4, fontSize: 11 }}>⇅</span>
+                      </div>
+                    </th>
+                    <th>
+                      <div style={{ display: "inline-flex", alignItems: "center", gap: 6, cursor: "pointer" }}>
                         SOURCE <span style={{ opacity: 0.4, fontSize: 11 }}>⇅</span>
                       </div>
                     </th>
@@ -633,6 +663,8 @@ export default function OrgLeadsPage() {
                     const name = leadName(lead);
                     const phone = leadPhone(lead);
                     const isSelected = selectedLeads.has(lead.id);
+                    const project = leadProject(lead);
+                    const created = leadDate(lead.createdAt);
 
                     return (
                       <tr key={lead.id} style={{ background: isSelected ? "#f8fafc" : undefined }}>
@@ -684,6 +716,30 @@ export default function OrgLeadsPage() {
                               ) : null}
                             </div>
                           </div>
+                        </td>
+                        <td>
+                          {project ? (
+                            <span style={{ fontWeight: 500, color: "#0f172a", fontSize: 13.5 }}>{project}</span>
+                          ) : lead.standaloneUnit ? (
+                            <>
+                              <div style={{ fontWeight: 500, color: "#0f172a", fontSize: 13.5 }}>
+                                {lead.standaloneUnit.label}
+                              </div>
+                              <div style={{ color: "#64748b", fontSize: 12.5, marginTop: 2 }}>Standalone unit</div>
+                            </>
+                          ) : (
+                            <span style={{ color: "#94a3b8" }}>—</span>
+                          )}
+                        </td>
+                        <td style={{ whiteSpace: "nowrap" }}>
+                          {created ? (
+                            <>
+                              <div style={{ fontWeight: 500, color: "#0f172a", fontSize: 13.5 }}>{created.date}</div>
+                              <div style={{ color: "#64748b", fontSize: 12.5, marginTop: 2 }}>{created.time}</div>
+                            </>
+                          ) : (
+                            <span style={{ color: "#94a3b8" }}>—</span>
+                          )}
                         </td>
                         <td>
                           <span className="lc-badge-source">

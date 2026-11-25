@@ -854,13 +854,24 @@ export class LeadsService implements OnModuleInit {
     }
     if (or.length === 0) return null;
 
+    // Only merge a repeat enquiry about the SAME thing: same project, or for a
+    // project-less capture the same standalone unit. (Previously a project-less
+    // capture dropped the project filter and merged into ANY recent lead with
+    // that phone/email — a standalone-unit enquiry overwrote a project lead.)
+    const unitId = leadUnitId(data);
+    const scope: Prisma.LeadWhereInput[] = projectId
+      ? [{ projectId }]
+      : [
+          { projectId: null },
+          ...(unitId ? [{ data: { path: ['unitId'], equals: unitId } }] : []),
+        ];
+
     const since = new Date(Date.now() - 48 * 60 * 60 * 1000);
     return this.prisma.lead.findFirst({
       where: {
         orgId,
         createdAt: { gte: since },
-        ...(projectId ? { projectId } : {}),
-        OR: or,
+        AND: [...scope, { OR: or }],
       },
       orderBy: { createdAt: 'desc' },
     });
@@ -1049,7 +1060,7 @@ export class LeadsService implements OnModuleInit {
     const statusCount = (status: string) =>
       byStatus.find((row) => row.status === status)?._count._all ?? 0;
 
-    const [teams, projectAgents, unitAgents] = await Promise.all([
+    const [teams, projectAgents, unitAgents, unitLabels] = await Promise.all([
       this.projectTeamsByProject(
         leads.filter((l) => !l.assignedToId).map((l) => l.projectId),
       ),
@@ -1061,11 +1072,16 @@ export class LeadsService implements OnModuleInit {
         orgId,
         leads.filter((l) => !l.projectId).map((l) => leadUnitId(l.data)),
       ),
+      this.standaloneUnitLabels(
+        orgId,
+        leads.filter((l) => !l.projectId).map((l) => leadUnitId(l.data)),
+      ),
     ]);
 
     return {
       data: leads.map((lead) => ({
         ...this.toListItem(lead),
+        standaloneUnit: this.standaloneUnitFor(lead, unitLabels),
         projectTeam: this.projectTeamFor(lead, teams),
         assignableAgents: this.assignableAgentsFor(lead, projectAgents, unitAgents),
       })),
@@ -1120,13 +1136,15 @@ export class LeadsService implements OnModuleInit {
     if (!lead) throw new NotFoundException('Lead not found');
     await this.assertCanAccessLead(orgId, leadId, actor);
 
-    const teams = await this.projectTeamsByProject([
-      lead.assignedToId ? null : lead.projectId,
+    const [teams, unitLabels] = await Promise.all([
+      this.projectTeamsByProject([lead.assignedToId ? null : lead.projectId]),
+      this.standaloneUnitLabels(orgId, [lead.projectId ? null : leadUnitId(lead.data)]),
     ]);
 
     return {
       ...this.toListItem(lead),
       ...this.leadEditFields(lead),
+      standaloneUnit: this.standaloneUnitFor(lead, unitLabels),
       projectTeam: this.projectTeamFor(lead, teams),
       activities: lead.activities.map(toActivity),
       callLogs: lead.callLogs.map((call) => ({
@@ -1642,6 +1660,34 @@ export class LeadsService implements OnModuleInit {
    * A standalone unit's own team (UnitSalesAgent), for leads on units with no
    * project. Units with nobody on the team are left out of the map.
    */
+  /** Display labels ("Villas · C-209") for standalone units, by unit id. */
+  private async standaloneUnitLabels(
+    orgId: string,
+    unitIds: Array<string | null>,
+  ): Promise<Map<string, string>> {
+    const map = new Map<string, string>();
+    const ids = [...new Set(unitIds.filter((id): id is string => !!id))];
+    if (ids.length === 0) return map;
+    const units = await this.prisma.unit.findMany({
+      where: { id: { in: ids }, orgId, projectId: null },
+      select: { id: true, unitNo: true, configuration: true },
+    });
+    for (const u of units) {
+      map.set(u.id, [u.configuration, u.unitNo].filter(Boolean).join(' · '));
+    }
+    return map;
+  }
+
+  private standaloneUnitFor(
+    lead: { projectId: string | null; data: unknown },
+    labels: Map<string, string>,
+  ): { id: string; label: string } | null {
+    if (lead.projectId) return null;
+    const unitId = leadUnitId(lead.data);
+    const label = unitId ? labels.get(unitId) : undefined;
+    return unitId && label ? { id: unitId, label } : null;
+  }
+
   private async standaloneUnitAgentsByUnit(
     orgId: string,
     unitIds: Array<string | null>,
