@@ -284,8 +284,12 @@ export default function OrgLeadDetailPage() {
     : field(lead.data, "interestedIn", "Interested in", "Configuration", "BHK", "bhk");
   const preferredBudget = formatBudgetRange(lead.budgetMin, lead.budgetMax);
   const purpose = lead.purpose || "—";
-  const project = lead.project?.name ?? field(lead.data, "Project", "project");
-  const unit = field(lead.data, "Unit", "unit");
+  // A standalone-unit lead has no project: its form's "project" value is the
+  // unit's label, so show it under Unit instead.
+  const project = lead.standaloneUnit
+    ? "—"
+    : lead.project?.name ?? field(lead.data, "Project", "project");
+  const unit = lead.standaloneUnit?.label ?? field(lead.data, "Unit", "unit");
 
   const avatarInitials = name
     .trim()
