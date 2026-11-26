@@ -1,13 +1,27 @@
 "use client";
 
 import { useState } from "react";
-import { Save, Trash2, Plus } from "lucide-react";
+import { Save, Trash2 } from "lucide-react";
 import { toast } from "sonner";
-import type { BlockConfig, GlobalWidget } from "@/components/openpage/blocks/types";
+import type { BlockConditional, BlockConfig, GlobalWidget } from "@/components/openpage/blocks/types";
 import { useConfigStore } from "@/components/openpage/store/configStore";
 import { Section } from "./shared-components";
 
 export const EMPTY_GLOBAL_WIDGETS: GlobalWidget[] = [];
+
+/** Common dynamic fields exposed by the property data binding. */
+const CONDITIONAL_FIELD_SUGGESTIONS = [
+  "property.name",
+  "property.startingPrice",
+  "property.reraNumber",
+  "property.possession",
+  "property.location",
+  "property.carpetArea",
+  "property.landArea",
+  "property.towers",
+  "property.units",
+  "property.description",
+];
 
 const animationOptions = [
   { value: '', label: 'None' },
@@ -125,6 +139,91 @@ export function AdvancedPanel({ block }: { block: BlockConfig }) {
               For menu scroll targets, set <b>Section ID</b> on the section Properties tab
               (e.g. <code>amenities</code>), then use that same ID in Header → Menu items.
             </p>
+          </div>
+        </Section>
+
+        {/* Dynamic Conditional Rendering */}
+        <Section title="Conditional Rendering (showIf)" defaultOpen={false}>
+          <div className="space-y-2">
+            <p className="text-[10px] text-text-3">
+              Builder.io-style conditional logic: show or hide this block based on real estate dynamic fields.
+            </p>
+            <div>
+              <label className="block text-[10px] text-text-3 mb-1">Field Name / Expression</label>
+              <input
+                type="text"
+                list="op-conditional-fields"
+                placeholder="e.g. property.reraNumber or property.startingPrice"
+                value={block.conditional?.field || block.showIf || ""}
+                onChange={(e) => {
+                  const val = e.target.value;
+                  updateBlock(block.id, {
+                    // Setting a structured rule retires any legacy showIf so
+                    // the renderer doesn't keep evaluating the old expression.
+                    showIf: undefined,
+                    conditional: {
+                      ...(block.conditional || { operator: "exists" }),
+                      field: val,
+                    },
+                  });
+                }}
+                className="w-full px-2 py-1.5 rounded border border-border-default bg-bg-2 text-text-0 text-[11px] outline-none focus:border-green font-mono"
+              />
+              <datalist id="op-conditional-fields">
+                {CONDITIONAL_FIELD_SUGGESTIONS.map((field) => (
+                  <option key={field} value={field} />
+                ))}
+              </datalist>
+            </div>
+            <div>
+              <label className="block text-[10px] text-text-3 mb-1">Condition Rule</label>
+              <select
+                value={block.conditional?.operator || "exists"}
+                onChange={(e) => {
+                  updateBlock(block.id, {
+                    conditional: {
+                      ...(block.conditional || { field: "property.reraNumber" }),
+                      operator: e.target.value as BlockConditional["operator"],
+                    },
+                  });
+                }}
+                className="w-full px-2 py-1.5 rounded border border-border-default bg-bg-2 text-text-0 text-[11px] outline-none focus:border-green cursor-pointer"
+              >
+                <option value="exists">Is Present / Non-empty</option>
+                <option value="notExists">Is Empty / Absent</option>
+                <option value="equals">Equals Exact Value</option>
+                <option value="notEquals">Does Not Equal</option>
+                <option value="contains">Contains Substring</option>
+              </select>
+            </div>
+            {["equals", "notEquals", "contains"].includes(block.conditional?.operator || "") && (
+              <div>
+                <label className="block text-[10px] text-text-3 mb-1">Target Value</label>
+                <input
+                  type="text"
+                  placeholder="Expected value"
+                  value={block.conditional?.value || ""}
+                  onChange={(e) => {
+                    updateBlock(block.id, {
+                      conditional: {
+                        ...(block.conditional || { field: "property.status", operator: "equals" }),
+                        value: e.target.value,
+                      },
+                    });
+                  }}
+                  className="w-full px-2 py-1.5 rounded border border-border-default bg-bg-2 text-text-0 text-[11px] outline-none focus:border-green"
+                />
+              </div>
+            )}
+            {block.conditional?.field && (
+              <button
+                type="button"
+                onClick={() => updateBlock(block.id, { conditional: undefined, showIf: undefined })}
+                className="text-[10px] text-status-red hover:underline mt-1"
+              >
+                Remove condition (always show)
+              </button>
+            )}
           </div>
         </Section>
 

@@ -7,3 +7,7 @@
 
 # Local-dev private files (Team Chat attachments) — never commit
 /private-uploads
+
+# MCP workspace output (templates generated via Claude, saved brand kits)
+/mcp-dev-template/site.json
+/mcp-dev-template/brand-kits

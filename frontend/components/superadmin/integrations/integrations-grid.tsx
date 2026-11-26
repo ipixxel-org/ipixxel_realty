@@ -22,6 +22,7 @@ function statusBadge(
   loading: boolean,
 ): Badge {
   if (it.comingSoon) return { cls: "b-gray", text: "Coming soon" };
+  if (!it.statusSource) return { cls: "b-green", text: "Available" };
   if (loading) return { cls: "b-gray", text: "Checking…" };
   if (status?.active) return { cls: "b-green", text: "Active • Configured" };
   if (status?.configured) return { cls: "b-amber", text: "Configured • Inactive" };

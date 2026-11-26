@@ -55,6 +55,7 @@ import { IntegrationsModule } from './modules/integrations/integrations.module';
 import { PaymentsModule } from './modules/payments/payments.module';
 import { AiModule } from './modules/ai/ai.module';
 import { BillingModule } from './modules/billing/billing.module';
+import { McpModule } from './modules/mcp/mcp.module';
 
 @Module({
   imports: [
@@ -110,9 +111,9 @@ import { BillingModule } from './modules/billing/billing.module';
     IntegrationsModule,
     PaymentsModule,
     BillingModule,
+    McpModule,
   ],
   controllers: [AppController],
   providers: [AppService],
 })
 export class AppModule {}
-

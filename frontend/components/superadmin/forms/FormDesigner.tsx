@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import DOMPurify from "isomorphic-dompurify";
 import Link from "next/link";
 import {
   AlignLeft,
@@ -562,7 +563,7 @@ export function FormDesigner({
                       ) : field.type === "html" ? (
                         <div
                           style={{ padding: "8px 10px", background: "#f8fafc", borderRadius: 8, fontSize: 12 }}
-                          dangerouslySetInnerHTML={{ __html: field.html || "<p>Custom HTML Block</p>" }}
+                          dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(field.html || "<p>Custom HTML Block</p>") }}
                         />
                       ) : field.type === "radio" ? (
                         <div className="fb-mock-options">

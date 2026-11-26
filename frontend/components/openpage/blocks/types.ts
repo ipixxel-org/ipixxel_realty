@@ -275,6 +275,13 @@ export interface SectionConfig {
   style?: BlockStyle;
 }
 
+export interface BlockConditional {
+  field?: string;
+  operator?: "equals" | "notEquals" | "exists" | "notExists" | "contains";
+  value?: string;
+  showIf?: string;
+}
+
 export interface BlockConfig {
   id: string;
   type: BlockType;
@@ -293,6 +300,8 @@ export interface BlockConfig {
   animation?: string;
   animationDuration?: string;
   animationDelay?: string;
+  conditional?: BlockConditional;
+  showIf?: string;
 }
 
 export interface GlobalWidget {

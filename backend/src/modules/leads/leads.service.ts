@@ -4,6 +4,7 @@ import {
   BadRequestException,
   OnModuleInit,
   Optional,
+  Logger,
 } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../database/prisma.service';
@@ -144,6 +145,7 @@ function toActivity(row: ActivityRow) {
 
 @Injectable()
 export class LeadsService implements OnModuleInit {
+  private readonly logger = new Logger(LeadsService.name);
   private readonly publicLeadRateLimit = new Map<
     string,
     { count: number; resetAt: number }
@@ -193,6 +195,29 @@ export class LeadsService implements OnModuleInit {
     }
   }
 
+  private async verifyTurnstileToken(token?: string, clientIp?: string): Promise<boolean> {
+    const secretKey = process.env.TURNSTILE_SECRET_KEY?.trim();
+    if (!secretKey) return true;
+    if (!token) return false;
+
+    try {
+      const formData = new URLSearchParams();
+      formData.append('secret', secretKey);
+      formData.append('response', token);
+      if (clientIp && clientIp !== 'unknown') formData.append('remoteip', clientIp);
+
+      const res = await fetch('https://challenges.cloudflare.com/turnstile/v0/siteverify', {
+        method: 'POST',
+        body: formData,
+      });
+      const data = (await res.json()) as { success?: boolean };
+      return Boolean(data.success);
+    } catch (err: unknown) {
+      this.logger.warn(`Turnstile verify network error: ${err instanceof Error ? err.message : String(err)}`);
+      return false;
+    }
+  }
+
   /**
    * Public capture path: an anonymous visitor submits a form. We resolve the
    * owning org from the landing page id, slug, and/or project id rather than
@@ -201,6 +226,14 @@ export class LeadsService implements OnModuleInit {
   async createFromPublic(dto: CreateLeadDto, clientIp?: string) {
     if (dto.hp) {
       return { id: 'filtered', ok: true };
+    }
+
+    if (process.env.TURNSTILE_SECRET_KEY) {
+      const token = dto.turnstileToken || dto.captchaToken;
+      const isValid = await this.verifyTurnstileToken(token, clientIp);
+      if (!isValid) {
+        throw new BadRequestException('Security challenge verification failed. Please refresh and try again.');
+      }
     }
 
     if (clientIp) {

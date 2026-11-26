@@ -13,6 +13,7 @@ import {
   Route,
   Settings,
   Sparkles,
+  Bot,
   X,
 } from "lucide-react";
 import type { LandingPageData, ModuleKey } from "@/lib/openpage/types";
@@ -23,6 +24,7 @@ import { BuilderFormScopeProvider } from "@/components/openpage/builder/forms-co
 import { livePagePath, templatePreviewPath } from "@/lib/openpage/paths";
 import { TopNav } from "@/components/openpage/topnav";
 import { EditorLayout } from "@/components/openpage/editor/EditorLayout";
+import { McpBridgeModal } from "@/components/openpage/editor/McpBridgeModal";
 import { OpenPageBridge } from "@/components/openpage/editor/OpenPageBridge";
 import { SiteRenderer } from "@/components/openpage/renderer/SiteRenderer";
 import { PageSettingsModule } from "@/components/openpage/modules/page-settings";
@@ -116,6 +118,7 @@ export function OpenPageStudio({ resource = "template" }: { resource?: Resource 
   const [activePage, setActivePage] = useState<LandingPageData | null>(null);
   const [helpOpen, setHelpOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [mcpOpen, setMcpOpen] = useState(false);
   const apiRef = useRef<{
     undo: () => void;
     redo: () => void;
@@ -742,6 +745,16 @@ export function OpenPageStudio({ resource = "template" }: { resource?: Resource 
             >
               <Keyboard size={14} /> Keyboard shortcuts
             </button>
+            <button
+              type="button"
+              className="ps-topnav-btn"
+              onClick={() => {
+                setHelpOpen(false);
+                setMcpOpen(true);
+              }}
+            >
+              <Bot size={14} /> MCP bridge
+            </button>
           </div>
           {resource === "landing-page" ? (
             <>
@@ -764,6 +777,8 @@ export function OpenPageStudio({ resource = "template" }: { resource?: Resource 
           )}
         </div>
       </SlidePanel>
+
+      <McpBridgeModal open={mcpOpen} onClose={() => setMcpOpen(false)} />
 
       {inAppPreviewOpen && activePage ? (
         <div className="ps-preview-overlay" role="dialog" aria-label="Page preview">
