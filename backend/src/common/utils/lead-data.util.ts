@@ -73,6 +73,32 @@ function firstMatching(
   return null;
 }
 
+/** At least 6 digits — rules out consent values like "yes" in a phone slot. */
+function looksLikePhone(value: string): boolean {
+  return (value.match(/\d/g) ?? []).length >= 6;
+}
+
+/**
+ * The lead's phone. Prefers a value that actually looks like a number: a
+ * "Contact me on WhatsApp" checkbox used to overwrite `phone` with "yes",
+ * while the real number stayed under the field's own label. Falls back to the
+ * old first-match behaviour when nothing looks like a phone.
+ */
+function resolvePhone(data: Record<string, unknown>, skip?: RegExp): string | null {
+  const candidates: string[] = [];
+  for (const key of PHONE_KEYS) {
+    const v = data[key];
+    if (typeof v === 'string' && v.trim()) candidates.push(v.trim());
+  }
+  for (const [key, v] of Object.entries(data)) {
+    if (skip?.test(key)) continue;
+    if (typeof v === 'string' && v.trim() && /phone|mobile|whatsapp/i.test(key)) {
+      candidates.push(v.trim());
+    }
+  }
+  return candidates.find(looksLikePhone) ?? candidates[0] ?? null;
+}
+
 function sameValue(left: unknown, right: unknown): boolean {
   if (left === right) return true;
   return typeof left === 'string' && typeof right === 'string' && left.trim() === right.trim();
@@ -99,9 +125,7 @@ export function normalizeLeadData(
   const skip = /project|unit|form|source|id$/i;
   const fullName =
     firstString(data, NAME_KEYS) ?? firstMatching(data, /\bname\b/i, skip);
-  const phone =
-    firstString(data, PHONE_KEYS) ??
-    firstMatching(data, /phone|mobile|whatsapp/i, skip);
+  const phone = resolvePhone(data, skip);
   const email =
     firstString(data, EMAIL_KEYS) ?? firstMatching(data, /email/i, skip);
   const project = extras?.projectName ?? firstString(data, PROJECT_KEYS);
@@ -126,7 +150,11 @@ export function leadContactFromData(data: Record<string, unknown>): {
 } {
   return {
     fullName: firstString(data, NAME_KEYS),
-    phone: firstString(data, PHONE_KEYS),
+    phone: (() => {
+      const p = firstString(data, PHONE_KEYS);
+      // Never dedupe on a non-number ("yes") — it would merge different people.
+      return p && looksLikePhone(p) ? p : null;
+    })(),
     email: firstString(data, EMAIL_KEYS),
   };
 }

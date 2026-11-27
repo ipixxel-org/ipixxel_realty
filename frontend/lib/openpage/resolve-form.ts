@@ -63,11 +63,24 @@ export function packDynamicLeadFields(
     const value = String(values[key] ?? "").trim();
     leadFields[f.label] = value;
     const label = f.label.toLowerCase();
-    if (type === "phone" || /phone|mobile|whatsapp/.test(label)) {
-      leadFields.phone = value;
-      leadFields.phoneNumber = value;
-    } else if (type === "email" || /email/.test(label)) {
-      leadFields.email = value;
+    // Checkbox / consent / choice fields ("Contact me on WhatsApp") hold
+    // "yes" or an option — never the contact value itself, so they must not
+    // claim the phone/email slot even when their label mentions it.
+    const isChoice = ["checkbox", "consent", "radio", "select", "multiselect", "hidden"].includes(type);
+    const isPhone = type === "phone" || (!isChoice && /phone|mobile|whatsapp/.test(label));
+    const isEmail = type === "email" || (!isChoice && /email/.test(label));
+    if (isPhone) {
+      // A real phone field wins over a later, phone-ish labelled field.
+      if (type === "phone" || !leadFields.phone) {
+        if (value || !leadFields.phone) {
+          leadFields.phone = value;
+          leadFields.phoneNumber = value;
+        }
+      }
+    } else if (isEmail) {
+      if ((type === "email" || !leadFields.email) && (value || !leadFields.email)) {
+        leadFields.email = value;
+      }
     } else if ((type === "text" || type === "name") && /name/.test(label) && !leadFields.fullName) {
       leadFields.fullName = value;
       leadFields.name = value;

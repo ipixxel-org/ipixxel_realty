@@ -718,7 +718,19 @@ export default function OrgLeadsPage() {
                           </div>
                         </td>
                         <td>
-                          {project ? (
+                          {lead.externalEmbed && !lead.standaloneUnit ? (
+                            <>
+                              <div style={{ fontWeight: 500, color: "#0f172a", fontSize: 13.5 }}>
+                                {lead.formName?.trim() || project || "Embedded form"}
+                              </div>
+                              <div style={{ color: "#64748b", fontSize: 12.5, marginTop: 2 }}>
+                                External page
+                                {lead.project?.name && lead.project.name !== lead.formName
+                                  ? ` · ${lead.project.name}`
+                                  : ""}
+                              </div>
+                            </>
+                          ) : project ? (
                             <span style={{ fontWeight: 500, color: "#0f172a", fontSize: 13.5 }}>{project}</span>
                           ) : lead.standaloneUnit ? (
                             <>
