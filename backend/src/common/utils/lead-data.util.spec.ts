@@ -1,5 +1,5 @@
 import { describe, expect, it } from '@jest/globals';
-import { normalizeLeadData } from './lead-data.util';
+import { leadContactFromData, normalizeLeadData } from './lead-data.util';
 
 describe('normalizeLeadData', () => {
   it('maps builder form labels onto canonical fields without duplicate aliases', () => {
@@ -32,5 +32,18 @@ describe('normalizeLeadData', () => {
     expect(next.fullName).toBe('Ananya Mehta');
     expect(next.Name).toBe('Referral name');
     expect(next.Notes).toBe('VIP');
+  });
+
+  it('ignores a consent "yes" that overwrote the phone slot', () => {
+    // A "Contact me on WhatsApp" checkbox used to write phone: "yes".
+    const next = normalizeLeadData({
+      fullName: 'Raman Mohanty',
+      phone: 'yes',
+      phoneNumber: 'yes',
+      'Phone Number': '6370548284',
+      'Contact me on WhatsApp': 'yes',
+    });
+    expect(next.phone).toBe('6370548284');
+    expect(leadContactFromData({ phone: 'yes' }).phone).toBeNull();
   });
 });

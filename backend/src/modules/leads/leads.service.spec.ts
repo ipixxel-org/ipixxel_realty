@@ -281,7 +281,7 @@ describe('LeadsService', () => {
         orgId: 'org-42',
         status: 'published',
       });
-      prisma.lead.findFirst.mockResolvedValue(null);
+      prisma.lead.findMany.mockResolvedValue([]);
       prisma.lead.create.mockResolvedValue({ id: 'lead-3' });
 
       await service.createFromPublic({
@@ -319,6 +319,87 @@ describe('LeadsService', () => {
       expect(persisted.phoneNumber).toBeUndefined();
       expect(persisted['Phone number']).toBeUndefined();
       expect(persisted['Interested in']).toBeUndefined();
+    });
+
+    describe('repeat submissions on the same form', () => {
+      const existing = {
+        id: 'lead-old',
+        landingPageId: 'lp-x',
+        projectId: null,
+        formName: 'Enquiry',
+        source: 'website',
+        data: { fullName: 'Rakesh', phone: '9990001111', email: 'rk@example.com' },
+      };
+
+      beforeEach(() => {
+        prisma.landingPage.findUnique.mockResolvedValue({
+          id: 'lp-x',
+          orgId: 'org-42',
+          status: 'published',
+        });
+        prisma.lead.create.mockResolvedValue({ id: 'lead-new' });
+        prisma.lead.update.mockResolvedValue({ id: 'lead-old' });
+        (prisma as unknown as { trackingEvent: { create: jest.Mock } }).trackingEvent = {
+          create: jest.fn().mockResolvedValue({}),
+        };
+      });
+
+      it('creates a NEW lead when a different person reuses the phone/email', async () => {
+        prisma.lead.findMany.mockResolvedValue([existing]);
+
+        const result = await service.createFromPublic({
+          landingPageId: 'lp-x',
+          data: { name: 'Subham', phone: '9990001111', email: 'rk@example.com' },
+        });
+
+        expect(prisma.lead.update).not.toHaveBeenCalled();
+        expect(prisma.lead.create).toHaveBeenCalled();
+        expect(result.id).toBe('lead-new');
+      });
+
+      it('updates the existing lead when the same person submits again', async () => {
+        prisma.lead.findMany.mockResolvedValue([existing]);
+
+        const result = await service.createFromPublic({
+          landingPageId: 'lp-x',
+          data: { name: '  rakesh ', phone: '9990001111', email: 'new@example.com' },
+        });
+
+        expect(prisma.lead.create).not.toHaveBeenCalled();
+        expect(prisma.lead.update).toHaveBeenCalledWith(
+          expect.objectContaining({ where: { id: 'lead-old' } }),
+        );
+        expect(result.id).toBe('lead-old');
+      });
+    });
+
+    it('tags embed captures and dedupes them only within the same embedded form', async () => {
+      (prisma as unknown as { leadForm: { findFirst: jest.Mock } }).leadForm = {
+        findFirst: jest.fn().mockResolvedValue({
+          id: 'form-1',
+          orgId: 'org-42',
+          name: 'Terra Alegria Phase 2',
+          content: {},
+        }),
+      };
+      prisma.lead.findMany.mockResolvedValue([]);
+      prisma.lead.create.mockResolvedValue({ id: 'lead-embed' });
+
+      await service.createFromPublic({
+        landingPageId: 'embed_emb_abc',
+        data: { name: 'Subham', phone: '9990002222' },
+      });
+
+      const where = prisma.lead.findMany.mock.calls.at(-1)[0].where;
+      expect(where.AND).toEqual(
+        expect.arrayContaining([{ data: { path: ['embedFormId'], equals: 'form-1' } }]),
+      );
+      const created = (prisma.lead.create as jest.Mock).mock.calls.at(-1)[0].data;
+      expect(created.orgId).toBe('org-42');
+      expect(created.formName).toBe('Terra Alegria Phase 2');
+      expect(created.data).toEqual(
+        expect.objectContaining({ embedFormId: 'form-1', captureChannel: 'external_embed' }),
+      );
     });
   });
 

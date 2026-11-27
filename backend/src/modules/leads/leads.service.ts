@@ -102,6 +102,27 @@ type ResolvedEmbedForm = {
   content: unknown;
 };
 
+/** Lower-cased, whitespace-collapsed name for same-person comparison. */
+function comparableName(name: string | null | undefined): string {
+  return (name ?? '').trim().replace(/\s+/g, ' ').toLowerCase();
+}
+
+/**
+ * Captured by a Form Builder embed placed on an outside site. New leads carry
+ * `captureChannel`; older ones are recognised by the embed iframe URL.
+ */
+function isExternalEmbedLead(data: unknown, landingPageUrl?: string | null): boolean {
+  const d =
+    data && typeof data === 'object' && !Array.isArray(data)
+      ? (data as Record<string, unknown>)
+      : {};
+  if (d.captureChannel === 'external_embed' || typeof d.embedFormId === 'string') {
+    return true;
+  }
+  const urls = [landingPageUrl, d.landing_page_url, d.landingPageUrl];
+  return urls.some((u) => typeof u === 'string' && u.includes('/embed/form/'));
+}
+
 /** Fields needed to render an activity/call actor. */
 const ACTOR_SELECT = {
   select: { id: true, firstName: true, lastName: true, email: true },
@@ -385,6 +406,12 @@ export class LeadsService implements OnModuleInit {
       unitId: dto.unitId,
       projectName,
     });
+    // Tag captures from a Form Builder embed on a builder's own (third-party)
+    // site, so Lead Center can label them and dedupe stays per-form.
+    if (embedForm) {
+      data.embedFormId = embedForm.id;
+      data.captureChannel = 'external_embed';
+    }
 
     // Promote UTM / ad params from the form blob onto structured columns so
     // Lead Center attribution and reporting stay filterable.
@@ -892,22 +919,48 @@ export class LeadsService implements OnModuleInit {
     // capture dropped the project filter and merged into ANY recent lead with
     // that phone/email — a standalone-unit enquiry overwrote a project lead.)
     const unitId = leadUnitId(data);
+    const embedFormId =
+      typeof data.embedFormId === 'string' && data.embedFormId ? data.embedFormId : null;
     const scope: Prisma.LeadWhereInput[] = projectId
       ? [{ projectId }]
       : [
           { projectId: null },
           ...(unitId ? [{ data: { path: ['unitId'], equals: unitId } }] : []),
+          // A project-less embed capture only merges into a lead from the SAME
+          // embedded form — not into any other project-less lead in the org.
+          ...(embedFormId && !unitId
+            ? [{ data: { path: ['embedFormId'], equals: embedFormId } }]
+            : []),
         ];
 
     const since = new Date(Date.now() - 48 * 60 * 60 * 1000);
-    return this.prisma.lead.findFirst({
+    const candidates = await this.prisma.lead.findMany({
       where: {
         orgId,
         createdAt: { gte: since },
         AND: [...scope, { OR: or }],
       },
       orderBy: { createdAt: 'desc' },
+      take: 10,
     });
+
+    // Only a repeat enquiry from the SAME person is merged. A phone/email
+    // match with a clearly different name (e.g. "Rakesh" then "Subham" on a
+    // shared device or a reused test number) is a new person → new lead.
+    const incomingName = comparableName(contact.fullName);
+    return (
+      candidates.find((lead) => {
+        if (!incomingName) return true;
+        const existingName = comparableName(
+          leadContactFromData(
+            lead.data && typeof lead.data === 'object' && !Array.isArray(lead.data)
+              ? normalizeLeadData(lead.data as Record<string, unknown>)
+              : {},
+          ).fullName,
+        );
+        return !existingName || existingName === incomingName;
+      }) ?? null
+    );
   }
 
   private async nextRoundRobinAssignee(
@@ -1832,6 +1885,7 @@ export class LeadsService implements OnModuleInit {
       utmMedium: lead.utmMedium ?? null,
       utmCampaign: lead.utmCampaign ?? null,
       landingPageUrl: lead.landingPageUrl ?? null,
+      externalEmbed: isExternalEmbedLead(data, lead.landingPageUrl),
       data,
       status: lead.status,
       assignedTo: lead.assignedTo
